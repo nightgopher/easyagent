@@ -116,7 +116,7 @@ fun ConnectionScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                "填写运行 easyagent 服务的主机地址和服务令牌（EA_API_KEY）。手机需要先接入与主机相同的网络，例如同一 tailnet。",
+                "填写运行 easyagent 服务的主机地址和服务令牌（EA_SERVER_API_KEY，未设置时使用 EA_API_KEY）。手机需要先接入与主机相同的网络，例如同一 tailnet。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

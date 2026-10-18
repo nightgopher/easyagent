@@ -6,7 +6,7 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 
 ## 功能（v1）
 
-- 运行主机配置：服务地址 + 服务令牌（`EA_API_KEY`），先测试后保存；令牌经 Android Keystore AES-GCM 加密落盘。
+- 运行主机配置：服务地址 + 服务令牌（`EA_SERVER_API_KEY`，未设置时使用 `EA_API_KEY`），先测试后保存；令牌经 Android Keystore AES-GCM 加密落盘。
 - 会话列表：拉取/新建/重命名/置顶/归档/删除，下拉刷新，置顶优先。
 - 聊天：历史恢复（`GET /sessions/{id}/run` 快照）、流式文本与思考、工具调用卡片（参数/输出/详情、失败展开）、错误与上下文压缩提示、排队消息横幅。
 - 任务控制：运行中排队发送（`POST /queue`）、停止当前任务、工具审批（批准/拒绝）。
@@ -26,12 +26,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 首次构建会从 google()/mavenCentral() 拉取 AGP/Kotlin/Compose 依赖。协议层测试：
 
 ```sh
-./gradlew :app:testDebugUnitTest
+./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
+
+Verify CI 与正式 Release 的验证阶段均执行上述单元测试、Lint 与 Debug APK 构建。当前手机端为源码预览，正式 Release 仍按 `docs/RELEASING.md` 发布核心、桥接及 macOS 原生客户端，不分发 Android 安装包；Android 正式签名发布尚未接入。
 
 ## 连接说明
 
-手机需能访问运行主机：家庭局域网，或接入与主机相同的 tailnet 后使用其虚拟网地址。地址形如 `http://<主机>:8080`；tailnet 链路由 WireGuard 加密，应用内允许明文 HTTP（`usesCleartextTraffic`）。令牌即 core 的 `EA_API_KEY`，与网页端登录用的服务令牌相同。
+手机需能访问运行主机：家庭局域网，或接入与主机相同的 tailnet 后使用其虚拟网地址。地址形如 `http://<主机>:8080`；tailnet 链路由 WireGuard 加密，应用内允许明文 HTTP（`usesCleartextTraffic`）。令牌与网页端登录用的服务令牌相同：优先使用 core 的 `EA_SERVER_API_KEY`，未配置时兼容使用 `EA_API_KEY`。
 
 部署相关的地址与密钥不写入本仓库。
 
