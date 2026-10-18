@@ -84,3 +84,15 @@ Electron 的本机固定签名、自动下载重签名、自动安装和回滚�
 从 v0.16.0 开始，Release 还必须包含 `update-darwin-arm64.json` 和 `easyagent-<version>-darwin-arm64.tar.gz`。MyGo 使用 `desktop-native/mygo.json` 中的公开 Ed25519 密钥校验下载；私钥只从 CI Secret `MYGO_UPDATER_PRIVATE_KEY` 读取，禁止提交私钥。`build-native.sh` 在发布构建缺少密钥时失败，并在上传前验证版本、URL、大小和签名。更新清单随完整 Release 一起发布，不修改旧版本资产。
 
 本机构建无需私钥，仍可检查已发布更新；签名发布演练使用 `scripts/check-native-release-build.sh` 的一次性测试密钥，不使用正式密钥或发布测试版本。首次上线需要发布包含新清单的正式版本；旧 Electron 安装不会通过此通道自动迁移。
+
+### macOS 固定代码身份
+
+v0.17.1 及此前的公开原生包使用 ad hoc 代码签名；其身份绑定具体构建，可能使更新后的屏幕录制、辅助功能授权失效。后续正式构建使用 `desktop-native/mygo.json` 中固定的 `macos.signingIdentity` 证书指纹，由 MyGo 在生成 DMG 和签名更新归档之前签署主应用和嵌套 Helper。构建后分别校验签名及指定要求，拒绝 ad hoc 或不同证书。
+
+`Release` 的原生构建需要 `MACOS_CERTIFICATE`（包含私钥的 PKCS#12 文件的 Base64）和 `MACOS_CERTIFICATE_PASSWORD` 两项 Actions Secret。证书必须匹配配置中的公开指纹；私钥不进入源码、日志或发布资产。`MYGO_UPDATER_PRIVATE_KEY` 仍用于 Ed25519 更新包校验，与 macOS 代码签名证书相互独立。CI 在临时钥匙串中导入证书，构建结束后恢复搜索列表并删除临时钥匙串；不修改系统证书信任。
+
+配置 Secret 后，可在 main 手动运行 `Release build check`，只验证真实签名证书和原生打包，不创建 tag 或 Release。PR 构建只使用一次性测试证书，不向 PR 提供正式签名私钥。
+
+本机正式构建也可复用已有 `~/Library/Application Support/EasyAgent Signing/identity.json` 指定的私有钥匙串；证书必须匹配同一指纹，配置与密钥文件须仅当前用户可读。缺少证书时正式构建失败；不带 tag 的开发构建仍使用临时 ad hoc 签名。
+
+从旧 ad hoc 身份迁移时，已有系统授权记录可能仍需用户确认一次；之后相同证书与 Bundle ID 的更新应满足之前的指定要求。构建演练用一次性证书连续构建两个版本，验证变更后的主应用及 Helper 均满足前一版本要求。首次授权与实际截图、控制能力仍需真实系统验收。固定本机证书不等同于 Apple Developer ID 或公证。

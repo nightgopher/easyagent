@@ -4,6 +4,7 @@
   "version": "0.17.1",
   "out": "build.noindex",
   "macos": {
+    "signingIdentity": "44FA716814B17ADACC6F187C9DB635090A793AF8",
     "minimumSystemVersion": "13.0",
     "infoPlist": {
       "NSMicrophoneUsageDescription": "录制语音并发送到当前 EasyAgent 主机转写。",

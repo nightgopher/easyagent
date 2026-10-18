@@ -4,7 +4,7 @@ EasyAgent 的唯一维护中桌面客户端是 `desktop-native/`，使用 Go / M
 
 ## 安装与启动
 
-Apple Silicon Mac 从 Release 下载 `easyagent-native-darwin-arm64.dmg`，正式安装入口为 `/Applications/EasyAgent.app`。当前使用 ad hoc 签名，尚未进行 Developer ID 签名与 Apple 公证。原生客户端已接入签名更新：设置中可检查更新，并选择自动检查或后台下载。存在活动任务、待审批操作或未保存文件时会阻止退出与更新重启。更新频道需要正式 Release 发布签名清单及归档后才可用；发布构建要求见 RELEASING.md。
+Apple Silicon Mac 从 Release 下载 `easyagent-native-darwin-arm64.dmg`，正式安装入口为 `/Applications/EasyAgent.app`。v0.17.1 及此前的公开包使用 ad hoc 签名；后续正式构建固定证书身份以保留系统授权，尚未进行 Developer ID 签名与 Apple 公证。原生客户端已接入签名更新：设置中可检查更新，并选择自动检查或后台下载。存在活动任务、待审批操作或未保存文件时会阻止退出与更新重启。更新频道需要正式 Release 发布签名清单及归档后才可用；发布构建要求见 RELEASING.md。
 
 本机构建：
 
