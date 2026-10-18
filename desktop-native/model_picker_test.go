@@ -49,6 +49,45 @@ func TestModelPickerWheelAndKeyboard(t *testing.T) {
 	}
 }
 
+func TestLargeModelPickerVirtualizesAndRevealsKeyboardChoice(t *testing.T) {
+	a := alignmentPreview(t)
+	a.ModelMenu = true
+	a.Live.Models = nil
+	for i := range 1200 {
+		a.Live.Models = append(a.Live.Models, fmt.Sprintf("model-%04d", i))
+	}
+	tt := ui.NewTester(a.View, 900, 640)
+	click(t, tt, "搜索模型")
+	if len(tt.Texts()) > 200 {
+		t.Fatalf("built the entire model catalog: %d texts", len(tt.Texts()))
+	}
+	tt.Key(0, ui.KeyUp)
+	tt.Frame()
+	viewport, _ := tt.Find("模型列表")
+	last, ok := tt.Find("选择模型：model-1199")
+	if !ok || last.H == 0 || last.Y < viewport.Y || last.Y+last.H > viewport.Y+viewport.H+1 {
+		t.Fatalf("wrapped keyboard selection invisible: %+v in %+v", last, viewport)
+	}
+	tt.Key(0, ui.KeyDown)
+	tt.Frame()
+	first, ok := tt.Find("选择模型：model-0000")
+	if !ok || first.H == 0 || first.Y < viewport.Y || first.Y+first.H > viewport.Y+viewport.H+1 {
+		t.Fatalf("keyboard did not return to first model: %+v", first)
+	}
+	tt.Scroll(viewport.X+viewport.W/2, viewport.Y+viewport.H/2, 0, 100000)
+	for range 3 {
+		tt.Frame()
+	}
+	if _, ok := tt.Find("选择模型：model-1199"); !ok {
+		t.Fatal("wheel cannot reach last model")
+	}
+	tt.Type("0050")
+	tt.Frame()
+	if !tt.HasText("model-0050") || a.Live.ModelIndex != 0 || len(tt.Texts()) > 200 {
+		t.Fatal("search did not reset the virtualized catalog")
+	}
+}
+
 func TestCompletionMenusKeepKeyboardSelectionVisible(t *testing.T) {
 	for _, kind := range []string{"commands", "mentions"} {
 		t.Run(kind, func(t *testing.T) {

@@ -232,19 +232,21 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 		a.heading(c, "检测到的模型")
 		a.note(c, str(catalog["message"]))
 		a.input(c, "搜索检测到的模型", &s.ModelCatalogSearch, "按模型 ID 搜索", false)
-		ui.Scroll(c).Label("默认模型目录").MaxHeight(260).Children(func() {
-			count := 0
-			for _, item := range list(catalog["data"]) {
-				name := str(object(item)["id"])
-				if !strings.Contains(strings.ToLower(name), strings.ToLower(s.ModelCatalogSearch)) {
-					continue
-				}
-				count++
-				menuOption(c.Key(name), "cpu", name, s.Model == name).Label("设为默认模型：" + name).Disabled(busy || s.Mode != "在桌面客户端配置").OnClick(func() { s.Model = name })
+		query := strings.ToLower(s.ModelCatalogSearch)
+		var names []string
+		for _, item := range list(catalog["data"]) {
+			name := str(object(item)["id"])
+			if strings.Contains(strings.ToLower(name), query) {
+				names = append(names, name)
 			}
-			if count == 0 {
-				a.note(c, "没有匹配的模型")
-			}
+		}
+		if len(names) == 0 {
+			a.note(c, "没有匹配的模型")
+		}
+		ui.List(c.Key(query), nil, len(names)).Label("默认模型目录").MaxHeight(260).Shrink(0).
+			ItemKey(func(i int) any { return names[i] }).Rows(func(row ui.ListRow) {
+			c, name := row.Context, names[row.Index]
+			menuOption(c.Key(name), "cpu", name, s.Model == name).Label("设为默认模型：" + name).Disabled(busy || s.Mode != "在桌面客户端配置").OnClick(func() { s.Model = name })
 		})
 	}
 	if catalog := object(l.Data["models"]); str(catalog["discovery_error"]) != "" {
