@@ -15,11 +15,13 @@ import (
 	"time"
 
 	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/hwj123hwj/easyagent/sdk/session"
 )
 
 // Receipts persist admission and the final result, not the live event stream.
 // An interrupted process must never replay a prompt that may have side effects.
 type runReceipt struct {
+	BaseEntryID      *string             `json:"base_entry_id,omitempty"`
 	CanContinue      bool                `json:"can_continue,omitempty"`
 	UserEntryID      string              `json:"user_entry_id,omitempty"`
 	AssistantEntryID string              `json:"assistant_entry_id,omitempty"`
@@ -42,7 +44,7 @@ func (s *Server) receiptPath(requestID string) string {
 }
 
 func (s *Server) saveRunReceipt(run *sessionRun) error {
-	data, err := json.Marshal(runReceipt{CanContinue: run.CanContinue, UserEntryID: run.UserEntryID, AssistantEntryID: run.AssistantEntryID, Usage: run.Usage, Inputs: run.Inputs, RunID: run.ID, RequestID: run.RequestID, SessionID: run.SessionID, Prompt: run.Prompt, State: run.State, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Result: run.last})
+	data, err := json.Marshal(runReceipt{BaseEntryID: run.baseEntryID, CanContinue: run.CanContinue, UserEntryID: run.UserEntryID, AssistantEntryID: run.AssistantEntryID, Usage: run.Usage, Inputs: run.Inputs, RunID: run.ID, RequestID: run.RequestID, SessionID: run.SessionID, Prompt: run.Prompt, State: run.State, StartedAt: run.StartedAt, EndedAt: run.EndedAt, Error: run.Error, Result: run.last})
 	if err != nil {
 		return err
 	}
@@ -128,7 +130,7 @@ func validRunReceipt(receipt runReceipt) bool {
 }
 
 func restoreReceipt(receipt runReceipt) *sessionRun {
-	run := &sessionRun{CanContinue: receipt.CanContinue, UserEntryID: receipt.UserEntryID, AssistantEntryID: receipt.AssistantEntryID, Usage: receipt.Usage, Inputs: receipt.Inputs, ID: receipt.RunID, RequestID: receipt.RequestID, SessionID: receipt.SessionID, Prompt: receipt.Prompt, State: receipt.State, StartedAt: receipt.StartedAt, EndedAt: receipt.EndedAt, Error: receipt.Error, last: receipt.Result, restored: true, done: make(chan struct{}), pending: map[string]*pendingConfirmation{}}
+	run := &sessionRun{baseEntryID: receipt.BaseEntryID, CanContinue: receipt.CanContinue, UserEntryID: receipt.UserEntryID, AssistantEntryID: receipt.AssistantEntryID, Usage: receipt.Usage, Inputs: receipt.Inputs, ID: receipt.RunID, RequestID: receipt.RequestID, SessionID: receipt.SessionID, Prompt: receipt.Prompt, State: receipt.State, StartedAt: receipt.StartedAt, EndedAt: receipt.EndedAt, Error: receipt.Error, last: receipt.Result, restored: true, done: make(chan struct{}), pending: map[string]*pendingConfirmation{}}
 	if runActive(run) {
 		run.State, run.Error = "interrupted", "服务重启导致任务中断；已接受的消息不会自动重复执行，请检查历史后决定是否重新发送"
 		ended := time.Now()
@@ -141,6 +143,7 @@ func restoreReceipt(receipt runReceipt) *sessionRun {
 func (s *Server) hydrateRestoredRun(run *sessionRun) error {
 	if !s.app.SessionManager().Exists(run.SessionID) {
 		run.baseline = []map[string]any{}
+		run.CanContinue = false
 		return nil
 	}
 	sess, err := s.resolveSession(s.ctx, run.SessionID)
@@ -152,7 +155,10 @@ func (s *Server) hydrateRestoredRun(run *sessionRun) error {
 		return err
 	}
 	run.baseline = serializeSessionContext(sess, messages)
-	return nil
+	if run.State == "interrupted" || run.State == "failed" {
+		run.CanContinue, err = restoredToolTail(s.ctx, run, sess.Session())
+	}
+	return err
 }
 
 // loadRunReceipt restores only proof of acceptance. Active receipts are
@@ -291,4 +297,80 @@ func forEachRunReceipt(ctx context.Context, dataDir string, visit func(runReceip
 			return
 		}
 	}
+}
+
+// Reconstruct eligibility from durable entries, never by replaying an accepted prompt.
+func restoredToolTail(ctx context.Context, run *sessionRun, sess *session.Session) (bool, error) {
+	messages, ids, err := sess.BuildContextSnapshot(ctx)
+	if err != nil {
+		return false, err
+	}
+	if len(messages) == 0 {
+		return false, nil
+	}
+	if _, ok := messages[len(messages)-1].(ai.ToolResultMessage); !ok {
+		return false, nil
+	}
+	completed := map[string]bool{}
+	complete := false
+	for i := len(messages) - 1; i >= 0; i-- {
+		switch m := messages[i].(type) {
+		case ai.ToolResultMessage:
+			completed[m.ToolCallID] = true
+		case ai.AssistantMessage:
+			if len(m.ToolCalls) == 0 {
+				return false, nil
+			}
+			for _, call := range m.ToolCalls {
+				if !completed[call.ID] {
+					return false, nil
+				}
+			}
+			complete = true
+		default:
+			return false, nil
+		}
+		if complete {
+			break
+		}
+	}
+	if !complete {
+		return false, nil
+	}
+	entries, err := sess.Storage().GetPathToRoot(ctx, "")
+	if err != nil {
+		return false, err
+	}
+	base, tail := -1, -1
+	for i, e := range entries {
+		if run.baseEntryID != nil && e.ID == *run.baseEntryID {
+			base = i
+		}
+		if e.ID == ids[len(ids)-1] {
+			tail = i
+		}
+	}
+	if tail < 0 {
+		return false, nil
+	}
+	if run.baseEntryID != nil {
+		if *run.baseEntryID != "" && base < 0 {
+			return false, nil
+		}
+		return tail > base || run.Inputs.ContinueRunID != "" && tail == base, nil
+	}
+	// Older receipts have no cursor: only accept a clearly newer tool result
+	// belonging to this prompt. A same-millisecond boundary remains conservative.
+	if run.Inputs.ContinueRunID != "" {
+		return true, nil
+	}
+	if entries[tail].Timestamp <= run.StartedAt.UnixMilli() {
+		return false, nil
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		if user, ok := messages[i].(ai.UserMessage); ok {
+			return len(user.Content) > 0 && user.Content[0].Text == run.Prompt, nil
+		}
+	}
+	return false, nil
 }
