@@ -603,6 +603,7 @@ func (a *preview) executeLiveCommand(text string) bool {
 		a.openSettings("general")
 	case "/mcp":
 		a.Settings.Workspace = s.Workspace
+		a.Live.SavedMCPForm.Workspace = s.Workspace
 		a.openSettings("mcp")
 	case "/new":
 		a.newSession()
