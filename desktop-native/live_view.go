@@ -24,6 +24,9 @@ func (a *preview) liveNotices(c *ui.Context) {
 				color = c.Theme().Danger
 			}
 			ui.Text(c, text).FontSize(12).TextColor(color).Grow(1).MinWidth(0).Role(ui.RoleStatus)
+			if l.CredentialRepair {
+				a.action(c, "重新填写访问令牌").OnClick(a.repairLiveCredential)
+			}
 			if !l.Connected {
 				a.action(c, "重连").Disabled(l.Connecting).OnClick(a.connectLive)
 			}

@@ -46,6 +46,7 @@ type liveState struct {
 	epoch                                                                  uint64
 	results                                                                chan liveResult
 	Connected, Connecting                                                  bool
+	CredentialRepair                                                       bool
 	Notice, Error                                                          string
 	Models                                                                 []string
 	ResourceErrors                                                         map[string]string
@@ -283,7 +284,7 @@ func (a *preview) run(key string, work func(context.Context, *backendClient) (an
 				l.Loading[key] = false
 			}
 			if err != nil {
-				l.Error = err.Error()
+				a.reportLiveError(err)
 				return
 			}
 			if done != nil {
@@ -323,7 +324,7 @@ func (a *preview) resource(key, path string) {
 			}
 			l.Loading[key] = false
 			if err != nil {
-				l.Error = err.Error()
+				a.reportLiveError(err)
 				l.ResourceErrors[key] = err.Error()
 				return
 			}
@@ -366,6 +367,7 @@ func (a *preview) connectLive() {
 	l.Connecting = true
 	l.Connected = false
 	l.Error = ""
+	l.CredentialRepair = false
 	l.Client = nil
 	ctx, cancel := context.WithCancel(l.ctx)
 	l.streamCancel = cancel
@@ -378,10 +380,8 @@ func (a *preview) connectLive() {
 		if h.Local {
 			b, err = l.Core.start(ctx, dir, cfg, secrets)
 		} else {
-			var token string
-			if h.HasToken {
-				token, err = secrets.Get("host/" + h.ID)
-			}
+			token, credentialErr := hostCredential(secrets, h)
+			err = credentialErr
 			if err == nil {
 				b, err = newBackendClient(h.URL, token)
 			}
@@ -390,7 +390,7 @@ func (a *preview) connectLive() {
 			}
 		}
 		if err != nil {
-			a.post(epoch, func() { l.Connecting = false; l.Error = err.Error() })
+			a.post(epoch, func() { l.Connecting = false; a.reportLiveError(err) })
 			return
 		}
 		b, _ = newBackendClient(b.URL, b.Token)
@@ -403,8 +403,15 @@ func (a *preview) connectLive() {
 				a.loadSettingsPage()
 			}
 		})
-		b.observe(ctx, func(e envelope) { a.post(epoch, func() { a.receive(e) }) }, func(connected bool) {
+		b.observe(ctx, func(e envelope) { a.post(epoch, func() { a.receive(e) }) }, func(connected bool, err error) {
 			a.post(epoch, func() {
+				if err != nil {
+					a.reportLiveError(err)
+					return
+				}
+				if l.CredentialRepair {
+					return
+				}
 				l.Connected = connected
 				if connected {
 					l.Error = ""
