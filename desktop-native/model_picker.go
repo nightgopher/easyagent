@@ -26,12 +26,13 @@ func (a *preview) modelChoices(query string) []nativeModelChoice {
 		all[id] = nativeModelChoice{id, name, str(item["provider"])}
 	}
 	var out []nativeModelChoice
+	query = strings.ToLower(query)
 	for _, id := range a.Live.Models {
 		choice := all[id]
 		if choice.ID == "" {
 			choice = nativeModelChoice{ID: id, Name: id}
 		}
-		if strings.Contains(strings.ToLower(choice.ID+" "+choice.Name+" "+choice.Provider), strings.ToLower(query)) {
+		if strings.Contains(strings.ToLower(choice.ID+" "+choice.Name+" "+choice.Provider), query) {
 			out = append(out, choice)
 		}
 	}
@@ -81,36 +82,37 @@ func (a *preview) liveModelPicker(c *ui.Context, anchor ui.Element) {
 		if len(choices) == 0 && !l.Loading["model-list"] {
 			a.note(c, "没有匹配的模型")
 		}
-		ui.Scroll(c).Label("模型列表").MaxHeight(260).FocusGroup(ui.Vertical).Children(func() {
-			for i, choice := range choices {
-				button := ui.ButtonBase(c.Key(choice.ID)).TextColor(c.Theme().Text).FillWidth().MinWidth(0).Padding(8, 10).Gap(8).Radius(5).Selected(s.Model == choice.ID).Label("选择模型：" + choice.ID).Disabled(l.Loading["model/"+s.RemoteID]).OnClick(func() { a.switchLiveModel(choice.ID) })
-				if s.Model == choice.ID {
-					button.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
-				}
-				if i == l.ModelIndex {
-					button.Background(c.Theme().Text.Alpha(.08))
-					if l.ModelJump {
-						button.ScrollIntoView()
-					}
-				}
-				button.Children(func() {
-					ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-						ui.Text(c, choice.Name).FontSize(12).SingleLine().MinWidth(0)
-						if choice.Name != choice.ID || choice.Provider != "" {
-							label := choice.ID
-							if choice.Provider != "" {
-								label = choice.Provider + " · " + label
-							}
-							ui.Text(c, label).FontSize(10).TextColor(c.Theme().TextMuted).SingleLine().MinWidth(0)
+		if l.ModelJump {
+			l.ModelList.ScrollIntoView(l.ModelIndex)
+			l.ModelJump = false
+		}
+		ui.List(c, &l.ModelList, len(choices)).Label("模型列表").MaxHeight(260).Shrink(0).
+			ItemKey(func(i int) any { return choices[i].ID }).Rows(func(row ui.ListRow) {
+			c, i := row.Context, row.Index
+			choice := choices[i]
+			button := ui.ButtonBase(c.Key(choice.ID)).TextColor(c.Theme().Text).FillWidth().MinWidth(0).Padding(8, 10).Gap(8).Radius(5).Selected(s.Model == choice.ID).Label("选择模型：" + choice.ID).Disabled(l.Loading["model/"+s.RemoteID]).OnClick(func() { a.switchLiveModel(choice.ID) })
+			if s.Model == choice.ID {
+				button.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+			}
+			if i == l.ModelIndex {
+				button.Background(c.Theme().Text.Alpha(.08))
+			}
+			button.Children(func() {
+				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+					ui.Text(c, choice.Name).FontSize(12).SingleLine().MinWidth(0)
+					if choice.Name != choice.ID || choice.Provider != "" {
+						label := choice.ID
+						if choice.Provider != "" {
+							label = choice.Provider + " · " + label
 						}
-					})
-					if s.Model == choice.ID {
-						icon(c, "check")
+						ui.Text(c, label).FontSize(10).TextColor(c.Theme().TextMuted).SingleLine().MinWidth(0)
 					}
 				})
-			}
+				if s.Model == choice.ID {
+					icon(c, "check")
+				}
+			})
 		})
-		l.ModelJump = false
 		if str(object(l.Data["models"])["source"]) == "configured" {
 			a.note(c, "仅显示已配置模型，连接尚未验证")
 		}

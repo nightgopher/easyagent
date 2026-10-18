@@ -50,6 +50,39 @@ func TestGlobalModelSettingsLayoutAndEditing(t *testing.T) {
 	}
 }
 
+func TestGlobalModelCatalogVirtualizesAndSearchesAfterScrolling(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Settings.Mode = "在桌面客户端配置"
+	data := make([]any, 1200)
+	for i := range data {
+		data[i] = map[string]any{"id": fmt.Sprintf("model-%04d", i)}
+	}
+	a.Live.Data["model-check"] = map[string]any{"data": data}
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Scroll(c).Grow(1).Children(func() { a.liveModelSettings(c) })
+	}, 900, 1400)
+	if len(tt.Texts()) > 200 {
+		t.Fatalf("built the entire default model catalog: %d texts", len(tt.Texts()))
+	}
+	viewport, ok := tt.Find("默认模型目录")
+	if !ok || viewport.H == 0 {
+		t.Fatal("missing model catalog")
+	}
+	tt.Scroll(viewport.X+viewport.W/2, viewport.Y+viewport.H/2, 0, 100000)
+	for range 3 {
+		tt.Frame()
+	}
+	if _, ok := tt.Find("设为默认模型：model-1199"); !ok {
+		t.Fatal("last catalog model unreachable")
+	}
+	a.Settings.ModelCatalogSearch = "0050"
+	tt.Frame()
+	click(t, tt, "设为默认模型：model-0050")
+	if a.Settings.Model != "model-0050" || len(tt.Texts()) > 200 {
+		t.Fatal("filtered catalog selection failed")
+	}
+}
+
 func TestModelCatalogCanBeDiscoveredBeforeChoosingModel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" || r.Method != "GET" {
