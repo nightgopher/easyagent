@@ -22,6 +22,7 @@ type liveResult struct {
 type liveState struct {
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
+	CollapsedBuckets                                                       map[string]bool
 	SavedModelForm                                                         modelForm
 	SavedMCPForm                                                           mcpForm
 	ModelIndex                                                             int
@@ -107,7 +108,7 @@ func localHostName() string {
 func newConnectedPreview(dir string) *preview {
 	a := newPreview()
 	ctx, cancel := context.WithCancel(context.Background())
-	l := &liveState{Dir: dir, Secrets: systemSecrets{}, Core: &localBackend{}, ctx: ctx, cancel: cancel, epoch: 1, results: make(chan liveResult, 1024), Models: []string{}, ResourceErrors: map[string]string{}, Data: map[string]any{}, Loading: map[string]bool{}, Versions: map[string]uint64{}, Drafts: map[string]string{}, DraftInputs: map[string]draftInputState{}, CollapsedProjects: map[string]bool{}, Workbench: newNativeWorkbench()}
+	l := &liveState{Dir: dir, Secrets: systemSecrets{}, Core: &localBackend{}, ctx: ctx, cancel: cancel, epoch: 1, results: make(chan liveResult, 1024), Models: []string{}, ResourceErrors: map[string]string{}, Data: map[string]any{}, Loading: map[string]bool{}, Versions: map[string]uint64{}, Drafts: map[string]string{}, DraftInputs: map[string]draftInputState{}, CollapsedProjects: map[string]bool{}, CollapsedBuckets: map[string]bool{}, Workbench: newNativeWorkbench()}
 	l.Config = clientConfig{Hosts: []hostConfig{{ID: "local", Name: localHostName(), Local: true}}, ActiveHost: "local", Model: modelConfig{Mode: "inherit"}}
 	l.hostCtx = ctx
 	l.Store = &nativeStore{dir: dir}
