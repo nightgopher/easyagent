@@ -170,7 +170,14 @@ func (s *session) history(records []storedMessage) {
 				s.Messages = append(s.Messages, &message{Text: text, EntryID: m.EntryID})
 			}
 			for _, call := range m.ToolCalls {
-				tool := &message{Tool: call.Name, CallID: call.ID, Args: call.Args, Text: displayText(call.Args), Kind: "tool", EntryID: m.EntryID, Status: "未完成"}
+				args := call.Args
+				if encoded, ok := args.(string); ok {
+					var decoded any
+					if json.Unmarshal([]byte(encoded), &decoded) == nil {
+						args = decoded
+					}
+				}
+				tool := &message{Tool: call.Name, CallID: call.ID, Args: args, Text: displayText(args), Kind: "tool", EntryID: m.EntryID, Status: "未完成"}
 				tools[call.ID] = tool
 				s.Messages = append(s.Messages, tool)
 			}
@@ -334,6 +341,9 @@ func (s *session) reduce(e envelope) {
 			}
 		}
 	} else if e.Type == "replay" {
+		if e.Seq < s.Seq {
+			return
+		}
 		if s.Run == nil && e.Run != nil {
 			copy := *e.Run
 			copy.State = "running"
@@ -349,6 +359,10 @@ func (s *session) reduce(e envelope) {
 		s.Seq = max(s.Seq, e.Seq)
 		s.Confirmations = e.Confirmations
 	} else if e.Type == "accepted" {
+		if e.Seq > 0 && e.Seq <= s.Seq {
+			return
+		}
+		s.Seq = max(s.Seq, e.Seq)
 		if s.runID() != e.RunID {
 			s.Run = &runInfo{ID: e.RunID, RequestID: e.RequestID, State: e.State, Prompt: e.Prompt}
 			if e.Prompt != "" {
