@@ -54,3 +54,31 @@ func TestSettingsCleanFormSwitchesWithoutConfirmation(t *testing.T) {
 		t.Fatal("clean switch should proceed")
 	}
 }
+
+func TestSettingsFeishuDirtyMatchesSaveSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name, savedID, inputID string
+		managed, want          bool
+	}{
+		{"blank retains local ID", "saved-app", "", false, false},
+		{"unchanged local ID", "saved-app", "saved-app", false, false},
+		{"changed local ID", "saved-app", "new-app", false, true},
+		{"new managed app", "", "new-app", true, true},
+		{"existing managed ID is read-only", "saved-app", "new-app", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newConnectedPreview(t.TempDir())
+			defer a.closeLive()
+			a.Settings.Tab = "feishu"
+			a.Live.Data["feishu"] = map[string]any{"app_id": tc.savedID, "managed": tc.managed}
+			a.Settings.AppID = tc.inputID
+			if got := a.settingsFormDirty(); got != tc.want {
+				t.Fatalf("dirty = %v, want %v", got, tc.want)
+			}
+			a.Settings.AppSecret = "unsaved-secret"
+			if !a.settingsFormDirty() {
+				t.Fatal("a new secret must always mark the form dirty")
+			}
+		})
+	}
+}
