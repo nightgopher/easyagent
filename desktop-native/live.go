@@ -24,6 +24,7 @@ type liveState struct {
 	CollapsedProjects                                                      map[string]bool
 	ModelIndex                                                             int
 	ModelJump                                                              bool
+	ModelList                                                              ui.ListState
 	CommandIndex                                                           int
 	CommandJump                                                            bool
 	RenameOwner                                                            *session
