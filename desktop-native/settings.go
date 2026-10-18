@@ -110,6 +110,15 @@ func (a *preview) preferenceRow(c *ui.Context, label, detail string, control fun
 		control()
 	})
 }
+
+// dirtySuffix marks form headings on pages with uncommitted edits; the save
+// and discard controls beside them make the state actionable.
+func (a *preview) dirtySuffix() string {
+	if a.Live != nil && a.settingsFormDirty() {
+		return " · 未保存"
+	}
+	return ""
+}
 func (a *preview) settingsView(c *ui.Context) {
 	s := &a.Settings
 	page := s.page()
@@ -165,9 +174,9 @@ func (a *preview) settingsView(c *ui.Context) {
 					if a.Live == nil {
 						a.text(c, "语言与外观保存在此设备；连接与能力设置仅为演示。").FontSize(11).TextColor(c.Theme().TextMuted)
 					} else if page.ID == "general" || page.ID == "appearance" {
-						a.note(c, "语言与外观保存在此设备。")
+						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else {
-						a.note(c, "设置属于当前运行主机，保存后会实际生效。")
+						a.note(c, "设置属于当前运行主机；表单修改需保存后生效，未保存的修改在切换分区或关闭时会被丢弃。")
 					}
 				})
 				if a.Live != nil {
@@ -217,8 +226,11 @@ func (a *preview) generalSettings(c *ui.Context) {
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
 		a.preferenceRow(c, "界面语言", "选择应用的显示语言。", func() {
 			if a.selectControl(c, "界面语言", &s.Preferences.Language, []string{"中文", "English"}).Width(180).Label(a.tr("语言选择")).Changed() {
-				s.savePreferences()
+				saved := s.savePreferences()
 				a.syncNativeLocale()
+				if saved {
+					c.Toast(a.tr("已保存"))
+				}
 			}
 		})
 		version := "EasyAgent " + nativeAppVersion()
@@ -261,7 +273,12 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 	ui.Row(c).AlignItems(ui.Stretch).Gap(12).Children(func() {
 		for _, option := range []struct{ id, label, detail string }{{"dark", "青夜", "深青背景 · 柔和浅青"}, {"light", "浅色", "明亮表面 · 清晰文字"}, {"system", "跟随系统", "随系统外观自动切换"}} {
 			selected := s.Preferences.Theme == option.id
-			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() { s.Preferences.Theme = option.id; s.savePreferences() })
+			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() {
+				s.Preferences.Theme = option.id
+				if s.savePreferences() {
+					c.Toast(a.tr("已保存"))
+				}
+			})
 			if selected {
 				e.BorderColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.08))
 			}
