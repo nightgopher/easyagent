@@ -103,7 +103,8 @@ jobs:
             mobile-native/**/*.gradle.kts
             mobile-native/gradle/wrapper/gradle-wrapper.properties
       - name: Install the pinned Android build tools
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.1'
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
       - name: Build and verify the signed Android APK
         env:
           TAG: ${{ needs.validate.outputs.version }}
