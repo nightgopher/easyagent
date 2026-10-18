@@ -252,6 +252,14 @@ func (a *preview) generalSettings(c *ui.Context) {
 					c.Toast(a.tr("已保存"))
 				}
 			}
+			a.action(c, "恢复默认语言").Disabled(s.Preferences.Language == "中文").OnClick(func() {
+				s.Preferences.Language = "中文"
+				saved := s.savePreferences()
+				a.syncNativeLocale()
+				if saved {
+					c.Toast(a.tr("已保存"))
+				}
+			})
 		})
 		version := "EasyAgent " + nativeAppVersion()
 		a.preferenceRow(c, "桌面版本", version, func() {
@@ -331,6 +339,12 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 				})
 				a.text(c, option.detail).FontSize(11).TextColor(c.Theme().TextMuted)
 			})
+		}
+	})
+	a.action(c, "恢复默认主题").AlignSelf(ui.Start).Disabled(s.Preferences.Theme == "dark").OnClick(func() {
+		s.Preferences.Theme = "dark"
+		if s.savePreferences() {
+			c.Toast(a.tr("已保存"))
 		}
 	})
 }
