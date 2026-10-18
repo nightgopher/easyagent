@@ -325,7 +325,7 @@ func (a *preview) resource(key, path string) {
 			l.Loading[key] = false
 			if err != nil {
 				a.reportLiveError(err)
-				l.ResourceErrors[key] = err.Error()
+				l.ResourceErrors[key] = l.Error
 				return
 			}
 			l.Data[key] = value
