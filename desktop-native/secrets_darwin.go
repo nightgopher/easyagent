@@ -15,19 +15,23 @@ import (
 type systemSecrets struct{}
 
 var keychain struct {
-	once           sync.Once
-	err            error
-	security, core uintptr
-	stringNew      func(uintptr, string, uint32) uintptr
-	dataNew        func(uintptr, *byte, int64) uintptr
-	dataLength     func(uintptr) int64
-	dataBytes      func(uintptr) uintptr
-	dictionary     func(uintptr, *uintptr, *uintptr, int64, uintptr, uintptr) uintptr
-	release        func(uintptr)
-	copy           func(uintptr, *uintptr) int32
-	add            func(uintptr, uintptr) int32
-	update         func(uintptr, uintptr) int32
-	delete         func(uintptr) int32
+	once                         sync.Once
+	err                          error
+	security, core               uintptr
+	keyCallbacks, valueCallbacks uintptr
+	arrayCallbacks               uintptr
+	stringNew                    func(uintptr, string, uint32) uintptr
+	dataNew                      func(uintptr, *byte, int64) uintptr
+	dataLength                   func(uintptr) int64
+	dataBytes                    func(uintptr) uintptr
+	dictionary                   func(uintptr, *uintptr, *uintptr, int64, uintptr, uintptr) uintptr
+	array                        func(uintptr, *uintptr, int64, uintptr) uintptr
+	defaultKeychain              func(*uintptr) int32
+	release                      func(uintptr)
+	copy                         func(uintptr, *uintptr) int32
+	add                          func(uintptr, uintptr) int32
+	update                       func(uintptr, uintptr) int32
+	delete                       func(uintptr) int32
 }
 
 func initKeychain() error {
@@ -51,6 +55,17 @@ func initKeychain() error {
 		purego.RegisterLibFunc(&k.add, k.security, "SecItemAdd")
 		purego.RegisterLibFunc(&k.update, k.security, "SecItemUpdate")
 		purego.RegisterLibFunc(&k.delete, k.security, "SecItemDelete")
+		purego.RegisterLibFunc(&k.array, k.core, "CFArrayCreate")
+		purego.RegisterLibFunc(&k.defaultKeychain, k.security, "SecKeychainCopyDefault")
+		k.keyCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeDictionaryKeyCallBacks")
+		if k.err != nil {
+			return
+		}
+		k.valueCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeDictionaryValueCallBacks")
+		if k.err != nil {
+			return
+		}
+		k.arrayCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeArrayCallBacks")
 	})
 	return keychain.err
 }
@@ -66,25 +81,41 @@ func keychainConstant(name string) uintptr {
 	return *(*uintptr)(nativePointer(address))
 }
 func keychainDictionary(keys, values []uintptr) uintptr {
-	return keychain.dictionary(0, &keys[0], &values[0], int64(len(keys)), 0, 0)
+	return keychain.dictionary(0, &keys[0], &values[0], int64(len(keys)), keychain.keyCallbacks, keychain.valueCallbacks)
 }
-func keychainQuery(account string, read bool) (uintptr, func()) {
+func keychainQuery(account string, read bool) (uintptr, uintptr, func(), error) {
+	// SecItemAdd writes to the default keychain, whereas an unscoped search
+	// follows the user's search list. That list may omit the default keychain.
+	var target uintptr
+	if keychain.defaultKeychain(&target) != 0 || target == 0 {
+		return 0, 0, nil, errors.New("无法打开默认系统钥匙串")
+	}
+	search := keychain.array(0, &target, 1, keychain.arrayCallbacks)
 	service := keychain.stringNew(0, "com.hwj.easyagent.native-preview", 0x08000100)
 	name := keychain.stringNew(0, account, 0x08000100)
-	keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount")}
-	values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name}
+	keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount"), keychainConstant("kSecMatchSearchList")}
+	values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name, search}
 	if read {
-		keys = append(keys, keychainConstant("kSecReturnData"))
-		values = append(values, keychainConstant("kCFBooleanTrue"))
+		keys = append(keys, keychainConstant("kSecReturnData"), keychainConstant("kSecMatchLimit"))
+		values = append(values, keychainConstant("kCFBooleanTrue"), keychainConstant("kSecMatchLimitOne"))
 	}
 	q := keychainDictionary(keys, values)
-	return q, func() { keychain.release(q); keychain.release(service); keychain.release(name) }
+	return q, target, func() {
+		keychain.release(q)
+		keychain.release(service)
+		keychain.release(name)
+		keychain.release(search)
+		keychain.release(target)
+	}, nil
 }
 func (systemSecrets) Get(account string) (string, error) {
 	if initKeychain() != nil {
 		return "", errors.New("系统钥匙串不可用")
 	}
-	q, done := keychainQuery(account, true)
+	q, _, done, err := keychainQuery(account, true)
+	if err != nil {
+		return "", err
+	}
 	defer done()
 	var result uintptr
 	status := keychain.copy(q, &result)
@@ -109,7 +140,10 @@ func (systemSecrets) Set(account, value string) error {
 	if value == "" {
 		return (systemSecrets{}).Delete(account)
 	}
-	q, done := keychainQuery(account, false)
+	q, target, done, err := keychainQuery(account, false)
+	if err != nil {
+		return err
+	}
 	defer done()
 	data := []byte(value)
 	v := keychain.dataNew(0, &data[0], int64(len(data)))
@@ -124,8 +158,8 @@ func (systemSecrets) Set(account, value string) error {
 		name := keychain.stringNew(0, account, 0x08000100)
 		defer keychain.release(service)
 		defer keychain.release(name)
-		keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount"), keychainConstant("kSecValueData")}
-		values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name, v}
+		keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount"), keychainConstant("kSecValueData"), keychainConstant("kSecUseKeychain")}
+		values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name, v, target}
 		d := keychainDictionary(keys, values)
 		defer keychain.release(d)
 		status = keychain.add(d, 0)
@@ -139,7 +173,10 @@ func (systemSecrets) Delete(account string) error {
 	if initKeychain() != nil {
 		return errors.New("系统钥匙串不可用")
 	}
-	q, done := keychainQuery(account, false)
+	q, _, done, err := keychainQuery(account, false)
+	if err != nil {
+		return err
+	}
 	defer done()
 	code := keychain.delete(q)
 	if code != 0 && code != -25300 {

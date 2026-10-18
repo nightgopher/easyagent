@@ -85,6 +85,7 @@ type settingsState struct {
 	feishuForm
 	Open                                                                     bool
 	Heading                                                                  ui.Handle
+	HostTokenField                                                           ui.Handle
 	Tab, Search, Notice, Error                                               string
 	Preferences                                                              localPreferences
 	Path                                                                     string
@@ -152,6 +153,7 @@ func (a *preview) closeSettings() {
 	}
 	a.Settings.Open = false
 	a.Settings.Heading.CancelFocus()
+	a.Settings.HostTokenField.CancelFocus()
 	a.Settings.AppSecret = ""
 	a.Settings.APIKey = ""
 	a.Settings.HostToken = ""

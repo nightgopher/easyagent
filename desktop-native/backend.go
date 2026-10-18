@@ -30,12 +30,14 @@ type backendClient struct {
 	ws         *websocket.Conn
 }
 
+var errUnauthorized = errors.New("服务拒绝访问（HTTP 401），请重新填写访问令牌")
+
 func newBackendClient(raw, token string) (*backendClient, error) {
 	u, err := url.Parse(strings.TrimRight(strings.TrimSpace(raw), "/"))
 	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return nil, errors.New("服务地址必须是无凭据、参数和片段的 HTTP(S) 地址")
 	}
-	return &backendClient{URL: u.String(), Token: token, HTTP: &http.Client{Timeout: 45 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
+	return &backendClient{URL: u.String(), Token: strings.TrimSpace(token), HTTP: &http.Client{Timeout: 45 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 func requestID() string {
 	var b [16]byte
@@ -82,7 +84,10 @@ func (b *backendClient) execute(req *http.Request, out any) error {
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		var v struct{ Error, Message string }
 		_ = json.Unmarshal(data, &v)
-		if res.StatusCode == 401 || res.StatusCode == 403 {
+		if res.StatusCode == http.StatusUnauthorized {
+			return errUnauthorized
+		}
+		if res.StatusCode == 403 {
 			return fmt.Errorf("服务拒绝访问（HTTP %d），请检查认证或权限", res.StatusCode)
 		}
 		msg := v.Error
@@ -153,7 +158,7 @@ func (b *backendClient) closeSocket() {
 		b.ws = nil
 	}
 }
-func (b *backendClient) observe(ctx context.Context, emit func(envelope), status func(bool)) {
+func (b *backendClient) observe(ctx context.Context, emit func(envelope), status func(bool, error)) {
 	defer b.closeSocket()
 	backoff := time.Second
 	for ctx.Err() == nil {
@@ -167,13 +172,22 @@ func (b *backendClient) observe(ctx context.Context, emit func(envelope), status
 		if b.Token != "" {
 			h.Set("Authorization", "Bearer "+b.Token)
 		}
-		conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
+		conn, response, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
+		if err != nil && response != nil {
+			if response.Body != nil {
+				_ = response.Body.Close()
+			}
+			if response.StatusCode == http.StatusUnauthorized {
+				status(false, errUnauthorized)
+				return
+			}
+		}
 		if err == nil {
 			conn.SetReadLimit(32 << 20)
 			b.mu.Lock()
 			b.ws = conn
 			b.mu.Unlock()
-			status(true)
+			status(true, nil)
 			backoff = time.Second
 			closed := make(chan struct{})
 			go func() {
@@ -196,7 +210,7 @@ func (b *backendClient) observe(ctx context.Context, emit func(envelope), status
 		if ctx.Err() != nil {
 			return
 		}
-		status(false)
+		status(false, nil)
 		t := time.NewTimer(backoff)
 		select {
 		case <-ctx.Done():
