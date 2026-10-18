@@ -6,6 +6,7 @@
   "macos": {
     "signingIdentity": "44FA716814B17ADACC6F187C9DB635090A793AF8",
     "minimumSystemVersion": "13.0",
+    "entitlements": "resources/easyagent.entitlements",
     "infoPlist": {
       "NSMicrophoneUsageDescription": "录制语音并发送到当前 EasyAgent 主机转写。",
       "NSDesktopFolderUsageDescription": "访问你选择的桌面项目，读取、编辑和运行项目文件。",
