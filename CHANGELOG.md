@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [v0.19.0] - 2026-10-18
+
+### Added
+- 正式 Release 新增可安装的 Android APK（`easyagent-android.apk`），采用固定发布证书签名，与核心及桌面使用相同版本，并纳入发布清单与 SHA-256 校验。
+- Android 发布前校验应用标识、版本、最低系统版本、非 Debug 构建和证书指纹；PR 使用一次性密钥演练真实 Release 构建，正式私钥仅供 Release 使用。
+
+### Development
+- Android 开发版本从桌面配置读取，消除独立维护的版本号；发布构建按 SemVer 生成递增的 Android versionCode。
+- 补齐文档索引和架构图中的 Android 客户端、独立构建单元及验证入口。APK 尚未完成 Android 真机或模拟器 UI 验收。
+- `make desktop` 显式声明为 phony 目标，修复遗留 `desktop/` 目录存在时构建被错误跳过；明确 `make test` / `make vet` 仅验证根 Go 模块。
+
 ## [v0.18.1] - 2026-10-18
 
 ### Fixed

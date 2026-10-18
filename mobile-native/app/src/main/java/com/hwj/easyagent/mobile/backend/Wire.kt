@@ -2,6 +2,7 @@ package com.hwj.easyagent.mobile.backend
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -181,6 +182,7 @@ fun pretty(v: JsonElement?): String {
     return prettyJson.encodeToString(JsonElement.serializer(), v)
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 private val prettyJson = Json { prettyPrint = true; prettyPrintIndent = "  " }
 
 fun JsonElement?.str(): String = (this as? JsonPrimitive)?.takeIf { it.isString }?.content ?: ""

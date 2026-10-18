@@ -7,6 +7,8 @@ on:
       - 'scripts/release.py'
       - 'scripts/publish-release.py'
       - 'scripts/build-release.sh'
+      - 'scripts/build-android.py'
+      - 'mobile-native/**'
       - 'scripts/check-release-build.sh'
       - 'scripts/test_cua_helper.py'
       - 'native/computer-use/**'
@@ -42,6 +44,24 @@ jobs:
           go-version-file: desktop-native/go.mod
       - name: Exercise the native release builder
         run: bash scripts/check-native-release-build.sh
+  android-build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            mobile-native/**/*.gradle.kts
+            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - name: Install the pinned Android build tools
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
+      - name: Exercise the release APK builder with a disposable signing key
+        run: python3 scripts/build-android.py build dist --test-signing
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: macos-15

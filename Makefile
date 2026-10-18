@@ -1,4 +1,4 @@
-.PHONY: build install run chat serve test vet clean tidy help
+.PHONY: build build-agent install run chat serve test vet clean tidy help desktop
 
 # ── Binary names ──
 BINARY   = easyagent
@@ -19,8 +19,8 @@ help:
 	@echo "  make run         Quick run (single prompt)"
 	@echo "  make chat        Start interactive TUI chat"
 	@echo "  make serve       Start HTTP server"
-	@echo "  make test        Run all tests"
-	@echo "  make vet         Run go vet"
+	@echo "  make test        Run root Go module tests (see docs/CONTRIBUTING.md for all clients)"
+	@echo "  make vet         Run go vet on the root Go module"
 	@echo "  make clean       Remove bin/ directory"
 	@echo "  make tidy        Run go mod tidy"
 	@echo ""
