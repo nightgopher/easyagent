@@ -20,12 +20,13 @@ import (
 // OpenAIProvider 通过 HTTP 调用 OpenAI Chat Completions API。
 // 兼容所有 OpenAI 格式的中转服务（如 https://api.longcat.chat/openai）。
 type OpenAIProvider struct {
-	apiKey  string
-	baseURL string // 例如 https://api.openai.com/v1 或 https://api.longcat.chat/openai/v1
-	client  *http.Client
+	thinking ThinkingOptions
+	apiKey   string
+	baseURL  string // 例如 https://api.openai.com/v1 或 https://api.longcat.chat/openai/v1
+	client   *http.Client
 }
 
-func NewOpenAIProvider(apiKey, baseURL string) *OpenAIProvider {
+func NewOpenAIProvider(apiKey, baseURL string, options ...ThinkingOptions) *OpenAIProvider {
 	// CRITICAL: Strip any control characters (ANSI escape codes like \x1b[A)
 	// that may have leaked into the baseURL from terminal input corruption.
 	// Without this, the URL becomes invalid and causes:
@@ -34,10 +35,15 @@ func NewOpenAIProvider(apiKey, baseURL string) *OpenAIProvider {
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
+	var thinking ThinkingOptions
+	if len(options) > 0 {
+		thinking = options[0]
+	}
 	return &OpenAIProvider{
-		apiKey:  apiKey,
-		baseURL: baseURL,
-		client:  newStreamHTTPClient(),
+		thinking: thinking,
+		apiKey:   apiKey,
+		baseURL:  baseURL,
+		client:   newStreamHTTPClient(),
 	}
 }
 
@@ -88,7 +94,10 @@ type openAIToolParam struct {
 }
 
 type openAIRequest struct {
-	StreamOptions *struct {
+	Thinking            *thinkingParam `json:"thinking,omitempty"`
+	ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
+	MaxCompletionTokens int            `json:"max_completion_tokens,omitempty"`
+	StreamOptions       *struct {
 		IncludeUsage bool `json:"include_usage"`
 	} `json:"stream_options,omitempty"`
 	Model       string            `json:"model"`
@@ -142,6 +151,13 @@ type openAIStreamChunk struct {
 // ─── Stream ───────────────────────────────────────────────────────────────────────
 
 func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error) {
+	if err := p.thinking.Validate(p.Name()); err != nil {
+		return nil, err
+	}
+	idle, err := configuredStreamIdleTimeout()
+	if err != nil {
+		return nil, err
+	}
 	stream := ai.NewEventStream(8)
 
 	oaiReq := p.buildOpenAIRequest(req, true)
@@ -152,10 +168,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 
 	// 流式请求绑定可取消的派生 context：空闲看门狗超时触发 cancel，
 	// 中止停滞的上游连接（总时长不受 http.Client.Timeout 限制）
-	streamCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		defer stream.Close()
-		defer cancel()
 
 		partial := ai.StreamAssistantMessage{}
 		_ = stream.Push(ctx, ai.EventStart{Partial: partial})
@@ -171,10 +185,14 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 		// 断流重试：上游（如 glm coding 端点）长思考静默期会被前置 LB 掐断，
 		// 客户端读到 unexpected EOF，或收到无内容的 finish_reason。只要一个
 		// delta 都没收到，原样重发是安全的（内容尚未开始）。
+		idleRetries := 0
 		for attempt := 1; ; attempt++ {
+			streamCtx, cancel := context.WithCancel(ctx)
+			started := time.Now()
 			httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost,
 				p.baseURL+"v1/chat/completions", bytes.NewReader(body))
 			if err != nil {
+				cancel()
 				fail(fmt.Errorf("create request: %w", err))
 				return
 			}
@@ -183,28 +201,39 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				cancel()
 				fail(err)
 				return
 			}
 			if resp.StatusCode != http.StatusOK {
 				respBody, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				cancel()
 				fail(fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody)))
 				return
 			}
 
-			wd := startStreamWatchdog(streamCtx, streamIdleTimeout, cancel)
-			received, err := p.handleSSE(streamCtx, stream, resp.Body, &partial, wd)
+			headers := time.Now()
+			wd := startStreamWatchdog(streamCtx, idle, cancel)
+			received, err := p.handleSSE(streamCtx, stream, watchedReader{resp.Body, wd}, &partial, wd)
 			resp.Body.Close()
+			cancel()
+			if wd.Tripped() {
+				err = wd.idleError(idle, attempt, started, headers)
+			}
+			retryIdle := wd.Tripped() && wd.Bytes.Load() == 0 && !received && idleRetries < 1
+			if retryIdle {
+				idleRetries++
+			}
 
 			if err == nil && received {
 				return // 正常完成，handleSSE 已收尾
 			}
 			// 空流（EOF 断流或伪造 finish_reason）且未被取消 → 退避后重试
-			if !received && err == nil && attempt < streamRetryAttempts &&
-				ctx.Err() == nil && streamCtx.Err() == nil {
+			if !received && (err == nil || retryIdle) && attempt < streamRetryAttempts && ctx.Err() == nil {
 				select {
 				case <-time.After(time.Duration(attempt) * streamRetryDelay):
+					partial = ai.StreamAssistantMessage{}
 					continue
 				case <-ctx.Done():
 				}
@@ -418,6 +447,17 @@ func (p *OpenAIProvider) buildOpenAIRequest(req ai.StreamRequest, stream bool) o
 		Temperature: 0.7,
 	}
 
+	if p.thinking.Mode != "" {
+		oaiReq.Thinking = &thinkingParam{Type: p.thinking.Mode}
+	}
+	oaiReq.ReasoningEffort = p.thinking.Effort
+	if p.thinking.Effort != "" {
+		oaiReq.Temperature = 0
+		if strings.HasPrefix(req.Model.ID, "gpt-") || strings.HasPrefix(req.Model.ID, "o1") || strings.HasPrefix(req.Model.ID, "o3") || strings.HasPrefix(req.Model.ID, "o4") {
+			oaiReq.MaxCompletionTokens = maxTokens
+			oaiReq.MaxTokens = 0
+		}
+	}
 	if stream {
 		oaiReq.StreamOptions = &struct {
 			IncludeUsage bool `json:"include_usage"`

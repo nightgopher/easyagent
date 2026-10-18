@@ -183,6 +183,21 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 					})
 				}
 			})
+			nativeDisclosure(c, "reasoning-settings", "思考与流式响应", func() {
+				choices := []string{"沿用模型默认", "开启思考", "关闭思考"}
+				if s.Provider == "Anthropic" {
+					choices = append(choices, "自适应思考")
+				}
+				a.dropdown(c, "思考模式", &s.Thinking, choices)
+				if s.Provider == "Anthropic" && thinkingMode(s.Thinking) == "enabled" {
+					a.input(c, "思考预算（token）", &s.ThinkingBudget, "至少 1024，例如 4096", false)
+				}
+				if s.Provider != "Anthropic" {
+					a.dropdown(c, "推理强度", &s.ReasoningEffort, []string{"沿用模型默认", "none", "minimal", "low", "medium", "high", "xhigh", "max"})
+				}
+				a.input(c, "流空闲超时", &s.StreamIdleTimeout, "默认 300s；例如 5m", false)
+				a.note(c, "留空沿用模型默认；仅对支持的模型开启思考，可能增加耗时和 token。adaptive 仅供支持它的 Anthropic 模型使用。")
+			})
 			a.note(c, "配置适用于此 Mac 的本地 Agent。密钥保存在 macOS 钥匙串；远程 Agent 的访问令牌在运行主机中配置。")
 		} else {
 			a.note(c, "读取 ~/.easyagent/config.yaml、~/.easyagent/.env 和当前环境中的模型与工具配置。修改后点击应用即可重新读取。")
@@ -253,7 +268,7 @@ func (a *preview) modelCandidateWithModel(model string) (modelConfig, string, er
 		if s.Provider == "Anthropic" {
 			provider = "anthropic"
 		}
-		cfg = modelConfig{Mode: "override", Provider: provider, BaseURL: s.BaseURL, Model: model, HasKey: true}
+		cfg = modelConfig{Thinking: thinkingMode(s.Thinking), ReasoningEffort: reasoningEffort(s.ReasoningEffort), ThinkingBudget: s.ThinkingBudget, StreamIdleTimeout: s.StreamIdleTimeout, Mode: "override", Provider: provider, BaseURL: s.BaseURL, Model: model, HasKey: true}
 	}
 	cfg, err := validatedModel(cfg)
 	key := strings.TrimSpace(s.APIKey)
@@ -770,3 +785,36 @@ func idString(v any) string {
 	return strconv.FormatInt(int64(number(v)), 10)
 }
 func pathSegment(v string) string { return url.PathEscape(v) }
+
+func thinkingMode(label string) string {
+	switch label {
+	case "沿用模型默认":
+		return ""
+	case "开启思考":
+		return "enabled"
+	case "关闭思考":
+		return "disabled"
+	case "自适应思考":
+		return "adaptive"
+	}
+	return label
+}
+func thinkingLabel(mode string) string {
+	switch mode {
+	case "":
+		return "沿用模型默认"
+	case "enabled":
+		return "开启思考"
+	case "disabled":
+		return "关闭思考"
+	case "adaptive":
+		return "自适应思考"
+	}
+	return mode
+}
+func reasoningEffort(label string) string {
+	if label == "沿用模型默认" {
+		return ""
+	}
+	return label
+}

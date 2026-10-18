@@ -19,21 +19,27 @@ import (
 // AnthropicProvider 通过 HTTP 直接调用 Anthropic Messages API。
 // 不依赖 anthropic-sdk-go，减少外部依赖。
 type AnthropicProvider struct {
-	apiKey  string
-	baseURL string // 例如 https://api.anthropic.com 或 https://api.longcat.chat/anthropic
-	client  *http.Client
+	thinking ThinkingOptions
+	apiKey   string
+	baseURL  string // 例如 https://api.anthropic.com 或 https://api.longcat.chat/anthropic
+	client   *http.Client
 }
 
-func NewAnthropicProvider(apiKey, baseURL string) *AnthropicProvider {
+func NewAnthropicProvider(apiKey, baseURL string, options ...ThinkingOptions) *AnthropicProvider {
 	// Strip ANSI escape codes that may leak from terminal input corruption.
 	baseURL = sanitizeURL(baseURL)
 	if !strings.HasSuffix(baseURL, "/") {
 		baseURL += "/"
 	}
+	var thinking ThinkingOptions
+	if len(options) > 0 {
+		thinking = options[0]
+	}
 	return &AnthropicProvider{
-		apiKey:  apiKey,
-		baseURL: baseURL,
-		client:  newStreamHTTPClient(),
+		thinking: thinking,
+		apiKey:   apiKey,
+		baseURL:  baseURL,
+		client:   newStreamHTTPClient(),
 	}
 }
 
@@ -59,6 +65,9 @@ type anthropicImageSource struct {
 }
 
 type anthropicContentBlock struct {
+	Thinking  string                `json:"thinking,omitempty"`
+	Signature string                `json:"signature,omitempty"`
+	Data      string                `json:"data,omitempty"`
 	Type      string                `json:"type"`
 	Text      string                `json:"text,omitempty"`
 	Source    *anthropicImageSource `json:"source,omitempty"`      // image content source
@@ -82,6 +91,7 @@ type anthropicToolSchema struct {
 }
 
 type anthropicRequest struct {
+	Thinking  *thinkingParam        `json:"thinking,omitempty"`
 	Model     string                `json:"model"`
 	Messages  []anthropicMessage    `json:"messages"`
 	System    string                `json:"system,omitempty"`
@@ -93,6 +103,13 @@ type anthropicRequest struct {
 // ─── Stream ───────────────────────────────────────────────────────────────────────
 
 func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error) {
+	if err := p.thinking.Validate(p.Name()); err != nil {
+		return nil, err
+	}
+	idle, err := configuredStreamIdleTimeout()
+	if err != nil {
+		return nil, err
+	}
 	stream := ai.NewEventStream(8)
 
 	anthropicReq := p.buildRequest(req, true)
@@ -104,10 +121,8 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 
 	// 流式请求绑定可取消的派生 context：空闲看门狗超时触发 cancel，
 	// 中止停滞的上游连接（总时长不受 http.Client.Timeout 限制）
-	streamCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		defer stream.Close()
-		defer cancel()
 
 		partial := ai.StreamAssistantMessage{}
 		_ = stream.Push(ctx, ai.EventStart{Partial: partial})
@@ -122,10 +137,14 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 
 		// 断流重试：上游长思考静默期会被前置 LB 掐断，客户端读到 unexpected EOF。
 		// 只要一个内容块都没收到，原样重发是安全的（内容尚未开始）。
+		idleRetries := 0
 		for attempt := 1; ; attempt++ {
+			streamCtx, cancel := context.WithCancel(ctx)
+			started := time.Now()
 			httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost,
 				p.baseURL+"v1/messages", bytes.NewReader(body))
 			if err != nil {
+				cancel()
 				fail(fmt.Errorf("create request: %w", err))
 				return
 			}
@@ -135,28 +154,39 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
+				cancel()
 				fail(err)
 				return
 			}
 			if resp.StatusCode != http.StatusOK {
 				respBody, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
+				cancel()
 				fail(fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody)))
 				return
 			}
 
-			wd := startStreamWatchdog(streamCtx, streamIdleTimeout, cancel)
-			received, err := p.handleSSE(streamCtx, stream, resp.Body, &partial, wd)
+			headers := time.Now()
+			wd := startStreamWatchdog(streamCtx, idle, cancel)
+			received, err := p.handleSSE(streamCtx, stream, watchedReader{resp.Body, wd}, &partial, wd)
 			resp.Body.Close()
+			cancel()
+			if wd.Tripped() {
+				err = wd.idleError(idle, attempt, started, headers)
+			}
+			retryIdle := wd.Tripped() && wd.Bytes.Load() == 0 && !received && idleRetries < 1
+			if retryIdle {
+				idleRetries++
+			}
 
 			if err == nil && received {
 				return // 正常完成，handleSSE 已收尾
 			}
 			// 空流（EOF 断流）且未被取消 → 退避后重试
-			if !received && err == nil && attempt < streamRetryAttempts &&
-				ctx.Err() == nil && streamCtx.Err() == nil {
+			if !received && (err == nil || retryIdle) && attempt < streamRetryAttempts && ctx.Err() == nil {
 				select {
 				case <-time.After(time.Duration(attempt) * streamRetryDelay):
+					partial = ai.StreamAssistantMessage{}
 					continue
 				case <-ctx.Done():
 				}
@@ -269,12 +299,14 @@ func (p *AnthropicProvider) handleSSEEvent(
 		var raw struct {
 			Index        int `json:"index"`
 			ContentBlock struct {
-				Type     string `json:"type"`
-				ID       string `json:"id,omitempty"`
-				Name     string `json:"name,omitempty"`
-				Text     string `json:"text,omitempty"`
-				Thinking string `json:"thinking,omitempty"`
-				Input    any    `json:"input,omitempty"`
+				Type      string `json:"type"`
+				ID        string `json:"id,omitempty"`
+				Name      string `json:"name,omitempty"`
+				Text      string `json:"text,omitempty"`
+				Thinking  string `json:"thinking,omitempty"`
+				Signature string `json:"signature,omitempty"`
+				Data      string `json:"data,omitempty"`
+				Input     any    `json:"input,omitempty"`
 			} `json:"content_block"`
 		}
 		if err := json.Unmarshal([]byte(data), &raw); err != nil {
@@ -292,7 +324,10 @@ func (p *AnthropicProvider) handleSSEEvent(
 			toolCallIndexMap[idx] = *toolCallCounter
 			*toolCallCounter++
 			_ = stream.Push(ctx, ai.EventToolCallStart{ContentIndex: idx, Partial: *partial})
+		case "redacted_thinking":
+			partial.ThinkingBlocks = append(partial.ThinkingBlocks, ai.ThinkingBlock{Type: "redacted_thinking", Data: raw.ContentBlock.Data})
 		case "thinking":
+			partial.ThinkingBlocks = append(partial.ThinkingBlocks, ai.ThinkingBlock{Type: "thinking", Thinking: raw.ContentBlock.Thinking, Signature: raw.ContentBlock.Signature})
 			if raw.ContentBlock.Thinking != "" {
 				partial.Thinking += raw.ContentBlock.Thinking
 				_ = stream.Push(ctx, ai.EventThinkingDelta{Delta: raw.ContentBlock.Thinking})
@@ -306,6 +341,7 @@ func (p *AnthropicProvider) handleSSEEvent(
 				Type        string `json:"type"`
 				Text        string `json:"text,omitempty"`
 				Thinking    string `json:"thinking,omitempty"`
+				Signature   string `json:"signature,omitempty"`
 				PartialJSON string `json:"partial_json,omitempty"`
 			} `json:"delta"`
 		}
@@ -318,7 +354,14 @@ func (p *AnthropicProvider) handleSSEEvent(
 		case "text_delta":
 			partial.Text += raw.Delta.Text
 			_ = stream.Push(ctx, ai.EventTextDelta{ContentIndex: idx, Delta: raw.Delta.Text, Partial: *partial})
+		case "signature_delta":
+			if n := len(partial.ThinkingBlocks); n > 0 {
+				partial.ThinkingBlocks[n-1].Signature += raw.Delta.Signature
+			}
 		case "thinking_delta":
+			if n := len(partial.ThinkingBlocks); n > 0 {
+				partial.ThinkingBlocks[n-1].Thinking += raw.Delta.Thinking
+			}
 			partial.Thinking += raw.Delta.Thinking
 			_ = stream.Push(ctx, ai.EventThinkingDelta{Delta: raw.Delta.Thinking})
 		case "input_json_delta":
@@ -420,6 +463,15 @@ func (p *AnthropicProvider) buildRequest(req ai.StreamRequest, stream bool) anth
 		Messages:  convertToAnthropicMessages(req.Messages),
 	}
 
+	if p.thinking.Mode != "" {
+		apiReq.Thinking = &thinkingParam{Type: p.thinking.Mode}
+		if p.thinking.Mode == "enabled" {
+			apiReq.Thinking.BudgetTokens = p.thinking.BudgetTokens
+			if apiReq.MaxTokens <= p.thinking.BudgetTokens {
+				apiReq.MaxTokens = p.thinking.BudgetTokens + 1024
+			}
+		}
+	}
 	if len(req.Tools) > 0 {
 		for _, t := range req.Tools {
 			params, _ := json.Marshal(t.Parameters)
@@ -474,6 +526,9 @@ func convertToAnthropicMessages(msgs []ai.Message) []anthropicMessage {
 
 		case ai.AssistantMessage:
 			var blocks []anthropicContentBlock
+			for _, b := range m.ThinkingBlocks {
+				blocks = append(blocks, anthropicContentBlock{Type: b.Type, Thinking: b.Thinking, Signature: b.Signature, Data: b.Data})
+			}
 			if m.Text != "" {
 				blocks = append(blocks, anthropicContentBlock{Type: "text", Text: m.Text})
 			}

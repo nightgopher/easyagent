@@ -96,7 +96,7 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 		g.mu.Unlock()
 		return retryRun(previous, sessionID, prompt, inputs)
 	}
-	if strings.TrimSpace(prompt) == "" || len(prompt) > 128*1024 {
+	if (strings.TrimSpace(prompt) == "" && inputs.ContinueRunID == "") || len(prompt) > 128*1024 {
 		return nil, false, &runAdmissionError{"invalid_prompt", "prompt is empty"}
 	}
 	g.mu.Lock()
@@ -106,7 +106,17 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 			g.mu.Unlock()
 			return nil, false, &runAdmissionError{"busy", "此会话正在处理消息，请等待完成或取消当前任务"}
 		}
+		if inputs.ContinueRunID != "" {
+			previous := state.run
+			if prompt != "" || len(inputs.Attachments)+len(inputs.Files) > 0 || previous == nil || previous.ID != inputs.ContinueRunID || !previous.CanContinue || (previous.State != "failed" && previous.State != "interrupted" && previous.State != "cancelled") {
+				g.mu.Unlock()
+				return nil, false, &runAdmissionError{"stale_run", "任务已变化或没有可续跑的工具结果，请刷新后重试"}
+			}
+		}
 		state.admission = flight
+	} else if inputs.ContinueRunID != "" {
+		g.mu.Unlock()
+		return nil, false, &runAdmissionError{"invalid_prompt", "续跑必须指定会话"}
 	}
 	g.mu.Unlock()
 	release, ok := s.activity.begin()
@@ -167,7 +177,12 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 			s.observeFiles(run, agent.AgentStreamEvent{Type: agent.StreamEventToolEnd, ToolName: e.ToolName, ToolCallID: e.ToolCallID, IsError: e.IsError})
 		}
 	})
-	stream, err := sess.PromptMessageStream(context.WithValue(ctx, runContextKey{}, run), message)
+	var stream <-chan agent.AgentStreamEvent
+	if inputs.ContinueRunID != "" {
+		stream, err = sess.ContinueStream(context.WithValue(ctx, runContextKey{}, run))
+	} else {
+		stream, err = sess.PromptMessageStream(context.WithValue(ctx, runContextKey{}, run), message)
+	}
 	if err != nil {
 		unsubscribeFiles()
 		if removeErr := os.Remove(s.receiptPath(requestID)); removeErr != nil {

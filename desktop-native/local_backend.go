@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,8 +30,9 @@ type hostConfig struct {
 	HasToken                 bool
 }
 type modelConfig struct {
-	Mode, Provider, BaseURL, Model string
-	HasKey                         bool
+	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
+	Mode, Provider, BaseURL, Model                               string
+	HasKey                                                       bool
 }
 type clientConfig struct {
 	Hosts      []hostConfig
@@ -198,6 +200,7 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 			return nil, errors.New("已保存的模型配置缺少密钥，请重新填写")
 		}
 		env["EA_PROVIDER"] = model.Provider
+		env["EA_THINKING"], env["EA_REASONING_EFFORT"], env["EA_THINKING_BUDGET"], env["EA_STREAM_IDLE_TIMEOUT"] = model.Thinking, model.ReasoningEffort, model.ThinkingBudget, model.StreamIdleTimeout
 		if model.Provider == "anthropic" {
 			env["ANTHROPIC_API_KEY"] = key
 			env["ANTHROPIC_BASE_URL"] = model.BaseURL
@@ -302,6 +305,22 @@ func (m *localBackend) stop() {
 }
 func (m *localBackend) close() { m.mu.Lock(); m.closed = true; m.mu.Unlock(); m.stop() }
 func validatedModel(cfg modelConfig) (modelConfig, error) {
+	if cfg.Thinking != "" && cfg.Thinking != "enabled" && cfg.Thinking != "disabled" && !(cfg.Provider == "anthropic" && cfg.Thinking == "adaptive") {
+		return cfg, errors.New("不支持的思考模式")
+	}
+	if cfg.Provider == "anthropic" && cfg.Thinking == "enabled" {
+		n, err := strconv.Atoi(cfg.ThinkingBudget)
+		if err != nil || n < 1024 {
+			return cfg, errors.New("Anthropic 思考预算至少为 1024 token")
+		}
+	}
+	if cfg.StreamIdleTimeout != "" {
+		d, err := time.ParseDuration(cfg.StreamIdleTimeout)
+		if err != nil || d <= 0 {
+			return cfg, errors.New("流空闲超时请填写正数时长，例如 300s")
+		}
+	}
+
 	if cfg.Mode == "inherit" {
 		return modelConfig{Mode: "inherit"}, nil
 	}
@@ -334,7 +353,7 @@ func inheritedCoreEnvironment(home string) map[string]string {
 	if data, err := os.ReadFile(filepath.Join(home, ".easyagent", "config.yaml")); err == nil {
 		_ = yaml.Unmarshal(data, &values)
 	}
-	fields := map[string]string{"workspace": "EA_WORKSPACE", "provider": "EA_PROVIDER", "openai_api_key": "OPENAI_API_KEY", "openai_base_url": "OPENAI_BASE_URL", "openai_model": "OPENAI_MODEL", "anthropic_api_key": "ANTHROPIC_API_KEY", "anthropic_base_url": "ANTHROPIC_BASE_URL", "anthropic_model": "ANTHROPIC_MODEL", "enable_bash": "EA_ENABLE_BASH", "enable_web": "EA_ENABLE_WEB", "enable_web_search": "EA_ENABLE_WEB_SEARCH", "kb_repo_path": "EA_KB_REPO_PATH", "asr_api_key": "ASR_API_KEY", "asr_base_url": "ASR_BASE_URL", "asr_model": "ASR_MODEL"}
+	fields := map[string]string{"thinking": "EA_THINKING", "reasoning_effort": "EA_REASONING_EFFORT", "thinking_budget": "EA_THINKING_BUDGET", "stream_idle_timeout": "EA_STREAM_IDLE_TIMEOUT", "workspace": "EA_WORKSPACE", "provider": "EA_PROVIDER", "openai_api_key": "OPENAI_API_KEY", "openai_base_url": "OPENAI_BASE_URL", "openai_model": "OPENAI_MODEL", "anthropic_api_key": "ANTHROPIC_API_KEY", "anthropic_base_url": "ANTHROPIC_BASE_URL", "anthropic_model": "ANTHROPIC_MODEL", "enable_bash": "EA_ENABLE_BASH", "enable_web": "EA_ENABLE_WEB", "enable_web_search": "EA_ENABLE_WEB_SEARCH", "kb_repo_path": "EA_KB_REPO_PATH", "asr_api_key": "ASR_API_KEY", "asr_base_url": "ASR_BASE_URL", "asr_model": "ASR_MODEL"}
 	for field, name := range fields {
 		if v, ok := values[field]; ok {
 			result[name] = fmt.Sprint(v)

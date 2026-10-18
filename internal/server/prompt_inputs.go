@@ -27,8 +27,9 @@ type fileReference struct {
 	Workspace string `json:"workspace"`
 }
 type promptInputs struct {
-	Attachments []string        `json:"attachments,omitempty"`
-	Files       []fileReference `json:"files,omitempty"`
+	ContinueRunID string          `json:"continue_run_id,omitempty"`
+	Attachments   []string        `json:"attachments,omitempty"`
+	Files         []fileReference `json:"files,omitempty"`
 }
 
 func sameInputs(a, b promptInputs) bool {

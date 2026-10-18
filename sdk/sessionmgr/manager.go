@@ -250,7 +250,7 @@ func (m *Manager) Fork(ctx context.Context, sourceID string, entryID string) (st
 // ForkAt copies the active branch. nil means the entire branch; an empty ID
 // means an empty conversation. Retained compaction messages preserve the summary
 // and the retained prefix, instead of resurrecting discarded tool outputs.
-// The runtime caller must keep source writes idle during the snapshot.
+// Offline callers must keep source writes idle; live runtimes use ForkSnapshot.
 func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) (newID, newPath string, err error) {
 	if sourceID == "" || strings.ContainsAny(sourceID, `/\\`) || sourceID == "." || sourceID == ".." {
 		return "", "", fmt.Errorf("invalid source session")
@@ -267,38 +267,18 @@ func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) 
 	if err != nil {
 		return "", "", err
 	}
-	if entryID != nil {
-		if *entryID == "" {
-			entries = nil
-		} else {
-			cut := -1
-			// Prefer the latest retained snapshot over the original pre-compaction entry.
-			for i := len(entries) - 1; i >= 0; i-- {
-				if entries[i].Type != session.EntryTypeCompaction {
-					continue
-				}
-				for j, retained := range entries[i].Retained {
-					if retained.ID == *entryID {
-						entries[i].Retained = append([]session.Entry(nil), entries[i].Retained[:j+1]...)
-						cut = i + 1
-						break
-					}
-				}
-				break
-			}
-			if cut < 0 {
-				for i, entry := range entries {
-					if entry.ID == *entryID {
-						cut = i + 1
-						break
-					}
-				}
-			}
-			if cut < 0 {
-				return "", "", fmt.Errorf("entry not found on active branch")
-			}
-			entries = entries[:cut]
-		}
+	return m.ForkSnapshot(ctx, sourceID, entries, entryID, nil)
+}
+
+// ForkSnapshot writes a consistent storage snapshot without reopening a live file.
+// application nil inherits the source; a pointer to an empty string selects the default agent.
+func (m *Manager) ForkSnapshot(ctx context.Context, sourceID string, entries []session.Entry, entryID *string, application *string) (newID, newPath string, err error) {
+	if sourceID == "" || strings.ContainsAny(sourceID, `/\`) || sourceID == "." || sourceID == ".." {
+		return "", "", fmt.Errorf("invalid source session")
+	}
+	entries, err = forkPrefix(entries, entryID)
+	if err != nil {
+		return "", "", err
 	}
 	data := make([]byte, 0)
 	for _, entry := range entries {
@@ -321,7 +301,7 @@ func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) 
 	if err = os.WriteFile(newPath, data, 0600); err != nil {
 		return
 	}
-	if err = m.copyMeta(sourceID, newID); err != nil {
+	if err = m.copyMeta(sourceID, newID, application); err != nil {
 		return
 	}
 	err = m.copyAttachments(sourceID, newID)
@@ -331,7 +311,7 @@ func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) 
 // copyMeta clones the source meta.json into the forked session, appending a
 // "(分叉)" title and recording the source id as forked_from. Missing source
 // metadata is tolerated: the fork simply starts with defaults.
-func (m *Manager) copyMeta(sourceID, newID string) error {
+func (m *Manager) copyMeta(sourceID, newID string, application *string) error {
 	m.metaMu.Lock()
 	defer m.metaMu.Unlock()
 	meta := map[string]any{}
@@ -351,6 +331,9 @@ func (m *Manager) copyMeta(sourceID, newID string) error {
 	}
 	if strings.TrimSpace(title) != "" {
 		meta["title"] = strings.TrimSpace(title) + " (分叉)"
+	}
+	if application != nil {
+		meta["application"] = *application
 	}
 	meta["forked_from"] = sourceID
 	meta["archived"], meta["pinned"] = false, false
@@ -534,4 +517,77 @@ func countMessages(path string) (int, int64, string, error) {
 		lastTS /= 1000
 	}
 	return count, lastTS, firstUserMsg, scanner.Err()
+}
+
+// forkPrefix extends an assistant cut through its complete tool-result group.
+func forkPrefix(entries []session.Entry, target *string) ([]session.Entry, error) {
+	if target == nil {
+		return entries, nil
+	}
+	if *target == "" {
+		return nil, nil
+	}
+	entries = append([]session.Entry(nil), entries...)
+	// Search the latest retained view first, preserving its compacted contents.
+	for i := len(entries) - 1; i >= 0; i-- {
+		if entries[i].Type != session.EntryTypeCompaction {
+			continue
+		}
+		tail := append(append([]session.Entry(nil), entries[i].Retained...), entries[i+1:]...)
+		cut, err := forkCut(tail, *target)
+		if err == nil {
+			if cut <= len(entries[i].Retained) {
+				entries[i].Retained = append([]session.Entry(nil), tail[:cut]...)
+				return entries[:i+1], nil
+			}
+			return entries[:i+1+cut-len(entries[i].Retained)], nil
+		}
+		// A missing tool result is an invalid cut, not a reason to resurrect pre-compaction data.
+		for _, e := range tail {
+			if e.ID == *target {
+				return nil, err
+			}
+		}
+		break
+	}
+	cut, err := forkCut(entries, *target)
+	if err != nil {
+		return nil, err
+	}
+	return entries[:cut], nil
+}
+func forkCut(entries []session.Entry, target string) (int, error) {
+	cut := -1
+	for i, e := range entries {
+		if e.ID == target {
+			cut = i + 1
+			break
+		}
+	}
+	if cut < 0 {
+		return 0, fmt.Errorf("entry not found on active branch")
+	}
+	pending := map[string]bool{}
+	for _, e := range entries[:cut] {
+		if e.Assistant != nil {
+			for _, call := range e.Assistant.ToolCalls {
+				pending[call.ID] = true
+			}
+		}
+		if e.Tool != nil {
+			delete(pending, e.Tool.ToolCallID)
+		}
+	}
+	for len(pending) > 0 && cut < len(entries) {
+		e := entries[cut]
+		if e.Tool == nil {
+			break
+		}
+		delete(pending, e.Tool.ToolCallID)
+		cut++
+	}
+	if len(pending) > 0 {
+		return 0, fmt.Errorf("tool results are incomplete; wait for the current turn to finish")
+	}
+	return cut, nil
 }

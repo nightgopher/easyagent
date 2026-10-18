@@ -359,17 +359,21 @@ func (a *App) ToolNames() []string {
 // Returns an error if the configured provider cannot be initialized
 // (e.g. missing API key).
 func registerProviders(registry *providers.Registry, cfg config.Config) error {
+	thinking := providers.ThinkingOptions{Mode: cfg.ThinkingMode, BudgetTokens: cfg.ThinkingBudget, Effort: cfg.ReasoningEffort}
+	if err := thinking.Validate(cfg.Provider); err != nil {
+		return err
+	}
 	switch cfg.Provider {
 	case "anthropic":
 		if cfg.AnthropicAPIKey != "" {
-			registry.Register(providers.NewAnthropicProvider(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL))
+			registry.Register(providers.NewAnthropicProvider(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL, thinking))
 			slog.Info("registered anthropic provider", "model", cfg.AnthropicModel, "base_url", cfg.AnthropicBaseURL)
 			return nil
 		}
 		return fmt.Errorf("EA_PROVIDER=anthropic but ANTHROPIC_API_KEY is empty")
 	case "openai":
 		if cfg.OpenAIAPIKey != "" {
-			registry.Register(providers.NewOpenAIProvider(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL))
+			registry.Register(providers.NewOpenAIProvider(cfg.OpenAIAPIKey, cfg.OpenAIBaseURL, thinking))
 			slog.Info("registered openai provider", "model", cfg.OpenAIModel, "base_url", cfg.OpenAIBaseURL)
 			return nil
 		}
