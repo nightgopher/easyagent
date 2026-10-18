@@ -1,12 +1,16 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type runInfo struct {
+	Anchors        []storedMessage  `json:"message_anchors"`
+	CanContinue    bool             `json:"can_continue"`
 	Inputs         map[string]any   `json:"inputs"`
 	ID             string           `json:"run_id"`
 	RequestID      string           `json:"request_id"`
@@ -40,15 +44,16 @@ type messageQueue struct {
 	Revision uint64
 }
 type storedMessage struct {
-	DurationMS float64 `json:"duration_ms"`
-	Role       string  `json:"role"`
-	Content    any     `json:"content"`
-	Thinking   string  `json:"thinking"`
-	EntryID    string  `json:"entry_id"`
-	ToolID     string  `json:"tool_call_id"`
-	Error      bool    `json:"is_error"`
-	StopReason string  `json:"stop_reason"`
-	ToolCalls  []struct {
+	ContentHash string  `json:"content_hash"`
+	DurationMS  float64 `json:"duration_ms"`
+	Role        string  `json:"role"`
+	Content     any     `json:"content"`
+	Thinking    string  `json:"thinking"`
+	EntryID     string  `json:"entry_id"`
+	ToolID      string  `json:"tool_call_id"`
+	Error       bool    `json:"is_error"`
+	StopReason  string  `json:"stop_reason"`
+	ToolCalls   []struct {
 		ID, Name string
 		Args     any
 	} `json:"tool_calls"`
@@ -162,14 +167,10 @@ func (s *session) history(records []storedMessage) {
 				s.Messages = append(s.Messages, &message{Tool: "思考过程", Text: m.Thinking, Kind: "thought"})
 			}
 			if text := displayText(m.Content); text != "" {
-				id := m.EntryID
-				if len(m.ToolCalls) > 0 || m.StopReason == "error" || m.StopReason == "aborted" {
-					id = ""
-				}
-				s.Messages = append(s.Messages, &message{Text: text, EntryID: id})
+				s.Messages = append(s.Messages, &message{Text: text, EntryID: m.EntryID})
 			}
 			for _, call := range m.ToolCalls {
-				tool := &message{Tool: call.Name, CallID: call.ID, Args: call.Args, Text: displayText(call.Args), Kind: "tool", Status: "未完成"}
+				tool := &message{Tool: call.Name, CallID: call.ID, Args: call.Args, Text: displayText(call.Args), Kind: "tool", EntryID: m.EntryID, Status: "未完成"}
 				tools[call.ID] = tool
 				s.Messages = append(s.Messages, tool)
 			}
@@ -207,6 +208,9 @@ func (s *session) event(e agentEvent) {
 		var m *message
 		if len(s.Messages) > 0 {
 			last := s.Messages[len(s.Messages)-1]
+			if kind == "thought" && last.Kind == "" && last.Text == "" && last.Tool == "" && last.RunID == s.runID() {
+				last.Kind, last.Tool = "thought", "思考过程"
+			}
 			if !last.User && last.Kind == kind && last.RunID == s.runID() && last.Tool == "" {
 				m = last
 			}
@@ -222,7 +226,18 @@ func (s *session) event(e agentEvent) {
 			s.Messages = append(s.Messages, m)
 		}
 		m.Text += e.Text
+	case "thinking_end":
+		for i := len(s.Messages) - 1; i >= 0; i-- {
+			if m := s.Messages[i]; m.Kind == "thought" && m.RunID == s.runID() {
+				m.DurationMS = e.DurationMS
+				break
+			}
+		}
+	case "context_usage":
+		s.ensureWaiting()
 	case "tool_start":
+		s.removeWaiting()
+
 		for _, m := range s.Messages {
 			if m.CallID == e.ToolID && m.RunID == s.runID() {
 				return
@@ -258,6 +273,7 @@ func (s *session) event(e agentEvent) {
 	case "compacted":
 		s.Messages = append(s.Messages, &message{Tool: "上下文压缩", Text: e.Summary, Kind: "compaction"})
 	case "error", "compaction_failed":
+		s.removeWaiting()
 		s.Messages = append(s.Messages, &message{Text: e.ErrorText, Kind: "error"})
 	case "done":
 		text := e.Final.Text
@@ -267,6 +283,9 @@ func (s *session) event(e agentEvent) {
 		has := false
 		for _, m := range s.Messages {
 			if m.RunID == s.runID() && m.Kind == "" && !m.User {
+				if m.Text == "" {
+					m.Text = text
+				}
 				has = true
 			}
 		}
@@ -336,6 +355,7 @@ func (s *session) reduce(e envelope) {
 				s.Messages = append(s.Messages, &message{User: true, Text: e.Prompt, RunID: e.RunID})
 			}
 		}
+		s.ensureWaiting()
 	} else {
 		if e.Seq > 0 && e.Seq <= s.Seq {
 			return
@@ -386,15 +406,20 @@ func (s *session) reduce(e envelope) {
 			s.Messages = append(s.Messages, &message{Kind: "error", Text: e.Message + e.Error})
 		}
 	}
+	if e.Type == "snapshot" && s.Run.active() && len(e.Events) == 0 {
+		s.ensureWaiting()
+	}
 	s.Running = s.Run.active()
 	s.Pending = len(s.Confirmations) > 0
 	if s.Run != nil && !s.Run.active() {
+		s.removeWaiting()
+		s.syncAnchors(s.Run.Anchors)
 		s.Confirmations = nil
 		s.Pending = false
 		for i := len(s.Messages) - 1; i >= 0; i-- {
 			m := s.Messages[i]
 			if m.RunID == s.Run.ID && !m.User && m.Kind == "" && m.Tool == "" {
-				if s.Run.State == "completed" {
+				if s.Run.State == "completed" && s.Run.AssistantEntry != "" {
 					m.EntryID = s.Run.AssistantEntry
 				}
 				break
@@ -439,5 +464,66 @@ func (s *session) updatePlan(name string, args any) {
 			content = str(entry["step"])
 		}
 		s.Plan = append(s.Plan, nativePlanEntry{content, str(entry["status"])})
+	}
+}
+
+func (s *session) canForkMessage(m *message) bool {
+	return m.EntryID != "" && (!s.Running || m.RunID != s.runID())
+}
+
+func (s *session) ensureWaiting() {
+	if s.Run == nil || !s.Run.active() {
+		return
+	}
+	if len(s.Messages) > 0 {
+		m := s.Messages[len(s.Messages)-1]
+		if !m.User && m.RunID == s.runID() && (m.Kind == "" || m.Kind == "thought") {
+			return
+		}
+	}
+	s.Messages = append(s.Messages, &message{RunID: s.runID(), WaitingSince: time.Now()})
+}
+func (s *session) removeWaiting() {
+	kept := s.Messages[:0]
+	for _, m := range s.Messages {
+		if !m.User && m.Tool == "" && m.Kind == "" && m.Text == "" && m.RunID == s.runID() {
+			continue
+		}
+		kept = append(kept, m)
+	}
+	s.Messages = kept
+}
+
+func (s *session) syncAnchors(records []storedMessage) {
+	byKey := map[string][]*message{}
+	for _, m := range s.Messages {
+		if m.RunID != s.runID() {
+			continue
+		}
+		role := "assistant"
+		if m.User {
+			role = "user"
+		} else if m.Kind != "" && m.Kind != "tool" {
+			continue
+		}
+		key := role + fmt.Sprintf("%x", sha256.Sum256([]byte(m.Text)))
+		if m.Kind == "tool" {
+			key = "tool/" + m.CallID
+		}
+		byKey[key] = append(byKey[key], m)
+	}
+	for _, r := range records {
+		hash := r.ContentHash
+		if hash == "" {
+			hash = fmt.Sprintf("%x", sha256.Sum256([]byte(displayText(r.Content))))
+		}
+		key := r.Role + hash
+		if r.Role == "tool" {
+			key = "tool/" + r.ToolID
+		}
+		if queue := byKey[key]; len(queue) > 0 {
+			queue[0].EntryID = r.EntryID
+			byKey[key] = queue[1:]
+		}
 	}
 }

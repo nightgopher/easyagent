@@ -11,7 +11,7 @@ type nativeRecovery struct{ Kind, Message, Settings, Action string }
 
 var authenticationError = regexp.MustCompile(`(?i)认证|unauthori[sz]ed|invalid.*(?:key|token)|\b40[13]\b|authentication`)
 var limitError = regexp.MustCompile(`(?i)\b429\b|rate.?limit|限流|quota|配额`)
-var connectionError = regexp.MustCompile(`(?i)network|fetch failed|ECONN|timeout|timed? ?out|断线|连接|超时|socket`)
+var connectionError = regexp.MustCompile(`(?i)network|fetch failed|ECONN|timeout|timed? ?out|stream idle|断线|连接|超时|socket`)
 
 func classifyRecovery(text string) nativeRecovery {
 	if authenticationError.MatchString(text) {
@@ -46,7 +46,11 @@ func (a *preview) recoveryView(c *ui.Context, s *session) {
 			if recovery.Kind == "network" {
 				a.action(c, "重新连接").Disabled(a.Live.Connecting).OnClick(a.connectLive)
 			}
-			if strings.TrimSpace(s.Run.Prompt) != "" {
+			if s.Run.CanContinue {
+				a.action(c, "从已保存的工具结果继续").Disabled(s.Sending || a.Live.configBusy() || !a.Live.Connected || a.Live.Loading["continue/"+s.RemoteID]).OnClick(func() {
+					a.operation("continue/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/run/continue", map[string]any{"run_id": s.runID(), "request_id": requestID()}, func(any) { a.loadSession(s) })
+				})
+			} else if strings.TrimSpace(s.Run.Prompt) != "" {
 				a.action(c, "检查后重新发送").Disabled(s.Sending || a.Live.configBusy() || !a.Live.Connected).OnClick(func() {
 					run := *s.Run
 					a.Live.Confirm = &nativeConfirmation{"重新发送这条任务？", "可能重复已经完成的操作。请先检查工具记录，确认可以再次执行。", func() {

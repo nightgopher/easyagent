@@ -23,10 +23,11 @@ import (
 )
 
 type runTestGateway struct {
-	requests     chan map[string]any
-	finish       chan struct{}
-	disconnected atomic.Bool
-	calls        atomic.Int32
+	failAfterTool atomic.Bool
+	requests      chan map[string]any
+	finish        chan struct{}
+	disconnected  atomic.Bool
+	calls         atomic.Int32
 }
 
 func newRunTestServer(t *testing.T) (*Server, *httptest.Server, *runTestGateway) {
@@ -55,6 +56,11 @@ func newFileRunTestServer(t *testing.T, toolFile string, dataInside ...bool) (*S
 				fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", chunk)
 				return
 			}
+		}
+		if gateway.failAfterTool.CompareAndSwap(true, false) {
+			w.WriteHeader(502)
+			fmt.Fprint(w, "test upstream unavailable")
+			return
 		}
 		fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"first \"}}]}\n\n")
 		w.(http.Flusher).Flush()

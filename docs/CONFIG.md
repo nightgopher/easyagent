@@ -101,3 +101,24 @@ Bash 并非文件路径沙箱；启用它就授予相应系统命令能力。ser
 `bash` 未指定 `timeout` 时默认等待 120 秒；模型可为构建、测试等显式指定更长秒数，用户停止任务仍会取消命令。界面显示的是本次命令的超时，而非工具的固定上限。
 
 自动压缩估算包含消息、系统提示词和工具定义，与桌面上下文用量一致。默认超过窗口 60% 时尝试清理旧工具输出，累计至少节省 2048 tokens 才持久化；超过 80% 或侵入输出预留区（默认 16384 tokens）时直接调用 LLM 做深度摘要，不先微压缩来推迟摘要。保留最近约 20000 tokens，不删除 JSONL 中的原始会话记录。SDK 可用 `compaction.Settings` 调整比例、预留与回收阈值；没有摘要通道的 SDK 调用方只能做微压缩。
+
+## 思考与流式响应
+
+默认不添加思考参数，沿用当前服务和模型的默认行为。原生客户端的“全局模型配置 → 思考与流式响应”可配置以下选项；远程主机通过自身配置设置。
+
+| 环境变量 | YAML 字段 | 行为 |
+|---|---|---|
+| `EA_THINKING` | `thinking` | 空值保持默认；`enabled` / `disabled` 显式请求思考开关；Anthropic 另支持 `adaptive`，仅用于支持它的模型 |
+| `EA_THINKING_BUDGET` | `thinking_budget` | Anthropic `enabled` 模式必填，至少 1024 token；请求输出上限同时为预算预留回答空间 |
+| `EA_REASONING_EFFORT` | `reasoning_effort` | OpenAI 兼容服务的可选推理强度；具体支持值由模型决定，留空不发送 |
+| `EA_STREAM_IDLE_TIMEOUT` | — | 正数 Go 时长，例如 `300s` / `5m`；默认 300 秒。任意 body 字节到达即刷新，独立于 120 秒响应头超时 |
+
+仅对支持的模型启用思考；它可能增加耗时和 token。GLM-5.3 系列强制思考，不能选择 `disabled`；其原生 API 仅支持 `max` / `high` / `low` 等指定强度，参见[智谱思考文档](https://docs.bigmodel.cn/cn/guide/capabilities/thinking)。Anthropic 签名思考块会随工具上下文完整保存和回传，参见[官方思考文档](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking)。OpenAI Chat Completions 的 `reasoning_effort` 支持值依模型而定，参见[官方接口说明](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。
+
+SSE 空流仍按原有上限退避重试；空闲超时仅在一个 body 字节都未收到时重试一次。有部分数据或调用方取消时不会自动重发。错误包含第几轮模型请求、连接尝试序号、响应头时间、首个 body 字节时间、接收字节数和最后数据距今时间，便于定位网关与上游停滞；不会记录请求正文或密钥。
+
+## 分叉与失败续跑
+
+`POST /sessions/{id}/fork` 支持可选 `application`：省略继承源 Agent，`""` 为编程，`"music"` 为音乐，`"kb"` 为知识库。`entry_id` 和 `before_message_index` 互斥；运行中仅允许本轮之前的历史分叉，整条分叉和本轮消息返回 409。带工具调用的切点自动延伸至全部工具结果；工具尚未完成时返回说明性错误。源会话继续运行。
+
+`POST /sessions/{id}/run/continue` 接受 `{"run_id":"失败任务ID","request_id":"唯一请求ID"}`，返回 202。仅对最新失败／中断任务、且上下文停在已保存工具结果时可用；原生客户端显示“从已保存的工具结果继续”。服务重用现有上下文请求模型，不再次写入原始用户问题，也不重新执行已保存的工具；模型后续主动提出的新工具请求仍按正常权限流程处理。过期任务返回冲突；重复 `request_id` 返回同一次接受结果。

@@ -42,8 +42,13 @@ func (a *preview) deleteNativeSession(s *session) {
 		a.operation("delete-session", "DELETE", sessionPath(s.RemoteID), nil, func(any) { a.refreshLiveSessions("") })
 	}}
 }
-func (a *preview) forkNativeSession(s *session) {
-	a.operation("fork/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/fork", map[string]any{}, func(v any) { a.refreshLiveSessions(str(object(v)["id"])) })
+func (a *preview) forkNativeSession(s *session) { a.forkNativeSessionTo(s, nil) }
+func (a *preview) forkNativeSessionTo(s *session, application *string) {
+	body := map[string]any{}
+	if application != nil {
+		body["application"] = *application
+	}
+	a.operation("fork/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/fork", body, func(v any) { a.refreshLiveSessions(str(object(v)["id"])) })
 }
 func (a *preview) sessionOptions(c *ui.Context, s *session, close func()) {
 	busy := s.Running || s.Pending || s.Sending
@@ -53,6 +58,9 @@ func (a *preview) sessionOptions(c *ui.Context, s *session, close func()) {
 	}
 	menuOption(c, "pin", pin, false).Disabled(a.Live.Loading["preferences/"+s.RemoteID]).OnClick(func() { close(); a.patchSessionPreference(s, map[string]any{"pinned": !s.Pinned}, nil) })
 	menuOption(c, "git-branch", "分叉会话", false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSession(s) })
+	for _, target := range []struct{ Name, ID string }{{"编程", ""}, {"音乐", "music"}, {"知识库", "kb"}} {
+		menuOption(c, "git-branch", "分叉为："+target.Name, false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSessionTo(s, &target.ID) })
+	}
 	menuOption(c, "edit", "重命名", false).OnClick(func() { close(); a.renameNativeSession(s) })
 	archive := "归档"
 	if s.Archived {

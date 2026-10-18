@@ -9,6 +9,7 @@ import (
 )
 
 type message struct {
+	WaitingSince                                 time.Time
 	Args                                         any
 	ExpansionTouched                             bool
 	DurationMS                                   float64
@@ -23,6 +24,7 @@ type message struct {
 }
 type nativePlanEntry struct{ Content, Status string }
 type session struct {
+	WaitingSecond                                int64
 	FileReferences                               []fileReference
 	MentionIndex                                 int
 	MentionJump                                  bool

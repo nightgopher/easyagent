@@ -139,6 +139,9 @@ func (a *preview) conversationMessages(c *ui.Context, s *session) {
 			selected = matches[(s.FindIndex%len(matches)+len(matches))%len(matches)].Index
 		}
 	}
+	if s.Sending && !s.Running {
+		ui.Text(c, "正在提交消息…").TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
+	}
 	for i := 0; i < len(s.Messages); {
 		if a.Live != nil && s.Messages[i].Kind == "tool" {
 			end := i + 1
@@ -250,6 +253,10 @@ func (a *preview) toolGroup(c *ui.Context, s *session, start, end, selected int)
 			ui.Text(c, title).FontSize(12).Grow(1).MinWidth(0).SingleLine()
 			ui.Text(c, status).FontSize(10).TextColor(c.Theme().TextMuted)
 		})
+		if a.Live != nil && len(tools) > 0 {
+			anchor := tools[len(tools)-1]
+			iconButton(c, "git-branch", "从工具结果创建分支").Disabled(!s.canForkMessage(anchor) || running).Tooltip("包含本组完整工具结果；当前轮次请等待完成").OnClick(func() { a.forkLive(end - 1) })
+		}
 		if !state.Open {
 			return
 		}
