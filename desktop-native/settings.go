@@ -246,9 +246,11 @@ func (a *preview) generalSettings(c *ui.Context) {
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
 		a.preferenceRow(c, "界面语言", "选择应用的显示语言；默认中文。", func() {
 			if a.selectControl(c, "界面语言", &s.Preferences.Language, []string{"中文", "English"}).Width(180).Label(a.tr("语言选择")).Changed() {
-				s.savePreferences()
+				saved := s.savePreferences()
 				a.syncNativeLocale()
-				c.Toast(a.tr("已保存"))
+				if saved {
+					c.Toast(a.tr("已保存"))
+				}
 			}
 		})
 		version := "EasyAgent " + nativeAppVersion()
@@ -291,7 +293,12 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 	ui.Row(c).AlignItems(ui.Stretch).Gap(12).Children(func() {
 		for _, option := range []struct{ id, label, detail string }{{"dark", "青夜", "深青背景 · 柔和浅青"}, {"light", "浅色", "明亮表面 · 清晰文字"}, {"system", "跟随系统", "随系统外观自动切换"}} {
 			selected := s.Preferences.Theme == option.id
-			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() { s.Preferences.Theme = option.id; s.savePreferences(); c.Toast(a.tr("已保存")) })
+			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() {
+				s.Preferences.Theme = option.id
+				if s.savePreferences() {
+					c.Toast(a.tr("已保存"))
+				}
+			})
 			if selected {
 				e.BorderColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.08))
 			}

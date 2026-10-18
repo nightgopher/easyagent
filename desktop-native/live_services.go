@@ -586,7 +586,10 @@ func (a *preview) settingsFormDirty() bool {
 		if s.AppSecret != "" {
 			return true
 		}
-		return !boolean(m["managed"]) && s.AppID != str(m["app_id"])
+		// Saving a blank ID preserves the saved value; managed hosts only
+		// accept an ID while setting up an app for the first time.
+		editableID := !boolean(m["managed"]) || str(m["app_id"]) == ""
+		return editableID && s.AppID != "" && s.AppID != str(m["app_id"])
 	}
 	return false
 }
