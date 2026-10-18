@@ -119,6 +119,13 @@ func newSettings() settingsState {
 	}
 }
 func (a *preview) openSettings(tab string) {
+	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
+		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
+			a.discardSettingsForms()
+			a.openSettings(tab)
+		}}
+		return
+	}
 	if a.Live != nil && a.Settings.Tab != tab {
 		a.cancelSettingsTransient()
 	}
