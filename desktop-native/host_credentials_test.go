@@ -189,6 +189,39 @@ func TestHostWebSocketUnauthorizedStopsAndOffersRepair(t *testing.T) {
 	}
 }
 
+func TestHostAuthenticationErrorSurvivesLateOperations(t *testing.T) {
+	for _, status := range []int{200, 500} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			defer once.Do(func() { close(release) })
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				close(entered)
+				<-release
+				w.WriteHeader(status)
+				fmt.Fprint(w, `{}`)
+			}))
+			t.Cleanup(server.Close)
+			a := hostCredentialPreview(t, &memorySecrets{})
+			a.Live.Config.ActiveHost = "remote"
+			a.syncSettingsConfig()
+			a.Live.Client, _ = newBackendClient(server.URL, "")
+			a.operation("late-operation", "GET", "/slow", nil, nil)
+			select {
+			case <-entered:
+			case <-time.After(3 * time.Second):
+				t.Fatal("operation did not start")
+			}
+			a.reportLiveError(errUnauthorized)
+			once.Do(func() { close(release) })
+			waitNative(t, a, func() bool { return !a.Live.Loading["late-operation"] })
+			if !a.Live.CredentialRepair || !strings.Contains(a.Live.Error, "401") {
+				t.Fatal("late response overwrote the authentication failure", a.Live.Error)
+			}
+		})
+	}
+}
+
 func TestSavedHostCredentialAuthenticatesRESTAndWSAfterRestart(t *testing.T) {
 	testSavedHostAuthentication(t, &memorySecrets{})
 }

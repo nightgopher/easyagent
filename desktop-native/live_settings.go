@@ -43,11 +43,13 @@ func (a *preview) operation(key, method, path string, body any, done func(any)) 
 		a.post(epoch, func() {
 			l.Loading[key] = false
 			if err != nil {
-				l.Error = err.Error()
-				l.ResourceErrors[key] = err.Error()
+				a.reportLiveError(err)
+				l.ResourceErrors[key] = l.Error
 				return
 			}
-			l.Error = ""
+			if !l.CredentialRepair {
+				l.Error = ""
+			}
 			if done != nil {
 				done(v)
 			}
