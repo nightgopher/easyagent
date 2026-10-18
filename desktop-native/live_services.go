@@ -80,6 +80,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 					s.Advanced = true
 					s.JSON = "{}"
 					s.MCPBase = nil
+					a.Live.SavedMCPForm = s.mcpForm
 					l.Notice = "填写需要修改的字段；省略的凭据会保留。"
 				})
 				for _, act := range []struct{ id, label string }{{"reconnect", "重新连接"}, {"refresh", "刷新工具"}, {"enable", "启用"}, {"disable", "停用"}, {"trust", "信任服务"}, {"untrust", "撤销信任"}, {"login", "授权登录"}, {"logout", "退出授权"}} {
@@ -118,7 +119,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 		a.action(c, "打开授权页面").OnClick(func() { go mygo.Shell.OpenExternal(l.LoginURL) })
 		a.action(c, "取消授权").OnClick(a.cancelMCPLogin)
 	}
-	a.heading(c, "添加或修改 MCP 服务")
+	a.heading(c, "添加或修改 MCP 服务"+a.dirtySuffix())
 	a.dropdown(c, "配置范围", &s.Scope, []string{"个人", "项目"})
 	a.input(c, "服务名称", &s.MCPName, "例如 filesystem", false)
 	ui.Row(c).Children(func() {
@@ -145,27 +146,37 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 		ui.Checkbox(c, &s.Trust, "信任此服务")
 	}
 	a.note(c, "保存后会实际连接受信任的服务；项目配置需先信任项目。修改时省略的凭据会保留。")
-	a.primary(c, "保存配置").AlignSelf(ui.Start).Disabled(l.Loading["mcp-save"] || strings.TrimSpace(s.MCPName) == "").OnClick(func() {
-		var config map[string]any
-		var err error
-		if s.Advanced {
-			err = json.Unmarshal([]byte(s.JSON), &config)
-			if config == nil && err == nil {
-				err = errors.New("配置必须是 JSON 对象")
+	ui.Row(c).Gap(8).Children(func() {
+		a.primary(c, "保存配置").Disabled(l.Loading["mcp-save"] || strings.TrimSpace(s.MCPName) == "").OnClick(func() {
+			var config map[string]any
+			var err error
+			if s.Advanced {
+				err = json.Unmarshal([]byte(s.JSON), &config)
+				if config == nil && err == nil {
+					err = errors.New("配置必须是 JSON 对象")
+				}
+			} else {
+				config, err = s.mcpConfig()
 			}
-		} else {
-			config, err = s.mcpConfig()
+			if err != nil {
+				l.Error = err.Error()
+				return
+			}
+			scope := "user"
+			if s.Scope == "项目" {
+				scope = "project"
+			}
+			path := "/mcp/servers/" + pathSegment(strings.TrimSpace(s.MCPName)) + query(map[string]string{"workspace": s.Workspace, "scope": scope})
+			a.operation("mcp-save", "PUT", path, config, func(v any) {
+				apply(v)
+				s.mcpForm = mcpForm{Workspace: s.Workspace}
+				a.Live.SavedMCPForm = s.mcpForm
+				l.Notice = "MCP 配置已保存。"
+			})
+		})
+		if a.settingsFormDirty() {
+			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
 		}
-		if err != nil {
-			l.Error = err.Error()
-			return
-		}
-		scope := "user"
-		if s.Scope == "项目" {
-			scope = "project"
-		}
-		path := "/mcp/servers/" + pathSegment(strings.TrimSpace(s.MCPName)) + query(map[string]string{"workspace": s.Workspace, "scope": scope})
-		a.operation("mcp-save", "PUT", path, config, func(v any) { apply(v); l.Notice = "MCP 配置已保存。" })
 	})
 }
 func (a *preview) startMCPLogin(name, scope, workspace string) {
@@ -359,7 +370,7 @@ func (a *preview) liveFeishuSettings(c *ui.Context) {
 			a.operation("bridge", "POST", "/settings/feishu/bridge/restart", map[string]any{}, func(v any) { l.Data["feishu"] = v })
 		})
 	}
-	a.heading(c, "自建应用凭据")
+	a.heading(c, "自建应用凭据"+a.dirtySuffix())
 	if managed && str(m["app_id"]) != "" {
 		s.AppID = str(m["app_id"])
 	}
@@ -368,15 +379,20 @@ func (a *preview) liveFeishuSettings(c *ui.Context) {
 		idField.Disabled(true)
 	}
 	a.input(c, "App Secret", &s.AppSecret, "填写后保存；留空保留服务端凭据", true)
-	a.primary(c, "保存并重启桥接").AlignSelf(ui.Start).Disabled(l.Loading["feishu-save"]).OnClick(func() {
-		id := s.AppID
-		if id == "" || managed && str(m["app_id"]) != "" {
-			id = str(m["app_id"])
-		}
-		if managed {
-			a.operation("feishu-save", "PUT", "/settings/feishu", map[string]any{"app_id": id, "app_secret": s.AppSecret}, func(v any) { s.AppSecret = ""; l.Data["feishu"] = v })
-		} else {
-			a.saveLocalFeishu(id, s.AppSecret)
+	ui.Row(c).Gap(8).Children(func() {
+		a.primary(c, "保存并重启桥接").Disabled(l.Loading["feishu-save"]).OnClick(func() {
+			id := s.AppID
+			if id == "" || managed && str(m["app_id"]) != "" {
+				id = str(m["app_id"])
+			}
+			if managed {
+				a.operation("feishu-save", "PUT", "/settings/feishu", map[string]any{"app_id": id, "app_secret": s.AppSecret}, func(v any) { s.AppSecret = ""; l.Data["feishu"] = v })
+			} else {
+				a.saveLocalFeishu(id, s.AppSecret)
+			}
+		})
+		if a.settingsFormDirty() {
+			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
 		}
 	})
 	if managed {
@@ -475,6 +491,7 @@ func (a *preview) saveLocalFeishu(id, secret string) {
 		return nil, atomicJSON(path, old)
 	}, func(any) {
 		a.Settings.AppSecret = ""
+		a.Live.Notice = "飞书凭据已保存，正在重启桥接。"
 		a.operation("bridge", "POST", "/settings/feishu/bridge/restart", map[string]any{}, func(v any) { l.Data["feishu"] = v })
 	})
 }
@@ -531,5 +548,70 @@ func (a *preview) cancelSettingsTransient() {
 	a.cancelQR()
 	a.cancelMCPLogin()
 	delete(a.Live.Data, "pairing")
-	a.Settings.AppSecret = ""
+	a.discardSettingsForms()
+}
+
+// settingsFormDirty reports whether the current page's form has edits that no
+// save button has committed yet. Host and Feishu compare against the host
+// entry and server state directly; model and MCP compare against snapshots
+// taken at load, edit and save time.
+func (a *preview) settingsFormDirty() bool {
+	s, l := &a.Settings, a.Live
+	switch s.Tab {
+	case "models":
+		want, form := l.SavedModelForm, s.modelForm
+		return form.Mode != want.Mode || form.Provider != want.Provider || form.BaseURL != want.BaseURL || form.Model != want.Model ||
+			form.Thinking != want.Thinking || form.ReasoningEffort != want.ReasoningEffort || form.ThinkingBudget != want.ThinkingBudget ||
+			form.StreamIdleTimeout != want.StreamIdleTimeout || form.APIKey != ""
+	case "connections":
+		if s.HostToken != "" {
+			return true
+		}
+		if s.EditHost == "" {
+			return s.HostName != "" || s.HostURL != ""
+		}
+		for _, h := range l.Config.Hosts {
+			if h.ID == s.EditHost && !h.Local {
+				return s.HostName != h.Name || s.HostURL != h.URL
+			}
+		}
+		return s.HostName != "" || s.HostURL != ""
+	case "mcp":
+		want, form := l.SavedMCPForm, s.mcpForm
+		return form.Workspace != want.Workspace || form.Scope != want.Scope || form.MCPName != want.MCPName || form.Transport != want.Transport ||
+			form.Command != want.Command || form.Args != want.Args || form.Variables != want.Variables || form.URL != want.URL ||
+			form.Timeout != want.Timeout || form.JSON != want.JSON || form.Advanced != want.Advanced || form.Trust != want.Trust
+	case "feishu":
+		m := object(l.Data["feishu"])
+		if s.AppSecret != "" {
+			return true
+		}
+		return !boolean(m["managed"]) && s.AppID != str(m["app_id"])
+	}
+	return false
+}
+
+// discardSettingsForms returns every settings form to its saved baseline and
+// clears secret inputs, so abandoned half-filled forms never survive a page
+// switch or a reopened settings window.
+func (a *preview) discardSettingsForms() {
+	s, l := &a.Settings, a.Live
+	if s.Tab == "models" && (s.modelForm != l.SavedModelForm || s.APIKey != "") {
+		a.clearModelCheck()
+	}
+	s.modelForm = l.SavedModelForm
+	s.APIKey = ""
+	s.mcpForm = l.SavedMCPForm
+	s.HostName, s.HostURL, s.HostToken = "", "", ""
+	for _, h := range l.Config.Hosts {
+		if h.ID == s.EditHost && !h.Local {
+			s.HostName, s.HostURL = h.Name, h.URL
+			break
+		}
+	}
+	m := object(l.Data["feishu"])
+	s.AppSecret = ""
+	if !boolean(m["managed"]) || str(m["app_id"]) == "" {
+		s.AppID = str(m["app_id"])
+	}
 }
