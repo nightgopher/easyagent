@@ -53,40 +53,63 @@ type feishuDemoState struct {
 	AppID         string
 	Saved, Bridge bool
 }
-type settingsState struct {
-	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout                       string
-	Open                                                                               bool
-	Heading                                                                            ui.Handle
-	Tab, Notice, Error                                                                 string
-	Preferences                                                                        localPreferences
-	Path                                                                               string
-	Host                                                                               int
-	Hosts                                                                              []demoHost
-	EditHost, HostName, HostURL, HostToken                                             string
-	Mode, Provider, BaseURL, Model, APIKey                                             string
-	ModelCatalogSearch                                                                 string
-	Checked, HasKey                                                                    bool
-	ComputerEnabled                                                                    bool
-	Approval                                                                           string
-	Audit                                                                              []string
+
+// modelForm, hostForm, mcpForm and feishuForm hold one settings page's input
+// state each; resetting a form resets the whole struct instead of a hand-kept
+// field list. They embed into settingsState, so existing s.Field access keeps
+// resolving to the owning form.
+type modelForm struct {
+	Mode, Provider, BaseURL, Model, APIKey                       string
+	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
+	ModelCatalogSearch                                           string
+	Checked, HasKey                                              bool
+}
+type hostForm struct {
+	EditHost, HostName, HostURL, HostToken string
+}
+type mcpForm struct {
 	Workspace, Scope, MCPName, Transport, Command, Args, Variables, URL, Timeout, JSON string
 	Advanced, Trust, ProjectTrust, MCPExtra                                            bool
 	MCPBase                                                                            map[string]any
-	HostFeishu                                                                         map[string]feishuDemoState
-	Servers                                                                            []*demoServer
-	Skills                                                                             []*demoSkill
-	SkillQuery, SkillFilter, SkillCategory, SkillDetail                                string
-	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace           string
-	ProjectTrustByWorkspace                                                            map[string]bool
-	CapabilityOpen                                                                     bool
-	AppID, AppSecret                                                                   string
-	Bridge, FeishuSaved, Pairing, QR, QRAuthorized                                     bool
+}
+type feishuForm struct {
+	AppID, AppSecret                               string
+	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
+}
+type settingsState struct {
+	modelForm
+	hostForm
+	mcpForm
+	feishuForm
+	Open                                                                     bool
+	Heading                                                                  ui.Handle
+	Tab, Notice, Error                                                       string
+	Preferences                                                              localPreferences
+	Path                                                                     string
+	Host                                                                     int
+	Hosts                                                                    []demoHost
+	ComputerEnabled                                                          bool
+	Approval                                                                 string
+	Audit                                                                    []string
+	HostFeishu                                                               map[string]feishuDemoState
+	Servers                                                                  []*demoServer
+	Skills                                                                   []*demoSkill
+	SkillQuery, SkillFilter, SkillCategory, SkillDetail                      string
+	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace string
+	ProjectTrustByWorkspace                                                  map[string]bool
+	CapabilityOpen                                                           bool
 }
 
+// newSettings seeds the preview/demo state. Hosts, MCP servers and skills here
+// are fixture data for tests and the unconnected preview, not a mirror of any
+// real deployment; live pages read from the connected host instead.
 func newSettings() settingsState {
 	return settingsState{
-		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark"}, Hosts: []demoHost{{"local", localHostName(), "", true}, {"mini", "迷你主机", "http://192.168.5.16:8080", false}}, EditHost: "迷你主机", HostName: "迷你主机", HostURL: "http://192.168.5.16:8080",
-		Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: "http://localhost:4001", Model: "coding", Approval: "逐批询问", Workspace: "/demo/easyagent", Scope: "个人", Transport: "stdio", Timeout: "30000",
+		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark"},
+		Hosts:     []demoHost{{"local", localHostName(), "", true}, {"mini", "迷你主机", "http://192.168.5.16:8080", false}},
+		hostForm:  hostForm{EditHost: "迷你主机", HostName: "迷你主机", HostURL: "http://192.168.5.16:8080"},
+		modelForm: modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: "http://localhost:4001", Model: "coding"},
+		Approval:  "逐批询问", mcpForm: mcpForm{Workspace: "/demo/easyagent", Scope: "个人", Transport: "stdio", Timeout: "30000"},
 		Audit: []string{}, Servers: []*demoServer{{Name: "filesystem-demo", Host: "local", Scope: "个人", Transport: "stdio", Enabled: true, Trusted: true, Tool: true}},
 		SkillFilter: "精选", SkillCategory: "全部", Skills: []*demoSkill{
 			{"frontend-design", "界面设计", "根据现有设计系统实现界面，并验证布局与交互。", "开发", "## 界面设计\n\n这是预览内置的示例技能，不会下载或写入正式技能目录。\n\n- 对照现有界面。\n- 实现交互与响应式布局。\n- 检查可读性和键盘操作。", false},
