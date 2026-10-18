@@ -135,6 +135,28 @@ func relativeSessionTime(raw string) string {
 	}
 	return fmt.Sprintf("%d 天前", int(age.Hours()/24))
 }
+
+var sidebarBucketLabels = [3]string{"今天", "7 天内", "更早"}
+
+// sessionBucket groups sidebar sessions by local calendar age: today, the
+// previous seven days, or older. Unparsable and future stamps sort with the
+// newest and oldest group respectively.
+func sessionBucket(raw string) int {
+	stamp, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return 2
+	}
+	local := stamp.Local()
+	today := time.Now()
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.Local)
+	if !local.Before(today) {
+		return 0
+	}
+	if !local.Before(today.AddDate(0, 0, -6)) {
+		return 1
+	}
+	return 2
+}
 func (a *preview) saveRename() {
 	l := a.Live
 	s := l.RenameOwner

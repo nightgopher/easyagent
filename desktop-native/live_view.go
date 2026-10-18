@@ -195,8 +195,50 @@ func (a *preview) liveSidebar(c *ui.Context) {
 				if collapsed {
 					continue
 				}
+				var pinned []*session
+				buckets := [3][]*session{}
 				for _, s := range byGroup[group] {
+					if s.Pinned {
+						pinned = append(pinned, s)
+						continue
+					}
+					buckets[sessionBucket(s.UpdatedAt)] = append(buckets[sessionBucket(s.UpdatedAt)], s)
+				}
+				for _, s := range pinned {
 					a.sessionRow(c, s)
+				}
+				first := -1
+				for i, list := range buckets {
+					if len(list) > 0 {
+						first = i
+						break
+					}
+				}
+				for i, label := range sidebarBucketLabels {
+					list := buckets[i]
+					if len(list) == 0 {
+						continue
+					}
+					bucketKey := groupKey + "/bucket/" + label
+					open := i == first
+					if state, ok := l.CollapsedBuckets[bucketKey]; ok {
+						open = state
+					}
+					ui.ButtonBase(c.Key(bucketKey)).Label("折叠时间分组："+label).FillWidth().Height(28).Justify(ui.Start).Gap(6).Padding(4, 8, 4, 20).Radius(4).OnClick(func() { l.CollapsedBuckets[bucketKey] = !open }).Children(func() {
+						if open {
+							icon(c, "chevron-down")
+						} else {
+							icon(c, "chevron-right")
+						}
+						ui.Text(c, label).FontSize(11).TextColor(c.Theme().TextMuted)
+						ui.Text(c, fmt.Sprint(len(list))).FontSize(10).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+					})
+					if !open {
+						continue
+					}
+					for _, s := range list {
+						a.sessionRow(c, s)
+					}
 				}
 			}
 			if len(groups) == 0 {
