@@ -1,6 +1,6 @@
 # EasyAgent 架构
 
-EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、Web、TUI 和飞书共享会话与工具能力。
+EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、Android、Web、TUI 和飞书共享会话与工具能力。
 
 ## 分层与源码
 
@@ -15,9 +15,22 @@ EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、Web
 
 `sdk/` 是外部 Go 模块可导入的公共能力，不能依赖 `internal/`，由 [架构测试](../sdk/arch_test.go) 检查。音乐、飞书等领域逻辑属于应用层。
 
+## 客户端与构建单元
+
+| 构建单元 | 目录与边界 | 验证入口 |
+|---|---|---|
+| Go 核心与桥接 | 根 `go.mod`；含 `sdk/`、`internal/`、`cmd/` 和嵌入的 Web 资源 | 根目录 Go 测试与 vet、Web 脚本测试 |
+| 原生桌面 | `desktop-native/` 的独立 Go 模块；管理本地核心或通过 HTTP / WebSocket 连接远程核心 | 在该目录执行 Go 测试；macOS 打包验证见 [桌面说明](DESKTOP.md) |
+| Android 客户端 | `mobile-native/` 的独立 Gradle 工程；`backend/` 负责连接、事件投影和凭据，`ui/` 为 Compose 界面；只连接远程核心 | JVM 单测、Lint、Debug 构建；签名 Release 构建见 [发布指南](RELEASING.md) |
+| TUI 依赖 | `third_party/bubbletea/` 的独立 Go 模块 | 在该目录执行 `go test ./...` |
+
+根目录的 Go 测试不会递归进入独立模块或 Android 工程。完整验证命令见 [贡献指南](CONTRIBUTING.md)，CI 分别运行各单元。
+
+桌面和 Android 共享的是 [HTTP / WebSocket 协议](API.md)，不直接引用服务端 `internal/` 或彼此的 UI 实现。协议变更须同时检查两端的 Wire 类型、事件投影与回归测试；历史研究中的 Electron 结构不是当前实现。
+
 ## 执行与流式回复
 
-1. TUI 直接调用运行时；桌面和 Web 通过 HTTP / WebSocket；飞书桥接通过核心 HTTP / SSE 接口提交任务。
+1. TUI 直接调用运行时；桌面、Android 和 Web 通过 HTTP / WebSocket；飞书桥接通过核心 HTTP / SSE 接口提交任务。
 2. `AgentSession` 组装模型、系统提示、工具与历史，进入 Agent 循环。
 3. Provider 持续产生文本和工具调用事件。Web、TUI 或桥接消费这些事件，无需等待整个 Agent 任务结束才显示回复。
 4. 工具经过校验、参数准备、hooks 和执行；允许并发的连续工具组成批次，其余按序执行。结果回到模型上下文。

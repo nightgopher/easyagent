@@ -1,6 +1,6 @@
 # 开发指南
 
-EasyAgent 的主要入口是桌面客户端、Go 服务内嵌 Web、终端 TUI 和飞书桥接。先阅读 [AGENTS.md](../AGENTS.md) 与 [架构](ARCHITECTURE.md)，当前使用说明从 [文档索引](README.md) 查找。
+EasyAgent 的主要入口是桌面、Android 客户端、Go 服务内嵌 Web、终端 TUI 和飞书桥接。先阅读 [AGENTS.md](../AGENTS.md) 与 [架构](ARCHITECTURE.md)，当前使用说明从 [文档索引](README.md) 查找。
 
 ## 环境与目录
 
@@ -31,10 +31,13 @@ go vet ./...
 (cd third_party/bubbletea && go test ./...)
 node --test scripts/web-test.mjs scripts/mcp-settings-test.mjs
 python3 scripts/test_update_mini.py
+python3 scripts/test_desktop_registration.py
 python3 -m unittest discover -s scripts -p "test_release*.py"
 (cd mobile-native && ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug)
 git diff --check
 ```
+
+`make test` / `make vet` 只检查根 Go 模块。三个独立构建单元与本地 TUI 依赖需要各自验证，见 [架构](ARCHITECTURE.md#客户端与构建单元)。修改 Android 或发布脚本时，额外执行 `python3 scripts/build-android.py build <临时输出目录> --test-signing` 演练 Release APK 与签名校验；此模式使用一次性测试密钥，不生成可用于正式更新的安装包。
 
 单元测试通过依赖注入使用 mock；CLI 联调使用本地模拟的 OpenAI / Anthropic HTTP 接口，不调用真实模型。CLI 不支持 `EA_PROVIDER=mock`。只针对文档的改动可先验证链接、配置名和示例；合并仍需通过仓库要求的 CI。涉及流式传输、取消、工具权限、会话持久化时，应添加能覆盖失败路径的回归测试。
 

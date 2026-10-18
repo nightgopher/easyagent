@@ -1,3 +1,5 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id("com.android.application") version "8.7.2"
     id("org.jetbrains.kotlin.android") version "2.0.21"
@@ -8,17 +10,34 @@ plugins {
 android {
     namespace = "com.hwj.easyagent.mobile"
     compileSdk = 35
+    buildToolsVersion = "35.0.1"
 
     defaultConfig {
         applicationId = "com.hwj.easyagent.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = providers.gradleProperty("easyagentVersionCode").orElse("1").get().toInt()
+        // Keep development builds on the same version as the desktop client.
+        versionName = providers.gradleProperty("easyagentVersion").getOrElse(
+            (JsonSlurper().parse(rootProject.file("../desktop-native/mygo.json")) as Map<*, *>)["version"] as String,
+        )
+    }
+
+    signingConfigs {
+        val keystore = System.getenv("ANDROID_KEYSTORE_FILE")
+        if (!keystore.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = "easyagent"
+                keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }

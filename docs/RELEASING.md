@@ -9,7 +9,7 @@
 - MAJOR：1.0 之后不兼容的公开接口变更。当前仍处于 0.x，不为发布流程整改直接跳到 1.0。
 - 预发布用于验收，不标记为 GitHub Latest；正式发布只推进版本，不倒退。
 
-公开接口包括 CLI 参数、配置名、HTTP 协议及 `sdk/`。桌面版本由 `desktop-native/mygo.json` 定义。从 v0.16.0 起仅发布 Go 核心、桥接与 MyGo 原生桌面 DMG；Electron 已退役。原生包版本必须与 tag 去掉 `v` 后一致，随包核心使用同一 tag 版本。历史版本资产要求保留在 `scripts/release.py`，已发布资产不变。
+公开接口包括 CLI 参数、配置名、HTTP 协议及 `sdk/`。客户端版本由 `desktop-native/mygo.json` 定义，Android 开发构建也从此读取。从 v0.16.0 起发布 Go 核心、桥接与 MyGo 原生桌面 DMG；Electron 已退役。从 v0.19.0 起同时分发固定证书签名的 Android APK。客户端版本必须与 tag 去掉 `v` 后一致，随包核心使用同一 tag 版本。历史版本资产要求保留在 `scripts/release.py`，已发布资产不变。
 
 2026-10-01 按维护者明确要求，在备份旧 Pi Agent 的 Release 元数据、全部资产和 Git 标签对象后，清理 `v0.10.0` 至 `v0.11.0` 的公开 Release 与 tag，以 EasyAgent `v0.1.0` 重新开始。这是更名时的一次性迁移；提交历史不清理。后续**一个 tag 永远对应一个提交；不能删除重打、强推移动或覆盖已发布资产。** GitHub 的 Release immutability 对启用之后的新发布锁定资产；tag ruleset 保护 `v*` 标签免于移动、删除。[GitHub 不可变发布说明](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 
@@ -44,9 +44,9 @@ git push origin refs/tags/v0.1.1-rc.1
 ## 自动发布的强制检查
 
 1. 严格版本格式；附注 tag；HEAD 与 tag 一致；提交已进入 main；版本高于现有版本；对应 CHANGELOG 节非空。
-2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器和发布脚本测试；Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查。
+2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本和 Android 单测 / Lint / Debug 构建；Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
 3. 同一 SHA 构建 Linux/macOS、amd64/arm64 的核心与桥接共 8 个程序，注入相同版本。原生 DMG 在 Apple Silicon runner 构建，核验包版本与 tag 一致、Bundle ID 为 `com.hwj.easyagent`，并启动实际 bundle 核心检查健康响应和子进程回收。
-4. 汇集 8 个核心及桥接程序和 1 个原生 DMG，生成完整 `release.json` 与 `checksums.txt`，加上 2 项签名更新资产，共 13 项资产。`core_only` 清单不能发布；缺少原生 DMG、空文件、额外旧 Electron 文件或校验失败均阻止发布。
+4. v0.19.0 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产和 1 个签名 Android APK，加上 `release.json` 与 `checksums.txt`，共 14 项资产；v0.16.0 至 v0.18.1 仍为历史的 13 项。`core_only` 清单不能发布；缺少 APK 或原生 DMG、空文件、额外旧 Electron 文件或校验失败均阻止发布。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹。
 5. 先建草稿，上传全部资产，核对 GitHub 返回的各文件 digest，再一次性公开；已公开版本拒绝重传。失败只保留草稿供检查，不公开半套文件。
 
 发布相关脚本变更还会运行 `Release build check`：在临时仓库创建仅供测试的 tag，实际构建所有核心目标与原生桌面目标，不向 GitHub 推送测试 tag，也不创建 Release。
@@ -68,6 +68,18 @@ EA_VERSION=v0.1.0 bash scripts/install.sh
 安装器适合 CLI 安装，不负责生产服务的并发切换；正在运行的迷你主机继续使用其带锁和健康回滚的更新器。
 
 SHA-256 用于检测下载损坏，信任根仍是 GitHub HTTPS 和发布权限。新版 Release 同时受 GitHub 不可变发布保护；下载完整资产后可运行 `sha256sum --check checksums.txt` 核验，macOS 可用 `shasum -a 256 -c checksums.txt`。
+
+## Android 签名与发布
+
+APK 名称固定为 `easyagent-android.apk`，应用标识为 `com.hwj.easyagent.mobile`，要求 Android 8.0 / API 26 及以上。从 v0.19.0（含其预发布）起 APK 是完整 Release 的必需资产；它与其他文件一并上传到草稿、验证 digest 后公开，不补传到已经锁定的旧 Release。
+
+正式构建需要 Actions Secret `ANDROID_KEYSTORE`（PKCS#12 文件的 Base64）和 `ANDROID_KEYSTORE_PASSWORD`；私钥别名为 `easyagent`，密钥与 keystore 使用相同密码。私钥不进入仓库，公开证书 SHA-256 固定于 [signing-cert.sha256](../mobile-native/signing-cert.sha256)。临时 keystore 权限为 0600，构建结束自动删除。发布脚本调用 Android 官方 [apksigner](https://developer.android.com/tools/apksigner) 验证签名，并拒绝不匹配的证书。
+
+维护者的原始 keystore 与密码保存在本机 `~/Library/Application Support/EasyAgent Signing/android/`，目录仅当前用户可读，应通过自己的私有备份保管；丢失签名私钥会影响覆盖更新。更换证书需先设计迁移方案，不直接替换指纹或改用 Debug 密钥。
+
+`scripts/release.py` 将 SemVer 转换为 `major * 10000000 + minor * 100000 + patch * 1000 + phase * 100 + N`；alpha / beta / rc / 正式的 phase 分别为 0 / 1 / 2 / 3，正式 N 为 0。minor、patch、预发布 N 均不超过 99，最终 versionCode 不超过 Android 的 2100000000 限制；越界拒绝构建，避免冲突或降级。versionName 保留完整版本字符串（不含开头的 `v`）。
+
+本地演练使用 `python3 scripts/build-android.py build <不存在的临时目录> --test-signing`，不要求正式私钥。正式构建只从已验证 tag 运行 `python3 scripts/build-android.py build dist --version "$TAG"`。需要 JDK 17、Android SDK 35、Build Tools 35.0.1。下载的正式 APK 可再次运行 `python3 scripts/build-android.py verify v0.19.0 /path/to/easyagent-android.apk` 校验身份与版本；完整文件校验仍以同一 Release 的 `checksums.txt` 为准。
 
 ## 旧 Electron 分发链路
 

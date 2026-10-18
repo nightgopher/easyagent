@@ -12,7 +12,13 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 - 任务控制：运行中排队发送（`POST /queue`）、停止当前任务、工具审批（批准/拒绝）。
 - WebSocket 断线自动重连（1s 起指数退避，上限 15s），重连后按 `after_seq` 续订，不丢事件。
 
-## 构建
+## 安装正式 APK
+
+从 [最新 Release](https://github.com/hwj123hwj/easyagent/releases/latest) 下载 `easyagent-android.apk`（Android 8.0 / API 26 及以上），在 Android 上打开并允许本次来源安装，或使用 `adb install -r easyagent-android.apk`。下载后可对照同一 Release 的 `checksums.txt` 验证 SHA-256。
+
+从 v0.19.0 起 APK 使用固定发布证书，后续正式 APK 可以覆盖更新并保留应用数据；此前自行构建的 Debug APK 签名不同，不能直接覆盖，迁移前需自行保留连接信息，再卸载旧 Debug 应用。正式签名与构建验证不代表已完成 Android 真机或模拟器 UI 验收。
+
+## 从源码构建
 
 需要 JDK 17 与 Android SDK（compileSdk 35，minSdk 26）：
 
@@ -29,7 +35,23 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
-Verify CI 与正式 Release 的验证阶段均执行上述单元测试、Lint 与 Debug APK 构建。当前手机端为源码预览，正式 Release 仍按 `docs/RELEASING.md` 发布核心、桥接及 macOS 原生客户端，不分发 Android 安装包；Android 正式签名发布尚未接入。
+Verify CI 与正式 Release 的验证阶段均执行上述单元测试、Lint 与 Debug APK 构建。开发版 versionName 从 `desktop-native/mygo.json` 读取，Debug versionCode 为 1；正式构建由发布脚本注入与 tag 对应的版本和递增 versionCode。
+
+演练正式构建（需要设置 `JAVA_HOME`、`ANDROID_HOME` 并安装 Build Tools 35.0.1），从仓库根目录运行：
+
+```sh
+python3 scripts/build-android.py build /tmp/easyagent-android-check --test-signing
+```
+
+输出目录须不存在。演练使用一次性密钥，验证 Release APK 的版本、应用标识、签名和非 Debug 属性，不使用正式私钥。正式发布与证书配置见 [发布指南](../docs/RELEASING.md#android-签名与发布)。
+
+## 源码边界
+
+- `backend/`：REST / WebSocket、Wire 类型、事件投影和 Android Keystore 凭据存储。
+- `ui/`：连接、会话、聊天与 Compose 组件；`MainActivity.kt` 为系统入口。
+- `app/src/test/`：协议投影与 HTTP 交互的 JVM 回归测试，不要求真实模型或运行主机。
+
+手机端通过同一套 [核心 API](../docs/API.md) 与服务通信。Go 服务、桌面模块与 Android 工程的构建和依赖相互独立，见 [架构](../docs/ARCHITECTURE.md#客户端与构建单元)。
 
 ## 连接说明
 
