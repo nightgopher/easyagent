@@ -55,7 +55,7 @@ git push origin refs/tags/v0.1.1-rc.1
 
 ## 安装与核验
 
-macOS 桌面从 Release 下载 `easyagent-native-darwin-arm64.dmg`（Apple Silicon）。原生客户端支持签名自动更新，也可通过 DMG 手动更新；安装包使用 ad hoc 测试签名，未进行 Developer ID 签名或 Apple 公证。测试签名与 GitHub SHA-256 校验均不代替 Apple 的开发者认证和公证。
+macOS 桌面从 Release 下载 `easyagent-native-darwin-arm64.dmg`（Apple Silicon）。原生客户端支持签名自动更新，也可通过 DMG 手动更新；从 v0.17.2 起安装包使用固定证书签名以保留系统授权；v0.17.1 及此前公开包使用 ad hoc 测试签名。尚未进行 Developer ID 签名或 Apple 公证，固定签名与 GitHub SHA-256 校验均不代替 Apple 的开发者认证和公证。
 
 安装脚本默认选择最新正式 Release，也可显式指定已有版本：
 
@@ -87,7 +87,7 @@ Electron 的本机固定签名、自动下载重签名、自动安装和回滚�
 
 ### macOS 固定代码身份
 
-v0.17.1 及此前的公开原生包使用 ad hoc 代码签名；其身份绑定具体构建，可能使更新后的屏幕录制、辅助功能授权失效。后续正式构建使用 `desktop-native/mygo.json` 中固定的 `macos.signingIdentity` 证书指纹，由 MyGo 在生成 DMG 和签名更新归档之前签署主应用和嵌套 Helper。构建后分别校验签名及指定要求，拒绝 ad hoc 或不同证书。
+v0.17.1 及此前的公开原生包使用 ad hoc 代码签名；其身份绑定具体构建，可能使更新后的屏幕录制、辅助功能授权失效。从 v0.17.2 起正式构建使用 `desktop-native/mygo.json` 中固定的 `macos.signingIdentity` 证书指纹，由 MyGo 在生成 DMG 和签名更新归档之前签署主应用和嵌套 Helper。构建后分别校验签名及指定要求，拒绝 ad hoc 或不同证书。
 
 `Release` 的原生构建需要 `MACOS_CERTIFICATE`（包含私钥的 PKCS#12 文件的 Base64）和 `MACOS_CERTIFICATE_PASSWORD` 两项 Actions Secret。证书必须匹配配置中的公开指纹；私钥不进入源码、日志或发布资产。`MYGO_UPDATER_PRIVATE_KEY` 仍用于 Ed25519 更新包校验，与 macOS 代码签名证书相互独立。CI 在临时钥匙串中导入证书，构建结束后恢复搜索列表并删除临时钥匙串；不修改系统证书信任。
 
