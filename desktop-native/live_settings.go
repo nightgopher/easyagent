@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -522,7 +523,7 @@ func (a *preview) selectLiveHost(index int) {
 	a.Settings.mcpForm = mcpForm{Workspace: l.workspace()}
 	a.Live.SavedMCPForm = a.Settings.mcpForm
 	a.Settings.hostForm = hostForm{}
-	a.Sessions = []*session{{ID: a.NextID, Title: "新会话", Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}}
+	a.Sessions = []*session{{ID: a.NextID, Title: "新会话", UpdatedAt: time.Now().UTC().Format(time.RFC3339), Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}}
 	a.Active = a.NextID
 	a.NextID++
 	a.restoreDraftInputs(a.current())
