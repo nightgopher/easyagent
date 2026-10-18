@@ -323,23 +323,26 @@ func (s *settingsState) loadPreferences(path string) {
 		s.Preferences = prefs
 	}
 }
-func (s *settingsState) savePreferences() {
+func (s *settingsState) savePreferences() bool {
 	if s.Path == "" {
-		return
+		return true
 	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0700); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	b, _ := json.MarshalIndent(s.Preferences, "", "  ")
 	tmp := s.Path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0600); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	if err := os.Rename(tmp, s.Path); err != nil {
 		s.Error = err.Error()
+		return false
 	}
+	s.Error = ""
+	return true
 }
 func previewTheme(base *ui.Theme, prefs localPreferences) ui.Theme {
 	t := *base
