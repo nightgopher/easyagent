@@ -206,6 +206,12 @@ func (a *preview) settingsView(c *ui.Context) {
 		})
 	})
 }
+
+// The *Settings functions below (generalSettings through feishuSettings) render
+// the demo pages used by tests and the unconnected preview only; the connected
+// app always takes the live* implementations in live_settings.go and
+// live_services.go. Their wording and behaviour are fixtures, not a spec —
+// change the live page first and only mirror a fixture when a test needs it.
 func (a *preview) generalSettings(c *ui.Context) {
 	s := &a.Settings
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
