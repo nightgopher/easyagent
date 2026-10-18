@@ -7,6 +7,7 @@
 ## 能做什么
 
 - **原生桌面客户端**：MyGo 原生界面（青夜视觉）、此 Mac 与远程主机连接配置、Slash 命令、可搜索模型、工具审批与展开。连接凭据由系统钥匙串保存，安装包随 Release 发布（`easyagent-native-darwin-arm64.dmg`）；Electron 客户端已退役并保留于历史归档，见 [桌面说明](docs/DESKTOP.md)。
+- **Android 手机端预览**：Kotlin / Jetpack Compose 原生客户端，连接远程主机，支持会话管理、流式对话、工具审批、停止与消息排队；当前从源码构建，见 [手机端说明](mobile-native/README.md)。
 - **Web 工作区**：流式对话、Slash 命令提示、模型切换、工具结果展开与复制、历史会话，以及飞书和 MCP 设置。断线后恢复当前任务，发送确认前保留草稿。
 - **MCP 工具**：官方 Go SDK 传输，支持 stdio、Streamable HTTP、兼容 SSE、用户/项目配置、逐工具过滤与 OAuth。工具进入同一 Agent 执行流程，见 [MCP](docs/MCP.md)。
 - **终端 TUI**：独立全屏界面、Markdown 渲染、多行输入、工具分组折叠、鼠标选区复制。输入框位于快捷键和状态栏上方。
@@ -67,6 +68,7 @@ TUI 中输入 `/help` 查看命令。`Enter` 发送，`Ctrl+J` 换行，`PgUp/Pg
 |---|---|
 | 配置模型、权限、路径与认证 | [配置](docs/CONFIG.md) |
 | 连接 Mac / 迷你主机、构建桌面应用 | [桌面客户端](docs/DESKTOP.md) |
+| 用 Android 手机连接远程 Agent | [Android 手机端](mobile-native/README.md) |
 | 配置外部工具、项目授权与 OAuth | [MCP](docs/MCP.md) |
 | 浏览与安装技能市场技能 | [技能市场](docs/SKILL_MARKET.md) |
 | 接入飞书、配对与排错 | [飞书](docs/FEISHU.md) |

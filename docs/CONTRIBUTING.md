@@ -14,6 +14,7 @@ Go 版本以 [go.mod](../go.mod) 为准（当前 1.24.2）。
 | `internal/web/static/` | 主 Web 界面的原生 HTML / CSS / JavaScript，嵌入 Go 程序 |
 | `third_party/bubbletea/` | TUI 依赖的本地模块及测试 |
 | `desktop-native/` | Go / MyGo 原生桌面客户端 |
+| `mobile-native/` | Kotlin / Jetpack Compose Android 客户端（JDK 17、Android SDK 35） |
 | `deploy/`、`scripts/` | 服务模板、部署与验证脚本 |
 
 构建 Go 程序使用 `make build`，产出 `bin/easyagent` 和 `bin/easyagent-bridge`。`make install` 仅安装核心 CLI，不安装桥接。桌面打包见 [桌面客户端](DESKTOP.md)。
@@ -31,6 +32,7 @@ go vet ./...
 node --test scripts/web-test.mjs scripts/mcp-settings-test.mjs
 python3 scripts/test_update_mini.py
 python3 -m unittest discover -s scripts -p "test_release*.py"
+(cd mobile-native && ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug)
 git diff --check
 ```
 
