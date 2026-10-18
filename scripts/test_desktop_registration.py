@@ -88,6 +88,18 @@ class RegistrationTests(unittest.TestCase):
             registration.unregister(app, "")
         self.run.assert_called_once()
 
+    def test_promoted_native_installer_mount(self):
+        with tempfile.TemporaryDirectory(prefix="easyagent-installer-check.", suffix=".noindex") as stage:
+            app = self.bundle(Path(stage).resolve() / "mount/EasyAgent.app", "com.hwj.easyagent")
+            helper = self.bundle(app / "Contents/Resources/cua-helper/EasyAgent Computer Use.app", "com.hwj.easyagent.cua-helper")
+            registration.unregister(app, "")
+            self.assertEqual([call.args[0][2] for call in self.run.call_args_list], [str(helper), str(app)])
+            with self.assertRaisesRegex(ValueError, "Quit"):
+                registration.unregister(app, str(helper) + "/Contents/MacOS/easyagent-cua-helper")
+            (app / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.other.app"}))
+            with self.assertRaisesRegex(ValueError, "identifier"):
+                registration.unregister(app, "")
+
     def test_isolated_native_baseline(self):
         with tempfile.TemporaryDirectory(prefix="easyagent-baseline.", suffix=".noindex") as stage:
             app = self.bundle(Path(stage).resolve() / "EasyAgent.app", "com.hwj.easyagent")

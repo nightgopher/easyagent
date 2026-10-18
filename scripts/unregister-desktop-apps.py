@@ -36,7 +36,7 @@ def unregister(app, commands):
     if not app.is_dir():
         return
     identifier = plistlib.loads((app / "Contents/Info.plist").read_bytes()).get("CFBundleIdentifier", "")
-    if not (identifier.startswith("com.easyagent.") or (development and identifier == "com.github.Electron") or (native_preview and identifier == "com.hwj.easyagent.native-preview") or ((native_app or native_baseline) and identifier == "com.hwj.easyagent")):
+    if not (identifier.startswith("com.easyagent.") or (development and identifier == "com.github.Electron") or (native_preview and identifier == "com.hwj.easyagent.native-preview") or ((native_app or native_baseline or mounted_test) and identifier == "com.hwj.easyagent")):
         raise ValueError(f"Unrelated bundle identifier: {identifier}")
     # Unregister helpers explicitly; -R can trigger Spotlight scans of packages.
     for bundle in [*app.rglob("*.app"), app]:
