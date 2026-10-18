@@ -130,7 +130,7 @@ func newConnectedPreview(dir string) *preview {
 	a.Live = l
 	a.loadFileState()
 	a.loadDraftInputs()
-	a.Sessions = []*session{{ID: 1, Title: "新会话", Model: l.Config.Model.Model, Workspace: l.workspace(), Project: filepath.Base(l.workspace())}}
+	a.Sessions = []*session{{ID: 1, Title: "新会话", UpdatedAt: time.Now().UTC().Format(time.RFC3339), Model: l.Config.Model.Model, Workspace: l.workspace(), Project: filepath.Base(l.workspace())}}
 	a.Active = 1
 	a.restoreDraftInputs(a.current())
 	a.NextID = 2
@@ -523,7 +523,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 				a.restoreDraftInputs(s)
 			}
 			s.Title = str(m["title"])
-			s.UpdatedAt = str(m["updated_at"])
+			s.UpdatedAt = sessionActivityTime(m)
 			if s.Title == "" {
 				s.Title = "会话 " + id[max(0, len(id)-6):]
 			}
@@ -540,7 +540,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 		if len(next) == 0 {
 			next = []*session{old[""]}
 			if next[0] == nil {
-				next[0] = &session{ID: a.NextID, Title: "新会话", Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}
+				next[0] = &session{ID: a.NextID, Title: "新会话", UpdatedAt: time.Now().UTC().Format(time.RFC3339), Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}
 				a.NextID++
 			}
 		}
@@ -625,7 +625,7 @@ func (a *preview) createLiveSessionIn(draft, workspace, application string, read
 			return
 		}
 		a.Live.Versions["sessions"]++
-		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application}
+		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application}
 		a.NextID++
 		if initial {
 			s.ID = origin.ID

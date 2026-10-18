@@ -118,6 +118,18 @@ func (a *preview) sessionRow(c *ui.Context, s *session) {
 		})
 	})
 }
+
+// SessionInfo lists activity as Unix seconds; creation responses only carry
+// created_at. Normalize both before rendering relative dates or time buckets.
+func sessionActivityTime(metadata map[string]any) string {
+	for _, field := range []string{"last_active", "created_at"} {
+		if seconds := int64(number(metadata[field])); seconds > 0 {
+			return time.Unix(seconds, 0).UTC().Format(time.RFC3339)
+		}
+	}
+	return ""
+}
+
 func relativeSessionTime(raw string) string {
 	stamp, err := time.Parse(time.RFC3339, raw)
 	if err != nil {
