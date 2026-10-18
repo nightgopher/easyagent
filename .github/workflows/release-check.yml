@@ -1,5 +1,6 @@
 name: Release build check
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - '.github/workflows/release*.yml'
@@ -19,6 +20,7 @@ permissions:
   contents: read
 jobs:
   release-build:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +31,7 @@ jobs:
           go-version-file: go.mod
       - run: bash scripts/check-release-build.sh
   native-build:
+    if: github.event_name == 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -39,3 +42,17 @@ jobs:
           go-version-file: desktop-native/go.mod
       - name: Exercise the native release builder
         run: bash scripts/check-native-release-build.sh
+  signing-certificate:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop-native/go.mod
+      - name: Verify the configured release certificate without publishing
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: python3 ../scripts/macos-signing.py -- go run ./tools/build
+        working-directory: desktop-native

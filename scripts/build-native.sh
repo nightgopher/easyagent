@@ -21,7 +21,12 @@ if [[ -n "$TAG" ]]; then
   export EASYAGENT_BUILD_VERSION="$TAG"
 fi
 cd "$ROOT/desktop-native"
-go run ./tools/build
+if [[ -n "$TAG" ]]; then
+  python3 "$ROOT/scripts/macos-signing.py" -- go run ./tools/build
+else
+  # Development bundles remain disposable and do not require the release key.
+  go run ./tools/build -sign -
+fi
 
 APP=$(find build.noindex/darwin-arm64 -maxdepth 1 -name '*.app' | head -1)
 [[ -n "$APP" && -d "$APP" ]] || { echo 'MyGo build did not produce an .app bundle' >&2; exit 1; }
