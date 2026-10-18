@@ -86,25 +86,7 @@ func menuCaption(c *ui.Context, label string) {
 func (a *preview) View(c *ui.Context) {
 	theme := previewTheme(c.Theme(), a.Settings.Preferences)
 	c.SetTheme(&theme)
-	if c.Shortcut(ui.Cmd, ui.KeyComma) {
-		a.openSettings("general")
-	}
-	if c.Shortcut(ui.Cmd, ui.KeyP) && !a.Settings.Open {
-		if a.Live != nil && (!a.Workbench || a.Live.Workbench.Tab != "files") {
-			a.openResource("files")
-		} else {
-			a.Workbench = !a.Workbench
-		}
-	}
-	if c.Shortcut(ui.Cmd, ui.KeyN) && !a.Settings.Open {
-		a.newSession()
-	}
-	if a.Live != nil && !a.Settings.Open && c.Shortcut(ui.Cmd, ui.KeyBackquote) {
-		a.toggleTerminal()
-	}
-	if a.Live != nil && c.Shortcut(ui.Cmd|ui.Shift, ui.KeyG) {
-		a.openResource("review")
-	}
+	a.dispatchNativeShortcuts(c)
 	ui.Column(c).Fill().Background(c.Theme().Background).TextColor(c.Theme().Text).FontSize(14).Children(func() {
 		a.chrome(c)
 		if a.Live != nil {

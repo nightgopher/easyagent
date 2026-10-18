@@ -1,0 +1,33 @@
+package main
+
+import "testing"
+
+func TestSettingsSidebarSearch(t *testing.T) {
+	models := false
+	for _, p := range settingsPages {
+		if settingsPageMatches(p, " 模型 ") {
+			models = true
+		}
+	}
+	if !models {
+		t.Fatal("query 模型 should match the models settings page")
+	}
+	if settingsPageMatches(settingsPage{ID: "general", Label: "常规", Description: "语言"}, "mcp") {
+		t.Fatal("unrelated query should not match")
+	}
+	if !settingsPageMatches(settingsPage{ID: "general", Label: "常规", Description: "语言"}, "") {
+		t.Fatal("empty query should match every page")
+	}
+}
+
+func TestShortcutRegistryDrivesNewSession(t *testing.T) {
+	for _, shortcut := range nativeShortcuts {
+		if shortcut.Label == "新会话" {
+			if shortcut.match == nil || shortcut.run == nil {
+				t.Fatal("新会话 must dispatch from the registry, not only render")
+			}
+			return
+		}
+	}
+	t.Fatal("新会话 missing from the shortcut registry")
+}
