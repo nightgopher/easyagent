@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
 
 func confirmDirtySwitch(t *testing.T, a *preview, tab string) {
 	t.Helper()
@@ -52,5 +56,48 @@ func TestSettingsCleanFormSwitchesWithoutConfirmation(t *testing.T) {
 	}
 	if a.Settings.Tab != "general" {
 		t.Fatal("clean switch should proceed")
+	}
+}
+
+func TestSettingsFeishuDirtyMatchesSaveSemantics(t *testing.T) {
+	for _, tc := range []struct {
+		name, savedID, inputID string
+		managed, want          bool
+	}{
+		{"blank retains local ID", "saved-app", "", false, false},
+		{"unchanged local ID", "saved-app", "saved-app", false, false},
+		{"changed local ID", "saved-app", "new-app", false, true},
+		{"new managed app", "", "new-app", true, true},
+		{"existing managed ID is read-only", "saved-app", "new-app", true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newConnectedPreview(t.TempDir())
+			defer a.closeLive()
+			a.Settings.Tab = "feishu"
+			a.Live.Data["feishu"] = map[string]any{"app_id": tc.savedID, "managed": tc.managed}
+			a.Settings.AppID = tc.inputID
+			if got := a.settingsFormDirty(); got != tc.want {
+				t.Fatalf("dirty = %v, want %v", got, tc.want)
+			}
+			a.Settings.AppSecret = "unsaved-secret"
+			if !a.settingsFormDirty() {
+				t.Fatal("a new secret must always mark the form dirty")
+			}
+		})
+	}
+}
+
+func TestSettingsFailedSaveDoesNotClaimSuccess(t *testing.T) {
+	a := newPreview()
+	// A directory cannot be replaced by the preferences file.
+	a.Settings.Path = t.TempDir()
+	a.openSettings("appearance")
+	tt := ui.NewTester(a.View, 1240, 820)
+	click(t, tt, "浅色")
+	if a.Settings.Error == "" || !tt.HasText(a.Settings.Error) {
+		t.Fatal("failed save must show an error")
+	}
+	if tt.HasText("已保存") {
+		t.Fatal("failed save must not show the success toast")
 	}
 }
