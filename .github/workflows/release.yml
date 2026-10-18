@@ -10,8 +10,6 @@ on:
         type: string
 permissions:
   contents: read
-env:
-  EA_MAC_SIGNING_MODE: adhoc
 # Serialize publication; do not cancel a run while uploading assets.
 concurrency:
   group: release
@@ -79,6 +77,8 @@ jobs:
         env:
           TAG: ${{ needs.validate.outputs.version }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: bash scripts/build-native.sh darwin-arm64 native-dist "$TAG"
       - uses: actions/upload-artifact@v4
         with:
