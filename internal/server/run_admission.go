@@ -108,6 +108,12 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 		}
 		if inputs.ContinueRunID != "" {
 			previous := state.run
+			if previous != nil && previous.restored && previous.ID == inputs.ContinueRunID {
+				if err := s.hydrateRestoredRun(previous); err != nil {
+					g.mu.Unlock()
+					return nil, false, err
+				}
+			}
 			if prompt != "" || len(inputs.Attachments)+len(inputs.Files) > 0 || previous == nil || previous.ID != inputs.ContinueRunID || !previous.CanContinue || (previous.State != "failed" && previous.State != "interrupted" && previous.State != "cancelled") {
 				g.mu.Unlock()
 				return nil, false, &runAdmissionError{"stale_run", "任务已变化或没有可续跑的工具结果，请刷新后重试"}
@@ -160,7 +166,11 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 	if err := sess.TrySetConfirmFunc(s.confirmRunTool); err != nil {
 		return nil, false, admissionRuntimeError(err)
 	}
-	run = &sessionRun{Inputs: inputs, ID: newRunID("run_"), RequestID: requestID, SessionID: sess.SessionID(), Prompt: prompt, DisplayPrompt: message.DisplayText, State: "running", StartedAt: time.Now(), baseline: serializeSessionContext(sess, baseline), pending: make(map[string]*pendingConfirmation), done: make(chan struct{}), cancel: cancel, ready: make(chan struct{})}
+	baseEntryID, err := sess.Session().Storage().GetLeaf(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	run = &sessionRun{baseEntryID: &baseEntryID, Inputs: inputs, ID: newRunID("run_"), RequestID: requestID, SessionID: sess.SessionID(), Prompt: prompt, DisplayPrompt: message.DisplayText, State: "running", StartedAt: time.Now(), baseline: serializeSessionContext(sess, baseline), pending: make(map[string]*pendingConfirmation), done: make(chan struct{}), cancel: cancel, ready: make(chan struct{})}
 	run.Attachments = s.resolvePromptAttachments(run.SessionID, inputs.Attachments)
 	if err := s.saveRunReceipt(run); err != nil {
 		return nil, false, fmt.Errorf("无法保存消息接受凭据，消息尚未执行")
