@@ -16,7 +16,7 @@ web / desktop
 
 ## Operating Context
 
-迷你主机作为日常正式入口，Mac 用于开发预览与本地任务。Go 服务嵌入原生 HTML/CSS/JavaScript 静态资源；Electron/React 桌面通过主进程连接本地或远程同一服务。HTTP API 和 WebSocket 提供会话、流式回复、工具事件与流水线。
+迷你主机作为日常正式入口，Mac 用于开发预览与本地任务。Go 服务嵌入原生 HTML/CSS/JavaScript 静态资源提供 Web 控制台；MyGo 原生桌面客户端（`desktop-native/`）连接本地或远程同一服务。HTTP API 和 WebSocket 提供会话、流式回复与工具事件。
 
 ## Capabilities and Constraints
 

@@ -8,7 +8,7 @@ import (
 
 // TestSDKDoesNotImportInternal 强制执行架构规则：
 // sdk/ 是公共 API 面，不得依赖 easyagent 自身的应用层（internal/）。
-// 这条测试把 PROJECT_CONTEXT.md 的层间规则变成 CI 可拦截的硬约束。
+// 这条测试把 AGENTS.md / docs/ARCHITECTURE.md 的层间规则变成 CI 可拦截的硬约束。
 func TestSDKDoesNotImportInternal(t *testing.T) {
 	// 测试运行时 cwd 就是 sdk/，./... 覆盖 sdk 全部子包。
 	// -test 必须加：默认的 go list -deps 不含 _test.go 的 import，
