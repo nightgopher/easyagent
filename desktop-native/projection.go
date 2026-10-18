@@ -142,6 +142,15 @@ func object(v any) map[string]any {
 }
 func list(v any) []any   { s, _ := v.([]any); return s }
 func boolean(v any) bool { b, _ := v.(bool); return b }
+func toolArguments(args any) any {
+	if encoded, ok := args.(string); ok {
+		var decoded any
+		if json.Unmarshal([]byte(encoded), &decoded) == nil {
+			return decoded
+		}
+	}
+	return args
+}
 func number(v any) float64 {
 	switch n := v.(type) {
 	case float64:
@@ -170,13 +179,7 @@ func (s *session) history(records []storedMessage) {
 				s.Messages = append(s.Messages, &message{Text: text, EntryID: m.EntryID})
 			}
 			for _, call := range m.ToolCalls {
-				args := call.Args
-				if encoded, ok := args.(string); ok {
-					var decoded any
-					if json.Unmarshal([]byte(encoded), &decoded) == nil {
-						args = decoded
-					}
-				}
+				args := toolArguments(call.Args)
 				tool := &message{Tool: call.Name, CallID: call.ID, Args: args, Text: displayText(args), Kind: "tool", EntryID: m.EntryID, Status: "未完成"}
 				tools[call.ID] = tool
 				s.Messages = append(s.Messages, tool)
@@ -250,7 +253,8 @@ func (s *session) event(e agentEvent) {
 				return
 			}
 		}
-		s.Messages = append(s.Messages, &message{Tool: e.ToolName, CallID: e.ToolID, RunID: s.runID(), Kind: "tool", Status: "执行中", Args: e.Args, Text: displayText(e.Args)})
+		args := toolArguments(e.Args)
+		s.Messages = append(s.Messages, &message{Tool: e.ToolName, CallID: e.ToolID, RunID: s.runID(), Kind: "tool", Status: "执行中", Args: args, Text: displayText(args)})
 	case "tool_update", "tool_end":
 		for _, m := range s.Messages {
 			if m.CallID == e.ToolID && m.RunID == s.runID() {
