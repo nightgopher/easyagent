@@ -282,6 +282,11 @@ func (a *preview) liveMarketSettings(c *ui.Context) {
 		a.marketDetail(c, object(l.Data["skill-detail"]))
 		return
 	}
+	ui.Row(c).Children(func() {
+		a.note(c, "技能安装到主机的个人技能目录；文件变更后新建会话加载。")
+		ui.Spacer(c)
+		a.action(c, "查看已加载技能").OnClick(func() { a.openSettings("capabilities") })
+	})
 	w, _ := c.Size()
 	available := min(float32(780), w-240-64)
 	ui.Row(c).Wrap().Gap(10).AlignItems(ui.Center).Children(func() {

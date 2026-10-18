@@ -120,7 +120,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	l := a.Live
 	busy := l.configBusy() || l.Loading["model-check"]
 	ui.Row(c).Children(func() {
-		a.heading(c, "全局模型配置")
+		a.heading(c, "全局模型配置"+a.dirtySuffix())
 		ui.Spacer(c)
 		a.action(c, "刷新模型").Disabled(busy || l.Loading["model-list"]).OnClick(a.refreshModels)
 	})
@@ -133,7 +133,11 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	a.note(c, "新建会话使用主机默认模型；会话中单独选择的模型只影响该会话，并在重启后保留。")
 	if !s.host().Local {
 		a.note(c, "模型配置属于服务主机。远程默认模型需在对应主机的 EasyAgent 配置中修改；会话模型可在对话输入框切换。")
-		a.action(c, "选择运行主机").OnClick(func() { a.openSettings("connections") })
+		ui.Row(c).Gap(8).Wrap().Children(func() {
+			for index, h := range l.Config.Hosts {
+				selectedButton(c, a.action(c, h.Name), h.ID == l.Config.ActiveHost).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
+			}
+		})
 		return
 	}
 	a.heading(c, "本地模型来源")
@@ -227,7 +231,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	if running {
 		a.note(c, "当前有任务正在执行，完成或停止任务后即可应用配置。")
 	}
-	a.note(c, "检测只读取模型目录，不发送推理请求。应用后重启本地核心，新会话使用新的默认模型，已有会话的单独选择保留。")
+	a.note(c, "检测只读取模型目录，不发送推理请求。应用后新会话使用新的默认模型，已有会话的单独选择保留。")
 	if catalog := object(l.Data["model-check"]); len(catalog) > 0 {
 		a.heading(c, "检测到的模型")
 		a.note(c, str(catalog["message"]))
@@ -474,12 +478,15 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			}
 		})
 	}
-	a.heading(c, "添加或修改远程主机")
+	a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
 	a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
 	a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
 	a.input(c, "访问令牌", &s.HostToken, "留空保留现有令牌", true)
 	ui.Row(c).Gap(8).Children(func() {
 		a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
+		if a.settingsFormDirty() {
+			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
+		}
 		a.action(c, "新增连接").OnClick(func() { s.EditHost = ""; s.HostName = ""; s.HostURL = ""; s.HostToken = "" })
 	})
 	a.action(c, "重连当前主机").AlignSelf(ui.Start).Disabled(l.Connecting).OnClick(a.connectLive)
@@ -511,13 +518,10 @@ func (a *preview) selectLiveHost(index int) {
 	l.EditQueueID = ""
 	l.EditQueueOwner = nil
 	a.Settings.APIKey = ""
-	a.Settings.AppSecret = ""
-	a.Settings.AppID = ""
-	a.Settings.MCPName = ""
-	a.Settings.Variables = ""
-	a.Settings.JSON = "{}"
-	a.Settings.MCPBase = nil
-	a.Settings.HostToken = ""
+	a.Settings.feishuForm = feishuForm{}
+	a.Settings.mcpForm = mcpForm{Workspace: l.workspace()}
+	a.Live.SavedMCPForm = a.Settings.mcpForm
+	a.Settings.hostForm = hostForm{}
 	a.Sessions = []*session{{ID: a.NextID, Title: "新会话", Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}}
 	a.Active = a.NextID
 	a.NextID++
@@ -731,6 +735,7 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 func (a *preview) liveCapabilitySettings(c *ui.Context) {
 	if a.current().RemoteID == "" {
 		a.note(c, "选择一个项目会话后查看实际加载的技能。")
+		a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
 		return
 	}
 	if a.resourceFeedback(c, "capabilities", a.loadSettingsPage) {
@@ -760,8 +765,7 @@ func (a *preview) liveCapabilitySettings(c *ui.Context) {
 			a.action(c, "使用技能").AlignSelf(ui.Start).OnClick(func() { a.current().Draft += "\n使用技能 " + str(skill["name"]) + " "; a.closeSettings() })
 		})
 	}
-	a.heading(c, "工作流")
-	a.note(c, "工作流功能已下线；历史运行记录可从 archive/workflow 分支版本查看。")
+	a.action(c, "打开技能市场").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
 }
 
 // Keep map iteration out of the view so keyed form rows remain stable.
