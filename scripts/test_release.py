@@ -98,18 +98,18 @@ class AssetsTest(unittest.TestCase):
         self.assertEqual(release.native_assets('v0.15.12'), ('easyagent-native-darwin-arm64.dmg',))
         self.assertEqual(
             release.required_assets('v1.2.3'),
-            release.ASSETS + release.native_assets(self.tag),
+            release.ASSETS + release.native_assets(self.tag) + release.android_assets(self.tag),
         )
 
     def test_electron_retirement_preserves_historical_manifests(self):
         self.assertEqual(release.desktop_assets('v0.15.12'), ('EasyAgent-0.15.12-arm64.dmg',))
         for tag in ('v0.16.0-alpha.1', 'v0.16.0', 'v1.0.0'):
             self.assertEqual(release.desktop_assets(tag), ())
-            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag))
+            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag) + release.android_assets(tag))
 
-    def test_each_missing_desktop_asset_rejects_manifest_and_publish(self):
+    def test_each_missing_client_asset_rejects_manifest_and_publish(self):
         release.manifest(self.directory, self.tag, self.sha)
-        for name in release.native_assets(self.tag):
+        for name in release.native_assets(self.tag) + release.android_assets(self.tag):
             path = self.directory / name
             content = path.read_bytes()
             path.unlink()
@@ -135,7 +135,7 @@ class AssetsTest(unittest.TestCase):
         with self.assertRaises(ValueError): publisher.validate_assets(self.directory, self.tag, self.sha)
 
     def test_core_only_manifest_is_never_publishable(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
         for tag in (self.tag, 'v0.1.0'):
             with self.subTest(tag=tag):
                 release.manifest(self.directory, tag, self.sha, core_only=True)
@@ -145,7 +145,7 @@ class AssetsTest(unittest.TestCase):
                 with mock.patch.object(publisher, 'api') as api, self.assertRaises(ValueError):
                     publisher.publish(tag, self.sha, self.directory)
                 api.assert_not_called()
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
         release.manifest(self.directory, self.tag, self.sha)
         manifest = json.loads((self.directory / 'release.json').read_text())
         manifest['core_only'] = True
@@ -155,7 +155,7 @@ class AssetsTest(unittest.TestCase):
         api.assert_not_called()
 
     def test_manifest_cli_requires_explicit_core_only(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
         command = ['python3', str(Path(release.__file__)), 'manifest', self.tag, self.sha, str(self.directory)]
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
@@ -165,7 +165,7 @@ class AssetsTest(unittest.TestCase):
         self.assertTrue(json.loads((self.directory / 'release.json').read_text())['core_only'])
 
     def test_old_release_manifest_remains_compatible(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
         tag = 'v0.1.0'
         release.manifest(self.directory, tag, self.sha)
         data = json.loads((self.directory / 'release.json').read_text())

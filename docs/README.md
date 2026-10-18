@@ -8,6 +8,7 @@
 |---|---|
 | [配置](CONFIG.md) | 模型、环境变量、文件访问策略、认证 |
 | [桌面客户端](DESKTOP.md) | 本地/远程连接、桌面交互、macOS 构建 |
+| [Android 手机端](../mobile-native/README.md) | APK 安装、远程连接、原生 Android 构建与限制 |
 | [MCP](MCP.md) | 传输、用户/项目配置、工具信任与 OAuth |
 | [技能市场](SKILL_MARKET.md) | 浏览、安装与卸载官方技能市场技能 |
 | [飞书](FEISHU.md) | 网页配置、长连接、首次配对、故障定位 |

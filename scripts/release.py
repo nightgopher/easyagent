@@ -44,11 +44,26 @@ def native_assets(tag):
     return ()
 
 
+def android_assets(tag):
+    if version_key(tag) >= version_key("v0.19.0-alpha.1"):
+        return ("easyagent-android.apk",)
+    return ()
+
+
+def android_version(tag):
+    major, minor, patch, phase, count = version_key(tag)
+    # Reserve 100 codes per prerelease phase; the final release follows rc.99.
+    code = major * 10_000_000 + minor * 100_000 + patch * 1000 + phase * 100 + count
+    if minor > 99 or patch > 99 or count > 99 or code > 2_100_000_000:
+        raise ValueError("Android version requires minor/patch/prerelease N <= 99 and versionCode <= 2100000000")
+    return tag[1:], code
+
+
 def required_assets(tag):
     required = ASSETS
     if version_key(tag) >= version_key("v0.2.0-alpha.1"):
         required = required + desktop_assets(tag)
-    return required + native_assets(tag)
+    return required + native_assets(tag) + android_assets(tag)
 
 
 def check_next(tag, tags):
