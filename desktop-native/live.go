@@ -23,6 +23,8 @@ type liveState struct {
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
 	CollapsedBuckets                                                       map[string]bool
+	SavedModelForm                                                         modelForm
+	SavedMCPForm                                                           mcpForm
 	ModelIndex                                                             int
 	ModelJump                                                              bool
 	ModelList                                                              ui.ListState
@@ -132,6 +134,11 @@ func newConnectedPreview(dir string) *preview {
 	a.Active = 1
 	a.restoreDraftInputs(a.current())
 	a.NextID = 2
+	// The demo fixture seeds forms with example hosts and MCP data; a connected
+	// client starts from the real config instead.
+	a.Settings.hostForm = hostForm{}
+	a.Settings.mcpForm = mcpForm{}
+	a.Settings.feishuForm = feishuForm{}
 	a.Settings.loadPreferences(filepath.Join(dir, "native-preview-preferences.json"))
 	a.syncSettingsConfig()
 	return a
@@ -146,23 +153,28 @@ func (a *preview) syncSettingsConfig() {
 			s.Host = i
 		}
 	}
-	m := l.Config.Model
-	s.Mode = "沿用命令行配置"
-	if m.Mode == "override" {
-		s.Mode = "在桌面客户端配置"
-	}
-	s.Provider = "OpenAI 兼容服务 / 网关"
-	if m.Provider == "anthropic" {
-		s.Provider = "Anthropic"
-	}
-	s.Thinking, s.ReasoningEffort, s.ThinkingBudget, s.StreamIdleTimeout = thinkingLabel(m.Thinking), m.ReasoningEffort, m.ThinkingBudget, m.StreamIdleTimeout
-	if s.ReasoningEffort == "" {
-		s.ReasoningEffort = "沿用模型默认"
-	}
-	s.BaseURL = m.BaseURL
-	s.Model = m.Model
-	s.HasKey = m.HasKey
+	s.modelForm = a.expectedModelForm()
+	s.HasKey = l.Config.Model.HasKey
 	s.Workspace = l.workspace()
+	l.SavedModelForm = s.modelForm
+	l.SavedMCPForm.Workspace = s.Workspace
+}
+
+// expectedModelForm is the model page state as saved in the live config; the
+// form and its dirty comparison both derive from it.
+func (a *preview) expectedModelForm() modelForm {
+	m := a.Live.Config.Model
+	f := modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: m.BaseURL, Model: m.Model, Thinking: thinkingLabel(m.Thinking), ReasoningEffort: m.ReasoningEffort, ThinkingBudget: m.ThinkingBudget, StreamIdleTimeout: m.StreamIdleTimeout}
+	if m.Mode == "override" {
+		f.Mode = "在桌面客户端配置"
+	}
+	if m.Provider == "anthropic" {
+		f.Provider = "Anthropic"
+	}
+	if f.ReasoningEffort == "" {
+		f.ReasoningEffort = "沿用模型默认"
+	}
+	return f
 }
 func (a *preview) post(epoch uint64, fn func()) {
 	a.postOwned(epoch, fn, nil)

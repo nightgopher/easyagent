@@ -13,21 +13,23 @@ import (
 )
 
 type settingsPage struct {
-	ID, Label, Icon, Description string
-	Group                        int
+	ID, Label, Icon, Description, Effect string
+	Group                                int
 }
 
+// Effect badges the page with when its changes take effect: 立即生效,
+// 新会话生效 or 需重启核心; empty pages are informational only.
 var settingsPages = []settingsPage{
-	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", 0},
-	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", 0},
-	{"models", "模型连接", "cpu", "连接模型服务，选择默认模型。", 0},
-	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", 0},
-	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", 0},
-	{"experiments", "实验", "wrench", "实验性功能开关：Computer use 等能力。", 0},
-	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", 1},
-	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", 1},
-	{"capabilities", "技能", "code", "查看当前项目实际加载的能力。", 1},
-	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", 1},
+	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", "", 0},
+	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", "立即生效", 0},
+	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", "", 0},
+	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", "新会话生效", 0},
+	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
+	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
+	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
+	{"capabilities", "技能", "code", "查看当前项目实际加载的技能与工具。", "", 1},
+	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
+	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 }
 
 type localPreferences struct {
@@ -53,40 +55,63 @@ type feishuDemoState struct {
 	AppID         string
 	Saved, Bridge bool
 }
-type settingsState struct {
-	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout                       string
-	Open                                                                               bool
-	Heading                                                                            ui.Handle
-	Tab, Notice, Error                                                                 string
-	Preferences                                                                        localPreferences
-	Path                                                                               string
-	Host                                                                               int
-	Hosts                                                                              []demoHost
-	EditHost, HostName, HostURL, HostToken                                             string
-	Mode, Provider, BaseURL, Model, APIKey                                             string
-	ModelCatalogSearch                                                                 string
-	Checked, HasKey                                                                    bool
-	ComputerEnabled                                                                    bool
-	Approval                                                                           string
-	Audit                                                                              []string
+
+// modelForm, hostForm, mcpForm and feishuForm hold one settings page's input
+// state each; resetting a form resets the whole struct instead of a hand-kept
+// field list. They embed into settingsState, so existing s.Field access keeps
+// resolving to the owning form.
+type modelForm struct {
+	Mode, Provider, BaseURL, Model, APIKey                       string
+	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
+	ModelCatalogSearch                                           string
+	Checked, HasKey                                              bool
+}
+type hostForm struct {
+	EditHost, HostName, HostURL, HostToken string
+}
+type mcpForm struct {
 	Workspace, Scope, MCPName, Transport, Command, Args, Variables, URL, Timeout, JSON string
 	Advanced, Trust, ProjectTrust, MCPExtra                                            bool
 	MCPBase                                                                            map[string]any
-	HostFeishu                                                                         map[string]feishuDemoState
-	Servers                                                                            []*demoServer
-	Skills                                                                             []*demoSkill
-	SkillQuery, SkillFilter, SkillCategory, SkillDetail                                string
-	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace           string
-	ProjectTrustByWorkspace                                                            map[string]bool
-	CapabilityOpen                                                                     bool
-	AppID, AppSecret                                                                   string
-	Bridge, FeishuSaved, Pairing, QR, QRAuthorized                                     bool
+}
+type feishuForm struct {
+	AppID, AppSecret                               string
+	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
+}
+type settingsState struct {
+	modelForm
+	hostForm
+	mcpForm
+	feishuForm
+	Open                                                                     bool
+	Heading                                                                  ui.Handle
+	Tab, Search, Notice, Error                                               string
+	Preferences                                                              localPreferences
+	Path                                                                     string
+	Host                                                                     int
+	Hosts                                                                    []demoHost
+	ComputerEnabled                                                          bool
+	Approval                                                                 string
+	Audit                                                                    []string
+	HostFeishu                                                               map[string]feishuDemoState
+	Servers                                                                  []*demoServer
+	Skills                                                                   []*demoSkill
+	SkillQuery, SkillFilter, SkillCategory, SkillDetail                      string
+	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace string
+	ProjectTrustByWorkspace                                                  map[string]bool
+	CapabilityOpen                                                           bool
 }
 
+// newSettings seeds the preview/demo state. Hosts, MCP servers and skills here
+// are fixture data for tests and the unconnected preview, not a mirror of any
+// real deployment; live pages read from the connected host instead.
 func newSettings() settingsState {
 	return settingsState{
-		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark"}, Hosts: []demoHost{{"local", localHostName(), "", true}, {"mini", "迷你主机", "http://192.168.5.16:8080", false}}, EditHost: "迷你主机", HostName: "迷你主机", HostURL: "http://192.168.5.16:8080",
-		Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: "http://localhost:4001", Model: "coding", Approval: "逐批询问", Workspace: "/demo/easyagent", Scope: "个人", Transport: "stdio", Timeout: "30000",
+		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark"},
+		Hosts:     []demoHost{{"local", localHostName(), "", true}, {"mini", "迷你主机", "http://192.168.5.16:8080", false}},
+		hostForm:  hostForm{EditHost: "迷你主机", HostName: "迷你主机", HostURL: "http://192.168.5.16:8080"},
+		modelForm: modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: "http://localhost:4001", Model: "coding"},
+		Approval:  "逐批询问", mcpForm: mcpForm{Workspace: "/demo/easyagent", Scope: "个人", Transport: "stdio", Timeout: "30000"},
 		Audit: []string{}, Servers: []*demoServer{{Name: "filesystem-demo", Host: "local", Scope: "个人", Transport: "stdio", Enabled: true, Trusted: true, Tool: true}},
 		SkillFilter: "精选", SkillCategory: "全部", Skills: []*demoSkill{
 			{"frontend-design", "界面设计", "根据现有设计系统实现界面，并验证布局与交互。", "开发", "## 界面设计\n\n这是预览内置的示例技能，不会下载或写入正式技能目录。\n\n- 对照现有界面。\n- 实现交互与响应式布局。\n- 检查可读性和键盘操作。", false},
@@ -96,6 +121,13 @@ func newSettings() settingsState {
 	}
 }
 func (a *preview) openSettings(tab string) {
+	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
+		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
+			a.discardSettingsForms()
+			a.openSettings(tab)
+		}}
+		return
+	}
 	if a.Live != nil && a.Settings.Tab != tab {
 		a.cancelSettingsTransient()
 	}
@@ -132,6 +164,13 @@ func (s *settingsState) page() settingsPage {
 		}
 	}
 	return settingsPages[0]
+}
+
+// settingsPageMatches reports whether a settings page matches the sidebar
+// search by label, description or id; an empty query matches everything.
+func settingsPageMatches(p settingsPage, search string) bool {
+	search = strings.TrimSpace(strings.ToLower(search))
+	return search == "" || strings.Contains(strings.ToLower(p.Label+p.Description+p.ID), search)
 }
 func (s *settingsState) host() demoHost       { return s.Hosts[min(s.Host, len(s.Hosts)-1)] }
 func (s *settingsState) message(value string) { s.Notice = value; s.Error = "" }
@@ -284,23 +323,26 @@ func (s *settingsState) loadPreferences(path string) {
 		s.Preferences = prefs
 	}
 }
-func (s *settingsState) savePreferences() {
+func (s *settingsState) savePreferences() bool {
 	if s.Path == "" {
-		return
+		return true
 	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0700); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	b, _ := json.MarshalIndent(s.Preferences, "", "  ")
 	tmp := s.Path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0600); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	if err := os.Rename(tmp, s.Path); err != nil {
 		s.Error = err.Error()
+		return false
 	}
+	s.Error = ""
+	return true
 }
 func previewTheme(base *ui.Theme, prefs localPreferences) ui.Theme {
 	t := *base
