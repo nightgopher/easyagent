@@ -31,4 +31,17 @@ jobs:
       - run: python3 scripts/test_update_mini.py
       - run: python3 scripts/test_desktop_registration.py
       - run: python3 -m unittest discover -s scripts -p "test_release*.py"
+      - uses: actions/setup-java@v4
+        if: ${{ hashFiles('mobile-native/gradlew') != '' }}
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            mobile-native/**/*.gradle.kts
+            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - name: Test, lint and build the Android client
+        if: ${{ hashFiles('mobile-native/gradlew') != '' }}
+        working-directory: mobile-native
+        run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - run: git diff --check

@@ -185,28 +185,35 @@ class AgentClient(val config: HostConfig) {
         }
         if (s.pendingRequest == "" || s.sentDraft != text) s.pendingRequest = requestId()
         s.sentDraft = text
+        val request = s.pendingRequest
+        s.sending = true
+        touch()
         if (s.running || s.pending) {
             val body = buildJsonObject {
                 put("action", "add")
-                put("id", s.pendingRequest)
+                put("id", request)
                 put("prompt", trimmed)
                 put("inputs", inputs)
             }
             scope.launch {
                 try {
                     val result = api.post(ApiClient.sessionPath(s.id) + "/queue", body)
-                    runCatching { wireJson.decodeFromJsonElement(MessageQueue.serializer(), result) }.getOrNull()?.let { s.queue = it }
-                    s.pendingRequest = ""
-                    s.draftClearCount++
+                    runCatching { wireJson.decodeFromJsonElement(MessageQueue.serializer(), result) }.getOrNull()?.let {
+                        if (it.revision >= s.queue.revision) s.queue = it
+                    }
+                    if (s.pendingRequest == request) {
+                        s.pendingRequest = ""
+                        s.draftClearCount++
+                        s.sending = false
+                    }
                 } catch (e: ApiException) {
                     error.value = e.message
+                    if (s.pendingRequest == request) s.sending = false
                 }
                 touch()
             }
             return
         }
-        s.sending = true
-        val request = s.pendingRequest
         val ok = send(buildJsonObject {
             put("type", "prompt")
             put("session_id", s.id)
