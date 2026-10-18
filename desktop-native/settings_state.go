@@ -20,13 +20,13 @@ type settingsPage struct {
 var settingsPages = []settingsPage{
 	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", 0},
 	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", 0},
-	{"models", "模型连接", "cpu", "连接模型服务，选择默认模型。", 0},
 	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", 0},
 	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", 0},
-	{"experiments", "实验", "wrench", "实验性功能开关：Computer use 等能力。", 0},
 	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", 1},
+	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", 1},
 	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", 1},
-	{"capabilities", "技能", "code", "查看当前项目实际加载的能力。", 1},
+	{"capabilities", "技能", "code", "查看当前项目实际加载的技能与工具。", 1},
+	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", 1},
 }
 

@@ -133,7 +133,11 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	a.note(c, "新建会话使用主机默认模型；会话中单独选择的模型只影响该会话，并在重启后保留。")
 	if !s.host().Local {
 		a.note(c, "模型配置属于服务主机。远程默认模型需在对应主机的 EasyAgent 配置中修改；会话模型可在对话输入框切换。")
-		a.action(c, "选择运行主机").OnClick(func() { a.openSettings("connections") })
+		ui.Row(c).Gap(8).Wrap().Children(func() {
+			for index, h := range l.Config.Hosts {
+				selectedButton(c, a.action(c, h.Name), h.ID == l.Config.ActiveHost).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
+			}
+		})
 		return
 	}
 	a.heading(c, "本地模型来源")
@@ -731,6 +735,7 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 func (a *preview) liveCapabilitySettings(c *ui.Context) {
 	if a.current().RemoteID == "" {
 		a.note(c, "选择一个项目会话后查看实际加载的技能。")
+		a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
 		return
 	}
 	if a.resourceFeedback(c, "capabilities", a.loadSettingsPage) {
@@ -760,8 +765,7 @@ func (a *preview) liveCapabilitySettings(c *ui.Context) {
 			a.action(c, "使用技能").AlignSelf(ui.Start).OnClick(func() { a.current().Draft += "\n使用技能 " + str(skill["name"]) + " "; a.closeSettings() })
 		})
 	}
-	a.heading(c, "工作流")
-	a.note(c, "工作流功能已下线；历史运行记录可从 archive/workflow 分支版本查看。")
+	a.action(c, "打开技能市场").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
 }
 
 // Keep map iteration out of the view so keyed form rows remain stable.
