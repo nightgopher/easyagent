@@ -43,11 +43,13 @@ func (a *preview) operation(key, method, path string, body any, done func(any)) 
 		a.post(epoch, func() {
 			l.Loading[key] = false
 			if err != nil {
-				l.Error = err.Error()
-				l.ResourceErrors[key] = err.Error()
+				a.reportLiveError(err)
+				l.ResourceErrors[key] = l.Error
 				return
 			}
-			l.Error = ""
+			if !l.CredentialRepair {
+				l.Error = ""
+			}
 			if done != nil {
 				done(v)
 			}
@@ -482,7 +484,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 	a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
 	a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
 	a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
-	a.input(c, "访问令牌", &s.HostToken, "留空保留现有令牌", true)
+	a.input(c, "访问令牌", &s.HostToken, "原地址留空保留令牌；新连接留空表示无令牌", true).Bind(&s.HostTokenField)
 	ui.Row(c).Gap(8).Children(func() {
 		a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
 		if a.settingsFormDirty() {
@@ -546,74 +548,43 @@ func (a *preview) saveLiveHost() {
 		l.Error = "请输入连接名称"
 		return
 	}
-	b, err := newBackendClient(s.HostURL, s.HostToken)
+	_, err := newBackendClient(s.HostURL, s.HostToken)
 	if err != nil {
 		l.Error = err.Error()
 		return
 	}
-	next := l.Config
-	next.Hosts = append([]hostConfig{}, next.Hosts...)
-	id := s.EditHost
-	index := -1
-	for i, h := range next.Hosts {
-		if h.ID == id && !h.Local {
-			index = i
-		}
-	}
-	if index < 0 {
-		id = requestID()
-		index = len(next.Hosts)
-		next.Hosts = append(next.Hosts, hostConfig{ID: id})
-	}
-	h := next.Hosts[index]
-	key := s.HostToken
-	// A different endpoint or credential is a distinct connection identity. Keep
-	// the old profile (and its drafts/editors) available instead of relabelling it.
-	changedIdentity := h.URL != "" && (h.URL != b.URL || key != "")
-	wasActive := id == l.Config.ActiveHost
-	if changedIdentity {
-		id = requestID()
-		index = len(next.Hosts)
-		h = hostConfig{ID: id}
-		next.Hosts = append(next.Hosts, h)
-	}
-	h.Name = strings.TrimSpace(s.HostName)
-	h.URL = b.URL
-	h.HasToken = key != "" || h.HasToken
-	next.Hosts[index] = h
+	form, old := s.hostForm, cloneConfig(l.Config)
+	wasActive := form.EditHost == old.ActiveHost
 	l.Loading["host-save"] = true
 	epoch := l.epoch
 	go func() {
-		var err error
-		if key != "" {
-			err = l.Secrets.Set("host/"+id, key)
-		}
-		if err == nil {
-			err = atomicJSON(filepath.Join(l.Dir, "connections.json"), next)
-			if err != nil && key != "" {
-				_ = l.Secrets.Delete("host/" + id)
-			}
-		}
+		saved, err := persistHostProfile(l.Dir, l.Secrets, old, form)
 		a.post(epoch, func() {
 			l.Loading["host-save"] = false
 			if err != nil {
-				l.Error = err.Error()
+				a.reportLiveError(err)
 				return
 			}
-			l.Config = next
-			s.EditHost = id
+			l.Config = saved.Config
+			s.EditHost = saved.Config.Hosts[saved.Index].ID
 			s.HostToken = ""
 			a.syncSettingsConfig()
+			if !l.CredentialRepair {
+				l.Error = ""
+			}
 			l.Notice = "主机连接已保存。"
-			if changedIdentity {
+			if saved.NewIdentity {
 				l.Notice = "已另存为新连接，原连接及其草稿仍保留。"
-				if wasActive {
-					a.selectLiveHost(index)
-				}
+			}
+			if wasActive && saved.NewIdentity {
+				a.selectLiveHost(saved.Index)
+			} else if wasActive && l.CredentialRepair {
+				a.connectLive()
 			}
 		})
 	}()
 }
+
 func (a *preview) removeLiveHost(index int) {
 	l := a.Live
 	if l.configBusy() {
@@ -623,24 +594,24 @@ func (a *preview) removeLiveHost(index int) {
 	if index < 0 || index >= len(l.Config.Hosts) || l.Config.Hosts[index].Local {
 		return
 	}
-	next := l.Config
-	next.Hosts = append([]hostConfig{}, next.Hosts...)
-	id := next.Hosts[index].ID
-	next.Hosts = append(next.Hosts[:index], next.Hosts[index+1:]...)
-	active := next.ActiveHost == id
-	if active {
-		next.ActiveHost = "local"
-	}
+	old := cloneConfig(l.Config)
+	id := old.Hosts[index].ID
+	active := old.ActiveHost == id
 	a.run("configuration", func(context.Context, *backendClient) (any, error) {
-		return nil, atomicJSON(filepath.Join(l.Dir, "connections.json"), next)
-	}, func(any) {
-		l.Config = next
+		return persistHostRemoval(l.Dir, l.Secrets, old, index)
+	}, func(value any) {
+		l.Config = value.(clientConfig)
+		if a.Settings.EditHost == id {
+			a.Settings.hostForm = hostForm{}
+			a.Settings.HostTokenField.CancelFocus()
+		}
 		a.syncSettingsConfig()
 		if active {
 			a.selectLiveHost(0)
 		}
 	})
 }
+
 func (a *preview) liveUsageSettings(c *ui.Context) {
 	if a.resourceFeedback(c, "usage", a.loadSettingsPage) {
 		return

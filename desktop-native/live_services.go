@@ -542,6 +542,7 @@ func (a *preview) cancelMCPLogin() {
 	l.Loading["mcp-login"] = false
 }
 func (a *preview) cancelSettingsTransient() {
+	a.Settings.HostTokenField.CancelFocus()
 	if a.Settings.Tab == "models" {
 		a.clearModelCheck()
 	}
