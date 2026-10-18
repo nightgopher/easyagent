@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/egoist/mygo/ui"
+)
 
 func confirmDirtySwitch(t *testing.T, a *preview, tab string) {
 	t.Helper()
@@ -80,5 +84,20 @@ func TestSettingsFeishuDirtyMatchesSaveSemantics(t *testing.T) {
 				t.Fatal("a new secret must always mark the form dirty")
 			}
 		})
+	}
+}
+
+func TestSettingsFailedSaveDoesNotClaimSuccess(t *testing.T) {
+	a := newPreview()
+	// A directory cannot be replaced by the preferences file.
+	a.Settings.Path = t.TempDir()
+	a.openSettings("appearance")
+	tt := ui.NewTester(a.View, 1240, 820)
+	click(t, tt, "浅色")
+	if a.Settings.Error == "" || !tt.HasText(a.Settings.Error) {
+		t.Fatal("failed save must show an error")
+	}
+	if tt.HasText("已保存") {
+		t.Fatal("failed save must not show the success toast")
 	}
 }
