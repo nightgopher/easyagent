@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -478,7 +479,10 @@ func (a *preview) toggleTerminal() {
 		}
 		h := http.Header{}
 		h.Set("Authorization", "Bearer "+b.Token)
-		conn, _, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
+		conn, resp, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
+		if err != nil && resp != nil {
+			err = terminalHandshakeError(resp)
+		}
 		var term *terminal.Terminal
 		if err == nil {
 			conn.SetReadLimit(128 << 10)
@@ -518,6 +522,28 @@ func (a *preview) toggleTerminal() {
 }
 
 var _ io.ReadWriteCloser = (*remoteTerminal)(nil)
+
+// terminalHandshakeError replaces the generic "websocket: bad handshake" with
+// the status and error body the server actually returned, so an opt-in flag
+// such as EA_ENABLE_TERMINAL is not mistaken for a protocol or network failure.
+func terminalHandshakeError(resp *http.Response) error {
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	_ = resp.Body.Close()
+	detail := strings.TrimSpace(string(body))
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(body, &payload) == nil && payload.Error != "" {
+		detail = payload.Error
+	}
+	if detail == "" {
+		detail = http.StatusText(resp.StatusCode)
+	}
+	if strings.Contains(detail, "terminal is not enabled") {
+		detail += "；需在远端核心 core.env 设置 EA_ENABLE_TERMINAL=1 并重启服务"
+	}
+	return fmt.Errorf("HTTP %d：%s", resp.StatusCode, detail)
+}
 
 // The same splitter handles pointer drags and keyboard resizing without changing
 // the session, file buffers, or terminal connection being resized.
