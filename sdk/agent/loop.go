@@ -115,6 +115,7 @@ func runAgentLoop(ctx context.Context, a *Agent, provider interface {
 
 		result, updatedHistory, err := processTurn(ctx, a, provider, consume, history, pending)
 		if err != nil {
+			err = fmt.Errorf("第 %d 轮请求: %w", turns, err)
 			if result.assistant.StopReason != "" {
 				return result.assistant, err
 			}

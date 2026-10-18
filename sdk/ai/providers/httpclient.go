@@ -3,7 +3,10 @@ package providers
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -16,7 +19,7 @@ import (
 const responseHeaderTimeout = 120 * time.Second
 
 // 变量化以便测试缩短等待。
-var streamIdleTimeout = 120 * time.Second
+var streamIdleTimeout = 300 * time.Second
 
 // 空流重试（断流重发）的次数上限与基础退避间隔，实际退避 = attempt * 基础间隔。
 // 变量化以便测试缩短等待。
@@ -32,7 +35,10 @@ func newStreamHTTPClient() *http.Client {
 
 // streamWatchdog 监视流式 body 的读取进度。
 type streamWatchdog struct {
-	Kick    func()      // 每读到一行数据调用
+	Kick    func() // 每读到一行数据调用
+	Bytes   atomic.Int64
+	First   atomic.Int64
+	Last    atomic.Int64
 	Tripped func() bool // 看门狗是否已因空闲超时触发
 }
 
@@ -78,4 +84,44 @@ func startStreamWatchdog(ctx context.Context, idle time.Duration, cancel context
 // idleTimeoutError 返回看门狗触发时用于 Result 的错误。
 func idleTimeoutError(idle time.Duration) error {
 	return fmt.Errorf("stream idle over %v: no data from upstream", idle)
+}
+
+func configuredStreamIdleTimeout() (time.Duration, error) {
+	value := strings.TrimSpace(os.Getenv("EA_STREAM_IDLE_TIMEOUT"))
+	if value == "" {
+		return streamIdleTimeout, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("EA_STREAM_IDLE_TIMEOUT must be a positive duration (for example 300s)")
+	}
+	return d, nil
+}
+
+type watchedReader struct {
+	io.Reader
+	wd *streamWatchdog
+}
+
+func (r watchedReader) Read(p []byte) (int, error) {
+	n, err := r.Reader.Read(p)
+	if n > 0 {
+		now := time.Now().UnixNano()
+		r.wd.First.CompareAndSwap(0, now)
+		r.wd.Last.Store(now)
+		r.wd.Bytes.Add(int64(n))
+		r.wd.Kick()
+	}
+	return n, err
+}
+func (wd *streamWatchdog) idleError(idle time.Duration, attempt int, started, headers time.Time) error {
+	last := "none"
+	if n := wd.Last.Load(); n > 0 {
+		last = time.Since(time.Unix(0, n)).Round(time.Millisecond).String() + " ago"
+	}
+	first := "none"
+	if n := wd.First.Load(); n > 0 {
+		first = time.Unix(0, n).Sub(started).Round(time.Millisecond).String()
+	}
+	return fmt.Errorf("%w (request attempt %d, headers %s, first body byte %s, bytes %d, last data %s)", idleTimeoutError(idle), attempt, headers.Sub(started).Round(time.Millisecond), first, wd.Bytes.Load(), last)
 }

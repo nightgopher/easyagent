@@ -47,12 +47,14 @@ func sanitizeConfigString(s string) string {
 }
 
 type Config struct {
-	Name     string
-	Host     string
-	Port     int
-	DataDir  string
-	MaxTurns int
-	Timeout  time.Duration
+	ThinkingMode, ReasoningEffort string
+	ThinkingBudget                int
+	Name                          string
+	Host                          string
+	Port                          int
+	DataDir                       string
+	MaxTurns                      int
+	Timeout                       time.Duration
 
 	// Provider
 	Provider string // anthropic / openai
@@ -237,6 +239,9 @@ func (c *Config) LoadFromEnv() {
 		c.ComputerApprovalPolicy = p
 	}
 
+	c.ThinkingMode = getEnv("EA_THINKING", c.ThinkingMode)
+	c.ReasoningEffort = getEnv("EA_REASONING_EFFORT", c.ReasoningEffort)
+	c.ThinkingBudget = getEnvInt("EA_THINKING_BUDGET", c.ThinkingBudget)
 	// Anthropic
 	if v := os.Getenv("ANTHROPIC_API_KEY"); v != "" {
 		c.AnthropicAPIKey = sanitizeConfigString(v)
@@ -395,6 +400,9 @@ func LoadDotEnv(path string) error {
 // yamlConfig is the YAML representation of Config for file-based configuration.
 // Uses yaml tags so users can write easyagent.yaml (legacy pi-go.yaml is still accepted).
 type yamlConfig struct {
+	ThinkingMode          string `yaml:"thinking,omitempty"`
+	ReasoningEffort       string `yaml:"reasoning_effort,omitempty"`
+	ThinkingBudget        int    `yaml:"thinking_budget,omitempty"`
 	AllowOutsideWorkspace bool   `yaml:"allow_outside_workspace,omitempty"`
 	Name                  string `yaml:"name,omitempty"`
 	Host                  string `yaml:"host,omitempty"`
@@ -462,6 +470,15 @@ func (c *Config) LoadFromYAML(path string) error {
 		return fmt.Errorf("parse YAML: %w", err)
 	}
 
+	if yc.ThinkingMode != "" {
+		c.ThinkingMode = yc.ThinkingMode
+	}
+	if yc.ReasoningEffort != "" {
+		c.ReasoningEffort = yc.ReasoningEffort
+	}
+	if yc.ThinkingBudget != 0 {
+		c.ThinkingBudget = yc.ThinkingBudget
+	}
 	// Apply YAML values only if non-zero (env vars override later)
 	if yc.Name != "" {
 		c.Name = yc.Name

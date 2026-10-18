@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -36,9 +37,11 @@ type pendingConfirmation struct {
 
 // sessionRun is owned by the session, never by a socket or HTTP request.
 type sessionRun struct {
-	UserEntryID      string   `json:"user_entry_id,omitempty"`
-	AssistantEntryID string   `json:"assistant_entry_id,omitempty"`
-	Usage            ai.Usage `json:"usage,omitempty"` // cumulative tokens across all turns
+	Anchors          []map[string]any `json:"message_anchors,omitempty"`
+	CanContinue      bool             `json:"can_continue,omitempty"`
+	UserEntryID      string           `json:"user_entry_id,omitempty"`
+	AssistantEntryID string           `json:"assistant_entry_id,omitempty"`
+	Usage            ai.Usage         `json:"usage,omitempty"` // cumulative tokens across all turns
 	files            *runFiles
 	DisplayPrompt    string            `json:"display_prompt,omitempty"`
 	Inputs           promptInputs      `json:"inputs,omitempty"`
@@ -213,6 +216,23 @@ func (s *Server) consumeRun(ctx context.Context, run *sessionRun, stream <-chan 
 			for _, entry := range run.baseline {
 				id, _ := entry["entry_id"].(string)
 				baselineIDs[id] = true
+			}
+			for i, m := range messages {
+				if !baselineIDs[ids[i]] {
+					row := serializeRunMessages([]ai.Message{m}, run.SessionID)[0]
+					text, _ := row["content"].(string)
+					run.Anchors = append(run.Anchors, map[string]any{"role": row["role"], "entry_id": ids[i], "content_hash": fmt.Sprintf("%x", sha256.Sum256([]byte(text))), "tool_call_id": row["tool_call_id"]})
+					if _, ok := m.(ai.ToolResultMessage); ok {
+						run.CanContinue = run.State != "completed"
+					}
+				}
+			}
+			if run.Inputs.ContinueRunID != "" && run.State != "completed" {
+				run.CanContinue = true
+			}
+			if len(messages) > 0 {
+				_, lastIsTool := messages[len(messages)-1].(ai.ToolResultMessage)
+				run.CanContinue = run.CanContinue && lastIsTool
 			}
 			for i := len(messages) - 1; i >= 0; i-- {
 				if user, ok := messages[i].(ai.UserMessage); ok && !baselineIDs[ids[i]] && len(user.Content) > 0 && user.Content[0].Type == "text" && user.Content[0].Text == run.Prompt {

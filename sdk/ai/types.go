@@ -43,14 +43,22 @@ func NewTextUserMessage(text string) UserMessage {
 	return UserMessage{Content: []ContentBlock{{Type: "text", Text: text}}}
 }
 
+type ThinkingBlock struct {
+	Type      string `json:"type"`
+	Thinking  string `json:"thinking,omitempty"`
+	Signature string `json:"signature,omitempty"`
+	Data      string `json:"data,omitempty"`
+}
+
 type AssistantMessage struct {
-	ThinkingDurationMS int64      `json:"thinking_duration_ms,omitempty"`
-	Text               string     `json:"text,omitempty"`
-	Thinking           string     `json:"thinking,omitempty"`
-	ToolCalls          []ToolCall `json:"tool_calls,omitempty"`
-	StopReason         StopReason `json:"stop_reason,omitempty"`
-	ErrorMsg           string     `json:"error_msg,omitempty"`
-	Usage              Usage      `json:"usage,omitempty"`
+	ThinkingBlocks     []ThinkingBlock `json:"thinking_blocks,omitempty"`
+	ThinkingDurationMS int64           `json:"thinking_duration_ms,omitempty"`
+	Text               string          `json:"text,omitempty"`
+	Thinking           string          `json:"thinking,omitempty"`
+	ToolCalls          []ToolCall      `json:"tool_calls,omitempty"`
+	StopReason         StopReason      `json:"stop_reason,omitempty"`
+	ErrorMsg           string          `json:"error_msg,omitempty"`
+	Usage              Usage           `json:"usage,omitempty"`
 }
 
 func (AssistantMessage) Role() Role     { return RoleAssistant }
@@ -120,13 +128,14 @@ const (
 )
 
 type StreamAssistantMessage struct {
-	ThinkingDurationMS int64      `json:"thinking_duration_ms,omitempty"`
-	Text               string     `json:"text,omitempty"`
-	Thinking           string     `json:"thinking,omitempty"`
-	ToolCalls          []ToolCall `json:"tool_calls,omitempty"`
-	StopReason         StopReason `json:"stop_reason,omitempty"`
-	ErrorMsg           string     `json:"error_msg,omitempty"`
-	Usage              Usage      `json:"usage,omitempty"`
+	ThinkingBlocks     []ThinkingBlock `json:"thinking_blocks,omitempty"`
+	ThinkingDurationMS int64           `json:"thinking_duration_ms,omitempty"`
+	Text               string          `json:"text,omitempty"`
+	Thinking           string          `json:"thinking,omitempty"`
+	ToolCalls          []ToolCall      `json:"tool_calls,omitempty"`
+	StopReason         StopReason      `json:"stop_reason,omitempty"`
+	ErrorMsg           string          `json:"error_msg,omitempty"`
+	Usage              Usage           `json:"usage,omitempty"`
 }
 
 type StreamRequest struct {

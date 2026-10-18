@@ -297,7 +297,9 @@ func (a *Agent) PromptStream(ctx context.Context, msg ai.Message) (<-chan AgentS
 		} else {
 			runSessionStartHooks(ctx, a.lifecycleHooks.SessionStart, SessionStartEvent{Goal: a.goal})
 		}
-		a.steeringQueue.Enqueue(msg)
+		if msg != nil {
+			a.steeringQueue.Enqueue(msg)
+		}
 
 		// PromptStream 的 stream consumer：转发 text delta 事件到 channel
 		consume := func(stream *ai.EventStream) (ai.StreamAssistantMessage, error) {
@@ -492,6 +494,7 @@ func (a *Agent) handleAssistantMessage(message ai.StreamAssistantMessage) (ai.As
 	assistant := ai.AssistantMessage{
 		Text:               message.Text,
 		Thinking:           message.Thinking,
+		ThinkingBlocks:     message.ThinkingBlocks,
 		ThinkingDurationMS: message.ThinkingDurationMS,
 		ToolCalls:          message.ToolCalls,
 		StopReason:         message.StopReason,

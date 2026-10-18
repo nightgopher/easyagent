@@ -153,6 +153,10 @@ func (a *preview) syncSettingsConfig() {
 	if m.Provider == "anthropic" {
 		s.Provider = "Anthropic"
 	}
+	s.Thinking, s.ReasoningEffort, s.ThinkingBudget, s.StreamIdleTimeout = thinkingLabel(m.Thinking), m.ReasoningEffort, m.ThinkingBudget, m.StreamIdleTimeout
+	if s.ReasoningEffort == "" {
+		s.ReasoningEffort = "沿用模型默认"
+	}
 	s.BaseURL = m.BaseURL
 	s.Model = m.Model
 	s.HasKey = m.HasKey
@@ -179,6 +183,12 @@ func (a *preview) postOwned(epoch uint64, fn, discard func()) {
 func (a *preview) liveTick() bool {
 	changed := false
 	l := a.Live
+	for _, s := range a.Sessions {
+		if (s.Running || s.Sending) && s.WaitingSecond != time.Now().Unix() {
+			s.WaitingSecond = time.Now().Unix()
+			changed = true
+		}
+	}
 	for i := 0; i < 256; i++ {
 		select {
 		case r := <-l.results:
@@ -724,7 +734,7 @@ func (a *preview) confirmLive(approved bool) {
 }
 func (a *preview) forkLive(index int) {
 	s := a.current()
-	if s.Running || index >= len(s.Messages) || s.Messages[index].EntryID == "" {
+	if index < 0 || index >= len(s.Messages) || !s.canForkMessage(s.Messages[index]) {
 		a.Live.Error = "这条回复尚无可用的分支点"
 		return
 	}
@@ -732,7 +742,7 @@ func (a *preview) forkLive(index int) {
 }
 func (a *preview) forkUserMessage(index int) {
 	s := a.current()
-	if index < 0 || index >= len(s.Messages) || !s.Messages[index].User || s.Running {
+	if index < 0 || index >= len(s.Messages) || !s.Messages[index].User || !s.canForkMessage(s.Messages[index]) {
 		return
 	}
 	before := 0

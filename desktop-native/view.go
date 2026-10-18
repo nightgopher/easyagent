@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/egoist/mygo/ui"
 	"strings"
+	"time"
 )
 
 var (
@@ -544,7 +545,7 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 					a.messageImages(key, m)
 					ui.Row(key).Gap(3).Children(func() {
 						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text) })
-						iconButton(key, "git-branch", "编辑并创建分支").Disabled(s.Running).OnClick(func() { a.forkUserMessage(i) })
+						iconButton(key, "git-branch", "编辑并创建分支").Disabled(!s.canForkMessage(m)).Tooltip("历史消息可随时分叉；当前轮次请等待完成").OnClick(func() { a.forkUserMessage(i) })
 					})
 				}
 			})
@@ -562,14 +563,18 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				ui.Text(key, "EasyAgent").FontSize(11).TextColor(c.Theme().TextMuted)
 			})
 			if m.Text == "" {
-				a.text(key, "正在生成…").TextColor(c.Theme().TextMuted)
+				label := "正在生成…"
+				if !m.WaitingSince.IsZero() {
+					label = fmt.Sprintf("正在生成… · 已等待 %d 秒", int(time.Since(m.WaitingSince).Seconds()))
+				}
+				a.text(key, label).TextColor(c.Theme().TextMuted)
 			} else {
 				a.renderSessionMarkdown(key, &m.Markdown, m.Text, s, "", s.Running && i == len(s.Messages)-1)
 			}
 			if !(s.Running && i == len(s.Messages)-1) {
 				ui.Row(key).Gap(3).Children(func() {
 					iconButton(key, "copy", fmt.Sprintf("复制回复 %d", i)).OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制回复") })
-					iconButton(key, "git-branch", fmt.Sprintf("从回复 %d 创建分支", i)).Disabled(a.Live != nil && (m.EntryID == "" || s.Running)).OnClick(func() { a.fork(i) })
+					iconButton(key, "git-branch", fmt.Sprintf("从回复 %d 创建分支", i)).Tooltip("从此回复创建分支（包含完整工具结果）；当前轮次请等待完成").Disabled(a.Live != nil && !s.canForkMessage(m)).OnClick(func() { a.fork(i) })
 				})
 			}
 		})
