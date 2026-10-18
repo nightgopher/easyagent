@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Self-signed distribution without a Developer ID team: the terminal
+	     renderer and other bundled libraries are re-signed by the same pinned
+	     certificate, but hardened runtime library validation still rejects
+	     them on newer macOS. Disable that check instead of notarization-only
+	     entitlements we cannot obtain. -->
+	<key>com.apple.security.cs.disable-library-validation</key>
+	<true/>
+</dict>
+</plist>

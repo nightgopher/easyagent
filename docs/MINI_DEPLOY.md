@@ -25,6 +25,8 @@ systemctl --user enable --now easyagent-update.timer
 
 开发权限在 `core.env` 中独立设置 `EA_ALLOW_OUTSIDE_WORKSPACE=true`。默认仍限制文件工具在工作区内；开关与 `EA_AUTO_APPROVE`、API 认证独立，仍受运行用户的操作系统权限限制。可通过认证后的 `/sessions/{id}/info` 的 `allow_outside_workspace` 字段核验实际会话策略。
 
+远程核心默认不开放桌面端「终端」面板：需要时在 `core.env` 额外设置 `EA_ENABLE_TERMINAL=1` 并重启核心服务。未开启时握手返回 403「interactive terminal is not enabled on this host」，桌面端会直接显示该原因。本地启动的核心由桌面端自动注入此开关，无需手动配置。
+
 ## 运维
 
 ```bash
