@@ -37,6 +37,7 @@ type pendingConfirmation struct {
 
 // sessionRun is owned by the session, never by a socket or HTTP request.
 type sessionRun struct {
+	baseEntryID      *string
 	Anchors          []map[string]any `json:"message_anchors,omitempty"`
 	CanContinue      bool             `json:"can_continue,omitempty"`
 	UserEntryID      string           `json:"user_entry_id,omitempty"`
@@ -420,7 +421,7 @@ func (s *Server) runSnapshot(sessionID string, afterSeq uint64, runID string, ws
 	s.runs.mu.Lock()
 	defer s.runs.mu.Unlock()
 	state := s.runs.sessionLocked(sessionID)
-	msg := wsServerMessage{Type: "snapshot", SessionID: sessionID, Seq: state.seq, Run: cloneRun(state.run), Queue: &queue}
+	msg := wsServerMessage{Type: "snapshot", SessionID: sessionID, Seq: state.seq, Queue: &queue}
 	if state.run != nil {
 		if state.run.restored {
 			msg.Reset = true
@@ -428,6 +429,7 @@ func (s *Server) runSnapshot(sessionID string, afterSeq uint64, runID string, ws
 				return wsServerMessage{}, err
 			}
 		}
+		msg.Run = cloneRun(state.run)
 		msg.RunID = state.run.ID
 		msg.PendingConfirmations = make([]*pendingConfirmation, 0, len(state.run.pending))
 		for _, pending := range state.run.pending {
