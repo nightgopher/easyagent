@@ -13,21 +13,23 @@ import (
 )
 
 type settingsPage struct {
-	ID, Label, Icon, Description string
-	Group                        int
+	ID, Label, Icon, Description, Effect string
+	Group                                int
 }
 
+// Effect badges the page with when its changes take effect: 立即生效,
+// 新会话生效 or 需重启核心; empty pages are informational only.
 var settingsPages = []settingsPage{
-	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", 0},
-	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", 0},
-	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", 0},
-	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", 0},
-	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", 1},
-	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", 1},
-	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", 1},
-	{"capabilities", "技能", "code", "查看当前项目实际加载的技能与工具。", 1},
-	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", 1},
-	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", 1},
+	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", "", 0},
+	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", "立即生效", 0},
+	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", "", 0},
+	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", "新会话生效", 0},
+	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
+	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
+	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
+	{"capabilities", "技能", "code", "查看当前项目实际加载的技能与工具。", "", 1},
+	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
+	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 }
 
 type localPreferences struct {
@@ -83,7 +85,7 @@ type settingsState struct {
 	feishuForm
 	Open                                                                     bool
 	Heading                                                                  ui.Handle
-	Tab, Notice, Error                                                       string
+	Tab, Search, Notice, Error                                               string
 	Preferences                                                              localPreferences
 	Path                                                                     string
 	Host                                                                     int
@@ -162,6 +164,13 @@ func (s *settingsState) page() settingsPage {
 		}
 	}
 	return settingsPages[0]
+}
+
+// settingsPageMatches reports whether a settings page matches the sidebar
+// search by label, description or id; an empty query matches everything.
+func settingsPageMatches(p settingsPage, search string) bool {
+	search = strings.TrimSpace(strings.ToLower(search))
+	return search == "" || strings.Contains(strings.ToLower(p.Label+p.Description+p.ID), search)
 }
 func (s *settingsState) host() demoHost       { return s.Hosts[min(s.Host, len(s.Hosts)-1)] }
 func (s *settingsState) message(value string) { s.Notice = value; s.Error = "" }

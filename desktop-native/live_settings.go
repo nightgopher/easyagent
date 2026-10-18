@@ -231,7 +231,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	if running {
 		a.note(c, "当前有任务正在执行，完成或停止任务后即可应用配置。")
 	}
-	a.note(c, "检测只读取模型目录，不发送推理请求。应用后重启本地核心，新会话使用新的默认模型，已有会话的单独选择保留。")
+	a.note(c, "检测只读取模型目录，不发送推理请求。应用后新会话使用新的默认模型，已有会话的单独选择保留。")
 	if catalog := object(l.Data["model-check"]); len(catalog) > 0 {
 		a.heading(c, "检测到的模型")
 		a.note(c, str(catalog["message"]))
