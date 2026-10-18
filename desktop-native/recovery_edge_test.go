@@ -38,3 +38,36 @@ func TestReloadedToolArgumentsPreservePlansAndFileLinks(t *testing.T) {
 		t.Fatal("file link lost after history reload")
 	}
 }
+
+func TestLiveAndReplayedStringToolArgumentsPreservePlansAndFiles(t *testing.T) {
+	for _, replay := range []bool{false, true} {
+		s := &session{Run: &runInfo{ID: "run", State: "running"}}
+		events := []agentEvent{
+			{Type: "tool_start", ToolID: "plan", ToolName: "todo_write", Args: `{"todos":[{"content":"keep live plan","status":"in_progress"}]}`},
+			{Type: "tool_end", ToolID: "plan"},
+			{Type: "tool_start", ToolID: "read", ToolName: "read", Args: `{"path":"proof.go"}`},
+			{Type: "tool_end", ToolID: "read"},
+		}
+		if replay {
+			var raw []json.RawMessage
+			for _, event := range events {
+				data, err := json.Marshal(event)
+				if err != nil {
+					t.Fatal(err)
+				}
+				raw = append(raw, data)
+			}
+			s.reduce(envelope{Type: "snapshot", Seq: 5, Run: &runInfo{ID: "run", State: "completed"}, Events: raw})
+		} else {
+			for _, event := range events {
+				s.event(event)
+			}
+		}
+		if len(s.Plan) != 1 || s.Plan[0].Content != "keep live plan" {
+			t.Fatalf("replay=%t: live plan lost: %#v", replay, s.Plan)
+		}
+		if len(s.Messages) != 2 || toolFilePath(s.Messages[1]) != "proof.go" {
+			t.Fatalf("replay=%t: live file link lost", replay)
+		}
+	}
+}
