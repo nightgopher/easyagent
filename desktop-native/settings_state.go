@@ -54,6 +54,7 @@ type feishuDemoState struct {
 	Saved, Bridge bool
 }
 type settingsState struct {
+	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout                       string
 	Open                                                                               bool
 	Heading                                                                            ui.Handle
 	Tab, Notice, Error                                                                 string

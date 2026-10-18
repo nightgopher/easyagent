@@ -256,3 +256,20 @@ func (s *Session) MoveTo(ctx context.Context, entryID string, summary string) er
 	}
 	return nil
 }
+
+// BuildContextSnapshot returns messages and IDs from the same storage snapshot.
+func (s *Session) BuildContextSnapshot(ctx context.Context) ([]ai.Message, []string, error) {
+	entries, err := s.contextEntries(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	messages := make([]ai.Message, 0, len(entries))
+	ids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		for _, m := range entryToMessages(e) {
+			messages = append(messages, m)
+			ids = append(ids, e.ID)
+		}
+	}
+	return messages, ids, nil
+}

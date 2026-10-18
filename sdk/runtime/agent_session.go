@@ -55,6 +55,7 @@ type AgentSession struct {
 	mu           sync.RWMutex
 	skillsMu     sync.RWMutex
 	loadedSkills []skill.Skill
+	runPrefix    []session.Entry
 	running      bool
 	mutating     bool
 	toolVersion  uint64
@@ -186,6 +187,14 @@ func (s *AgentSession) PromptStream(ctx context.Context, input string) (<-chan a
 
 // PromptMessageStream preserves structured user content through the runtime.
 func (s *AgentSession) PromptMessageStream(ctx context.Context, input ai.UserMessage) (<-chan agent.AgentStreamEvent, error) {
+	return s.promptMessageStream(ctx, input)
+}
+
+// ContinueStream resumes from persisted context without duplicating a user prompt.
+func (s *AgentSession) ContinueStream(ctx context.Context) (<-chan agent.AgentStreamEvent, error) {
+	return s.promptMessageStream(ctx, nil)
+}
+func (s *AgentSession) promptMessageStream(ctx context.Context, input ai.Message) (<-chan agent.AgentStreamEvent, error) {
 	ag, err := s.preparePrompt(ctx)
 	if err != nil {
 		return nil, err
@@ -239,6 +248,11 @@ func (s *AgentSession) preparePrompt(ctx context.Context) (*agent.Agent, error) 
 		if err := s.refreshToolsLocked(ctx); err != nil {
 			return nil, err
 		}
+	}
+	var err error
+	s.runPrefix, err = s.session.Storage().GetPathToRoot(ctx, "")
+	if err != nil {
+		return nil, err
 	}
 	s.running = true
 	s.releaseTools = release
@@ -857,10 +871,31 @@ func (s *AgentSession) ContextSnapshot(ctx context.Context) (agent.ContextSnapsh
 
 // Fork snapshots this session while blocking concurrent prompts and mutations.
 func (s *AgentSession) Fork(ctx context.Context, entryID *string) (string, string, error) {
+	return s.ForkTo(ctx, entryID, nil)
+}
+
+// ForkTo permits immutable history prefixes during a run, never its mutable tail.
+func (s *AgentSession) ForkTo(ctx context.Context, entryID *string, application *string) (string, string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.busyLocked() {
+	if s.mutating {
 		return "", "", agent.ErrAgentBusy
 	}
-	return s.sessionMgr.ForkAt(ctx, s.sessionID, entryID)
+	entries := s.runPrefix
+	if s.busyLocked() {
+		if entryID == nil {
+			return "", "", agent.ErrAgentBusy
+		}
+	} else {
+		var err error
+		entries, err = s.session.Storage().GetPathToRoot(ctx, "")
+		if err != nil {
+			return "", "", err
+		}
+	}
+	id, path, err := s.sessionMgr.ForkSnapshot(ctx, s.sessionID, entries, entryID, application)
+	if err != nil && s.busyLocked() {
+		return "", "", agent.ErrAgentBusy
+	}
+	return id, path, err
 }

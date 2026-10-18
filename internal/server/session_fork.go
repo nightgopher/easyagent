@@ -11,6 +11,7 @@ import (
 )
 
 type forkRequest struct {
+	Application        *string `json:"application,omitempty"`
 	EntryID            *string `json:"entry_id,omitempty"`
 	BeforeMessageIndex *int    `json:"before_message_index,omitempty"`
 }
@@ -44,8 +45,12 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 	// writes from other entrypoints and manual compaction.
 	s.runs.mu.Lock()
 	defer s.runs.mu.Unlock()
-	if state := s.runs.sessions[sourceID]; sessionBusy(state) {
-		writeError(w, 409, "会话正在运行，请等待完成后分叉")
+	if req.Application != nil && *req.Application != "" && *req.Application != "music" && *req.Application != "kb" {
+		writeError(w, 400, "unknown application")
+		return
+	}
+	if state := s.runs.sessions[sourceID]; state != nil && (state.admission != nil || sessionBusy(state) && req.EntryID == nil && req.BeforeMessageIndex == nil) {
+		writeError(w, 409, "当前轮次完成后可分叉；运行中请选择更早的历史消息")
 		return
 	}
 	source, err := s.app.LoadSession(r.Context(), sourceID)
@@ -53,20 +58,12 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "session not found")
 		return
 	}
-	if source.IsBusy() {
-		writeError(w, 409, "会话正在运行，请等待完成后分叉")
-		return
-	}
-	messages, err := source.Session().BuildContext(r.Context())
+	messages, ids, err := source.Session().BuildContextSnapshot(r.Context())
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
-	ids, err := source.Session().BuildContextEntryIDs(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
+
 	records, err := source.Session().Compactions(r.Context())
 	if err != nil {
 		writeError(w, 500, err.Error())
@@ -80,63 +77,99 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 	cut := len(messages)
 	if req.BeforeMessageIndex != nil {
 		index := *req.BeforeMessageIndex
-		if index < 0 {
-			writeError(w, 400, "before_message_index must be >= 0")
-			return
-		}
-		seen := 0
-		for i, message := range messages {
-			if message.Role() != ai.RoleUser {
-				continue
-			}
-			if seen == index {
-				cut = i
-				value := ""
-				if i > 0 {
-					value = ids[i-1]
-				} else if len(records) > 0 {
-					value = records[len(records)-1].ID
+		if state := s.runs.sessions[sourceID]; sessionBusy(state) {
+			historicalUsers := 0
+			value := ""
+			found := false
+			for i, row := range state.run.baseline {
+				if row["role"] != "user" {
+					continue
 				}
-				if index == 0 {
-					value = ""
+				if historicalUsers == index {
+					if i > 0 {
+						value, _ = state.run.baseline[i-1]["entry_id"].(string)
+					}
+					found = true
+					break
 				}
-				target = &value
-				break
+				historicalUsers++
 			}
-			seen++
-		}
-	} else if target != nil {
-		cut = -1
-		if *target == "" {
-			cut = 0
-		}
-		for i, id := range ids {
-			if id == *target {
-				cut = i + 1
-				break
+			if !found {
+				writeError(w, 409, "当前轮次完成后可分叉")
+				return
 			}
-		}
-		if cut < 0 {
-			writeError(w, 400, "entry not found in current context")
-			return
+			target = &value
+		} else {
+			if index < 0 {
+				writeError(w, 400, "before_message_index must be >= 0")
+				return
+			}
+			seen := 0
+			found := false
+			for i, message := range messages {
+				if message.Role() != ai.RoleUser {
+					continue
+				}
+				if seen == index {
+					found = true
+					cut = i
+					value := ""
+					if i > 0 {
+						value = ids[i-1]
+					} else if len(records) > 0 {
+						value = records[len(records)-1].ID
+					}
+					if index == 0 {
+						value = ""
+					}
+					target = &value
+					break
+				}
+				seen++
+			}
+			if !found {
+				writeError(w, 400, "user message index not found")
+				return
+			}
 		}
 	}
-	newID, _, err := source.Fork(r.Context(), target)
+
+	newID, _, err := source.ForkTo(r.Context(), target, req.Application)
 	if errors.Is(err, agent.ErrAgentBusy) {
-		writeError(w, 409, "会话正在运行，请等待完成后分叉")
+		writeError(w, 409, "当前轮次完成后可分叉；运行中请选择更早的历史消息")
 		return
 	}
+	if err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	forked, _, err := s.app.SessionManager().Open(r.Context(), newID)
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
+	defer forked.Storage().Close()
+	kept, err := forked.BuildContext(r.Context())
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	forkCompactions, err := forked.Compactions(r.Context())
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if len(forkCompactions) > 0 && len(kept) > 0 {
+		kept = kept[1:]
+	}
+	cut = len(kept)
 	users := 0
-	for _, message := range messages[:cut] {
+	for _, message := range kept {
 		if message.Role() == ai.RoleUser {
 			users++
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(forkResponse{ID: newID, SourceID: sourceID, KeptMessages: cut, KeptUserMessages: users, DroppedMessages: len(messages) - cut, BranchUserMsgIndex: users})
+	_ = json.NewEncoder(w).Encode(forkResponse{ID: newID, SourceID: sourceID, KeptMessages: cut, KeptUserMessages: users, DroppedMessages: max(0, len(messages)-cut), BranchUserMsgIndex: users})
 }
