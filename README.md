@@ -70,6 +70,7 @@ TUI 中输入 `/help` 查看命令。`Enter` 发送，`Ctrl+J` 换行，`PgUp/Pg
 | 连接 Mac / 迷你主机、构建桌面应用 | [桌面客户端](docs/DESKTOP.md) |
 | 用 Android 手机连接远程 Agent | [Android 手机端](mobile-native/README.md) |
 | 配置外部工具、项目授权与 OAuth | [MCP](docs/MCP.md) |
+| 浏览与安装技能市场技能 | [技能市场](docs/SKILL_MARKET.md) |
 | 接入飞书、配对与排错 | [飞书](docs/FEISHU.md) |
 | 开机启动、同步 main、健康检查与回滚 | [部署运维](docs/MINI_DEPLOY.md) |
 | 打 tag、发布和核验下载 | [版本与发布](docs/RELEASING.md) · [更新记录](CHANGELOG.md) |

@@ -117,8 +117,15 @@ GET /ws
 | `POST` | `/sessions/{id}/compact` | 压缩会话上下文 |
 | `POST` | `/sessions/{id}/command` | 执行斜杠命令 |
 | `GET` | `/sessions/{id}/run` | 当前 run 与恢复快照 |
+| `POST` | `/sessions/{id}/run/continue` | 从已保存的工具结果继续失败任务，body 为 `{"run_id":"..."}`（可选幂等 `request_id`），返回 202 |
 | `GET` | `/sessions/{id}/run-files` | 最近最多 50 个任务的文件变更汇总，含 `workspace`、`incomplete`、`skipped` 与来源 |
 | `GET` | `/sessions/{id}/runs/{run}/files` | 单个任务文件变更详情及可用的修改前后内容 |
+| `POST` | `/sessions/{id}/runs/{run}/undo` | 撤回单个任务的文件修改，body 为 `{"path":"...","after_hash":"..."}`；存在运行中任务时返回 409 |
+| `GET` | `/sessions/{id}/queue` | 读取待发消息队列（`items`、`paused`、`revision`） |
+| `POST` | `/sessions/{id}/queue` | 队列操作：body 为 `{"action":"add\|edit\|remove\|pause\|resume\|send_now","id":"...","prompt":"...","inputs":{...}}`，冲突返回 409 |
+| `POST` | `/sessions/{id}/attachments` | 上传工作区附件，body 为 `{"name":"...","data":"<base64>"}`（1 字节–4MiB），图片校验尺寸上限 32M 像素 |
+| `GET` | `/sessions/{id}/capabilities` | 会话实际加载的技能与工具清单（含来源与调用方式） |
+| `PATCH` | `/sessions/{id}` | 更新会话偏好：`title`（1–160 字符）、`pinned`、`archived` |
 | `POST` | `/sessions/{id}/run/cancel` | body 为 `{"run_id":"..."}` |
 | `POST` | `/sessions/{id}/run/confirm` | body 为 `{"run_id":"...","confirmation_id":"...","approved":true}`；提问须同时提交 `answers`，见下文 |
 | `GET` | `/sessions/{id}/diff` | 获取会话 Git diff |
@@ -194,6 +201,19 @@ POST /sessions/{id}/model
 
 ---
 
+## 用量与电脑控制
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/usage/summary` | Token 用量汇总（默认近 30 天，`?since=`/`?until=` 为 RFC3339），返回总计与按会话排行 |
+| `GET` | `/computer/settings` | 电脑控制开关、审批策略、可用性、系统权限与占用状态 |
+| `POST` | `/computer/settings` | 更新电脑控制配置：`enabled`、`approval_policy`（`ask`/`auto`）、`clear_approved_apps` |
+| `POST` | `/computer/permissions` | 在运行主机上请求辅助功能与屏幕录制等系统权限 |
+
+技能市场端点（`/skills/market/*`，含安装任务与 SSE 进度）见 [技能市场](SKILL_MARKET.md)，受 `EA_SKILL_MARKET` 开关约束。
+
+---
+
 ## 文件操作
 
 | 方法 | 路径 | 说明 |
@@ -212,7 +232,6 @@ POST /sessions/{id}/model
 serve 模式内嵌网页控制台（浏览器打开 `http://<host>:<port>/`），无需独立前端：
 
 - **对话**：原有聊天界面（WebSocket 流式 + 会话侧栏 + 模型切换）。
-- **流水线**：YAML DAG 提交、运行详情、审批与取消。
 - **设置**：托管飞书配置、配对、服务状态与 MCP 工具配置。
 - **会话**：会话列表、消息回看（含工具调用）、删除。
 
