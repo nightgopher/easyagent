@@ -119,6 +119,13 @@ func newSettings() settingsState {
 	}
 }
 func (a *preview) openSettings(tab string) {
+	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
+		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
+			a.discardSettingsForms()
+			a.openSettings(tab)
+		}}
+		return
+	}
 	if a.Live != nil && a.Settings.Tab != tab {
 		a.cancelSettingsTransient()
 	}
@@ -307,23 +314,26 @@ func (s *settingsState) loadPreferences(path string) {
 		s.Preferences = prefs
 	}
 }
-func (s *settingsState) savePreferences() {
+func (s *settingsState) savePreferences() bool {
 	if s.Path == "" {
-		return
+		return true
 	}
 	if err := os.MkdirAll(filepath.Dir(s.Path), 0700); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	b, _ := json.MarshalIndent(s.Preferences, "", "  ")
 	tmp := s.Path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0600); err != nil {
 		s.Error = err.Error()
-		return
+		return false
 	}
 	if err := os.Rename(tmp, s.Path); err != nil {
 		s.Error = err.Error()
+		return false
 	}
+	s.Error = ""
+	return true
 }
 func previewTheme(base *ui.Theme, prefs localPreferences) ui.Theme {
 	t := *base

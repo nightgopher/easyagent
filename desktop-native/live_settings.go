@@ -120,7 +120,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	l := a.Live
 	busy := l.configBusy() || l.Loading["model-check"]
 	ui.Row(c).Children(func() {
-		a.heading(c, "全局模型配置")
+		a.heading(c, "全局模型配置"+a.dirtySuffix())
 		ui.Spacer(c)
 		a.action(c, "刷新模型").Disabled(busy || l.Loading["model-list"]).OnClick(a.refreshModels)
 	})
@@ -474,12 +474,15 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			}
 		})
 	}
-	a.heading(c, "添加或修改远程主机")
+	a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
 	a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
 	a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
 	a.input(c, "访问令牌", &s.HostToken, "留空保留现有令牌", true)
 	ui.Row(c).Gap(8).Children(func() {
 		a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
+		if a.settingsFormDirty() {
+			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
+		}
 		a.action(c, "新增连接").OnClick(func() { s.EditHost = ""; s.HostName = ""; s.HostURL = ""; s.HostToken = "" })
 	})
 	a.action(c, "重连当前主机").AlignSelf(ui.Start).Disabled(l.Connecting).OnClick(a.connectLive)
@@ -511,13 +514,10 @@ func (a *preview) selectLiveHost(index int) {
 	l.EditQueueID = ""
 	l.EditQueueOwner = nil
 	a.Settings.APIKey = ""
-	a.Settings.AppSecret = ""
-	a.Settings.AppID = ""
-	a.Settings.MCPName = ""
-	a.Settings.Variables = ""
-	a.Settings.JSON = "{}"
-	a.Settings.MCPBase = nil
-	a.Settings.HostToken = ""
+	a.Settings.feishuForm = feishuForm{}
+	a.Settings.mcpForm = mcpForm{Workspace: l.workspace()}
+	a.Live.SavedMCPForm = a.Settings.mcpForm
+	a.Settings.hostForm = hostForm{}
 	a.Sessions = []*session{{ID: a.NextID, Title: "新会话", Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}}
 	a.Active = a.NextID
 	a.NextID++
