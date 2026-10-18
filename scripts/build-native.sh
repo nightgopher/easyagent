@@ -55,7 +55,7 @@ fi
 
 # Exercise bundle discovery AND the actual local-backend launcher with isolated
 # configuration. A healthy Resources binary alone does not catch UI recursion.
-EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test ./... -count=1
+EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test ./... -count=1
 
 if [[ -n "$DIST" ]]; then
   mkdir -p "$DIST"
