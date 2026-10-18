@@ -54,7 +54,7 @@ func TestNativeAlignedReadingColumnAndSettingsAccess(t *testing.T) {
 }
 func TestNativeProjectCollapseAndSuggestionsPreserveDraft(t *testing.T) {
 	a := alignmentPreview(t)
-	a.Sessions = append(a.Sessions, &session{ID: 8, Title: "同项目另一会话", Workspace: "/demo/easyagent", Project: "easyagent"})
+	a.Sessions = append(a.Sessions, &session{ID: 8, Title: "同项目另一会话", UpdatedAt: a.current().UpdatedAt, Workspace: "/demo/easyagent", Project: "easyagent"})
 	tt := ui.NewTester(a.View, 1240, 820)
 	click(t, tt, "折叠项目：easyagent")
 	if _, ok := tt.Find("同项目另一会话"); ok {

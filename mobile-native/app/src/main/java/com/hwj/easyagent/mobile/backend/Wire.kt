@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.time.Instant
 
 // 与 desktop-native/projection.go 中的结构一一对应，字段名以服务端 JSON 为准。
 
@@ -22,12 +23,17 @@ val wireJson: Json = Json {
 data class SessionSummary(
     val id: String = "",
     val title: String = "",
-    @SerialName("updated_at") val updatedAt: String = "",
+    @SerialName("last_active") val lastActive: Long = 0,
+    @SerialName("created_at") val createdAt: Long = 0,
     val workspace: String = "",
     val application: String = "",
     val archived: Boolean = false,
     val pinned: Boolean = false,
 ) {
+    val updatedAt: String
+        get() = (lastActive.takeIf { it > 0 } ?: createdAt.takeIf { it > 0 })
+            ?.let { Instant.ofEpochSecond(it).toString() }.orEmpty()
+
     val displayTitle: String
         get() = title.ifBlank { "会话 " + id.takeLast(6) }
 }
