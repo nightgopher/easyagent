@@ -110,17 +110,38 @@ func (a *preview) preferenceRow(c *ui.Context, label, detail string, control fun
 		control()
 	})
 }
+
+// dirtySuffix marks form headings on pages with uncommitted edits; the save
+// and discard controls beside them make the state actionable.
+func (a *preview) dirtySuffix() string {
+	if a.Live != nil && a.settingsFormDirty() {
+		return " · 未保存"
+	}
+	return ""
+}
 func (a *preview) settingsView(c *ui.Context) {
 	s := &a.Settings
 	page := s.page()
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Width(240).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Padding(16, 12, 14, 12).Children(func() {
 			flatButton(c, "arrow-left", a.tr("返回工作区")).Justify(ui.Start).Padding(6, 10).Height(32).TextColor(c.Theme().Text).OnClick(a.closeSettings)
+			ui.TextInput(c, &s.Search).Label(a.tr("搜索设置")).Placeholder(a.tr("搜索设置…")).FontSize(12).Padding(7, 9).Background(searchSurface(c)).Border(1, c.Theme().Border)
 			ui.Scroll(c).Grow(1).MinHeight(0).Padding(14, 0).Children(func() {
+				total := 0
 				for group, title := range []string{"基础设置", "连接与能力"} {
+					count := 0
+					for _, p := range settingsPages {
+						if p.Group == group && settingsPageMatches(p, s.Search) {
+							count++
+						}
+					}
+					if count == 0 {
+						continue
+					}
+					total += count
 					a.text(c, title).FontSize(11).TextColor(c.Theme().TextMuted).Padding(8, 8, 6, 8)
 					for _, p := range settingsPages {
-						if p.Group != group {
+						if p.Group != group || !settingsPageMatches(p, s.Search) {
 							continue
 						}
 						item := ui.ButtonBase(c.Key(p.ID)).Label(a.tr(p.Label)).Height(34).Justify(ui.Start).Gap(9).Padding(6, 10).Radius(6).TextColor(c.Theme().TextMuted).FontSize(13).Selected(p.ID == s.Tab).OnClick(func() { a.openSettings(p.ID) })
@@ -131,6 +152,9 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 						item.Children(func() { icon(c, p.Icon); a.text(c, p.Label).SingleLine() })
 					}
+				}
+				if total == 0 {
+					a.note(c, "没有匹配的设置分区。")
 				}
 			})
 			ui.Row(c).Gap(8).Padding(10).Children(func() {
@@ -145,7 +169,12 @@ func (a *preview) settingsView(c *ui.Context) {
 		ui.Scroll(c.Key(s.Tab)).Grow(1).MinWidth(0).Padding(24, 32, 40, 32).Children(func() {
 			ui.Column(c).FillWidth().MaxWidth(780).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
 				ui.Column(c).Gap(6).Margin(0, 0, 6, 0).Children(func() {
-					a.text(c, page.Label).Bind(&s.Heading).Focusable().Role(ui.RoleHeading).FontSize(22).FontWeight(600)
+					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+						a.text(c, page.Label).Bind(&s.Heading).Focusable().Role(ui.RoleHeading).FontSize(22).FontWeight(600)
+						if page.Effect != "" {
+							ui.Text(c, page.Effect).FontSize(10).Padding(2, 7).Radius(8).Background(c.Theme().Accent.Alpha(.1)).TextColor(c.Theme().Accent).Label("生效时机")
+						}
+					})
 					a.note(c, page.Description)
 					if page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
@@ -165,9 +194,9 @@ func (a *preview) settingsView(c *ui.Context) {
 					if a.Live == nil {
 						a.text(c, "语言与外观保存在此设备；连接与能力设置仅为演示。").FontSize(11).TextColor(c.Theme().TextMuted)
 					} else if page.ID == "general" || page.ID == "appearance" {
-						a.note(c, "语言与外观保存在此设备。")
+						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else {
-						a.note(c, "设置属于当前运行主机，保存后会实际生效。")
+						a.note(c, "设置属于当前运行主机；表单修改需保存后生效，未保存的修改在切换分区或关闭时会被丢弃。")
 					}
 				})
 				if a.Live != nil {
@@ -206,14 +235,31 @@ func (a *preview) settingsView(c *ui.Context) {
 		})
 	})
 }
+
+// The *Settings functions below (generalSettings through feishuSettings) render
+// the demo pages used by tests and the unconnected preview only; the connected
+// app always takes the live* implementations in live_settings.go and
+// live_services.go. Their wording and behaviour are fixtures, not a spec —
+// change the live page first and only mirror a fixture when a test needs it.
 func (a *preview) generalSettings(c *ui.Context) {
 	s := &a.Settings
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
-		a.preferenceRow(c, "界面语言", "选择应用的显示语言。", func() {
+		a.preferenceRow(c, "界面语言", "选择应用的显示语言；默认中文。", func() {
 			if a.selectControl(c, "界面语言", &s.Preferences.Language, []string{"中文", "English"}).Width(180).Label(a.tr("语言选择")).Changed() {
-				s.savePreferences()
+				saved := s.savePreferences()
 				a.syncNativeLocale()
+				if saved {
+					c.Toast(a.tr("已保存"))
+				}
 			}
+			a.action(c, "恢复默认语言").Disabled(s.Preferences.Language == "中文").OnClick(func() {
+				s.Preferences.Language = "中文"
+				saved := s.savePreferences()
+				a.syncNativeLocale()
+				if saved {
+					c.Toast(a.tr("已保存"))
+				}
+			})
 		})
 		version := "EasyAgent " + nativeAppVersion()
 		a.preferenceRow(c, "桌面版本", version, func() {
@@ -236,11 +282,11 @@ func (a *preview) generalSettings(c *ui.Context) {
 	a.note(c, "仅安装经过签名验证的原生更新包；运行中的任务或未保存文件会阻止重启。")
 	a.heading(c, "常用快捷键")
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
-		for _, shortcut := range []struct{ label, key string }{{"发送消息", "Enter"}, {"输入换行", "Shift + Enter"}, {"打开命令菜单", "/"}, {"文件工作台", "⌘ P"}, {"代码审查", "⌘ Shift G"}} {
+		for _, shortcut := range nativeShortcuts {
 			ui.Row(c).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
-				a.text(c, shortcut.label).FontSize(12)
+				a.text(c, shortcut.Label).FontSize(12)
 				ui.Spacer(c)
-				ui.Text(c, shortcut.key).Font("monospace").FontSize(11).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border)
+				ui.Text(c, shortcut.Keys).Font("monospace").FontSize(11).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border)
 			})
 		}
 	})
@@ -251,11 +297,16 @@ func (a *preview) generalSettings(c *ui.Context) {
 func (a *preview) appearanceSettings(c *ui.Context) {
 	s := &a.Settings
 	a.heading(c, "配色主题")
-	a.note(c, "立即应用到当前界面，选择会保留在此设备。")
+	a.note(c, "立即应用到当前界面，选择保留在此设备；默认「青夜」。")
 	ui.Row(c).AlignItems(ui.Stretch).Gap(12).Children(func() {
 		for _, option := range []struct{ id, label, detail string }{{"dark", "青夜", "深青背景 · 柔和浅青"}, {"light", "浅色", "明亮表面 · 清晰文字"}, {"system", "跟随系统", "随系统外观自动切换"}} {
 			selected := s.Preferences.Theme == option.id
-			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() { s.Preferences.Theme = option.id; s.savePreferences() })
+			e := ui.ButtonBase(c.Key(option.id)).Label(a.tr(option.label)).Grow(1).Basis(0).MinWidth(0).Column().AlignItems(ui.Stretch).Justify(ui.Start).TextColor(c.Theme().Text).Padding(10, 12).Gap(10).Radius(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Selected(selected).TextColor(c.Theme().Text).OnClick(func() {
+				s.Preferences.Theme = option.id
+				if s.savePreferences() {
+					c.Toast(a.tr("已保存"))
+				}
+			})
 			if selected {
 				e.BorderColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.08))
 			}
@@ -288,6 +339,12 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 				})
 				a.text(c, option.detail).FontSize(11).TextColor(c.Theme().TextMuted)
 			})
+		}
+	})
+	a.action(c, "恢复默认主题").AlignSelf(ui.Start).Disabled(s.Preferences.Theme == "dark").OnClick(func() {
+		s.Preferences.Theme = "dark"
+		if s.savePreferences() {
+			c.Toast(a.tr("已保存"))
 		}
 	})
 }
