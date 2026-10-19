@@ -12,8 +12,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 
-from release import android_version, validate
+from release import android_assets, android_version, validate, verify_android_archive
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD_TOOLS = "35.0.1"
@@ -94,6 +95,10 @@ def build(tag, directory, test_signing=False):
         verify_apk(apk, tag, certificate, tools)
         directory.mkdir(parents=True)
         shutil.copyfile(apk, directory / "easyagent-android.apk")
+        if "easyagent-android.zip" in android_assets(tag):
+            with zipfile.ZipFile(directory / "easyagent-android.zip", "x", compression=zipfile.ZIP_STORED) as archive:
+                archive.write(directory / "easyagent-android.apk", "easyagent-android.apk")
+            verify_android_archive(directory / "easyagent-android.apk", directory / "easyagent-android.zip")
     print(f"Verified Android {name} ({code}), certificate SHA-256 {certificate}")
     print(f"Android artifact: {directory / 'easyagent-android.apk'}")
 
