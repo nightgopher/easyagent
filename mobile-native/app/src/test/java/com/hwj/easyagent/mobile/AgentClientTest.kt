@@ -47,6 +47,7 @@ class AgentClientTest {
         client.link.value = LinkStatus.CONNECTED
         val session = client.chat("s1")
         session.running = true
+        session.draft = "next prompt"
         session.queue = MessageQueue(items = listOf(QueueItem("newer", "queued")), revision = 4)
         client.sendPrompt(session, "next prompt")
         assertTrue("queue submission must disable sending until acknowledged", session.sending)
@@ -57,8 +58,8 @@ class AgentClientTest {
         assertEquals(1, server.requestCount)
         assertEquals(4, session.queue.revision)
         assertEquals("newer", session.queue.items.single().id)
-        assertEquals(1, session.draftClearCount)
         assertEquals("", session.pendingRequest)
+        assertEquals("", session.draft)
     }
 
     @Test
@@ -67,6 +68,7 @@ class AgentClientTest {
         client.link.value = LinkStatus.CONNECTED
         val session = client.chat("s1")
         session.running = true
+        session.draft = "keep this draft"
         client.sendPrompt(session, "keep this draft")
         val requestId = session.pendingRequest
         withTimeout(5_000) { while (client.error.value == null) delay(10) }
@@ -74,6 +76,6 @@ class AgentClientTest {
         assertTrue(requestId.isNotEmpty())
         assertEquals(requestId, session.pendingRequest)
         assertEquals("keep this draft", session.sentDraft)
-        assertEquals(0, session.draftClearCount)
+        assertEquals("keep this draft", session.draft)
     }
 }
