@@ -6,16 +6,23 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/hwj123hwj/easyagent/sdk/ai/models"
 	"github.com/hwj123hwj/easyagent/sdk/compaction"
 )
 
 // consumeStreamFunc 定义如何消费 LLM 事件流。
 // 不同的调用者（RunLoop vs PromptStream）提供不同的实现。
 type consumeStreamFunc func(stream *ai.EventStream) (ai.StreamAssistantMessage, error)
+
+type streamProvider interface {
+	Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error)
+}
 
 // toolBatch 表示一组可一起执行的工具调用。
 type toolBatch struct {
@@ -239,6 +246,8 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 		}
 		return turnResult{assistant: message}, history, streamErr
 	}
+
+	message = autoContinueMessage(ctx, a, provider, consume, history, message)
 
 	a.emit(ctx, EventContextUsage{Usage: estimateContext(a.llmRequest(append(append([]ai.Message{}, history...), message)), message.Usage)})
 
@@ -735,4 +744,109 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 func marshalArgs(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+func checkTruncation(msg ai.AssistantMessage, modelID string, reqMaxTokens int) (isLength bool, isSuspected bool) {
+	if msg.StopReason == ai.StopReasonLength {
+		return true, false
+	}
+	maxTokens := reqMaxTokens
+	if maxTokens <= 0 {
+		maxTokens = models.MaxOutput(modelID)
+	}
+	if msg.StopReasonMissing && maxTokens > 0 {
+		outTokens := msg.Usage.OutputTokens
+		if outTokens == 0 && len(msg.Text) > 0 {
+			outTokens = len(msg.Text) / 3
+		}
+		if outTokens >= int(float64(maxTokens)*0.95) {
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func isAutoContinueEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("EA_AUTO_CONTINUE"))
+	if strings.EqualFold(v, "false") || v == "0" {
+		return false
+	}
+	v2 := strings.TrimSpace(os.Getenv("EA_STREAM_AUTO_CONTINUE"))
+	if strings.EqualFold(v2, "false") || v2 == "0" {
+		return false
+	}
+	return true
+}
+
+func autoContinueMessage(
+	ctx context.Context,
+	a *Agent,
+	provider streamProvider,
+	consume consumeStreamFunc,
+	history []ai.Message,
+	message ai.AssistantMessage,
+) ai.AssistantMessage {
+	if len(message.ToolCalls) > 0 {
+		return message
+	}
+
+	maxTokens := 0
+	if a.model.MaxTokens > 0 {
+		maxTokens = a.model.MaxTokens
+	}
+	isLength, isSuspected := checkTruncation(message, a.model.ID, maxTokens)
+	if !isLength && !isSuspected {
+		return message
+	}
+
+	if !isAutoContinueEnabled() {
+		if isSuspected || isLength {
+			message.Text += "\n\n[回复可能被截断]"
+		}
+		return message
+	}
+
+	const maxContinues = 3
+	continues := 0
+	accumulatedText := message.Text
+
+	for (isLength || isSuspected) && continues < maxContinues {
+		continues++
+		slog.Info("auto-continue request", "attempt", continues, "stop_reason", message.StopReason, "suspected", isSuspected)
+		a.emit(ctx, EventAutoContinued{Attempt: continues, Suspected: isSuspected})
+
+		contContext := append(append([]ai.Message{}, history...),
+			ai.AssistantMessage{Text: accumulatedText},
+			ai.NewTextUserMessage("请继续未完成的输出，直接从截断处继续输出。"),
+		)
+		contReq := a.llmRequest(contContext)
+		stream, err := provider.Stream(ctx, contReq)
+		if err != nil {
+			slog.Warn("auto-continue request failed", "err", err)
+			break
+		}
+		nextStreamMsg, nextErr := consume(stream)
+		if nextErr != nil {
+			slog.Warn("auto-continue stream failed", "err", nextErr)
+			break
+		}
+		nextMsg, _ := a.handleAssistantMessage(nextStreamMsg)
+		accumulatedText += nextMsg.Text
+		message.Usage.OutputTokens += nextMsg.Usage.OutputTokens
+		message.Usage.InputTokens += nextMsg.Usage.InputTokens
+		message.StopReason = nextMsg.StopReason
+		message.StopReasonMissing = nextMsg.StopReasonMissing
+
+		isLength, isSuspected = checkTruncation(message, a.model.ID, maxTokens)
+	}
+
+	if continues > 0 {
+		message.Text = accumulatedText + "\n\n[已自动续写]"
+	} else if isSuspected || isLength {
+		message.Text = accumulatedText + "\n\n[回复可能被截断]"
+	} else {
+		message.Text = accumulatedText
+	}
+
+	return message
 }
