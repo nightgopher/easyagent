@@ -1,7 +1,9 @@
 package server
 
 import (
+	"crypto/subtle"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -18,9 +20,36 @@ import (
 
 func (s *Server) authorized(r *http.Request) bool {
 	if s.apiKey != "" {
-		return bearerToken(r) == s.apiKey
+		return s.checkToken(r, bearerToken(r))
 	}
 	return s.openAccessAllowed(r)
+}
+
+// checkToken 以常量时间比较令牌，并对错误令牌按来源 IP 限流。
+// 封禁期内即使令牌正确也拒绝；空令牌（未登录的探测）不计入失败。
+func (s *Server) checkToken(r *http.Request, token string) bool {
+	ip := remoteIP(r)
+	if s.authFails.blockedFor(ip) > 0 {
+		return false
+	}
+	if subtle.ConstantTimeCompare([]byte(token), []byte(s.apiKey)) == 1 {
+		s.authFails.reset(ip)
+		return true
+	}
+	if token != "" {
+		blocked := s.authFails.fail(ip)
+		slog.Warn("auth failed", "remote", r.RemoteAddr, "path", r.URL.Path, "blocked", blocked)
+	}
+	return false
+}
+
+// denyStatus 返回认证失败时应使用的状态码：封禁期内为 429，否则 401。
+func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request) int {
+	if d := s.authFails.blockedFor(remoteIP(r)); d > 0 {
+		w.Header().Set("Retry-After", fmt.Sprint(int(d.Seconds())+1))
+		return http.StatusTooManyRequests
+	}
+	return http.StatusUnauthorized
 }
 
 // wsAuthorized 在 WebSocket 升级前做同等校验；token 支持 ?token= 查询参数
@@ -31,7 +60,7 @@ func (s *Server) wsAuthorized(r *http.Request) bool {
 		if token == "" {
 			token = bearerToken(r)
 		}
-		return token == s.apiKey
+		return s.checkToken(r, token)
 	}
 	return s.openAccessAllowed(r)
 }
