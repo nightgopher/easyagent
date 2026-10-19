@@ -74,8 +74,8 @@ func (m *Manager) Create(ctx context.Context) (string, string, error) {
 
 // SaveMeta writes session metadata (e.g. workspace, application) to meta.json in the session directory.
 func (m *Manager) SaveMeta(sessionID string, workspace string, application string) error {
-	return m.updateMeta(sessionID, func(meta map[string]any) {
-		meta["workspace"], meta["application"] = workspace, application
+	return m.updateMeta(sessionID, map[string]any{
+		"workspace": workspace, "application": application,
 	})
 }
 
@@ -86,27 +86,22 @@ type ModelPreference struct {
 }
 
 func (m *Manager) SaveModel(id string, choice ModelPreference) error {
-	return m.updateMeta(id, func(meta map[string]any) { meta["model_selection"] = choice })
+	return m.updateMeta(id, map[string]any{"model_selection": choice})
 }
 
 func (m *Manager) LoadModel(id string) (ModelPreference, error) {
 	m.metaMu.Lock()
 	defer m.metaMu.Unlock()
-	var meta struct {
-		Selection ModelPreference `json:"model_selection"`
-	}
+	var choice ModelPreference
 	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\\`) {
-		return meta.Selection, fmt.Errorf("invalid session id")
+		return choice, fmt.Errorf("invalid session id")
 	}
-	data, err := os.ReadFile(filepath.Join(m.SessionsDir(), id, "meta.json"))
-	if os.IsNotExist(err) {
-		return meta.Selection, nil
-	}
+	meta, err := readMetadata(filepath.Join(m.SessionsDir(), id))
 	if err != nil {
-		return meta.Selection, err
+		return choice, err
 	}
-	err = json.Unmarshal(data, &meta)
-	return meta.Selection, err
+	err = meta.decodeField("model_selection", &choice)
+	return choice, err
 }
 
 // PreferencePatch changes only explicitly supplied indexing preferences.
@@ -120,20 +115,20 @@ func (m *Manager) UpdatePreferences(id string, patch PreferencePatch) error {
 	if patch.Title != nil && (len([]rune(strings.TrimSpace(*patch.Title))) == 0 || len([]rune(*patch.Title)) > 160) {
 		return fmt.Errorf("title must contain 1–160 characters")
 	}
-	return m.updateMeta(id, func(meta map[string]any) {
-		if patch.Title != nil {
-			meta["title"] = strings.TrimSpace(*patch.Title)
-		}
-		if patch.Pinned != nil {
-			meta["pinned"] = *patch.Pinned
-		}
-		if patch.Archived != nil {
-			meta["archived"] = *patch.Archived
-		}
-	})
+	fields := map[string]any{}
+	if patch.Title != nil {
+		fields["title"] = strings.TrimSpace(*patch.Title)
+	}
+	if patch.Pinned != nil {
+		fields["pinned"] = *patch.Pinned
+	}
+	if patch.Archived != nil {
+		fields["archived"] = *patch.Archived
+	}
+	return m.updateMeta(id, fields)
 }
 
-func (m *Manager) updateMeta(id string, update func(map[string]any)) error {
+func (m *Manager) updateMeta(id string, fields map[string]any) error {
 	m.metaMu.Lock()
 	defer m.metaMu.Unlock()
 	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\\`) {
@@ -147,62 +142,19 @@ func (m *Manager) updateMeta(id string, update func(map[string]any)) error {
 	if !fi.IsDir() {
 		return fmt.Errorf("session directory is not a regular directory")
 	}
-	path := filepath.Join(dir, "meta.json")
-	meta := map[string]any{}
-	data, err := os.ReadFile(path)
-	if err == nil {
-		if err = json.Unmarshal(data, &meta); err != nil {
-			return fmt.Errorf("read session metadata: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	if meta == nil {
-		meta = map[string]any{}
-	}
-	update(meta)
-	data, err = json.Marshal(meta)
+	meta, err := readMetadata(dir)
 	if err != nil {
 		return err
 	}
-	f, err := os.CreateTemp(dir, ".meta-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(f.Name())
-	if _, err = f.Write(data); err == nil {
-		err = f.Sync()
-	}
-	closeErr := f.Close()
-	if err != nil {
-		return err
-	}
-	if closeErr != nil {
-		return closeErr
-	}
-	return os.Rename(f.Name(), path)
-}
-
-// readMeta reads session metadata from meta.json if it exists.
-func readMeta(sessionDir string) (workspace string, application string) {
-	metaPath := filepath.Join(sessionDir, "meta.json")
-	data, err := os.ReadFile(metaPath)
-	if err != nil {
-		return "", ""
-	}
-	var meta struct {
-		Workspace   string `json:"workspace"`
-		Application string `json:"application"`
-	}
-	if json.Unmarshal(data, &meta) == nil {
-		return meta.Workspace, meta.Application
-	}
-	return "", ""
+	return meta.write(dir, fields)
 }
 
 // Metadata restores the workspace and application that own a persisted session.
 func (m *Manager) Metadata(id string) (workspace, application string) {
-	return readMeta(filepath.Join(m.SessionsDir(), id))
+	meta, _ := readMetadata(filepath.Join(m.SessionsDir(), id))
+	_ = meta.decodeField("workspace", &workspace)
+	_ = meta.decodeField("application", &application)
+	return
 }
 
 // Open opens an existing session by ID.
@@ -272,55 +224,29 @@ func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) 
 
 // ForkSnapshot writes a consistent storage snapshot without reopening a live file.
 // application nil inherits the source; a pointer to an empty string selects the default agent.
-func (m *Manager) ForkSnapshot(ctx context.Context, sourceID string, entries []session.Entry, entryID *string, application *string) (newID, newPath string, err error) {
-	if sourceID == "" || strings.ContainsAny(sourceID, `/\`) || sourceID == "." || sourceID == ".." {
-		return "", "", fmt.Errorf("invalid source session")
-	}
-	entries, err = forkPrefix(entries, entryID)
-	if err != nil {
-		return "", "", err
-	}
-	data := make([]byte, 0)
-	for _, entry := range entries {
-		encoded, encodeErr := json.Marshal(entry)
-		if encodeErr != nil {
-			return "", "", encodeErr
-		}
-		data = append(data, encoded...)
-		data = append(data, '\n')
-	}
-	newID, newPath, err = m.Create(ctx)
-	if err != nil {
-		return
-	}
-	defer func() {
-		if err != nil {
-			_ = m.Delete(newID)
-		}
-	}()
-	if err = os.WriteFile(newPath, data, 0600); err != nil {
-		return
-	}
-	if err = m.copyMeta(sourceID, newID, application); err != nil {
-		return
-	}
-	err = m.copyAttachments(sourceID, newID)
-	return
+func (m *Manager) ForkSnapshot(ctx context.Context, sourceID string, entries []session.Entry, entryID *string, application *string) (string, string, error) {
+	result, err := m.ForkSnapshotWithStats(ctx, sourceID, entries, entryID, application)
+	return result.ID, result.Path, err
 }
 
 // copyMeta clones the source meta.json into the forked session, appending a
 // "(分叉)" title and recording the source id as forked_from. Missing source
-// metadata is tolerated: the fork simply starts with defaults.
+// metadata is tolerated: the fork simply starts with defaults. Unreadable or
+// malformed metadata aborts the fork rather than silently losing preferences.
 func (m *Manager) copyMeta(sourceID, newID string, application *string) error {
 	m.metaMu.Lock()
 	defer m.metaMu.Unlock()
-	meta := map[string]any{}
-	if data, err := os.ReadFile(filepath.Join(m.SessionsDir(), sourceID, "meta.json")); err == nil {
-		if json.Unmarshal(data, &meta) != nil {
-			meta = map[string]any{}
-		}
+	meta, err := readMetadata(filepath.Join(m.SessionsDir(), sourceID))
+	if err != nil {
+		return err
 	}
-	title, _ := meta["title"].(string)
+	var title string
+	_ = meta.decodeField("title", &title)
+	fields := map[string]any{
+		"forked_from": sourceID,
+		"archived":    false,
+		"pinned":      false,
+	}
 	if strings.TrimSpace(title) == "" {
 		// Match List()'s fallback title derivation so forks of untitled
 		// sessions still read as "源标题 (分叉)" once the source gets named.
@@ -330,18 +256,12 @@ func (m *Manager) copyMeta(sourceID, newID string, application *string) error {
 		}
 	}
 	if strings.TrimSpace(title) != "" {
-		meta["title"] = strings.TrimSpace(title) + " (分叉)"
+		fields["title"] = strings.TrimSpace(title) + " (分叉)"
 	}
 	if application != nil {
-		meta["application"] = *application
+		fields["application"] = *application
 	}
-	meta["forked_from"] = sourceID
-	meta["archived"], meta["pinned"] = false, false
-	data, err := json.Marshal(meta)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(m.SessionsDir(), newID, "meta.json"), data, 0o644)
+	return meta.write(filepath.Join(m.SessionsDir(), newID), fields)
 }
 
 // copyAttachments copies the attachment metadata directory so the forked
@@ -406,9 +326,6 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			info.LastActive = fi.ModTime().Unix()
 		}
 
-		// Read workspace and application from meta.json
-		info.Workspace, info.Application = readMeta(filepath.Join(sessionsDir, id))
-
 		// Count messages and extract title by scanning JSONL
 		msgCount, lastActive, firstUserMsg, err := countMessages(sessionPath)
 		if err == nil {
@@ -418,18 +335,18 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			}
 			info.Title = strings.SplitN(firstUserMsg, "\n", 2)[0]
 		}
-		var preferences struct {
-			Title      string `json:"title"`
-			Pinned     bool   `json:"pinned"`
-			Archived   bool   `json:"archived"`
-			ForkedFrom string `json:"forked_from"`
-		}
-		if data, err := os.ReadFile(filepath.Join(sessionsDir, id, "meta.json")); err == nil && json.Unmarshal(data, &preferences) == nil {
-			if preferences.Title != "" {
-				info.Title = preferences.Title
+		// Use one metadata snapshot for project ownership and preferences.
+		if meta, err := readMetadata(filepath.Join(sessionsDir, id)); err == nil {
+			_ = meta.decodeField("workspace", &info.Workspace)
+			_ = meta.decodeField("application", &info.Application)
+			var title string
+			_ = meta.decodeField("title", &title)
+			if title != "" {
+				info.Title = title
 			}
-			info.Pinned, info.Archived = preferences.Pinned, preferences.Archived
-			info.ForkedFrom = preferences.ForkedFrom
+			_ = meta.decodeField("pinned", &info.Pinned)
+			_ = meta.decodeField("archived", &info.Archived)
+			_ = meta.decodeField("forked_from", &info.ForkedFrom)
 		}
 
 		infos = append(infos, info)
