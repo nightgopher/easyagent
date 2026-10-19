@@ -134,7 +134,11 @@ func (w *wsConn) writeLoop() {
 }
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if !s.wsAuthorized(r) {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if s.apiKey != "" {
+			status = s.denyStatus(w, r)
+		}
+		http.Error(w, `{"error":"unauthorized"}`, status)
 		return
 	}
 	conn, err := s.newUpgrader().Upgrade(w, r, nil)
