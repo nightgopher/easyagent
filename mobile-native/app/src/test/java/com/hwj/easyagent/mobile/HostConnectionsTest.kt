@@ -68,7 +68,11 @@ class HostConnectionsTest {
         val connections = withContext(main) { HostConnections(settings) }
         try {
             withContext(main) {
-                eventually { connections.clientFor("a")?.link?.value == LinkStatus.CONNECTED && connections.clientFor("b")?.link?.value == LinkStatus.CONNECTED }
+                eventually {
+                    listOf("a", "b").all { id ->
+                        connections.clientFor(id)?.let { it.link.value == LinkStatus.CONNECTED && it.sessions.value.isNotEmpty() } == true
+                    } && a.socket != null && b.socket != null
+                }
                 block(a, b, settings, prefs, connections)
             }
         } finally {
