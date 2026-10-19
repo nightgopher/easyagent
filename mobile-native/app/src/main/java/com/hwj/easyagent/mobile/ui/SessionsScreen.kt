@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
@@ -46,6 +48,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.backend.AgentClient
+import com.hwj.easyagent.mobile.backend.HostConnections
 import com.hwj.easyagent.mobile.backend.LinkStatus
 import com.hwj.easyagent.mobile.backend.SessionSummary
 import kotlinx.serialization.json.buildJsonObject
@@ -58,10 +61,12 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun SessionsScreen(
     client: AgentClient,
+    connections: HostConnections,
     onOpen: (String) -> Unit,
-    onEditConnection: () -> Unit,
-    onDisconnect: () -> Unit,
+    onSelectHost: (String) -> Unit,
+    onManageHosts: () -> Unit,
 ) {
+    val hosts by connections.state.collectAsStateWithLifecycle()
     val sessions by client.sessions.collectAsStateWithLifecycle()
     val loading by client.sessionsLoading.collectAsStateWithLifecycle()
     val link by client.link.collectAsStateWithLifecycle()
@@ -69,6 +74,8 @@ fun SessionsScreen(
     val snackbar = remember { SnackbarHostState() }
     var showArchived by rememberSaveable { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var hostMenuOpen by remember { mutableStateOf(false) }
+    val host = hosts.hosts.firstOrNull { it.id == client.config.id } ?: client.config
     var renaming by remember { mutableStateOf<SessionSummary?>(null) }
     var deleting by remember { mutableStateOf<SessionSummary?>(null) }
 
@@ -87,9 +94,27 @@ fun SessionsScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("EasyAgent")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("EasyAgent")
+                            IconButton(onClick = { hostMenuOpen = true }) { Icon(Icons.Filled.ExpandMore, contentDescription = "切换运行主机") }
+                            DropdownMenu(expanded = hostMenuOpen, onDismissRequest = { hostMenuOpen = false }) {
+                                hosts.hosts.forEach { saved ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(saved.label + if (saved.id == hosts.activeId) " · 当前" else "")
+                                                Text(hostStatus(connections.clientFor(saved.id)), style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        },
+                                        onClick = { hostMenuOpen = false; onSelectHost(saved.id) },
+                                    )
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(text = { Text("管理运行主机") }, onClick = { hostMenuOpen = false; onManageHosts() })
+                            }
+                        }
                         Text(
-                            hostLabel(client.config.url) + " · " + linkLabel(link),
+                            host.label + " · " + linkLabel(link),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (link == LinkStatus.CONNECTED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                             maxLines = 1,
@@ -105,8 +130,7 @@ fun SessionsScreen(
                             text = { Text(if (showArchived) "隐藏已归档" else "显示已归档（${archived.size}）") },
                             onClick = { showArchived = !showArchived; menuOpen = false },
                         )
-                        DropdownMenuItem(text = { Text("修改连接") }, onClick = { menuOpen = false; onEditConnection() })
-                        DropdownMenuItem(text = { Text("断开并清除配置") }, onClick = { menuOpen = false; onDisconnect() })
+                        DropdownMenuItem(text = { Text("管理运行主机") }, onClick = { menuOpen = false; onManageHosts() })
                     }
                 },
             )
@@ -246,9 +270,7 @@ private fun RenameDialog(initial: String, onDismiss: () -> Unit, onConfirm: (Str
     )
 }
 
-private fun hostLabel(url: String): String = url.removePrefix("https://").removePrefix("http://")
-
-private fun linkLabel(link: LinkStatus): String = when (link) {
+internal fun linkLabel(link: LinkStatus): String = when (link) {
     LinkStatus.CONNECTED -> "已连接"
     LinkStatus.CONNECTING -> "连接中"
     LinkStatus.DISCONNECTED -> "已断开，正在重连"

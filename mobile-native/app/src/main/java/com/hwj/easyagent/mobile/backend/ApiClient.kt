@@ -28,6 +28,12 @@ class ApiClient(val baseUrl: String, private val token: String) {
         .followRedirects(false)
         .build()
 
+    fun close() {
+        http.dispatcher.cancelAll()
+        http.connectionPool.evictAll()
+        http.dispatcher.executorService.shutdown()
+    }
+
     suspend fun get(path: String): JsonElement = request("GET", path, null)
 
     suspend fun post(path: String, body: JsonElement? = null): JsonElement = request("POST", path, body)
