@@ -26,7 +26,7 @@ enum class LinkStatus { CONNECTING, CONNECTED, DISCONNECTED }
  * 所有状态只在主线程修改；UI 通过 [revision] 感知变化后直接读取。
  */
 class AgentClient(val config: HostConfig) {
-    val api = ApiClient(config.url, config.token)
+    val api = ApiClient(config.url, requireNotNull(config.token))
     val link = MutableStateFlow(LinkStatus.CONNECTING)
     val sessions = MutableStateFlow<List<SessionSummary>>(emptyList())
     val sessionsLoading = MutableStateFlow(false)
@@ -70,9 +70,11 @@ class AgentClient(val config: HostConfig) {
     fun shutdown() {
         closed = true
         reconnectJob?.cancel()
-        socket?.close(1000, null)
+        socket?.cancel()
         socket = null
         scope.cancel()
+        api.close()
+        link.value = LinkStatus.DISCONNECTED
     }
 
     fun touch() {
@@ -97,6 +99,11 @@ class AgentClient(val config: HostConfig) {
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = post { dropped(webSocket) }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) = post {
+                webSocket.close(code, reason)
+                dropped(webSocket)
+            }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = post { dropped(webSocket) }
         })
@@ -141,7 +148,7 @@ class AgentClient(val config: HostConfig) {
         if (s.pendingRequest != "" && pendingMatched) {
             s.sending = false
             s.pendingRequest = ""
-            s.draftClearCount++
+            acknowledgeDraft(s)
         }
         if (e.type == "error" && e.requestId == s.pendingRequest) {
             s.sending = false
@@ -203,7 +210,7 @@ class AgentClient(val config: HostConfig) {
                     }
                     if (s.pendingRequest == request) {
                         s.pendingRequest = ""
-                        s.draftClearCount++
+                        acknowledgeDraft(s)
                         s.sending = false
                     }
                 } catch (e: ApiException) {
@@ -313,5 +320,9 @@ class AgentClient(val config: HostConfig) {
         val bytes = ByteArray(16)
         SecureRandom().nextBytes(bytes)
         return "mobile-" + bytes.joinToString("") { "%02x".format(it) }
+    }
+
+    private fun acknowledgeDraft(s: ChatSession) {
+        if (s.draft == s.sentDraft) s.draft = ""
     }
 }

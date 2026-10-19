@@ -37,8 +37,7 @@ class ChatSession(val id: String) {
     var sending = false
     var pendingRequest = ""
     var sentDraft = ""
-    /** 服务端确认接收后递增，UI 据此清空与 [sentDraft] 一致的草稿。 */
-    var draftClearCount = 0L
+    var draft = ""
     var usage: JsonObject? = null
     private var nextUid = 1L
 
