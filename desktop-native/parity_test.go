@@ -158,3 +158,159 @@ func TestNativeNewParityPanelLayouts(t *testing.T) {
 		}
 	}
 }
+
+func TestSettingsCopyParity(t *testing.T) {
+	// 1. Shared copy constants parity
+	sharedConstants := []string{
+		SettingCopyGlobalModelConfig,
+		SettingCopyDefaultModel,
+		SettingCopyCurrentModel,
+		SettingCopyModelNote,
+		SettingCopyRemoteModelNote,
+		SettingCopyRefreshModels,
+		SettingCopySaveDefaultModel,
+		SettingCopyLocalSource,
+		SettingCopyCmdlineMode,
+		SettingCopyDesktopMode,
+		SettingCopyCmdlineNote,
+	}
+	for _, sc := range sharedConstants {
+		if strings.TrimSpace(sc) == "" {
+			t.Fatal("shared copy constant must not be empty")
+		}
+	}
+
+	// 2. Settings pages registry parity
+	for _, p := range settingsPages {
+		if p.ID == "skillMarket" {
+			t.Fatal("skillMarket should not exist as a separate page in settingsPages registry")
+		}
+	}
+	var capPage *settingsPage
+	for i := range settingsPages {
+		if settingsPages[i].ID == "capabilities" {
+			capPage = &settingsPages[i]
+			break
+		}
+	}
+	if capPage == nil {
+		t.Fatal("capabilities page missing from settingsPages")
+	}
+	if capPage.Effect != "新会话生效" {
+		t.Fatalf("expected capabilities effect badge to be '新会话生效', got %q", capPage.Effect)
+	}
+
+	// 3. Search keywords match capabilities market subview
+	for _, q := range []string{"市场", "market", "安装技能", "技能市场"} {
+		if !settingsPageMatches(*capPage, q) {
+			t.Fatalf("expected query %q to match capabilities page", q)
+		}
+	}
+
+	// 4. Capabilities 3 subviews navigation
+	a := newPreview()
+	a.openSettings("capabilities")
+	if a.Settings.CapabilityTab != "installed" {
+		t.Fatalf("expected default capability tab to be 'installed', got %q", a.Settings.CapabilityTab)
+	}
+	a.openSettings("skillMarket")
+	if a.Settings.Tab != "capabilities" || a.Settings.CapabilityTab != "market" {
+		t.Fatalf("expected skillMarket to open capabilities market tab, got tab=%q capTab=%q", a.Settings.Tab, a.Settings.CapabilityTab)
+	}
+}
+
+func TestSettingsShortcutCaptureAndFooterSync(t *testing.T) {
+	a := newPreview()
+	if a.shortcutLabel("新会话") != "⌘ N" {
+		t.Fatalf("initial new session shortcut should be ⌘ N, got %q", a.shortcutLabel("新会话"))
+	}
+	tt := ui.NewTester(a.View, 1240, 820)
+	if !tt.HasText("⌘ N 新会话") {
+		t.Fatal("footer should display initial ⌘ N 新会话")
+	}
+
+	// Apply custom shortcut
+	if err := a.applyCustomShortcut("new_session", "⌘ 1"); err != nil {
+		t.Fatalf("applyCustomShortcut failed: %v", err)
+	}
+	if a.shortcutLabel("新会话") != "⌘ 1" {
+		t.Fatalf("expected new session shortcut to be ⌘ 1, got %q", a.shortcutLabel("新会话"))
+	}
+	tt.Frame()
+	if !tt.HasText("⌘ 1 新会话") {
+		t.Fatal("footer should reflect updated shortcut ⌘ 1 新会话")
+	}
+
+	// Conflict detection
+	err := a.applyCustomShortcut("files", "⌘ 1")
+	if err == nil {
+		t.Fatal("expected shortcut conflict when assigning same key to files")
+	}
+
+	// Reset single shortcut
+	a.resetSingleShortcut("new_session")
+	if a.shortcutLabel("新会话") != "⌘ N" {
+		t.Fatalf("expected new session shortcut to reset to ⌘ N, got %q", a.shortcutLabel("新会话"))
+	}
+	tt.Frame()
+	if !tt.HasText("⌘ N 新会话") {
+		t.Fatal("footer should reflect reset shortcut ⌘ N 新会话")
+	}
+}
+
+func TestSettingsSectionDefaultResetModal(t *testing.T) {
+	a := newPreview()
+
+	// Supported sections check
+	supported := []string{"general", "appearance", "models", "experiments", "mcp", "feishu"}
+	for _, sec := range supported {
+		if !a.canResetPageDefaults(sec) {
+			t.Fatalf("section %q should support reset page defaults", sec)
+		}
+	}
+	unsupported := []string{"connections", "usage", "capabilities"}
+	for _, sec := range unsupported {
+		if a.canResetPageDefaults(sec) {
+			t.Fatalf("section %q should not support reset page defaults", sec)
+		}
+	}
+
+	// Test general reset
+	a.Settings.Preferences.Language = "English"
+	_ = a.applyCustomShortcut("new_session", "⌘ 2")
+	a.resetPageDefaults("general")
+	if a.Settings.Confirm == nil {
+		t.Fatal("expected confirmation modal for general reset")
+	}
+	if !strings.Contains(a.Settings.Confirm.Title, "常规") || !strings.Contains(a.Settings.Confirm.Description, "界面语言") {
+		t.Fatalf("unexpected confirm dialog content: %+v", a.Settings.Confirm)
+	}
+	a.Settings.Confirm.Action()
+	if a.Settings.Preferences.Language != "中文" || a.shortcutLabel("新会话") != "⌘ N" {
+		t.Fatal("general reset did not restore default language and shortcuts")
+	}
+
+	// Test appearance reset
+	a.Settings.Preferences.Theme = "light"
+	a.resetPageDefaults("appearance")
+	if a.Settings.Confirm == nil {
+		t.Fatal("expected confirmation modal for appearance reset")
+	}
+	a.Settings.Confirm.Action()
+	if a.Settings.Preferences.Theme != "dark" {
+		t.Fatalf("appearance reset did not restore dark theme, got %q", a.Settings.Preferences.Theme)
+	}
+
+	// Test models reset
+	a.Settings.Mode = "在桌面客户端配置"
+	a.Settings.Model = "custom-model"
+	a.Settings.APIKey = "custom-key"
+	a.resetPageDefaults("models")
+	if a.Settings.Confirm == nil {
+		t.Fatal("expected confirmation modal for models reset")
+	}
+	a.Settings.Confirm.Action()
+	if a.Settings.Mode != "沿用命令行配置" || a.Settings.APIKey != "" {
+		t.Fatal("models reset did not restore default mode and clear apiKey")
+	}
+}

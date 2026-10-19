@@ -83,10 +83,28 @@ func (a *preview) loadSettingsPage() {
 		a.marketRead("sections", "/skills/market/sections", nil)
 	}
 }
+func (a *preview) saveLiveDefaultModel(model string) {
+	if strings.TrimSpace(model) == "" {
+		return
+	}
+	currentInfo := object(object(a.Live.Data["models"])["current"])
+	provider := str(currentInfo["provider"])
+	payload := map[string]any{
+		"model": strings.TrimSpace(model),
+	}
+	if provider != "" {
+		payload["provider"] = provider
+	}
+	a.operation("model-default", "PUT", "/models/default", payload, func(v any) {
+		a.Settings.message("已保存主机默认模型（需重启核心生效）")
+		a.refreshModels()
+	})
+}
+
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "skillMarket" {
+	if tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -110,10 +128,10 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.liveComputerSettings(c)
 	case "mcp":
 		a.liveMCPSettings(c)
-	case "skillMarket":
-		a.liveMarketSettings(c)
 	case "capabilities":
 		a.liveCapabilitySettings(c)
+	case "skillMarket":
+		a.liveMarketSettings(c)
 	case "feishu":
 		a.liveFeishuSettings(c)
 	}
@@ -121,21 +139,44 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 func (a *preview) liveModelSettings(c *ui.Context) {
 	s := &a.Settings
 	l := a.Live
-	busy := l.configBusy() || l.Loading["model-check"]
+	busy := l.configBusy() || l.Loading["model-check"] || l.Loading["model-default"]
 	ui.Row(c).Children(func() {
-		a.heading(c, "全局模型配置"+a.dirtySuffix())
+		a.heading(c, SettingCopyGlobalModelConfig+a.dirtySuffix())
 		ui.Spacer(c)
-		a.action(c, "刷新模型").Disabled(busy || l.Loading["model-list"]).OnClick(a.refreshModels)
+		a.action(c, SettingCopyRefreshModels).Disabled(busy || l.Loading["model-list"]).OnClick(a.refreshModels)
 	})
-	defaultModel := str(object(object(l.Data["models"])["current"])["id"])
+	currentInfo := object(object(l.Data["models"])["current"])
+	defaultModel := str(currentInfo["id"])
 	if defaultModel == "" {
 		defaultModel = "尚未读取"
 	}
-	a.preferenceRow(c, "主机默认模型", defaultModel, func() {})
-	a.preferenceRow(c, "当前会话模型", a.current().Model, func() {})
-	a.note(c, "新建会话使用主机默认模型；会话中单独选择的模型只影响该会话，并在重启后保留。")
+	if s.DefaultModelChoice == "" && defaultModel != "尚未读取" {
+		s.DefaultModelChoice = defaultModel
+	}
+	ui.Column(c).Gap(8).Children(func() {
+		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, a.tr(SettingCopyDefaultModel)).FontSize(13).FontWeight(500)
+			if len(l.Models) > 0 {
+				choices := l.Models
+				if s.DefaultModelChoice == "" {
+					s.DefaultModelChoice = choices[0]
+				}
+				a.dropdown(c, "", &s.DefaultModelChoice, choices)
+			} else {
+				a.input(c, "", &s.DefaultModelChoice, "填写模型 ID", false).Label("主机默认模型")
+			}
+			a.primary(c, SettingCopySaveDefaultModel).Disabled(busy || strings.TrimSpace(s.DefaultModelChoice) == "").OnClick(func() {
+				a.saveLiveDefaultModel(s.DefaultModelChoice)
+			})
+		})
+		if discoveryError := str(object(l.Data["models"])["discovery_error"]); discoveryError != "" {
+			a.note(c, "模型拉取失败: "+discoveryError)
+		}
+	})
+	a.preferenceRow(c, SettingCopyCurrentModel, a.current().Model, func() {})
+	a.note(c, SettingCopyModelNote)
 	if !s.host().Local {
-		a.note(c, "模型配置属于服务主机。远程默认模型需在对应主机的 EasyAgent 配置中修改；会话模型可在对话输入框切换。")
+		a.note(c, SettingCopyRemoteModelNote)
 		ui.Row(c).Gap(8).Wrap().Children(func() {
 			for index, h := range l.Config.Hosts {
 				selectedButton(c, a.action(c, h.Name), h.ID == l.Config.ActiveHost).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
@@ -143,11 +184,11 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 		})
 		return
 	}
-	a.heading(c, "本地模型来源")
+	a.heading(c, SettingCopyLocalSource)
 	ui.Column(c).Gap(12).Disabled(busy).Children(func() {
 		ui.RadioGroup(c, func() {
 			ui.Row(c).Gap(20).Wrap().Children(func() {
-				for _, mode := range []string{"沿用命令行配置", "在桌面客户端配置"} {
+				for _, mode := range []string{SettingCopyCmdlineMode, SettingCopyDesktopMode} {
 					if ui.Radio(c, &s.Mode, mode, a.tr(mode)).Changed() {
 						a.clearModelCheck()
 					}
@@ -705,39 +746,105 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 	})
 }
 func (a *preview) liveCapabilitySettings(c *ui.Context) {
-	if a.current().RemoteID == "" {
-		a.note(c, "选择一个项目会话后查看实际加载的技能。")
-		a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
-		return
+	s := &a.Settings
+	if s.CapabilityTab == "" {
+		s.CapabilityTab = "installed"
 	}
-	if a.resourceFeedback(c, "capabilities", a.loadSettingsPage) {
-		return
-	}
-	m := object(a.Live.Data["capabilities"])
-	a.heading(c, "当前会话的能力")
-	a.note(c, "项目："+str(m["workspace"]))
-	a.note(c, "默认读取项目与个人 .agents/skills，兼容 .claude/skills。同名技能以项目为先；文件变更后新建会话加载。")
-	skills := list(m["skills"])
-	a.heading(c, fmt.Sprintf("已加载技能 · %d", len(skills)))
-	if len(skills) == 0 {
-		a.note(c, "当前没有加载技能。")
-	}
-	for _, raw := range skills {
-		skill := object(raw)
-		scope, invocation := "个人", "仅显式调用"
-		if str(skill["scope"]) == "project" {
-			scope = "项目"
+	ui.Row(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
+		tabs := []struct{ id, label string }{
+			{"installed", "已安装"},
+			{"session", "当前会话已加载"},
+			{"market", "市场"},
 		}
-		if boolean(skill["model_invocation"]) {
-			invocation = "可由模型调用"
+		for _, t := range tabs {
+			selected := s.CapabilityTab == t.id
+			btn := a.action(c, t.label).OnClick(func() {
+				s.CapabilityTab = t.id
+				if t.id == "installed" {
+					a.marketRead("installed", "/skills/market/installed", nil)
+				} else if t.id == "market" {
+					if s.SkillFilter == "已安装" {
+						s.SkillFilter = "推荐"
+					}
+					a.searchMarket()
+				}
+			})
+			if selected {
+				btn.TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.1))
+			}
 		}
-		nativeDisclosure(c, str(skill["name"]), str(skill["name"])+" · "+scope+" · "+invocation, func() {
-			a.note(c, str(skill["description"]))
-			nativePre(c, str(skill["source"]))
-			a.action(c, "使用技能").AlignSelf(ui.Start).OnClick(func() { a.current().Draft += "\n使用技能 " + str(skill["name"]) + " "; a.closeSettings() })
+	})
+
+	switch s.CapabilityTab {
+	case "market":
+		a.liveMarketSettings(c)
+	case "session":
+		if a.current().RemoteID == "" {
+			a.note(c, "选择一个项目会话后查看实际加载的技能。")
+			a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() { s.CapabilityTab = "market" })
+			return
+		}
+		if a.resourceFeedback(c, "capabilities", a.loadSettingsPage) {
+			return
+		}
+		m := object(a.Live.Data["capabilities"])
+		a.heading(c, "当前会话的能力")
+		a.note(c, "项目："+str(m["workspace"]))
+		a.note(c, "默认读取项目与个人 .agents/skills，兼容 .claude/skills。同名技能以项目为先；文件变更后新建会话加载。")
+		skills := list(m["skills"])
+		a.heading(c, fmt.Sprintf("已加载技能 · %d", len(skills)))
+		if len(skills) == 0 {
+			a.note(c, "当前没有加载技能。")
+		}
+		for _, raw := range skills {
+			skill := object(raw)
+			scope, invocation := "个人", "仅显式调用"
+			if str(skill["scope"]) == "project" {
+				scope = "项目"
+			}
+			if boolean(skill["model_invocation"]) {
+				invocation = "可由模型调用"
+			}
+			nativeDisclosure(c, str(skill["name"]), str(skill["name"])+" · "+scope+" · "+invocation, func() {
+				a.note(c, str(skill["description"]))
+				nativePre(c, str(skill["source"]))
+				a.action(c, "使用技能").AlignSelf(ui.Start).OnClick(func() { a.current().Draft += "\n使用技能 " + str(skill["name"]) + " "; a.closeSettings() })
+			})
+		}
+	case "installed":
+		fallthrough
+	default:
+		a.heading(c, "已安装技能")
+		a.note(c, "本机/主机技能目录与项目目录中的技能。文件变更后新建会话生效。")
+		installed := list(object(a.Live.Data["installed"])["installed"])
+		loading := a.Live.Loading["installed"]
+		if len(installed) == 0 && loading {
+			a.note(c, "正在加载已安装技能…")
+			return
+		}
+		if len(installed) == 0 {
+			a.note(c, "暂无已安装技能，可前往「市场」子视图安装新技能。")
+			a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() {
+				s.CapabilityTab = "market"
+				if s.SkillFilter == "已安装" {
+					s.SkillFilter = "推荐"
+				}
+				a.searchMarket()
+			})
+			return
+		}
+		w, _ := c.Size()
+		available := min(float32(780), w-240-64)
+		columns := max(1, int((available+12)/272))
+		if w <= 640 {
+			columns = 1
+		}
+		ui.Grid(c).Columns(columns).Gap(12).AlignItems(ui.Stretch).Children(func() {
+			for _, raw := range installed {
+				a.marketCard(c, object(raw), true, loading)
+			}
 		})
 	}
-	a.action(c, "打开技能市场").AlignSelf(ui.Start).OnClick(func() { a.openSettings("skillMarket") })
 }
 
 // Keep map iteration out of the view so keyed form rows remain stable.
