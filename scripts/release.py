@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import zipfile
 
 TAG_RE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(alpha|beta|rc)\.([1-9][0-9]*))?\Z")
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64")
@@ -45,9 +46,22 @@ def native_assets(tag):
 
 
 def android_assets(tag):
+    if version_key(tag) >= version_key("v0.19.2-alpha.1"):
+        return ("easyagent-android.apk", "easyagent-android.zip")
     if version_key(tag) >= version_key("v0.19.0-alpha.1"):
         return ("easyagent-android.apk",)
     return ()
+
+
+def verify_android_archive(apk, archive):
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            if (bundle.namelist() != ["easyagent-android.apk"]
+                    or bundle.getinfo("easyagent-android.apk").file_size != Path(apk).stat().st_size
+                    or bundle.read("easyagent-android.apk") != Path(apk).read_bytes()):
+                raise ValueError("Android ZIP must contain only the identical signed APK")
+    except (zipfile.BadZipFile, RuntimeError) as error:
+        raise ValueError("invalid Android ZIP archive") from error
 
 
 def android_version(tag):
@@ -130,6 +144,8 @@ def manifest(directory, tag, sha, core_only=False):
         if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
             raise ValueError(f"missing or empty release asset: {name}")
         assets[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if "easyagent-android.zip" in required:
+        verify_android_archive(directory / "easyagent-android.apk", directory / "easyagent-android.zip")
     data = {"version": tag, "commit": sha, "assets": assets}
     if core_only:
         data["core_only"] = True

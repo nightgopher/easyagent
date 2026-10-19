@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 import release
 
@@ -59,6 +60,11 @@ class AssetsTest(unittest.TestCase):
         self.directory = Path(self.tmp.name)
         self.tag, self.sha = 'v1.2.3', 'a' * 40
         for name in release.required_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
+        self.write_android_archive_fixture()
+
+    def write_android_archive_fixture(self):
+        with zipfile.ZipFile(self.directory / 'easyagent-android.zip', 'w') as archive:
+            archive.writestr('easyagent-android.apk', (self.directory / 'easyagent-android.apk').read_bytes())
 
     def test_exact_manifest_and_tamper_detection(self):
         release.manifest(self.directory, self.tag, self.sha)
@@ -146,11 +152,28 @@ class AssetsTest(unittest.TestCase):
                     publisher.publish(tag, self.sha, self.directory)
                 api.assert_not_called()
         for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
+        self.write_android_archive_fixture()
         release.manifest(self.directory, self.tag, self.sha)
         manifest = json.loads((self.directory / 'release.json').read_text())
         manifest['core_only'] = True
         (self.directory / 'release.json').write_text(json.dumps(manifest))
         with mock.patch.object(publisher, 'api') as api, self.assertRaisesRegex(ValueError, 'partial core-only'):
+            publisher.publish(self.tag, self.sha, self.directory)
+        api.assert_not_called()
+
+    def test_mismatched_android_archive_cannot_be_published_with_matching_outer_hashes(self):
+        release.manifest(self.directory, self.tag, self.sha)
+        with zipfile.ZipFile(self.directory / 'easyagent-android.zip', 'w') as archive:
+            archive.writestr('easyagent-android.apk', b'wrong signed APK')
+        with self.assertRaisesRegex(ValueError, 'identical signed APK'):
+            release.manifest(self.directory, self.tag, self.sha)
+        manifest = json.loads((self.directory / 'release.json').read_text())
+        manifest['assets']['easyagent-android.zip'] = hashlib.sha256((self.directory / 'easyagent-android.zip').read_bytes()).hexdigest()
+        (self.directory / 'release.json').write_text(json.dumps(manifest))
+        names = set(release.required_assets(self.tag)) | {'release.json'}
+        (self.directory / 'checksums.txt').write_text(''.join(
+            f'{hashlib.sha256((self.directory / name).read_bytes()).hexdigest()}  {name}\n' for name in sorted(names)))
+        with mock.patch.object(publisher, 'api') as api, self.assertRaisesRegex(ValueError, 'identical signed APK'):
             publisher.publish(self.tag, self.sha, self.directory)
         api.assert_not_called()
 

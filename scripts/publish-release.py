@@ -7,7 +7,7 @@ import subprocess
 import sys
 from urllib.parse import quote
 
-from release import release_notes, required_assets, version_key
+from release import release_notes, required_assets, verify_android_archive, version_key
 
 
 def api(method, path, data=None, optional=False):
@@ -43,6 +43,8 @@ def validate_assets(directory, tag, sha):
     checksums = "".join(f"{hashes[n]}  {n}\n" for n in sorted(expected - {"checksums.txt"}))
     if (directory / "checksums.txt").read_text() != checksums:
         raise ValueError("checksum manifest is incomplete or incorrect")
+    if "easyagent-android.zip" in required:
+        verify_android_archive(directory / "easyagent-android.apk", directory / "easyagent-android.zip")
     return hashes
 
 
