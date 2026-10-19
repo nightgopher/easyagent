@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/hwj123hwj/easyagent/sdk/runtime"
 )
 
 type forkRequest struct {
@@ -58,83 +58,9 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "session not found")
 		return
 	}
-	messages, ids, err := source.Session().BuildContextSnapshot(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-
-	records, err := source.Session().Compactions(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	// The compaction header is a synthetic input, not a user turn.
-	if len(records) > 0 && len(messages) > 0 {
-		messages, ids = messages[1:], ids[1:]
-	}
-	target := req.EntryID
-	cut := len(messages)
-	if req.BeforeMessageIndex != nil {
-		index := *req.BeforeMessageIndex
-		if state := s.runs.sessions[sourceID]; sessionBusy(state) {
-			historicalUsers := 0
-			value := ""
-			found := false
-			for i, row := range state.run.baseline {
-				if row["role"] != "user" {
-					continue
-				}
-				if historicalUsers == index {
-					if i > 0 {
-						value, _ = state.run.baseline[i-1]["entry_id"].(string)
-					}
-					found = true
-					break
-				}
-				historicalUsers++
-			}
-			if !found {
-				writeError(w, 409, "当前轮次完成后可分叉")
-				return
-			}
-			target = &value
-		} else {
-			if index < 0 {
-				writeError(w, 400, "before_message_index must be >= 0")
-				return
-			}
-			seen := 0
-			found := false
-			for i, message := range messages {
-				if message.Role() != ai.RoleUser {
-					continue
-				}
-				if seen == index {
-					found = true
-					cut = i
-					value := ""
-					if i > 0 {
-						value = ids[i-1]
-					} else if len(records) > 0 {
-						value = records[len(records)-1].ID
-					}
-					if index == 0 {
-						value = ""
-					}
-					target = &value
-					break
-				}
-				seen++
-			}
-			if !found {
-				writeError(w, 400, "user message index not found")
-				return
-			}
-		}
-	}
-
-	newID, _, err := source.ForkTo(r.Context(), target, req.Application)
+	result, err := source.ForkWithOptions(r.Context(), runtime.ForkOptions{
+		EntryID: req.EntryID, BeforeMessageIndex: req.BeforeMessageIndex, Application: req.Application,
+	})
 	if errors.Is(err, agent.ErrAgentBusy) {
 		writeError(w, 409, "当前轮次完成后可分叉；运行中请选择更早的历史消息")
 		return
@@ -143,33 +69,7 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	forked, _, err := s.app.SessionManager().Open(r.Context(), newID)
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	defer forked.Storage().Close()
-	kept, err := forked.BuildContext(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	forkCompactions, err := forked.Compactions(r.Context())
-	if err != nil {
-		writeError(w, 500, err.Error())
-		return
-	}
-	if len(forkCompactions) > 0 && len(kept) > 0 {
-		kept = kept[1:]
-	}
-	cut = len(kept)
-	users := 0
-	for _, message := range kept {
-		if message.Role() == ai.RoleUser {
-			users++
-		}
-	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(forkResponse{ID: newID, SourceID: sourceID, KeptMessages: cut, KeptUserMessages: users, DroppedMessages: max(0, len(messages)-cut), BranchUserMsgIndex: users})
+	_ = json.NewEncoder(w).Encode(forkResponse{ID: result.ID, SourceID: sourceID, KeptMessages: result.KeptMessages, KeptUserMessages: result.KeptUserMessages, DroppedMessages: result.DroppedMessages, BranchUserMsgIndex: result.KeptUserMessages})
 }
