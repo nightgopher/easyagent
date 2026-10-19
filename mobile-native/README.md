@@ -1,12 +1,13 @@
 # EasyAgent Android 手机端
 
-EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView），定位与 `desktop-native/` 对应：连接一台运行主机（远程 Go 服务），复用 core 的认证 REST + `/ws` WebSocket 协议，做"口袋里的 Agent 遥控器"——对话、下发任务、审批、查看状态。
+EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView），定位与 `desktop-native/` 对应：保存并切换多台运行主机（远程 Go 服务），复用 core 的认证 REST + `/ws` WebSocket 协议，做"口袋里的 Agent 遥控器"——对话、下发任务、审批、查看状态。
 
 桌面主宿主 MyGo（`desktop-native/`）当前只支持 macOS/Windows/Linux 桌面与浏览器，没有 Android 目标，因此手机端不与桌面端共用 UI 框架；两者共享的是同一套协议语义（`desktop-native/backend.go` 的连接模型与 `projection.go` 的信封投影，本目录 `backend/` 包下为等价移植并带 JVM 单元测试）。
 
 ## 功能（v1）
 
-- 运行主机配置：服务地址 + 服务令牌（`EA_SERVER_API_KEY`，未设置时使用 `EA_API_KEY`），先测试后保存；令牌经 Android Keystore AES-GCM 加密落盘。
+- 运行主机配置：可命名并保存多个服务地址 + 服务令牌（`EA_SERVER_API_KEY`，未设置时使用 `EA_API_KEY`），支持测试、编辑和移除；令牌按主机经 Android Keystore AES-GCM 加密落盘。
+- 主机切换：会话列表顶部的下拉按钮快速切换，或从「更多 → 管理运行主机」添加和管理。各主机独立连接、重连、会话缓存与本次运行中的草稿；切换不清空草稿或断开其他连接。保存的主机及所选主机在重启后恢复；旧版单主机配置自动迁移，无需重新输入令牌。
 - 会话列表：拉取/新建/重命名/置顶/归档/删除，下拉刷新，置顶优先。
 - 聊天：历史恢复（`GET /sessions/{id}/run` 快照）、流式文本与思考、工具调用卡片（参数/输出/详情、失败展开）、错误与上下文压缩提示、排队消息横幅。
 - 任务控制：运行中排队发送（`POST /queue`）、停止当前任务、工具审批（批准/拒绝）。
@@ -18,7 +19,7 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 
 在 Android 上打开 APK 并允许本次来源安装，或使用 `adb install -r easyagent-android.apk`。两种下载格式均可对照同一 [Release](https://github.com/hwj123hwj/easyagent/releases/latest) 的 `checksums.txt` 验证 SHA-256。
 
-从 v0.19.0 起 APK 使用固定发布证书，后续正式 APK 可以覆盖更新并保留应用数据；此前自行构建的 Debug APK 签名不同，不能直接覆盖，迁移前需自行保留连接信息，再卸载旧 Debug 应用。正式签名与构建验证不代表已完成 Android 真机或模拟器 UI 验收。
+从 v0.19.0 起 APK 使用固定发布证书，后续正式 APK 可以覆盖更新并保留应用数据；此前自行构建的 Debug APK 签名不同，不能直接覆盖，迁移前需自行保留连接信息，再卸载旧 Debug 应用。
 
 ## 从源码构建
 
@@ -61,9 +62,12 @@ python3 scripts/build-android.py build /tmp/easyagent-android-check --test-signi
 
 部署相关的地址与密钥不写入本仓库。
 
+首次启动没有配置时会显示「连接运行主机」。可先测试，再「保存并连接」；暂时离线的主机也可保存，客户端会持续重试。令牌无法解密时，该主机不会发送无认证请求，可在「运行主机」页重新编辑令牌。移除连接只删除此手机的配置、凭据与缓存，不删除服务器会话；修改地址或令牌会重建该连接的会话缓存，以免跨主机复用状态。
+
 ## 边界与已知限制
 
 - Markdown 仅渲染围栏代码块（等宽样式），行内样式按原文显示。
+- 聊天草稿及投影缓存保留在应用进程内；切换主机不会丢失，结束应用进程后不保证恢复。
 - 未实现：附件上传、会话分支、文件工作台、模型切换、MCP/技能市场、用量页、本地核心进程模式（手机端只连远程主机）。需要时按 desktop-native 对应实现逐步补齐。
 - 审批卡片的"问答（answers）"表单按批准/拒绝处理；带答案的问答场景待补。
 - 明文 HTTP 任意开启：仅在私有网络/tailnet 内使用；接入公网主机时请配置 HTTPS。

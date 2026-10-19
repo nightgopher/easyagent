@@ -46,6 +46,7 @@ import com.hwj.easyagent.mobile.backend.HostConfig
 import com.hwj.easyagent.mobile.backend.getString
 import com.hwj.easyagent.mobile.backend.obj
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,10 +54,12 @@ fun ConnectionScreen(
     initial: HostConfig?,
     canCancel: Boolean,
     onCancel: () -> Unit,
-    onConnected: (HostConfig) -> Unit,
+    onSave: (HostConfig) -> Unit,
 ) {
+    val id = rememberSaveable { initial?.id ?: UUID.randomUUID().toString() }
+    var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
     var url by rememberSaveable { mutableStateOf(initial?.url ?: "") }
-    var token by rememberSaveable { mutableStateOf(initial?.token ?: "") }
+    var token by remember { mutableStateOf(initial?.token ?: "") }
     var showToken by rememberSaveable { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
@@ -65,30 +68,41 @@ fun ConnectionScreen(
 
     if (canCancel) BackHandler(onBack = onCancel)
 
-    fun verify(then: ((HostConfig) -> Unit)?) {
-        val normalized = try {
-            ApiClient.normalize(url)
-        } catch (e: IllegalArgumentException) {
+    fun config(): HostConfig? = try {
+        HostConfig(ApiClient.normalize(url), token.trim(), id, name.trim())
+    } catch (e: IllegalArgumentException) {
+        resultOk = false
+        result = e.message
+        null
+    }
+
+    fun save() {
+        val config = config() ?: return
+        try {
+            onSave(config)
+        } catch (e: Exception) {
             resultOk = false
-            result = e.message
-            return
+            result = if (e is IllegalArgumentException) e.message else "无法保存主机连接或加密令牌，请重试"
         }
-        val secret = token.trim()
+    }
+
+    fun verify() {
+        val config = config() ?: return
         testing = true
         result = null
         scope.launch {
+            val api = ApiClient(config.url, requireNotNull(config.token))
             try {
-                val api = ApiClient(normalized, secret)
                 val version = api.get("/health").obj().getString("version")
                 // /health 不鉴权，再请求会话列表验证令牌。
                 api.get("/sessions")
                 resultOk = true
                 result = "连接成功" + if (version.isNotEmpty()) " · EasyAgent $version" else ""
-                then?.invoke(HostConfig(normalized, secret))
             } catch (e: ApiException) {
                 resultOk = false
                 result = e.message
             } finally {
+                api.close()
                 testing = false
             }
         }
@@ -97,7 +111,7 @@ fun ConnectionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("连接运行主机") },
+                title = { Text(if (initial == null) "连接运行主机" else "编辑运行主机") },
                 navigationIcon = {
                     if (canCancel) {
                         IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
@@ -121,19 +135,31 @@ fun ConnectionScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             OutlinedTextField(
+                value = name,
+                onValueChange = { name = it; result = null },
+                label = { Text("连接名称（可选）") },
+                placeholder = { Text("例如：迷你主机") },
+                singleLine = true,
+                enabled = !testing,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
                 value = url,
-                onValueChange = { url = it },
+                onValueChange = { url = it; result = null },
                 label = { Text("服务地址") },
                 placeholder = { Text("http://主机地址:8080") },
                 singleLine = true,
+                enabled = !testing,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
                 value = token,
-                onValueChange = { token = it },
+                onValueChange = { token = it; result = null },
                 label = { Text("服务令牌") },
                 singleLine = true,
+                enabled = !testing,
                 visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
                     IconButton(onClick = { showToken = !showToken }) {
@@ -143,6 +169,9 @@ fun ConnectionScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                 modifier = Modifier.fillMaxWidth(),
             )
+            if (initial != null && initial.token == null) {
+                Text("无法读取已保存的令牌，请重新填写；服务未设置令牌时可留空。", color = MaterialTheme.colorScheme.error)
+            }
             result?.let {
                 Text(
                     it,
@@ -152,14 +181,14 @@ fun ConnectionScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedButton(
-                    onClick = { verify(null) },
+                    onClick = { verify() },
                     enabled = !testing && url.isNotBlank(),
                     modifier = Modifier.weight(1f),
                 ) {
                     if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("测试连接")
                 }
                 Button(
-                    onClick = { verify(onConnected) },
+                    onClick = { save() },
                     enabled = !testing && url.isNotBlank(),
                     modifier = Modifier.weight(1f),
                 ) {
@@ -167,7 +196,7 @@ fun ConnectionScreen(
                 }
             }
             Text(
-                "令牌经 Android Keystore 加密后保存在本机，不随备份上传。",
+                "保存后自动连接，离线时会自动重试。令牌按主机经 Android Keystore 加密保存在本机，不随备份上传。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

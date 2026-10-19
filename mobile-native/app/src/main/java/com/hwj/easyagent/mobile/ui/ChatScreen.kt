@@ -55,10 +55,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -103,7 +100,6 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     val error by client.error.collectAsStateWithLifecycle()
     val session = remember(sessionId) { client.chat(sessionId) }
     val snackbar = remember { SnackbarHostState() }
-    var draft by rememberSaveable(sessionId) { mutableStateOf("") }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
 
     LaunchedEffect(error) {
@@ -120,10 +116,6 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
             session.confirmations.forEach { add(Entry.Approval(it)) }
             if (session.queue.items.isNotEmpty()) add(Entry.Queue)
         }.asReversed()
-    }
-    val clearCount = session.draftClearCount
-    LaunchedEffect(clearCount) {
-        if (clearCount > 0 && draft == session.sentDraft) draft = ""
     }
     val busy = session.running || session.pending
     val subtitle = session.statusText() + " · " + when (link) {
@@ -160,12 +152,12 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
         },
         bottomBar = {
             Composer(
-                draft = draft,
-                onDraftChange = { draft = it },
-                enabled = draft.isNotBlank() && !session.sending && link == LinkStatus.CONNECTED,
+                draft = session.draft,
+                onDraftChange = { session.draft = it; client.touch() },
+                enabled = session.draft.isNotBlank() && !session.sending && link == LinkStatus.CONNECTED,
                 sending = session.sending,
                 queued = busy,
-                onSend = { client.sendPrompt(session, draft) },
+                onSend = { client.sendPrompt(session, session.draft) },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },
