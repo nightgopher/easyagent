@@ -1,8 +1,10 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 from unittest import mock
+import zipfile
 
 import release
 
@@ -10,7 +12,7 @@ import release
 class AndroidPolicyTest(unittest.TestCase):
     def test_android_version_codes_follow_semver_order(self):
         tags = ['v0.19.0-alpha.1', 'v0.19.0-alpha.99', 'v0.19.0-beta.1',
-                'v0.19.0-rc.1', 'v0.19.0-rc.99', 'v0.19.0', 'v0.19.1', 'v0.20.0', 'v1.0.0']
+                'v0.19.0-rc.1', 'v0.19.0-rc.99', 'v0.19.0', 'v0.19.1', 'v0.19.2', 'v0.20.0', 'v1.0.0']
         versions = [release.android_version(tag) for tag in tags]
         codes = [code for _, code in versions]
         self.assertEqual(codes, sorted(set(codes)))
@@ -24,9 +26,34 @@ class AndroidPolicyTest(unittest.TestCase):
         for tag in ['v0.18.0', 'v0.18.1']:
             self.assertEqual(release.android_assets(tag), ())
             self.assertEqual(len(release.required_assets(tag)) + 2, 13)
-        for tag in ['v0.19.0-alpha.1', 'v0.19.0', 'v1.0.0']:
+        for tag in ['v0.19.0-alpha.1', 'v0.19.0', 'v0.19.1']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk',))
-            self.assertIn('easyagent-android.apk', release.required_assets(tag))
+            self.assertEqual(len(release.required_assets(tag)) + 2, 14)
+        for tag in ['v0.19.2-alpha.1', 'v0.19.2', 'v1.0.0']:
+            self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
+            self.assertEqual(len(release.required_assets(tag)) + 2, 15)
+
+
+class AndroidArchiveTest(unittest.TestCase):
+    def test_only_identical_apk_is_accepted(self):
+        with tempfile.TemporaryDirectory() as folder:
+            apk, archive = Path(folder) / 'release.apk', Path(folder) / 'release.zip'
+            apk.write_bytes(b'signed APK fixture')
+            cases = [({'easyagent-android.apk': apk.read_bytes()}, True),
+                     ({'easyagent-android.apk': b'changedAPK fixture'}, False),
+                     ({'easyagent-android.apk': apk.read_bytes(), 'extra.txt': b'extra'}, False),
+                     ({'../easyagent-android.apk': apk.read_bytes()}, False)]
+            for contents, valid in cases:
+                with self.subTest(contents=list(contents)):
+                    with zipfile.ZipFile(archive, 'w') as bundle:
+                        for name, data in contents.items(): bundle.writestr(name, data)
+                    if valid:
+                        release.verify_android_archive(apk, archive)
+                    else:
+                        with self.assertRaises(ValueError): release.verify_android_archive(apk, archive)
+            archive.write_bytes(b'not a ZIP')
+            with self.assertRaisesRegex(ValueError, 'invalid Android ZIP'):
+                release.verify_android_archive(apk, archive)
 
 
 class AndroidAPKTest(unittest.TestCase):

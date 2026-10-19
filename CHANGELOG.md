@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [v0.19.2] - 2026-10-19
+
+### Fixed
+- Android 下载新增 `easyagent-android.zip` 备用包，便于直接下载 APK 反复中断时改用 ZIP；解压后安装其中的 APK。
+- ZIP 只包含同版本、同签名且字节完全一致的 `easyagent-android.apk`；构建、发布清单和上传前检查均校验这一关系，两种格式同时纳入 SHA-256 清单。
+- README 与手机端说明增加 APK / ZIP 直下载入口。从本版本起完整 Release 包含 15 项资产，既有版本的标签和资产保持不变。
+
 ## [v0.19.1] - 2026-10-19
 
 ### Fixed
