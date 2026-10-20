@@ -47,7 +47,7 @@ func (s SSHBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	isolateCommand(cmd)
 	cmd.WaitDelay = time.Second
-	out, err := cmd.CombinedOutput()
+	out, err := combinedOutput(cmd, req.Output)
 
 	result := RunResult{
 		Output:   out,

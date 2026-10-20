@@ -26,16 +26,17 @@ type ListOptions struct {
 	ExtensionTools         []agent.Tool
 	AllowedTools           []string
 	BlockedTools           []string
-	FileMutationQueue      *FileMutationQueue       // 可选：per-file 写操作串行化
-	BackupManager          *basetools.BackupManager // 可选：操作前自动快照
-	ReadTracker            *basetools.ReadTracker   // 可选：读后外部修改保护
+	FileMutationQueue      *FileMutationQueue         // 可选：per-file 写操作串行化
+	BackupManager          *basetools.BackupManager   // 可选：操作前自动快照
+	ReadTracker            *basetools.ReadTracker     // 可选：读后外部修改保护
+	BackgroundTasks        *basetools.BackgroundTasks // 可选：bash 后台任务，提供时注册 bash_output / bash_kill
 }
 
 // BaseToolNames returns the canonical coding-agent tool names before extension tools.
 func BaseToolNames(enableBash bool) []string {
 	names := []string{"read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question"}
 	if enableBash {
-		names = append([]string{"bash"}, names...)
+		names = append([]string{"bash", "bash_output", "bash_kill"}, names...)
 	}
 	return names
 }
@@ -54,7 +55,14 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithBashWorkspace(opts.Workspace),
 			basetools.WithBashMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithBashOperations(opts.BashOps),
+			basetools.WithBashBackground(opts.BackgroundTasks),
 		))
+		if opts.BackgroundTasks != nil {
+			toolList = append(toolList,
+				basetools.NewBashOutputTool(opts.BackgroundTasks, opts.MaxOutputLen),
+				basetools.NewBashKillTool(opts.BackgroundTasks),
+			)
+		}
 	}
 
 	if opts.EnableWeb {

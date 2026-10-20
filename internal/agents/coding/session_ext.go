@@ -19,6 +19,7 @@ type CodingSessionExt struct {
 	goal        string
 	rebuild     func() error
 	readTracker *basetools.ReadTracker
+	background  *basetools.BackgroundTasks
 }
 
 // NewCodingSessionExt creates a new CodingSessionExt with default profile "coding".
@@ -27,6 +28,7 @@ func NewCodingSessionExt(rebuild func() error) *CodingSessionExt {
 		profile:     string(profile.ProfileCoding),
 		rebuild:     rebuild,
 		readTracker: basetools.NewReadTracker(),
+		background:  basetools.NewBackgroundTasks(),
 	}
 }
 
@@ -36,6 +38,22 @@ func (e *CodingSessionExt) ReadTracker() *basetools.ReadTracker {
 		return nil
 	}
 	return e.readTracker
+}
+
+// BackgroundTasks returns the per-session background bash task registry.
+func (e *CodingSessionExt) BackgroundTasks() *basetools.BackgroundTasks {
+	if e == nil {
+		return nil
+	}
+	return e.background
+}
+
+// Close stops this session's background bash tasks.
+func (e *CodingSessionExt) Close() error {
+	if e == nil || e.background == nil {
+		return nil
+	}
+	return e.background.Close()
 }
 
 // SetRebuild sets the rebuild callback. Called by AgentSession after creation

@@ -5,6 +5,7 @@ package operations
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"time"
@@ -24,6 +25,9 @@ type RunRequest struct {
 	Command string        // The shell command to execute
 	Timeout time.Duration // Maximum execution time (0 = no timeout)
 	WorkDir string        // Working directory ("" = default)
+	// Output, when set, receives combined stdout+stderr as it is produced and
+	// RunResult.Output stays empty. Used by background tasks to read output while running.
+	Output io.Writer
 }
 
 // RunResult is the output of BashOperations.Run.
@@ -59,11 +63,11 @@ type FileOperations interface {
 
 // FileInfo describes a file and is returned by Stat.
 type FileInfo struct {
-	Name    string    // Base name of the file
-	Size    int64     // Length in bytes
+	Name    string      // Base name of the file
+	Size    int64       // Length in bytes
 	Mode    fs.FileMode // File mode bits
-	ModTime time.Time // Last modification time
-	IsDir   bool      // Abbreviation for Mode().IsDir()
+	ModTime time.Time   // Last modification time
+	IsDir   bool        // Abbreviation for Mode().IsDir()
 }
 
 // DirEntry is an entry read from a directory.
