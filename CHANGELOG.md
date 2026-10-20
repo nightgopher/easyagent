@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 子 agent：编码 agent 新增 `task` 工具，在独立上下文中执行委派任务，只把最终回答交回主会话，大范围搜索和调查的中间结果不再占用主会话上下文。子 agent 不能再派生子 agent，审批沿用主会话（描述标注来自哪个子任务），`readonly` 子任务只有读取与搜索工具并可并行，主任务取消时一并取消。`EA_BLOCKED_TOOLS=task` 可关闭。
+
 ### Security
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
