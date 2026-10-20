@@ -32,6 +32,10 @@ func TestWhyDangerous_Hits(t *testing.T) {
 		"git reset --hard HEAD~3",
 		"shutdown -h now",
 		"kill -9 1234",
+		"echo cm0gLXJmIC8= | base64 -d | sh",
+		"cat script.txt | bash",
+		"eval \"$CMD\"",
+		"x=1; eval $x",
 	}
 	for _, cmd := range cases {
 		assert.NotEmpty(t, whyDangerous(cmd), "应判定为危险: %q", cmd)
@@ -49,6 +53,9 @@ func TestWhyDangerous_Safe(t *testing.T) {
 		"go build ./...",
 		"npm install",
 		"ps aux",
+		"git log | head",
+		"echo evaluate",
+		"bash -n script.sh",
 	}
 	for _, cmd := range cases {
 		assert.Empty(t, whyDangerous(cmd), "应判定为安全: %q", cmd)

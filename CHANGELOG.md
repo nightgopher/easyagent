@@ -6,8 +6,17 @@
 
 ### Added
 - 子 agent：编码 agent 新增 `task` 工具，在独立上下文中执行委派任务，只把最终回答交回主会话，大范围搜索和调查的中间结果不再占用主会话上下文。子 agent 不能再派生子 agent，审批沿用主会话（描述标注来自哪个子任务），`readonly` 子任务只有读取与搜索工具并可并行，主任务取消时一并取消。`EA_BLOCKED_TOOLS=task` 可关闭。
+- bash 后台任务：`bash` 新增 `run_in_background` 参数，立即返回任务 ID（如 `bg-1`）；新增 `bash_output`（读取上次以来的新输出，不带参数时列出全部任务）和 `bash_kill`（终止整个进程组）。每会话最多同时运行 8 个，每个任务保留最后 1MB 输出并标注丢弃量；会话关闭和程序退出时自动终止遗留任务。前台命令超时的报错会提示改用后台运行。
+- `read` 识别图片与二进制：PNG / JPEG / GIF / WebP 作为图片交给模型（单图上限 5MB），其他含 NUL 字节的二进制文件和 PDF 只返回类型与大小，不再把字节当文本输出；GBK 等非 UTF-8 文本仍按文本读取。
+
+### Removed
+- 编码 agent 移除三个重复工具：`multiedit`（`edit` 的 `edits` 参数已支持同一文件多处替换）、`batch`（agent loop 已自动并行执行连续的并发安全工具调用）、`read_many_files`（改为并行多次 `read`，需要按 glob 筛选时先用 `find`）。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 中的这些名称不再生效。
 
 ### Security
+- 新增 [安全模型与部署加固](docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
+- 监听非回环地址时启动日志警告明文 HTTP 传输。
+- bash 危险命令识别新增管道交给 shell 执行（如 `base64 -d | sh`）和 `eval`。
+- 服务端 deb 包的 systemd 单元进一步收紧：清空 capability、独立 `/dev`，禁止修改内核日志、时钟和主机名。
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
 ## [v0.21.1] - 2026-10-20

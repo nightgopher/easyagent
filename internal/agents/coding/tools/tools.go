@@ -26,17 +26,17 @@ type ListOptions struct {
 	ExtensionTools         []agent.Tool
 	AllowedTools           []string
 	BlockedTools           []string
-	FileMutationQueue      *FileMutationQueue       // 可选：per-file 写操作串行化
-	BackupManager          *basetools.BackupManager // 可选：操作前自动快照
-	ReadTracker            *basetools.ReadTracker   // 可选：读后外部修改保护
-	ToolRegistry           basetools.ToolRegistry   // 可选：batch 工具需要的 tool registry
+	FileMutationQueue      *FileMutationQueue         // 可选：per-file 写操作串行化
+	BackupManager          *basetools.BackupManager   // 可选：操作前自动快照
+	ReadTracker            *basetools.ReadTracker     // 可选：读后外部修改保护
+	BackgroundTasks        *basetools.BackgroundTasks // 可选：bash 后台任务，提供时注册 bash_output / bash_kill
 }
 
 // BaseToolNames returns the canonical coding-agent tool names before extension tools.
 func BaseToolNames(enableBash bool) []string {
-	names := []string{"read", "write", "edit", "grep", "find", "ls", "multiedit", "patch", "batch", "todo_write", "save_memory", "local_time", "delete_file", "read_many_files", "ask_user_question"}
+	names := []string{"read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question"}
 	if enableBash {
-		names = append([]string{"bash"}, names...)
+		names = append([]string{"bash", "bash_output", "bash_kill"}, names...)
 	}
 	return names
 }
@@ -55,7 +55,14 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithBashWorkspace(opts.Workspace),
 			basetools.WithBashMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithBashOperations(opts.BashOps),
+			basetools.WithBashBackground(opts.BackgroundTasks),
 		))
+		if opts.BackgroundTasks != nil {
+			toolList = append(toolList,
+				basetools.NewBashOutputTool(opts.BackgroundTasks, opts.MaxOutputLen),
+				basetools.NewBashKillTool(opts.BackgroundTasks),
+			)
+		}
 	}
 
 	if opts.EnableWeb {
@@ -117,22 +124,11 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithLsMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithLsOperations(opts.FileOps),
 		),
-		// ── New enhanced tools ──
-		basetools.NewMultiEditTool(
-			basetools.WithMultiEditWorkspace(opts.Workspace),
-			basetools.WithMultiEditPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
-			basetools.WithMultiEditOperations(opts.FileOps),
-			basetools.WithMultiEditBackupManager(opts.BackupManager),
-			basetools.WithMultiEditReadTracker(opts.ReadTracker),
-		),
 		basetools.NewPatchTool(
 			basetools.WithPatchWorkspace(opts.Workspace),
 			basetools.WithPatchPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
 			basetools.WithPatchOperations(opts.FileOps),
 			basetools.WithPatchBackupManager(opts.BackupManager),
-		),
-		basetools.NewBatchTool(
-			basetools.WithBatchRegistry(opts.ToolRegistry),
 		),
 		basetools.NewTodoTool(),
 		basetools.NewMemoryTool(),
@@ -142,13 +138,6 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithDeleteFilePathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
 			basetools.WithDeleteFileOperations(opts.FileOps),
 			basetools.WithDeleteFileBackupManager(opts.BackupManager),
-		),
-		basetools.NewReadManyFilesTool(
-			basetools.WithReadManyFilesWorkspace(opts.Workspace),
-			basetools.WithReadManyFilesPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
-			basetools.WithReadManyFilesMaxOutputLen(opts.MaxOutputLen),
-			basetools.WithReadManyFilesOperations(opts.FileOps),
-			basetools.WithReadManyFilesTracker(opts.ReadTracker),
 		),
 		basetools.NewAskUserTool(),
 	)
