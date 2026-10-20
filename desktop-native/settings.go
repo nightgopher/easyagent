@@ -174,6 +174,12 @@ func (a *preview) settingsView(c *ui.Context) {
 						if page.Effect != "" {
 							ui.Text(c, page.Effect).FontSize(10).Padding(2, 7).Radius(8).Background(c.Theme().Accent.Alpha(.1)).TextColor(c.Theme().Accent).Label("生效时机")
 						}
+						ui.Spacer(c)
+						if a.canResetPageDefaults(page.ID) {
+							a.action(c, "恢复默认").OnClick(func() {
+								a.resetPageDefaults(page.ID)
+							})
+						}
 					})
 					a.note(c, page.Description)
 					if page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" {
@@ -211,8 +217,6 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.modelSettings(c)
 					case "usage":
 						a.usageSettings(c)
-					case "skillMarket":
-						a.skillSettings(c)
 					case "experiments":
 						a.experimentSettings(c)
 					case "connections":
@@ -221,6 +225,8 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.mcpSettings(c)
 					case "capabilities":
 						a.capabilitySettings(c)
+					case "skillMarket":
+						a.skillSettings(c)
 					case "feishu":
 						a.feishuSettings(c)
 					}
@@ -234,6 +240,30 @@ func (a *preview) settingsView(c *ui.Context) {
 			})
 		})
 	})
+	if a.Live == nil && s.Confirm != nil {
+		confirm := s.Confirm != nil
+		ui.Modal(c, &confirm, func() {
+			if s.Confirm == nil {
+				return
+			}
+			value := s.Confirm
+			a.text(c, value.Title).FontSize(14).FontWeight(600)
+			a.text(c, value.Description).FontSize(12).TextColor(c.Theme().TextMuted)
+			ui.Row(c).Gap(10).Margin(12, 0, 0, 0).Children(func() {
+				a.action(c, "取消").OnClick(func() { s.Confirm = nil })
+				a.primary(c, "确认").OnClick(func() {
+					action := value.Action
+					s.Confirm = nil
+					if action != nil {
+						action()
+					}
+				})
+			})
+		})
+		if !confirm {
+			s.Confirm = nil
+		}
+	}
 }
 
 // The *Settings functions below (generalSettings through feishuSettings) render
@@ -281,12 +311,37 @@ func (a *preview) generalSettings(c *ui.Context) {
 	}
 	a.note(c, "仅安装经过签名验证的原生更新包；运行中的任务或未保存文件会阻止重启。")
 	a.heading(c, "常用快捷键")
+	a.note(c, "点击条目即可按下键盘自定义按键组合；冲突时自动提示。")
 	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
-		for _, shortcut := range nativeShortcuts {
-			ui.Row(c).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
-				a.text(c, shortcut.Label).FontSize(12)
+		for _, sc := range nativeShortcuts {
+			shortcut := sc
+			ui.Row(c.Key(shortcut.ID)).Padding(10, 16).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).AlignItems(ui.Center).Children(func() {
+				ui.Column(c).Gap(2).Children(func() {
+					a.text(c, shortcut.Label).FontSize(12)
+					if s.CapturingShortcutID == shortcut.ID && s.ShortcutConflict != "" {
+						ui.Text(c, s.ShortcutConflict).FontSize(11).TextColor(c.Theme().Danger)
+					}
+				})
 				ui.Spacer(c)
-				ui.Text(c, shortcut.Keys).Font("monospace").FontSize(11).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border)
+				if s.CapturingShortcutID == shortcut.ID {
+					ui.Text(c, "按下新按键… (Esc 取消)").FontSize(11).TextColor(c.Theme().Accent).Padding(3, 7).Radius(4).Background(c.Theme().Accent.Alpha(.1)).Border(1, c.Theme().Accent)
+					a.action(c, "取消").OnClick(func() {
+						s.CapturingShortcutID = ""
+						s.ShortcutConflict = ""
+					})
+				} else {
+					ui.ButtonBase(c).Label("改键：" + shortcut.Label).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border).OnClick(func() {
+						s.CapturingShortcutID = shortcut.ID
+						s.ShortcutConflict = ""
+					}).Children(func() {
+						ui.Text(c, shortcut.Keys).Font("monospace").FontSize(11).TextColor(c.Theme().Text)
+					})
+					if shortcut.Keys != shortcut.DefaultKeys {
+						a.action(c, "重置").OnClick(func() {
+							a.resetSingleShortcut(shortcut.ID)
+						})
+					}
+				}
 			})
 		}
 	})
@@ -351,21 +406,21 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 func (a *preview) modelSettings(c *ui.Context) {
 	s := &a.Settings
 	ui.Row(c).Children(func() {
-		a.heading(c, "当前模型")
+		a.heading(c, SettingCopyGlobalModelConfig)
 		ui.Spacer(c)
-		a.action(c, "刷新模型").OnClick(func() { s.message("示例模型目录已刷新。") })
+		a.action(c, SettingCopyRefreshModels).OnClick(func() { s.message("示例模型目录已刷新。") })
 	})
 	ui.Text(c, s.host().Name+" · "+a.tr("当前模型")+"："+a.current().Model).FontSize(13)
 	if !s.host().Local {
 		a.heading(c, "模型配置属于服务主机")
-		a.note(c, "远程模型需在对应主机的 EasyAgent 配置中设置。")
+		a.note(c, SettingCopyRemoteModelNote)
 		a.action(c, "选择运行主机").OnClick(func() { a.openSettings("connections") })
 		return
 	}
-	a.heading(c, "本地模型来源")
+	a.heading(c, SettingCopyLocalSource)
 	ui.RadioGroup(c, func() {
 		ui.Row(c).Gap(24).Wrap().Children(func() {
-			for _, mode := range []string{"沿用命令行配置", "在桌面客户端配置"} {
+			for _, mode := range []string{SettingCopyCmdlineMode, SettingCopyDesktopMode} {
 				if ui.Radio(c, &s.Mode, mode, a.tr(mode)).Changed() {
 					s.Checked = false
 					s.Error = ""
@@ -373,8 +428,8 @@ func (a *preview) modelSettings(c *ui.Context) {
 			}
 		})
 	})
-	if s.Mode == "沿用命令行配置" {
-		a.note(c, "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。")
+	if s.Mode == SettingCopyCmdlineMode {
+		a.note(c, SettingCopyCmdlineNote)
 	} else {
 		if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic"}).Changed() {
 			s.APIKey = ""

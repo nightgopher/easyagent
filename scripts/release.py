@@ -36,12 +36,34 @@ def desktop_assets(tag):
 
 def native_assets(tag):
     version_key(tag)
+    linux = ()
+    # Linux desktop packaging shares the macOS update channel from v0.21.0:
+    # deb (system install), tar.gz (per-user auto-update) and signed manifests.
+    if version_key(tag) >= version_key("v0.21.0-alpha.1"):
+        linux = (
+            "easyagent-native-linux-amd64.deb",
+            "easyagent-native-linux-arm64.deb",
+            "easyagent-native-install-linux-amd64.sh",
+            "easyagent-native-install-linux-arm64.sh",
+            "update-linux-amd64.json",
+            "update-linux-arm64.json",
+            f"easyagent-{tag[1:]}-linux-amd64.tar.gz",
+            f"easyagent-{tag[1:]}-linux-arm64.tar.gz",
+        )
     # Signed archives and their manifests are mandatory for the native-only release.
     if version_key(tag) >= version_key("v0.16.0-alpha.1"):
-        return ("easyagent-native-darwin-arm64.dmg", "update-darwin-arm64.json", f"easyagent-{tag[1:]}-darwin-arm64.tar.gz")
+        return ("easyagent-native-darwin-arm64.dmg", "update-darwin-arm64.json", f"easyagent-{tag[1:]}-darwin-arm64.tar.gz") + linux
     # MyGo native client ships an Apple Silicon DMG with the promoted release.
     if version_key(tag) >= version_key("v0.15.12"):
         return ("easyagent-native-darwin-arm64.dmg",)
+    return ()
+
+
+def server_assets(tag):
+    version_key(tag)
+    # Debian/Ubuntu server packages (easyagent serve + Feishu bridge + systemd).
+    if version_key(tag) >= version_key("v0.21.0-alpha.1"):
+        return (f"easyagent-server_{tag[1:]}-1_amd64.deb", f"easyagent-server_{tag[1:]}-1_arm64.deb")
     return ()
 
 
@@ -77,7 +99,7 @@ def required_assets(tag):
     required = ASSETS
     if version_key(tag) >= version_key("v0.2.0-alpha.1"):
         required = required + desktop_assets(tag)
-    return required + native_assets(tag) + android_assets(tag)
+    return required + native_assets(tag) + android_assets(tag) + server_assets(tag)
 
 
 def check_next(tag, tags):
@@ -133,7 +155,9 @@ def manifest(directory, tag, sha, core_only=False):
     if not re.fullmatch(r"[0-9a-f]{40}", sha):
         raise ValueError("manifest requires a full commit SHA")
     directory = Path(directory)
-    required = ASSETS if core_only else required_assets(tag)
+    # Server debs are built by the core job; a partial core-only manifest must
+    # account for them even though it can never be published.
+    required = ASSETS + server_assets(tag) if core_only else required_assets(tag)
     allowed = set(required) | {"release.json", "checksums.txt"}
     extra = {p.name for p in directory.iterdir()} - allowed
     if extra:

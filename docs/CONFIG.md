@@ -114,6 +114,7 @@ Bash 并非文件路径沙箱；启用它就授予相应系统命令能力。ser
 | `EA_THINKING_BUDGET` | `thinking_budget` | Anthropic `enabled` 模式必填，至少 1024 token；请求输出上限同时为预算预留回答空间 |
 | `EA_REASONING_EFFORT` | `reasoning_effort` | OpenAI 兼容服务的可选推理强度；具体支持值由模型决定，留空不发送 |
 | `EA_STREAM_IDLE_TIMEOUT` | — | 正数 Go 时长，例如 `300s` / `5m`；默认 300 秒。任意 body 字节到达即刷新，独立于 120 秒响应头超时 |
+| `EA_AUTO_CONTINUE` | — | `true` / `false`（默认开启）；长回复遇到 length 截断或网关吞掉 finish_reason 时自动续写并提示用户 |
 
 仅对支持的模型启用思考；它可能增加耗时和 token。GLM-5.3 系列强制思考，不能选择 `disabled`；其原生 API 仅支持 `max` / `high` / `low` 等指定强度，参见[智谱思考文档](https://docs.bigmodel.cn/cn/guide/capabilities/thinking)。Anthropic 签名思考块会随工具上下文完整保存和回传，参见[官方思考文档](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking)。OpenAI Chat Completions 的 `reasoning_effort` 支持值依模型而定，参见[官方接口说明](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。
 

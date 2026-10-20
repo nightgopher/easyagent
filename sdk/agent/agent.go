@@ -245,6 +245,8 @@ func (a *Agent) PromptStream(ctx context.Context, msg ai.Message) (<-chan AgentS
 			ev = AgentStreamEvent{Type: StreamEventLoopDetected, ToolName: e.ToolName, RepeatCount: e.RepeatCount}
 		case EventMicroCompacted:
 			ev = AgentStreamEvent{Type: StreamEventMicroCompacted, ClearedCount: e.ClearedResults, TokensBefore: e.TokensBefore, TokensAfter: e.TokensAfter}
+		case EventAutoContinued:
+			ev = AgentStreamEvent{Type: StreamEventAutoContinued, RepeatCount: e.Attempt}
 		default:
 			return
 		}
@@ -498,6 +500,7 @@ func (a *Agent) handleAssistantMessage(message ai.StreamAssistantMessage) (ai.As
 		ThinkingDurationMS: message.ThinkingDurationMS,
 		ToolCalls:          message.ToolCalls,
 		StopReason:         message.StopReason,
+		StopReasonMissing:  message.StopReasonMissing,
 		ErrorMsg:           message.ErrorMsg,
 		Usage:              message.Usage,
 	}
@@ -536,6 +539,7 @@ const (
 	StreamEventConfirmationRes  StreamEventType = "confirmation_result"
 	StreamEventLoopDetected     StreamEventType = "loop_detected"
 	StreamEventMicroCompacted   StreamEventType = "micro_compacted"
+	StreamEventAutoContinued    StreamEventType = "auto_continued"
 )
 
 type AgentStreamEvent struct {

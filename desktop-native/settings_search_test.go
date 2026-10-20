@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -58,7 +59,7 @@ func TestSettingsRestoreIndividualDefaults(t *testing.T) {
 	}
 	recovered := newSettings()
 	recovered.loadPreferences(s.Path)
-	if recovered.Preferences != s.Preferences {
+	if !reflect.DeepEqual(recovered.Preferences, s.Preferences) {
 		t.Fatal("restored defaults were not persisted")
 	}
 }
