@@ -52,14 +52,13 @@ type SynopsisSettings struct {
 }
 
 // DefaultSynopsisSettings 返回默认设置：阈值 DefaultSynopsisThreshold，
-// 豁免 read / grep / read_many_files。
+// 豁免 read / grep。
 func DefaultSynopsisSettings() SynopsisSettings {
 	return SynopsisSettings{
 		Threshold: DefaultSynopsisThreshold,
 		ExemptTools: map[string]bool{
-			"read":            true,
-			"grep":            true,
-			"read_many_files": true,
+			"read": true,
+			"grep": true,
 		},
 	}
 }

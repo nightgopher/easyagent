@@ -86,21 +86,8 @@ func TestEditTolerancePreservesExactPriorityAndRejectsOverlap(t *testing.T) {
 	require.Equal(t, "new|hello\r\nworld", string(data))
 }
 
-func TestReadManyFilesSharesProtectionWithMultiEdit(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "target.txt")
-	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
-	tracker := NewReadTracker()
-	require.NoError(t, executeProtectionTool(t, NewReadManyFilesTool(WithReadManyFilesWorkspace(dir), WithReadManyFilesTracker(tracker)), map[string]any{"paths": []string{"target.txt"}}))
-	require.NoError(t, os.WriteFile(path, []byte("old external"), 0o600))
-	require.ErrorContains(t, executeProtectionTool(t, NewMultiEditTool(WithMultiEditReadTracker(tracker)), MultiEditParams{FilePath: path, Edits: []MultiEditSingleEntry{{OldString: "old", NewString: "new"}}}), "modified externally")
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Equal(t, "old external", string(data))
-}
-
 func TestReadProtectionContinuesAfterSuccessfulMutations(t *testing.T) {
-	for _, kind := range []string{"edit", "bulk", "write", "multiedit"} {
+	for _, kind := range []string{"edit", "bulk", "write"} {
 		t.Run(kind, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "target")
 			require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
@@ -118,9 +105,6 @@ func TestReadProtectionContinuesAfterSuccessfulMutations(t *testing.T) {
 			case "write":
 				tool = NewWriteTool(WithWriteReadTracker(tracker))
 				params = WriteParams{Path: path, Content: "new"}
-			case "multiedit":
-				tool = NewMultiEditTool(WithMultiEditReadTracker(tracker))
-				params = MultiEditParams{FilePath: path, Edits: []MultiEditSingleEntry{{OldString: "old", NewString: "new"}}}
 			}
 			require.NoError(t, executeProtectionTool(t, tool, params))
 			// An agent can continue editing its own new content without re-reading.

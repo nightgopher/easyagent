@@ -88,6 +88,7 @@ TUI 中输入 `/help` 查看命令。`Enter` 发送，`Ctrl+J` 换行，`PgUp/Pg
 | 浏览与安装技能市场技能 | [技能市场](docs/SKILL_MARKET.md) |
 | 接入飞书、配对与排错 | [飞书](docs/FEISHU.md) |
 | 开机启动、同步 main、健康检查与回滚 | [部署运维](docs/MINI_DEPLOY.md) |
+| 远程部署的隔离与 HTTPS | [安全模型](docs/SECURITY_MODEL.md) |
 | 打 tag、发布和核验下载 | [版本与发布](docs/RELEASING.md) · [更新记录](CHANGELOG.md) |
 | 接入 HTTP / SSE / WebSocket | [API](docs/API.md) |
 | 理解源码与 SDK 边界 | [架构](docs/ARCHITECTURE.md) |
