@@ -70,12 +70,25 @@ func (s *Session) buildContextEntries(ctx context.Context, applyMicro bool) ([]E
 	if err != nil {
 		return nil, err
 	}
+	return contextFromEntries(entries, applyMicro, true), nil
+}
+
+// HistoryFromEntries reconstructs message history from one immutable storage
+// snapshot. Compaction summaries and storage markers are not conversation turns.
+// Source entry IDs and micro-compacted tool contents are preserved.
+func HistoryFromEntries(entries []Entry) []Entry {
+	return contextFromEntries(entries, true, false)
+}
+
+func contextFromEntries(entries []Entry, applyMicro, includeSummary bool) []Entry {
 	start := 0
 	var result []Entry
 	for i := len(entries) - 1; i >= 0; i-- {
 		if entries[i].Type == EntryTypeCompaction {
-			msg := ai.NewTextUserMessage("Context summary from previous conversation:\n\n" + entries[i].Summary)
-			result = append(result, Entry{ID: entries[i].ID, Type: EntryTypeMessage, User: &msg})
+			if includeSummary {
+				msg := ai.NewTextUserMessage("Context summary from previous conversation:\n\n" + entries[i].Summary)
+				result = append(result, Entry{ID: entries[i].ID, Type: EntryTypeMessage, User: &msg})
+			}
 			result = append(result, entries[i].Retained...)
 			start = i + 1
 			break
@@ -118,7 +131,7 @@ func (s *Session) buildContextEntries(ctx context.Context, applyMicro bool) ([]E
 			result[i].Tool = &tool
 		}
 	}
-	return result, nil
+	return result
 }
 
 func (s *Session) BuildContext(ctx context.Context) ([]ai.Message, error) {
