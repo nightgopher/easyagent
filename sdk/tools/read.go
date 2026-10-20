@@ -1,14 +1,17 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 	"github.com/hwj123hwj/easyagent/sdk/operations"
 )
 
@@ -64,8 +67,10 @@ func NewReadTool(opts ...ReadToolOption) *ReadTool {
 	}
 	return t
 }
-func (t *ReadTool) Name() string        { return "read" }
-func (t *ReadTool) Description() string { return "Read a file from disk." }
+func (t *ReadTool) Name() string { return "read" }
+func (t *ReadTool) Description() string {
+	return "Read a file from disk. Text files are returned with line numbers; PNG, JPEG, GIF and WebP images are returned as images; other binary files return only their type and size."
+}
 func (t *ReadTool) Parameters() map[string]any {
 	return map[string]any{
 		"type": "object",
@@ -120,6 +125,10 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		t.readTracker.Record(cleanPath, data, modTime)
 	}
 
+	if result, ok := readNonText(params.Path, data); ok {
+		return result, nil
+	}
+
 	lines := strings.Split(string(data), "\n")
 	totalLines := len(lines)
 
@@ -169,6 +178,43 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 
 	return agent.ToolResult{Content: b.String()}, nil
+}
+
+// maxReadImageBytes 对齐主流视觉接口的单图上限（Anthropic 为 5MB）。
+const maxReadImageBytes = 5 * 1024 * 1024
+
+var readImageTypes = map[string]bool{"image/png": true, "image/jpeg": true, "image/gif": true, "image/webp": true}
+
+// readNonText 识别图片与二进制文件：图片作为图片块交给模型，其他二进制只返回类型和大小，
+// 避免把字节当文本塞进上下文。返回 false 表示按文本处理。
+func readNonText(path string, data []byte) (agent.ToolResult, bool) {
+	mediaType := http.DetectContentType(data)
+	if i := strings.IndexByte(mediaType, ';'); i >= 0 {
+		mediaType = mediaType[:i]
+	}
+	if readImageTypes[mediaType] {
+		if len(data) > maxReadImageBytes {
+			return agent.ToolResult{IsError: true, Content: fmt.Sprintf(
+				"image %s is %d bytes, over the %d byte limit; shrink it first (for example with sips or ImageMagick) and read the smaller copy", path, len(data), maxReadImageBytes)}, true
+		}
+		return agent.ToolResult{
+			Content: fmt.Sprintf("Image file %s (%s, %d bytes)", path, mediaType, len(data)),
+			Images:  []ai.ImageBlock{{MediaType: mediaType, Data: data}},
+		}, true
+	}
+	head := data
+	if len(head) > 8192 {
+		head = head[:8192]
+	}
+	// 与 git 相同只看 NUL 字节：GBK 等非 UTF-8 文本仍按文本返回。PDF 不一定含 NUL，单独识别。
+	if mediaType != "application/pdf" && bytes.IndexByte(head, 0) < 0 {
+		return agent.ToolResult{}, false
+	}
+	hint := "it is not shown as text"
+	if mediaType == "application/pdf" {
+		hint = "PDF text is not extracted; use a converter such as pdftotext through bash if available"
+	}
+	return agent.ToolResult{Content: fmt.Sprintf("Binary file %s (%s, %d bytes); %s.", path, mediaType, len(data), hint)}, true
 }
 
 // IsConcurrencySafe implements agent.ConcurrencySafeChecker.
