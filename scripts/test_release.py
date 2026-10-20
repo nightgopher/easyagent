@@ -104,18 +104,36 @@ class AssetsTest(unittest.TestCase):
         self.assertEqual(release.native_assets('v0.15.12'), ('easyagent-native-darwin-arm64.dmg',))
         self.assertEqual(
             release.required_assets('v1.2.3'),
-            release.ASSETS + release.native_assets(self.tag) + release.android_assets(self.tag),
+            release.ASSETS + release.native_assets(self.tag) + release.android_assets(self.tag) + release.server_assets(self.tag),
         )
+
+    def test_linux_native_and_server_assets_start_at_v0_21_0(self):
+        v20 = release.required_assets('v0.20.0')
+        for name in ('easyagent-native-linux-amd64.deb', 'easyagent-0.20.0-linux-amd64.tar.gz',
+                     'update-linux-arm64.json', 'easyagent-server_0.20.0-1_amd64.deb'):
+            self.assertNotIn(name, v20)
+        for tag in ('v0.21.0-alpha.1', 'v0.21.0-rc.1', 'v0.21.0'):
+            with self.subTest(tag=tag):
+                assets = release.required_assets(tag)
+                for arch in ('amd64', 'arm64'):
+                    self.assertIn(f'easyagent-native-linux-{arch}.deb', assets)
+                    self.assertIn(f'easyagent-native-install-linux-{arch}.sh', assets)
+                    self.assertIn(f'easyagent-{tag[1:]}-linux-{arch}.tar.gz', assets)
+                    self.assertIn(f'update-linux-{arch}.json', assets)
+                    self.assertIn(f'easyagent-server_{tag[1:]}-1_{arch}.deb', assets)
+        # The server debs ride with the core build's partial manifest.
+        self.assertEqual(release.server_assets('v0.20.0'), ())
+        self.assertEqual(len(release.server_assets('v0.21.0')), 2)
 
     def test_electron_retirement_preserves_historical_manifests(self):
         self.assertEqual(release.desktop_assets('v0.15.12'), ('EasyAgent-0.15.12-arm64.dmg',))
         for tag in ('v0.16.0-alpha.1', 'v0.16.0', 'v1.0.0'):
             self.assertEqual(release.desktop_assets(tag), ())
-            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag) + release.android_assets(tag))
+            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag) + release.android_assets(tag) + release.server_assets(tag))
 
     def test_each_missing_client_asset_rejects_manifest_and_publish(self):
         release.manifest(self.directory, self.tag, self.sha)
-        for name in release.native_assets(self.tag) + release.android_assets(self.tag):
+        for name in release.native_assets(self.tag) + release.android_assets(self.tag) + release.server_assets(self.tag):
             path = self.directory / name
             content = path.read_bytes()
             path.unlink()
@@ -141,17 +159,28 @@ class AssetsTest(unittest.TestCase):
         with self.assertRaises(ValueError): publisher.validate_assets(self.directory, self.tag, self.sha)
 
     def test_core_only_manifest_is_never_publishable(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
+        # Server debs join the partial core-only manifest from v0.21.0; older
+        # tags must not see them, so each iteration stages only its own set.
+        client = release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag)
+        for name in client: (self.directory / name).unlink()
         for tag in (self.tag, 'v0.1.0'):
             with self.subTest(tag=tag):
+                required = set(release.ASSETS + release.server_assets(tag))
+                for name in release.server_assets(self.tag):
+                    path = self.directory / name
+                    if name in required and not path.exists(): path.write_text('fixture:' + name)
+                    if name not in required: path.unlink(missing_ok=True)
                 release.manifest(self.directory, tag, self.sha, core_only=True)
                 manifest = json.loads((self.directory / 'release.json').read_text())
                 self.assertTrue(manifest['core_only'])
-                self.assertEqual(set(manifest['assets']), set(release.ASSETS))
+                self.assertEqual(set(manifest['assets']), required)
                 with mock.patch.object(publisher, 'api') as api, self.assertRaises(ValueError):
                     publisher.publish(tag, self.sha, self.directory)
                 api.assert_not_called()
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
+        for name in release.server_assets(self.tag):
+            path = self.directory / name
+            if not path.exists(): path.write_text('fixture:' + name)
+        for name in client: (self.directory / name).write_text('fixture:' + name)
         self.write_android_archive_fixture()
         release.manifest(self.directory, self.tag, self.sha)
         manifest = json.loads((self.directory / 'release.json').read_text())
@@ -188,7 +217,7 @@ class AssetsTest(unittest.TestCase):
         self.assertTrue(json.loads((self.directory / 'release.json').read_text())['core_only'])
 
     def test_old_release_manifest_remains_compatible(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag) + release.server_assets(self.tag): (self.directory / name).unlink()
         tag = 'v0.1.0'
         release.manifest(self.directory, tag, self.sha)
         data = json.loads((self.directory / 'release.json').read_text())

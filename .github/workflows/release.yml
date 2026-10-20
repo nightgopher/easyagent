@@ -86,6 +86,32 @@ jobs:
           path: native-dist/*
           if-no-files-found: error
           retention-days: 3
+  native-linux:
+    needs: [validate, core]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build and validate the Linux native packages
+        env:
+          TAG: ${{ needs.validate.outputs.version }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: |
+          # Stage outside the repository: the second build's clean-checkout
+          # would reject the first build's untracked artifacts otherwise.
+          bash scripts/build-native.sh linux-amd64 /tmp/native-dist "$TAG"
+          bash scripts/build-native.sh linux-arm64 /tmp/native-dist "$TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-native-linux
+          path: /tmp/native-dist/*
+          if-no-files-found: error
+          retention-days: 3
   android:
     needs: [validate, verify]
     runs-on: ubuntu-latest
@@ -118,7 +144,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   publish:
-    needs: [validate, core, native, android]
+    needs: [validate, core, native, native-linux, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
