@@ -56,6 +56,9 @@ var dangerousRules = []dangerousRule{
 
 	// 远程脚本执行（curl/wget 管道到 shell）
 	{regexp.MustCompile(`(?i)\b(curl|wget)\b.*\|\s*(sh|bash|zsh|fish)`), "远程脚本直接执行"},
+	// 把任意输出（解码后的 base64、拼接的字符串等）交给 shell 执行，内容无法从命令文本看出
+	{regexp.MustCompile(`(?i)\|\s*(sudo\s+)?(sh|bash|zsh|fish|dash|ksh)\b`), "管道输入交给 shell 执行"},
+	{regexp.MustCompile(`(?i)(^|[;&|(]\s*)eval\s`), "eval 动态执行"},
 
 	// 系统电源/进程
 	{regexp.MustCompile(`(?i)\b(shutdown|reboot|halt|poweroff|init\s+0)\b`), "关机/重启"},

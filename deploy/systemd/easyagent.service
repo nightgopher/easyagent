@@ -24,6 +24,15 @@ ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
+# 不保留任何 capability，独立 /dev，内核日志、时钟、主机名不可改
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictRealtime=true
 
 [Install]
 WantedBy=multi-user.target
