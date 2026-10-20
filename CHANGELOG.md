@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Removed
+- 编码 agent 移除三个重复工具：`multiedit`（`edit` 的 `edits` 参数已支持同一文件多处替换）、`batch`（agent loop 已自动并行执行连续的并发安全工具调用）、`read_many_files`（改为并行多次 `read`，需要按 glob 筛选时先用 `find`）。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 中的这些名称不再生效。
+
 ### Security
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
