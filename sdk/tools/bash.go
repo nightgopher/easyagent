@@ -19,11 +19,14 @@ type BashTool struct {
 	maxOutputLen     int    // 最大输出长度，0 表示使用 DefaultMaxOutputLen
 	progressInterval time.Duration
 	ops              operations.BashOperations
+	background       *BackgroundTasks // nil 表示不支持 run_in_background
 }
 
 type BashParams struct {
 	Command string `json:"command"`
 	Timeout int    `json:"timeout,omitempty"`
+	// RunInBackground 立即返回任务 ID，用 bash_output 读取输出、bash_kill 终止。
+	RunInBackground bool `json:"run_in_background,omitempty"`
 }
 
 // BashToolOption configures a BashTool during construction.
@@ -44,6 +47,11 @@ func WithBashOperations(ops operations.BashOperations) BashToolOption {
 	return func(t *BashTool) { t.ops = ops }
 }
 
+// WithBashBackground enables run_in_background with the session's task registry.
+func WithBashBackground(tasks *BackgroundTasks) BashToolOption {
+	return func(t *BashTool) { t.background = tasks }
+}
+
 // NewBashTool creates BashTool with optional configuration.
 // If no BashOperations is provided via WithBashOperations, defaults to LocalBashOperations.
 func NewBashTool(opts ...BashToolOption) *BashTool {
@@ -62,13 +70,17 @@ func (t *BashTool) Description() string {
 	return "Execute a non-interactive shell command on the server. No terminal or password input is available; use sudo -n when elevated access is needed."
 }
 func (t *BashTool) Parameters() map[string]any {
+	properties := map[string]any{
+		"command": map[string]any{"type": "string", "description": "The shell command to execute."},
+		"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds (default 120). Set a longer timeout for builds or tests."},
+	}
+	if t.background != nil {
+		properties["run_in_background"] = map[string]any{"type": "boolean", "description": "Start the command in the background and return a task id immediately, for dev servers, watchers or long builds. Read output with bash_output and stop it with bash_kill. timeout does not apply."}
+	}
 	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"command": map[string]any{"type": "string", "description": "The shell command to execute."},
-			"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds (default 120). Set a longer timeout for builds or tests."},
-		},
-		"required": []string{"command"},
+		"type":       "object",
+		"properties": properties,
+		"required":   []string{"command"},
 	}
 }
 func (t *BashTool) Validate(raw json.RawMessage) (json.RawMessage, error) {
@@ -104,6 +116,9 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		return agent.ToolResult{IsError: true}, err
 	}
 
+	if params.RunInBackground {
+		return t.startBackground(params.Command)
+	}
 	if params.Timeout <= 0 {
 		params.Timeout = DefaultBashTimeoutSeconds
 	}
@@ -133,6 +148,9 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 			failure = fmt.Errorf("command interrupted: request deadline exceeded: %w", runErr)
 		} else {
 			failure = fmt.Errorf("command timed out after %s: %w", req.Timeout, runErr)
+			if t.background != nil {
+				failure = fmt.Errorf("%w; run long-lived commands with run_in_background", failure)
+			}
 		}
 	case errors.Is(runErr, context.Canceled):
 		failure = fmt.Errorf("command canceled: %w", runErr)
@@ -150,6 +168,18 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 
 	return agent.ToolResult{Content: output}, nil
+}
+
+func (t *BashTool) startBackground(command string) (agent.ToolResult, error) {
+	if t.background == nil {
+		err := fmt.Errorf("background tasks are not available in this session")
+		return agent.ToolResult{IsError: true, Content: err.Error()}, err
+	}
+	task, err := t.background.start(t.ops, command, t.workspace)
+	if err != nil {
+		return agent.ToolResult{IsError: true, Content: err.Error()}, err
+	}
+	return agent.ToolResult{Content: fmt.Sprintf("Started background task %s. Read its output with bash_output and stop it with bash_kill.", task.id)}, nil
 }
 
 // ansiRegex matches ANSI escape sequences.

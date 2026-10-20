@@ -3,6 +3,7 @@ package operations
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -28,7 +29,7 @@ func (LocalBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 		cmd.Dir = req.WorkDir
 	}
 
-	out, err := cmd.CombinedOutput()
+	out, err := combinedOutput(cmd, req.Output)
 	result := RunResult{
 		Output:   out,
 		ExitCode: 0,
@@ -49,6 +50,16 @@ func (LocalBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 	}
 
 	return result, nil
+}
+
+// combinedOutput 收集合并输出；指定 w 时直接流式写入 w，不在内存里另存一份。
+func combinedOutput(cmd *exec.Cmd, w io.Writer) ([]byte, error) {
+	if w == nil {
+		return cmd.CombinedOutput()
+	}
+	cmd.Stdout = w
+	cmd.Stderr = w
+	return nil, cmd.Run()
 }
 
 // LocalFileOperations performs file operations on the local filesystem.
