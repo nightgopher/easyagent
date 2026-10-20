@@ -134,3 +134,11 @@ func (EventMicroCompacted) agentEventMarker() {}
 type EventContextUsage struct{ Usage ContextUsage }
 
 func (EventContextUsage) agentEventMarker() {}
+
+// EventAutoContinued 在输出被截断后自动发起续写时发出。
+type EventAutoContinued struct {
+	Attempt   int  // 续写轮次（1 开始）
+	Suspected bool // 是否为疑似截断（未带 length 信号）
+}
+
+func (EventAutoContinued) agentEventMarker() {}

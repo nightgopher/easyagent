@@ -214,6 +214,31 @@ func (a *App) ReloadRuntimeOverrides() {
 	a.cfg.LoadRuntimeOverrides(a.cfg.DataDir)
 }
 
+// SetDefaultModel updates the in-memory configuration and persists the choice to settings.json.
+func (a *App) SetDefaultModel(provider, model string) error {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+	if provider == "" {
+		provider = a.cfg.Provider
+		if provider == "" {
+			provider = "openai"
+		}
+	}
+	a.cfg.Provider = provider
+	switch provider {
+	case "openai":
+		a.cfg.OpenAIModel = model
+	case "anthropic":
+		a.cfg.AnthropicModel = model
+	default:
+		a.cfg.OpenAIModel = model
+	}
+	return config.SaveRuntimeOverrideDefaultModel(a.cfg.DataDir, provider, model)
+}
+
 // Config returns a snapshot of the current configuration.
 func (a *App) Config() config.Config {
 	a.cfgMu.Lock()

@@ -108,7 +108,7 @@ GET /ws
 | `GET` | `/sessions` | 列出所有会话 |
 | `POST` | `/sessions` | 创建新会话 |
 | `GET` | `/sessions/{id}/messages` | 获取会话消息（含压缩记录、消息 `entry_id` 与图片） |
-| `POST` | `/sessions/{id}/fork` | 分叉空闲会话：省略参数复制完整分支，`entry_id` 保留至指定当前上下文消息；空字符串创建空分叉；或 `before_message_index` 在第 N 条用户消息之前分叉（0 从空开始），两者互斥 |
+| `POST` | `/sessions/{id}/fork` | 分叉会话：空闲时省略参数复制完整分支；`entry_id` 保留至指定历史消息，空字符串创建空分叉；或 `before_message_index` 在第 N 条用户消息之前分叉（0 从空开始），两者互斥。运行中只能选择本轮开始前的历史点；分叉点与 `kept_messages` / `kept_user_messages` / `dropped_messages` 均基于同一历史快照，不计压缩摘要或当前轮消息 |
 | `GET` | `/sessions/{id}/attachments/{attID}/raw` | 认证读取工作区内附件；`?format=data_url` 返回受支持图片的 JSON `data_url`，供桌面认证通道预览 |
 | `GET` | `/sessions/{id}/info` | 获取会话信息、`access_mode` 及 `context_usage` |
 | `POST` | `/sessions/{id}/permissions` | 切换空闲会话权限，body 为 `{"mode":"ask"}` 或 `{"mode":"full"}` |

@@ -425,6 +425,7 @@ func (p *AnthropicProvider) handleSSEEvent(
 	case "message_stop":
 		if partial.StopReason == "" {
 			partial.StopReason = ai.StopReasonStop
+			partial.StopReasonMissing = true
 		}
 		_ = stream.Push(ctx, ai.EventDone{Reason: partial.StopReason, Message: *partial})
 		stream.SetResult(*partial, nil)
