@@ -28,6 +28,7 @@ Provider 必须收到协议完成标记才确认成功；缺少终态的 EOF、�
 - **Before / After hooks**：Before 返回 error 则阻止执行，错误信息成为工具结果；After 返回 error 则整体视为失败，原结果保留在 `AfterHookError` 供排查。
 - **循环检测**：同一工具以相同参数连续调用达到阈值（默认 5）时发出 `EventLoopDetected` 并注入软提醒，不中断执行；每次 Prompt 开始时重置。
 - **输出摘要**：默认阈值为 51200 字符，可用 `EA_SYNOPSIS_THRESHOLD` 调整；`read`、`grep` 豁免概览化。其他超限输出由 After hook 生成结构摘要替换模型可见内容，完整输出保留在 `UserFacing` 并由 `full_output` 按 ref 取回（最近 16 条）。见 [sdk/agent/synopsis.go](../sdk/agent/synopsis.go)。
+- **子 agent（`task`）**：在全新的 Agent 里运行委派的 prompt，系统提示沿用主会话并追加子 agent 说明；只有最终回答（附工具调用次数和 token 用量）作为工具结果写回主会话，中间调用不进入主会话历史。子 agent 继承主会话的工具（去掉 `task`、`ask_user_question`、`todo_write`、`full_output`）和审批回调，审批描述带 `[subagent: …]` 前缀；`readonly` 时只保留声明并发安全的只读工具，多个只读子任务可并行。默认最多 50 轮，主任务取消时随 ctx 一起取消。应用通过实现 `SubagentsEnabled() bool` 开启，目前只有编码 agent 启用；`EA_BLOCKED_TOOLS=task` 可关闭。见 [sdk/agent/task_tool.go](../sdk/agent/task_tool.go)。
 
 ## 双层上下文压缩
 
