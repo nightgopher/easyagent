@@ -200,6 +200,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /sessions/{id}/attachments", s.uploadAttachment)
 	restMux.HandleFunc("POST /sessions/{id}/model", s.switchModel)
 	restMux.HandleFunc("GET /models", s.listModels)
+	restMux.HandleFunc("PUT /models/default", s.setDefaultModel)
 	restMux.HandleFunc("GET /tools", s.listTools)
 	restMux.HandleFunc("GET /commands", s.listCommands)
 	restMux.HandleFunc("GET /applications", s.listApplications)
@@ -262,6 +263,7 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/computer/", restHandler)
 	topMux.Handle("/usage/", restHandler)
 	topMux.Handle("/models", restHandler)
+	topMux.Handle("/models/", restHandler)
 	topMux.Handle("/tools", restHandler)
 	topMux.Handle("/commands", restHandler)
 	topMux.Handle("/mcp", restHandler)
@@ -755,6 +757,46 @@ func (s *Server) switchModel(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"provider": provider,
 		"model":    modelID,
+	})
+}
+
+type SetDefaultModelRequest struct {
+	Model    string `json:"model"`
+	Provider string `json:"provider,omitempty"`
+}
+
+func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
+	var req SetDefaultModelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Model == "" {
+		writeError(w, http.StatusBadRequest, "model is required")
+		return
+	}
+
+	if err := s.app.SetDefaultModel(req.Provider, req.Model); err != nil {
+		writeError(w, http.StatusInternalServerError, "set default model failed: "+err.Error())
+		return
+	}
+
+	cfg := s.app.Config()
+	provider := cfg.Provider
+	modelID := ""
+	switch provider {
+	case "openai":
+		modelID = cfg.OpenAIModel
+	case "anthropic":
+		modelID = cfg.AnthropicModel
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"ok":       true,
+		"provider": provider,
+		"model":    modelID,
+		"current":  &ModelInfo{ID: modelID, Provider: provider, Name: modelID},
 	})
 }
 

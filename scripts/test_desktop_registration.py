@@ -121,6 +121,11 @@ class RegistrationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "permission denied"):
             registration.unregister(self.app, "")
 
+    def test_lsregister_path_resolution(self):
+        path = registration.get_lsregister()
+        self.assertTrue(Path(path).is_file() or "Support/lsregister" in path)
+        self.assertIn("lsregister", registration.LSREGISTER)
+
 
 if __name__ == "__main__":
     unittest.main()
