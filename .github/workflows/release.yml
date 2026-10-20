@@ -102,12 +102,14 @@ jobs:
           TAG: ${{ needs.validate.outputs.version }}
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
         run: |
-          bash scripts/build-native.sh linux-amd64 native-dist "$TAG"
-          bash scripts/build-native.sh linux-arm64 native-dist "$TAG"
+          # Stage outside the repository: the second build's clean-checkout
+          # would reject the first build's untracked artifacts otherwise.
+          bash scripts/build-native.sh linux-amd64 /tmp/native-dist "$TAG"
+          bash scripts/build-native.sh linux-arm64 /tmp/native-dist "$TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: release-native-linux
-          path: native-dist/*
+          path: /tmp/native-dist/*
           if-no-files-found: error
           retention-days: 3
   android:

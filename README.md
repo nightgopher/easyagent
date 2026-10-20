@@ -36,7 +36,7 @@ macOS 从 [Release](https://github.com/hwj123hwj/easyagent/releases/latest) 下�
 Debian/Ubuntu 服务器安装服务端包（自动注册 systemd，监听 127.0.0.1:8080，首次安装生成含随机 `EA_SERVER_API_KEY` 的 `/etc/easyagent/easyagent.env`）：
 
 ```bash
-curl -fsSL -o easyagent-server.deb https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-server_0.21.0-1_amd64.deb
+curl -fsSL -o easyagent-server.deb https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-server_0.21.1-1_amd64.deb
 sudo dpkg -i easyagent-server.deb || sudo apt-get install -f
 sudo systemctl status easyagent        # 核心服务
 sudo systemctl enable --now easyagent-bridge   # 飞书桥接（配置后启用）
