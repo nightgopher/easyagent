@@ -487,7 +487,11 @@ func (a *preview) composer(c *ui.Context) {
 			ui.Row(c).Children(func() {
 				ui.Text(c, footer).FontSize(11).TextColor(c.Theme().TextMuted)
 				ui.Spacer(c)
-				a.text(c, "⌘ N 新会话").FontSize(11).TextColor(c.Theme().TextMuted)
+				newSessionShortcut := a.shortcutLabel("新会话")
+				if newSessionShortcut == "" {
+					newSessionShortcut = "⌘ N"
+				}
+				a.text(c, newSessionShortcut+" "+a.tr("新会话")).FontSize(11).TextColor(c.Theme().TextMuted)
 			})
 		})
 	})

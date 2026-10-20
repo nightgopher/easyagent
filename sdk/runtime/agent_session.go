@@ -868,34 +868,3 @@ func (s *AgentSession) ContextSnapshot(ctx context.Context) (agent.ContextSnapsh
 	}
 	return s.agent.ContextSnapshot(ctx)
 }
-
-// Fork snapshots this session while blocking concurrent prompts and mutations.
-func (s *AgentSession) Fork(ctx context.Context, entryID *string) (string, string, error) {
-	return s.ForkTo(ctx, entryID, nil)
-}
-
-// ForkTo permits immutable history prefixes during a run, never its mutable tail.
-func (s *AgentSession) ForkTo(ctx context.Context, entryID *string, application *string) (string, string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.mutating {
-		return "", "", agent.ErrAgentBusy
-	}
-	entries := s.runPrefix
-	if s.busyLocked() {
-		if entryID == nil {
-			return "", "", agent.ErrAgentBusy
-		}
-	} else {
-		var err error
-		entries, err = s.session.Storage().GetPathToRoot(ctx, "")
-		if err != nil {
-			return "", "", err
-		}
-	}
-	id, path, err := s.sessionMgr.ForkSnapshot(ctx, s.sessionID, entries, entryID, application)
-	if err != nil && s.busyLocked() {
-		return "", "", agent.ErrAgentBusy
-	}
-	return id, path, err
-}

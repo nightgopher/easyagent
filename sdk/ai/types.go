@@ -57,6 +57,7 @@ type AssistantMessage struct {
 	Thinking           string          `json:"thinking,omitempty"`
 	ToolCalls          []ToolCall      `json:"tool_calls,omitempty"`
 	StopReason         StopReason      `json:"stop_reason,omitempty"`
+	StopReasonMissing  bool            `json:"stop_reason_missing,omitempty"`
 	ErrorMsg           string          `json:"error_msg,omitempty"`
 	Usage              Usage           `json:"usage,omitempty"`
 }
@@ -134,6 +135,7 @@ type StreamAssistantMessage struct {
 	Thinking           string          `json:"thinking,omitempty"`
 	ToolCalls          []ToolCall      `json:"tool_calls,omitempty"`
 	StopReason         StopReason      `json:"stop_reason,omitempty"`
+	StopReasonMissing  bool            `json:"stop_reason_missing,omitempty"`
 	ErrorMsg           string          `json:"error_msg,omitempty"`
 	Usage              Usage           `json:"usage,omitempty"`
 }
