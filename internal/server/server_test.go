@@ -193,3 +193,18 @@ func TestChatStreamRouteIsAuthenticated(t *testing.T) {
 		assert.Equal(t, want, w.Code, w.Body.String())
 	}
 }
+
+func TestLoopbackListen(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"127.0.0.1:8080":    true,
+		"[::1]:8080":        true,
+		"localhost:8080":    true,
+		":8080":             false,
+		"0.0.0.0:8080":      false,
+		"[::]:8080":         false,
+		"192.168.5.16:8080": false,
+		"agent.lan:8080":    false,
+	} {
+		assert.Equal(t, want, loopbackListen(addr), addr)
+	}
+}

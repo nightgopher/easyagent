@@ -296,7 +296,23 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) ListenAndServe(addr string) error {
 	s.baseURL = normalizeLocalBaseURL(addr)
 	slog.Info("starting easyagent server", "listen", addr)
+	if !loopbackListen(addr) {
+		slog.Warn("listening on a non-loopback address over plain HTTP; tokens and conversations are sent unencrypted. Put an HTTPS reverse proxy in front, see docs/SECURITY_MODEL.md", "listen", addr)
+	}
 	return s.serveUntilSignal(addr)
+}
+
+// loopbackListen 判断监听地址是否只接受本机连接；通配地址与主机名一律视为对外。
+func loopbackListen(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // normalizeLocalBaseURL 把监听地址转成进程内桥接可自呼的 loopback URL。
