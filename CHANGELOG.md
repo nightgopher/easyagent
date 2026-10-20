@@ -7,6 +7,9 @@
 ### Added
 - `read` 识别图片与二进制：PNG / JPEG / GIF / WebP 作为图片交给模型（单图上限 5MB），其他含 NUL 字节的二进制文件和 PDF 只返回类型与大小，不再把字节当文本输出；GBK 等非 UTF-8 文本仍按文本读取。
 
+### Removed
+- 编码 agent 移除三个重复工具：`multiedit`（`edit` 的 `edits` 参数已支持同一文件多处替换）、`batch`（agent loop 已自动并行执行连续的并发安全工具调用）、`read_many_files`（改为并行多次 `read`，需要按 glob 筛选时先用 `find`）。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 中的这些名称不再生效。
+
 ### Security
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
