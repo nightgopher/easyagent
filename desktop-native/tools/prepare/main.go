@@ -13,14 +13,19 @@ import (
 	"strings"
 )
 
-func run(dir, name string, args ...string) {
+func runEnv(dir string, env []string, name string, args ...string) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		panic(err)
 	}
+}
+
+func run(dir, name string, args ...string) {
+	runEnv(dir, nil, name, args...)
 }
 func copyFile(from, to string) {
 	src, err := os.Open(from)
@@ -68,7 +73,15 @@ func resetResources(target string) error {
 func main() {
 	cwd, _ := os.Getwd()
 	root := filepath.Dir(cwd)
-	target := filepath.Join(cwd, "resources", runtime.GOOS+"-"+runtime.GOARCH)
+	// Cross builds need the target platform, not the host: tools/build sets
+	// EASYAGENT_TARGET_PLATFORM per requested -platform entry (GOOS-GOARCH).
+	platform := strings.SplitN(os.Getenv("EASYAGENT_TARGET_PLATFORM"), "-", 2)
+	goos, goarch := runtime.GOOS, runtime.GOARCH
+	if len(platform) == 2 && platform[0] != "" && platform[1] != "" {
+		goos, goarch = platform[0], platform[1]
+	}
+	targetName := goos + "-" + goarch
+	target := filepath.Join(cwd, "resources", targetName)
 	if err := resetResources(target); err != nil {
 		panic(err)
 	}
@@ -80,7 +93,19 @@ func main() {
 	if version == "" {
 		version = "native-" + strings.TrimSpace(string(sha))
 	}
-	run(root, "go", "build", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", filepath.Join(target, "easyagent"), "./cmd/easyagent")
+	// macOS 的 .app 布局把核心放进 Contents/Resources/easyagent；Linux 的
+	// deb/tar.gz 布局核心与 UI 同目录，而 MyGo 打包的 UI 可执行就叫 easyagent，
+	// 同名会被 MyGo 拒绝（resource would replace the app's own easyagent），
+	// 因此 Linux 核心叫 easyagent-core，与 local_backend.go 的查找保持一致。
+	coreName := "easyagent"
+	if goos == "linux" {
+		coreName = "easyagent-core"
+	}
+	cross := []string{}
+	if goos != runtime.GOOS || goarch != runtime.GOARCH {
+		cross = []string{"GOOS=" + goos, "GOARCH=" + goarch}
+	}
+	runEnv(root, cross, "go", "build", "-trimpath", "-ldflags", "-s -w -X main.version="+version, "-o", filepath.Join(target, coreName), "./cmd/easyagent")
 	modules := []string{"github.com/zkrebbekx/go-mermaid", "github.com/srwiley/oksvg", "github.com/srwiley/rasterx"}
 	// 冷缓存下 go list -m 的 {{.Dir}} 可能未解压间接依赖，先显式下载。
 	for _, module := range modules {
@@ -98,7 +123,7 @@ func main() {
 		}
 		copyFile(license, filepath.Join(target, "licenses", name+"-LICENSE"))
 	}
-	if runtime.GOOS == "darwin" {
+	if goos == "darwin" {
 		data, err := os.ReadFile(filepath.Join(cwd, "mygo.json"))
 		if err != nil {
 			panic(err)
@@ -114,7 +139,7 @@ func main() {
 		}
 		app := filepath.Join(target, "cua-helper/EasyAgent Computer Use.app/Contents")
 		_ = os.MkdirAll(filepath.Join(app, "MacOS"), 0755)
-		arch := runtime.GOARCH
+		arch := goarch
 		if arch == "amd64" {
 			arch = "x86_64"
 		}

@@ -426,6 +426,7 @@ func (p *OpenAIProvider) handleSSE(ctx context.Context, stream *ai.EventStream, 
 
 	if partial.StopReason == "" {
 		partial.StopReason = ai.StopReasonStop
+		partial.StopReasonMissing = true
 	}
 	_ = stream.Push(ctx, ai.EventDone{Reason: partial.StopReason, Message: *partial})
 	stream.SetResult(*partial, nil)

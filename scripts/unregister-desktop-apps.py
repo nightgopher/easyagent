@@ -7,7 +7,20 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-LSREGISTER = "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+
+def get_lsregister():
+    for candidate in [
+        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
+        "/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister",
+        "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister",
+    ]:
+        if Path(candidate).is_file():
+            return candidate
+    return "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+
+LSREGISTER = get_lsregister()
 
 
 def unregister(app, commands):

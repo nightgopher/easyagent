@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 )
 
-func verify(config, dir, version string) error {
+func verify(config, dir, version, platform string) error {
 	var c struct{ Updates struct{ PublicKey string } }
 	b, err := os.ReadFile(config)
 	if err != nil {
@@ -28,14 +28,14 @@ func verify(config, dir, version string) error {
 		Version, URL, Signature string
 		Size                    int64
 	}
-	b, err = os.ReadFile(filepath.Join(dir, "update-darwin-arm64.json"))
+	b, err = os.ReadFile(filepath.Join(dir, "update-"+platform+".json"))
 	if err != nil {
 		return err
 	}
 	if err = json.Unmarshal(b, &m); err != nil {
 		return err
 	}
-	name := "easyagent-" + version + "-darwin-arm64.tar.gz"
+	name := "easyagent-" + version + "-" + platform + ".tar.gz"
 	if m.Version != version || m.URL != "https://github.com/hwj123hwj/easyagent/releases/download/v"+version+"/"+name {
 		return fmt.Errorf("update manifest version or URL mismatch")
 	}
@@ -57,11 +57,11 @@ func verify(config, dir, version string) error {
 	return nil
 }
 func main() {
-	if len(os.Args) != 4 {
-		fmt.Fprintln(os.Stderr, "usage: verify-update config directory version")
+	if len(os.Args) != 5 {
+		fmt.Fprintln(os.Stderr, "usage: verify-update config directory version platform")
 		os.Exit(2)
 	}
-	if err := verify(os.Args[1], os.Args[2], os.Args[3]); err != nil {
+	if err := verify(os.Args[1], os.Args[2], os.Args[3], os.Args[4]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

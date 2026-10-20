@@ -612,6 +612,8 @@ type runtimeOverrides struct {
 	EnableComputerUse      *bool    `json:"enable_computer_use,omitempty"`
 	ComputerApprovalPolicy *string  `json:"computer_approval_policy,omitempty"`
 	ApprovedApps           []string `json:"approved_apps,omitempty"`
+	DefaultModel           *string  `json:"default_model,omitempty"`
+	DefaultProvider        *string  `json:"default_provider,omitempty"`
 }
 
 // LoadRuntimeOverrides applies <dataDir>/settings.json on top of c. Missing
@@ -632,6 +634,32 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 		c.ComputerApprovalPolicy = *o.ComputerApprovalPolicy
 	}
 	c.ApprovedApps = o.ApprovedApps
+	if o.DefaultModel != nil && *o.DefaultModel != "" {
+		if o.DefaultProvider != nil && *o.DefaultProvider != "" {
+			c.Provider = *o.DefaultProvider
+		}
+		switch c.Provider {
+		case "openai":
+			c.OpenAIModel = *o.DefaultModel
+		case "anthropic":
+			c.AnthropicModel = *o.DefaultModel
+		default:
+			c.OpenAIModel = *o.DefaultModel
+		}
+	}
+}
+
+// SaveRuntimeOverrideDefaultModel persists default model and optional provider.
+func SaveRuntimeOverrideDefaultModel(dataDir, provider, model string) error {
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+	return mutateRuntimeOverrides(dataDir, func(o *runtimeOverrides) {
+		o.DefaultModel = &model
+		if provider != "" {
+			o.DefaultProvider = &provider
+		}
+	})
 }
 
 // SaveRuntimeOverrideComputerPolicy persists the approval policy ("ask"/"auto").
@@ -704,7 +732,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps"} {
+	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {

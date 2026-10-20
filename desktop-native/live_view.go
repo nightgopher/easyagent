@@ -533,7 +533,11 @@ func (a *preview) liveComposer(c *ui.Context) {
 			ui.Row(c).Gap(10).Children(func() {
 				ui.Text(c, "Enter 发送 · Shift+Enter 换行").FontSize(11).TextColor(c.Theme().TextMuted)
 				ui.Spacer(c)
-				ui.Text(c, "⌘ N 新会话").FontSize(11).TextColor(c.Theme().TextMuted)
+				newSessionShortcut := a.shortcutLabel("新会话")
+				if newSessionShortcut == "" {
+					newSessionShortcut = "⌘ N"
+				}
+				ui.Text(c, newSessionShortcut+" "+a.tr("新会话")).FontSize(11).TextColor(c.Theme().TextMuted)
 			})
 		})
 	})
