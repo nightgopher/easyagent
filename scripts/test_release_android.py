@@ -29,9 +29,13 @@ class AndroidPolicyTest(unittest.TestCase):
         for tag in ['v0.19.0-alpha.1', 'v0.19.0', 'v0.19.1']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk',))
             self.assertEqual(len(release.required_assets(tag)) + 2, 14)
-        for tag in ['v0.19.2-alpha.1', 'v0.19.2', 'v1.0.0']:
+        for tag in ['v0.19.2-alpha.1', 'v0.19.2']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
             self.assertEqual(len(release.required_assets(tag)) + 2, 15)
+        # Linux desktop/server packaging joined the release manifest at v0.21.0.
+        for tag in ['v0.21.0-alpha.1', 'v1.0.0']:
+            self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
+            self.assertEqual(len(release.required_assets(tag)) + 2, 25)
 
 
 class AndroidArchiveTest(unittest.TestCase):

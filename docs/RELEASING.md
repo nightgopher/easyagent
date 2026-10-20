@@ -9,7 +9,7 @@
 - MAJOR：1.0 之后不兼容的公开接口变更。当前仍处于 0.x，不为发布流程整改直接跳到 1.0。
 - 预发布用于验收，不标记为 GitHub Latest；正式发布只推进版本，不倒退。
 
-公开接口包括 CLI 参数、配置名、HTTP 协议及 `sdk/`。客户端版本由 `desktop-native/mygo.json` 定义，Android 开发构建也从此读取。从 v0.16.0 起发布 Go 核心、桥接与 MyGo 原生桌面 DMG；Electron 已退役。从 v0.19.0 起同时分发固定证书签名的 Android APK，v0.19.2 起增加包含同一 APK 的 ZIP 备用下载包。客户端版本必须与 tag 去掉 `v` 后一致，随包核心使用同一 tag 版本。历史版本资产要求保留在 `scripts/release.py`，已发布资产不变。
+公开接口包括 CLI 参数、配置名、HTTP 协议及 `sdk/`。客户端版本由 `desktop-native/mygo.json` 定义，Android 开发构建也从此读取。从 v0.16.0 起发布 Go 核心、桥接与 MyGo 原生桌面 DMG；Electron 已退役。从 v0.19.0 起同时分发固定证书签名的 Android APK，v0.19.2 起增加包含同一 APK 的 ZIP 备用下载包。从 v0.21.0 起分发 Linux 桌面 deb / 自更新 tar.gz 与服务端 easyagent-server deb（双架构）。客户端版本必须与 tag 去掉 `v` 后一致，随包核心使用同一 tag 版本。历史版本资产要求保留在 `scripts/release.py`，已发布资产不变。
 
 2026-10-01 按维护者明确要求，在备份旧 Pi Agent 的 Release 元数据、全部资产和 Git 标签对象后，清理 `v0.10.0` 至 `v0.11.0` 的公开 Release 与 tag，以 EasyAgent `v0.1.0` 重新开始。这是更名时的一次性迁移；提交历史不清理。后续**一个 tag 永远对应一个提交；不能删除重打、强推移动或覆盖已发布资产。** GitHub 的 Release immutability 对启用之后的新发布锁定资产；tag ruleset 保护 `v*` 标签免于移动、删除。[GitHub 不可变发布说明](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 
@@ -46,7 +46,7 @@ git push origin refs/tags/v0.1.1-rc.1
 1. 严格版本格式；附注 tag；HEAD 与 tag 一致；提交已进入 main；版本高于现有版本；对应 CHANGELOG 节非空。
 2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本和 Android 单测 / Lint / Debug 构建；Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
 3. 同一 SHA 构建 Linux/macOS、amd64/arm64 的核心与桥接共 8 个程序，注入相同版本。原生 DMG 在 Apple Silicon runner 构建，核验包版本与 tag 一致、Bundle ID 为 `com.hwj.easyagent`，并启动实际 bundle 核心检查健康响应和子进程回收。
-4. v0.19.2 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产、1 个签名 Android APK 和 1 个 ZIP 备用包，加上 `release.json` 与 `checksums.txt`，共 15 项资产；v0.19.0 至 v0.19.1 保留历史的 14 项，v0.16.0 至 v0.18.1 为 13 项。`core_only` 清单不能发布；缺少必需文件、空文件、额外旧 Electron 文件或校验失败均阻止发布。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹；ZIP 须仅包含与独立 APK 字节完全一致的 `easyagent-android.apk`。
+4. v0.21.0 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产、1 个签名 Android APK 和 1 个 ZIP 备用包、2 个 Linux 桌面 deb、2 个 Linux 用户级自更新 tar.gz 及配套 install 脚本与签名清单、2 个服务端 deb，加上 `release.json` 与 `checksums.txt`，共 25 项资产；v0.19.2 至 v0.20.0 保留历史的 15 项，v0.19.0 至 v0.19.1 为 14 项，v0.16.0 至 v0.18.1 为 13 项。`core_only` 清单不能发布；缺少必需文件、空文件、额外旧 Electron 文件或校验失败均阻止发布。Linux 桌面 deb 由核心 job 之后的 Linux runner 构建（amd64 直接执行包内核心校验版本，arm64 依赖同一 prepare 流水线与 deb 元数据校验），签名更新清单使用与 macOS 相同的 `MYGO_UPDATER_PRIVATE_KEY` 并在打包目录内复核签名与 URL。服务端 deb 复用核心 job 已构建并校验过 vcs 元数据的两个 Linux 二进制。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹；ZIP 须仅包含与独立 APK 字节完全一致的 `easyagent-android.apk`。
 5. 先建草稿，上传全部资产，核对 GitHub 返回的各文件 digest，再一次性公开；已公开版本拒绝重传。失败只保留草稿供检查，不公开半套文件。
 
 发布相关脚本变更还会运行 `Release build check`：在临时仓库创建仅供测试的 tag，实际构建所有核心目标与原生桌面目标，不向 GitHub 推送测试 tag，也不创建 Release。
@@ -56,6 +56,10 @@ git push origin refs/tags/v0.1.1-rc.1
 ## 安装与核验
 
 macOS 桌面从 Release 下载 `easyagent-native-darwin-arm64.dmg`（Apple Silicon）。原生客户端支持签名自动更新，也可通过 DMG 手动更新；从 v0.17.2 起安装包使用固定证书签名以保留系统授权；v0.17.1 及此前公开包使用 ad hoc 测试签名。尚未进行 Developer ID 签名或 Apple 公证，固定签名与 GitHub SHA-256 校验均不代替 Apple 的开发者认证和公证。
+
+Linux 桌面自 v0.21.0 起随正式 Release 发布：Debian/Ubuntu 服务器或桌面机直接安装 `easyagent-native-linux-<架构>.deb`（系统级安装到 /opt/easyagent，应用菜单与 `easyagent-desktop` 命令入口；运行需 libgtk-3 与 libwebkit2gtk-4.1，包依赖已声明）；偏好用户级安装或需要应用内自动更新时，下载 `easyagent-<版本>-linux-<架构>.tar.gz` 配套 `easyagent-native-install-linux-<架构>.sh`，客户端通过签名清单 `update-linux-<架构>.json` 自更新。包内 UI 可执行为 `easyagent`、核心为 `easyagent-core`（同目录），`EASYAGENT_NATIVE_CORE` 仍可显式指定核心。历史上的 native-preview 预览 Release 保留原样但不再更新。
+
+服务端自 v0.21.0 起提供 `easyagent-server_<版本>-1_<架构>.deb`：安装 easyagent 核心与飞书桥接并注册 systemd（`easyagent.service` 默认启用并监听 127.0.0.1:8080，`easyagent-bridge.service` 在配置飞书后手动启用）。首次安装生成 `/etc/easyagent/easyagent.env`（含随机 `EA_SERVER_API_KEY`，远程访问把 `EA_HOST` 改为 0.0.0.0 并设置模型凭据）；升级保留该文件，`dpkg --purge easyagent-server` 移除全部数据。迷你主机持续部署（跟踪 main 的更新器）与 deb 稳定版是两条独立通道，同一主机只保留一条。
 
 安装脚本默认选择最新正式 Release，也可显式指定已有版本：
 
