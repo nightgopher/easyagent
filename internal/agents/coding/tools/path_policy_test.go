@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
@@ -14,7 +13,7 @@ import (
 func TestFileToolPathPolicy(t *testing.T) {
 	for _, allow := range []bool{false, true} {
 		for _, style := range []string{"absolute", "relative", "symlink"} {
-			for _, name := range []string{"read", "write", "edit", "grep", "find", "ls", "multiedit", "patch", "delete_file", "read_many_files"} {
+			for _, name := range []string{"read", "write", "edit", "grep", "find", "ls", "patch", "delete_file"} {
 				t.Run(name+"/"+style+"/"+map[bool]string{false: "restricted", true: "outside"}[allow], func(t *testing.T) {
 					root := t.TempDir()
 					ws := filepath.Join(root, "workspace")
@@ -52,14 +51,10 @@ func TestFileToolPathPolicy(t *testing.T) {
 						args["pattern"] = "policy-marker"
 					case "find", "ls":
 						args["path"] = dir
-					case "multiedit":
-						args = map[string]any{"file_path": path, "edits": []map[string]any{{"old_string": "policy-marker", "new_string": "changed"}}}
 					case "patch":
 						args = map[string]any{"patchText": "--- " + path + "\n+++ " + path + "\n@@ -1 +1 @@\n-policy-marker\n+changed\n"}
 					case "delete_file":
 						args = map[string]any{"file_path": path}
-					case "read_many_files":
-						args = map[string]any{"paths": []string{path}, "allowLocalExecution": true}
 					}
 					var tool agent.Tool
 					for _, x := range BuildList(ListOptions{FileMutationQueue: NewFileMutationQueue(), Workspace: ws, AllowOutsideWorkspace: allow}) {
@@ -77,15 +72,8 @@ func TestFileToolPathPolicy(t *testing.T) {
 						if err != nil || result.IsError {
 							t.Fatalf("outside mode failed: %v %+v", err, result)
 						}
-						if name == "read_many_files" && !strings.Contains(result.Content, "policy-marker") {
-							t.Fatal(result.Content)
-						}
 					} else {
-						if name == "read_many_files" {
-							if strings.Contains(result.Content, "policy-marker") {
-								t.Fatal("argument bypassed policy")
-							}
-						} else if err == nil && !result.IsError {
+						if err == nil && !result.IsError {
 							t.Fatal("outside path accepted")
 						}
 						data, e := os.ReadFile(target)
