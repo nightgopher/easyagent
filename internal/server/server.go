@@ -58,8 +58,9 @@ type Server struct {
 	localBridge       feishuBridge                                    // 非 systemd 托管主机上随 serve 运行的进程内飞书桥接
 	localBridgeRunner func(ctx context.Context, baseURL string) error // 测试注入；nil 用真实实现
 
-	allowNoAuth    bool     // EA_ALLOW_NO_AUTH=1：未配 key 时完全开放（调试用）
-	allowedOrigins []string // EA_ALLOWED_ORIGINS：显式 CORS 白名单；空 = 不返回 CORS 头
+	authFails      authLimiter // 错误令牌按来源 IP 限流
+	allowNoAuth    bool        // EA_ALLOW_NO_AUTH=1：未配 key 时完全开放（调试用）
+	allowedOrigins []string    // EA_ALLOWED_ORIGINS：显式 CORS 白名单；空 = 不返回 CORS 头
 }
 
 // SetExtraRoutes sets an additional ServeMux to be merged into the server's routes.
@@ -86,11 +87,14 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 		if !s.authorized(r) {
 			if s.apiKey != "" {
+				status := s.denyStatus(w, r)
+				msg := "unauthorized: set Authorization: Bearer <EA_API_KEY>"
+				if status == http.StatusTooManyRequests {
+					msg = "too many failed authentication attempts; retry later"
+				}
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(ErrorResponse{
-					Error: "unauthorized: set Authorization: Bearer <EA_API_KEY>",
-				})
+				w.WriteHeader(status)
+				_ = json.NewEncoder(w).Encode(ErrorResponse{Error: msg})
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")

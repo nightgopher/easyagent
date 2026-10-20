@@ -37,6 +37,7 @@ Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MO
 | 未设置 API Key | 默认仅接受 loopback 来源的 API 请求 |
 | `EA_ALLOW_NO_AUTH=1` | 显式放开普通 API；不能用于绕过飞书设置管理接口的认证 |
 | `EA_ALLOWED_ORIGINS` | 逗号分隔的允许来源，按部署需求配置 |
+| 错误令牌限流 | 同一非 loopback 来源 1 分钟内错误令牌达 10 次，封禁 5 分钟（返回 `429` 与 `Retry-After`，封禁期内正确令牌也被拒绝）；不带令牌的请求不计数，loopback 不受限。来源取直连地址，不信任 `X-Forwarded-For`，经反向代理时所有请求会共用代理地址 |
 
 Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSocket 的认证细节见 [API](API.md)。
 
