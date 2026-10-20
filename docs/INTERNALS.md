@@ -27,7 +27,7 @@ Provider 必须收到协议完成标记才确认成功；缺少终态的 EOF、�
 - **确认门**：工具实现 `ToolWithConfirmation` 并声明需要确认时，Agent 先发出 `EventConfirmationRequest`，再调用注入的 `ConfirmFunc`。服务端 run 注入交互审批；必须审批或交互的工具在没有确认通道时拒绝执行，普通可选确认在未注入回调时沿用 SDK 默认放行。拒绝时工具不执行，拒绝信息作为工具结果回给模型；`ask_user_question` 即使完全权限也等待用户回答。
 - **Before / After hooks**：Before 返回 error 则阻止执行，错误信息成为工具结果；After 返回 error 则整体视为失败，原结果保留在 `AfterHookError` 供排查。
 - **循环检测**：同一工具以相同参数连续调用达到阈值（默认 5）时发出 `EventLoopDetected` 并注入软提醒，不中断执行；每次 Prompt 开始时重置。
-- **输出摘要**：默认阈值为 51200 字符，可用 `EA_SYNOPSIS_THRESHOLD` 调整；`read`、`grep`、`read_many_files` 豁免概览化。其他超限输出由 After hook 生成结构摘要替换模型可见内容，完整输出保留在 `UserFacing` 并由 `full_output` 按 ref 取回（最近 16 条）。见 [sdk/agent/synopsis.go](../sdk/agent/synopsis.go)。
+- **输出摘要**：默认阈值为 51200 字符，可用 `EA_SYNOPSIS_THRESHOLD` 调整；`read`、`grep` 豁免概览化。其他超限输出由 After hook 生成结构摘要替换模型可见内容，完整输出保留在 `UserFacing` 并由 `full_output` 按 ref 取回（最近 16 条）。见 [sdk/agent/synopsis.go](../sdk/agent/synopsis.go)。
 
 ## 双层上下文压缩
 
