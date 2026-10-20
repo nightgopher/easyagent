@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+## [v0.21.0] - 2026-10-20
+
+### Added
+- 正式 Release 新增 Linux 桌面端分发：`easyagent-native-linux-amd64.deb` / `-arm64.deb`（系统级安装到 /opt/easyagent，应用菜单入口 easyagent-desktop），以及配套用户级自更新通道 `easyagent-<版本>-linux-<架构>.tar.gz`、`easyagent-native-install-linux-<架构>.sh` 与签名更新清单 `update-linux-<架构>.json`；原 native-preview 预览通道退役，后续 Linux 桌面包随正式 Release 发布。
+- 正式 Release 新增服务端 Debian 包 `easyagent-server_<版本>-1_amd64.deb` / `_arm64.deb`：打包 easyagent 核心与飞书桥接二进制，附 systemd 单元（easyagent.service 自动启用，easyagent-bridge.service 配置飞书后手动启用），首次安装生成含随机 EA_SERVER_API_KEY 的 /etc/easyagent/easyagent.env，升级保留配置、purge 完整清理。
+- Linux 桌面包内核心可执行更名为 easyagent-core：MyGo 打包的 UI 可执行占用 easyagent 名称，同目录同名会被拒绝；本地后端查找逻辑同步调整，PATH 中的 easyagent 继续指向服务端核心。
+- 正式 Linux 桌面包不捆绑 Node workflow runtime（动态工作流在 Linux 不可用），仅打包 Go 二进制，延续预览版裁剪后的体积。
+
+### Changed
+- 完整 Release 资产从 15 项增至 25 项；v0.21.0 起的清单强制要求全部 Linux 资产，缺失或校验失败阻止发布，历史版本清单保持不变。
+
 ## [v0.20.0] - 2026-10-19
 
 ### Added

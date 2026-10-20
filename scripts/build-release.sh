@@ -26,5 +26,10 @@ done
 # Both binaries must expose the version without starting a service or reading credentials.
 [[ $(dist/easyagent-linux-amd64 --version) == "easyagent $version" ]]
 [[ $(dist/easyagent-bridge-linux-amd64 --version) == "easyagent-bridge $version" ]]
+# Server .deb packages wrap the two Linux binaries for Debian/Ubuntu hosts.
+for arch in amd64 arm64; do
+  CORE_BIN="dist/easyagent-linux-$arch" BRIDGE_BIN="dist/easyagent-bridge-linux-$arch" \
+    bash scripts/build-server-deb.sh "${version#v}" "$arch" dist
+done
 python3 scripts/release.py manifest "$version" "$revision" dist --core-only
 (cd dist && sha256sum --check checksums.txt)

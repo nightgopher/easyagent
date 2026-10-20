@@ -1,7 +1,7 @@
 {
   "name": "EasyAgent",
   "identifier": "com.hwj.easyagent",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "out": "build.noindex",
   "macos": {
     "signingIdentity": "44FA716814B17ADACC6F187C9DB635090A793AF8",
@@ -20,6 +20,15 @@
     "tagPrefix": "v",
     "deltas": 0,
     "changelog": "../CHANGELOG.md"
+  },
+  "linux": {
+    "maintainer": "WJ Huang <130386673+hwj123hwj@users.noreply.github.com>",
+    "comment": "EasyAgent 原生桌面客户端（连接本地或远程 EasyAgent 核心）",
+    "categories": [
+      "Development",
+      "Utility"
+    ],
+    "command": "easyagent-desktop"
   },
   "icon": "resources/icon.png"
 }
