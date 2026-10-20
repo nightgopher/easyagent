@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-## [v0.21.0] - 2026-10-20
+## [v0.21.1] - 2026-10-20
 
 ### Added
 - 正式 Release 新增 Linux 桌面端分发：`easyagent-native-linux-amd64.deb` / `-arm64.deb`（系统级安装到 /opt/easyagent，应用菜单入口 easyagent-desktop），以及配套用户级自更新通道 `easyagent-<版本>-linux-<架构>.tar.gz`、`easyagent-native-install-linux-<架构>.sh` 与签名更新清单 `update-linux-<架构>.json`；原 native-preview 预览通道退役，后续 Linux 桌面包随正式 Release 发布。
