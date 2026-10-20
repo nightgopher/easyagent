@@ -590,6 +590,11 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		MaxTokens:     models.MaxOutput(modelID),
 	}
 
+	taskTool := s.newTaskTool(model, registry, toolList)
+	if taskTool != nil {
+		toolList = append(toolList, taskTool)
+	}
+
 	// Compaction settings
 	compactionSettings := compaction.DefaultSettings()
 	var summarizeFunc compaction.SummarizeFunc
@@ -633,6 +638,9 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		ContextFiles: contextFiles,
 		Skills:       skills,
 	}, profileName, goal)
+	if taskTool != nil {
+		taskTool.SetSystemPrompt(systemPrompt)
+	}
 
 	// Aggregate lifecycle hooks from extension registry
 	var lifecycleHooks agent.LifecycleHooks
@@ -664,6 +672,47 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		ConfirmFunc:        s.wrapConfirm(s.confirmFunc),
 		LoopDetectSettings: agent.DefaultLoopDetectSettings(),
 	}), nil
+}
+
+// subagentExcludedTools 是子 agent 不继承的工具：子 agent 无法与用户交互，也不应改写主会话的
+// 待办与概览存储。
+var subagentExcludedTools = map[string]bool{"ask_user_question": true, "todo_write": true, "full_output": true}
+
+// newTaskTool 为声明支持子 agent 的应用创建 task 工具；工具过滤配置同样作用于 task。
+func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry, tools []agent.Tool) *agent.TaskTool {
+	app, ok := s.application.(interface{ SubagentsEnabled() bool })
+	if !ok || !app.SubagentsEnabled() || !toolAllowed(agent.TaskToolName, s.cfg.AllowedTools, s.cfg.BlockedTools) {
+		return nil
+	}
+	var childTools []agent.Tool
+	for _, tool := range tools {
+		if !subagentExcludedTools[tool.Name()] {
+			childTools = append(childTools, tool)
+		}
+	}
+	return agent.NewTaskTool(agent.TaskToolOptions{
+		Model:       model,
+		Registry:    registry,
+		Tools:       childTools,
+		ConfirmFunc: s.wrapConfirm(s.confirmFunc),
+	})
+}
+
+func toolAllowed(name string, allowed, blocked []string) bool {
+	for _, b := range blocked {
+		if b == name {
+			return false
+		}
+	}
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, a := range allowed {
+		if a == name {
+			return true
+		}
+	}
+	return false
 }
 
 // SetConfirmFunc 注入危险工具执行前的确认回调。
