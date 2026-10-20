@@ -251,7 +251,7 @@ func (s *Server) observeFiles(run *sessionRun, event agent.AgentStreamEvent) {
 	defer f.mu.Unlock()
 	if event.Type == agent.StreamEventToolStart {
 		switch event.ToolName {
-		case "write", "edit", "multiedit":
+		case "write", "edit":
 		default:
 			return
 		}

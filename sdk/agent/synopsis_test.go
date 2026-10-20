@@ -66,7 +66,7 @@ func TestSynopsisAfterHook_ExemptTool(t *testing.T) {
 	hook := NewSynopsisAfterHook(SynopsisSettings{Threshold: 4000}, nil)
 
 	// read/grep 等豁免工具的输出本身就是给模型看的，超阈值也保持原文。
-	for _, name := range []string{"read", "grep", "read_many_files"} {
+	for _, name := range []string{"read", "grep"} {
 		got, err := hook(context.Background(), ToolCallContext{ToolName: name}, ToolResult{Content: large})
 		if err != nil {
 			t.Fatal(err)
