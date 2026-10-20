@@ -17,26 +17,41 @@ type settingsPage struct {
 	Group                                int
 }
 
+// Shared settings UI copy definitions (preventing drift between live and demo views)
+const (
+	SettingCopyGlobalModelConfig = "全局模型配置"
+	SettingCopyDefaultModel      = "主机默认模型"
+	SettingCopyCurrentModel      = "当前会话模型"
+	SettingCopyModelNote         = "新建会话使用主机默认模型；会话中单独选择的模型只影响该会话，并在重启后保留。"
+	SettingCopyRemoteModelNote   = "模型配置属于服务主机。远程默认模型可通过下拉选择保存为该主机默认模型；会话模型可在对话输入框切换。"
+	SettingCopyRefreshModels     = "刷新模型"
+	SettingCopySaveDefaultModel  = "保存默认模型"
+	SettingCopyLocalSource       = "本地模型来源"
+	SettingCopyCmdlineMode       = "沿用命令行配置"
+	SettingCopyDesktopMode       = "在桌面客户端配置"
+	SettingCopyCmdlineNote       = "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。"
+)
+
 // Effect badges the page with when its changes take effect: 立即生效,
 // 新会话生效 or 需重启核心; empty pages are informational only.
 var settingsPages = []settingsPage{
 	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", "", 0},
 	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", "立即生效", 0},
 	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", "", 0},
-	{"skillMarket", "技能市场", "download", "浏览并安装官方技能市场里的技能。", "新会话生效", 0},
 	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
 	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
 	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
-	{"capabilities", "技能", "code", "查看当前项目实际加载的技能与工具。", "", 1},
+	{"capabilities", "技能", "code", "管理已安装技能、查看会话加载状态或从市场安装新技能。", "新会话生效", 1},
 	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 }
 
 type localPreferences struct {
-	Language       string  `json:"language"`
-	Theme          string  `json:"theme"`
-	WorkbenchWidth float32 `json:"workbench_width,omitempty"`
-	TerminalHeight float32 `json:"terminal_height,omitempty"`
+	Language       string            `json:"language"`
+	Theme          string            `json:"theme"`
+	WorkbenchWidth float32           `json:"workbench_width,omitempty"`
+	TerminalHeight float32           `json:"terminal_height,omitempty"`
+	Shortcuts      map[string]string `json:"shortcuts,omitempty"`
 }
 type demoHost struct {
 	ID, Name, URL string
@@ -64,6 +79,7 @@ type modelForm struct {
 	Mode, Provider, BaseURL, Model, APIKey                       string
 	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
 	ModelCatalogSearch                                           string
+	DefaultModelChoice                                           string
 	Checked, HasKey                                              bool
 }
 type hostForm struct {
@@ -101,6 +117,10 @@ type settingsState struct {
 	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace string
 	ProjectTrustByWorkspace                                                  map[string]bool
 	CapabilityOpen                                                           bool
+	CapabilityTab                                                            string
+	CapturingShortcutID                                                      string
+	ShortcutConflict                                                         string
+	Confirm                                                                  *nativeConfirmation
 }
 
 // newSettings seeds the preview/demo state. Hosts, MCP servers and skills here
@@ -122,6 +142,18 @@ func newSettings() settingsState {
 	}
 }
 func (a *preview) openSettings(tab string) {
+	if tab == "skillMarket" {
+		tab = "capabilities"
+		a.Settings.CapabilityTab = "market"
+	}
+	if tab == "capabilities" {
+		search := strings.ToLower(a.Settings.Search)
+		if strings.Contains(search, "市场") || strings.Contains(search, "market") || strings.Contains(search, "安装") {
+			a.Settings.CapabilityTab = "market"
+		} else if a.Settings.CapabilityTab == "" {
+			a.Settings.CapabilityTab = "installed"
+		}
+	}
 	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
 		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
 			a.discardSettingsForms()
@@ -165,6 +197,13 @@ func (s *settingsState) page() settingsPage {
 			return p
 		}
 	}
+	if s.Tab == "skillMarket" {
+		for _, p := range settingsPages {
+			if p.ID == "capabilities" {
+				return p
+			}
+		}
+	}
 	return settingsPages[0]
 }
 
@@ -172,7 +211,14 @@ func (s *settingsState) page() settingsPage {
 // search by label, description or id; an empty query matches everything.
 func settingsPageMatches(p settingsPage, search string) bool {
 	search = strings.TrimSpace(strings.ToLower(search))
-	return search == "" || strings.Contains(strings.ToLower(p.Label+p.Description+p.ID), search)
+	if search == "" {
+		return true
+	}
+	text := strings.ToLower(p.Label + p.Description + p.ID)
+	if p.ID == "capabilities" {
+		text += " 技能市场 市场 market 安装技能"
+	}
+	return strings.Contains(text, search)
 }
 func (s *settingsState) host() demoHost       { return s.Hosts[min(s.Host, len(s.Hosts)-1)] }
 func (s *settingsState) message(value string) { s.Notice = value; s.Error = "" }
@@ -323,6 +369,13 @@ func (s *settingsState) loadPreferences(path string) {
 	var prefs localPreferences
 	if json.Unmarshal(b, &prefs) == nil && (prefs.Theme == "dark" || prefs.Theme == "light" || prefs.Theme == "system") && (prefs.Language == "中文" || prefs.Language == "English") {
 		s.Preferences = prefs
+		for id, keys := range prefs.Shortcuts {
+			for i := range nativeShortcuts {
+				if nativeShortcuts[i].ID == id && keys != "" {
+					nativeShortcuts[i].Keys = keys
+				}
+			}
+		}
 	}
 }
 func (s *settingsState) savePreferences() bool {
@@ -405,4 +458,109 @@ func searchSurface(c *ui.Context) ui.Color {
 		return sunken
 	}
 	return ui.Hex("#e7efeb")
+}
+
+func (a *preview) requestConfirmation(title, detail string, action func()) {
+	conf := &nativeConfirmation{Title: title, Description: detail, Action: action}
+	if a.Live != nil {
+		a.Live.Confirm = conf
+	} else {
+		a.Settings.Confirm = conf
+	}
+}
+
+func (a *preview) canResetPageDefaults(pageID string) bool {
+	switch pageID {
+	case "general", "appearance", "models", "experiments", "mcp", "feishu":
+		return true
+	default:
+		return false
+	}
+}
+
+func (a *preview) resetPageDefaults(pageID string) {
+	s := &a.Settings
+	switch pageID {
+	case "general":
+		a.requestConfirmation(
+			"恢复常规默认设置？",
+			"将重置以下项：\n• 界面语言恢复为「中文」\n• 所有自定义快捷键恢复为默认绑定",
+			func() {
+				s.Preferences.Language = "中文"
+				a.resetAllShortcuts()
+				s.Preferences.Shortcuts = make(map[string]string)
+				s.savePreferences()
+				a.syncNativeLocale()
+				s.message("常规设置已恢复默认。")
+			},
+		)
+	case "appearance":
+		a.requestConfirmation(
+			"恢复外观默认设置？",
+			"将重置以下项：\n• 配色主题恢复为「青夜 (dark)」",
+			func() {
+				s.Preferences.Theme = "dark"
+				s.savePreferences()
+				s.message("外观设置已恢复默认。")
+			},
+		)
+	case "models":
+		a.requestConfirmation(
+			"恢复模型连接默认设置？",
+			"将重置以下项：\n• 本地模型来源重置为「沿用命令行配置」\n• 清空桌面填写的模型服务地址、模型与思考配置",
+			func() {
+				s.Mode = "沿用命令行配置"
+				s.Provider = "OpenAI 兼容服务 / 网关"
+				s.BaseURL = "http://localhost:4001"
+				s.Model = "coding"
+				s.APIKey = ""
+				s.Thinking = ""
+				s.ReasoningEffort = ""
+				s.ThinkingBudget = ""
+				s.StreamIdleTimeout = ""
+				s.DefaultModelChoice = ""
+				if a.Live != nil {
+					a.clearModelCheck()
+				}
+				s.message("模型连接设置已恢复默认。")
+			},
+		)
+	case "experiments":
+		a.requestConfirmation(
+			"恢复电脑控制默认设置？",
+			"将重置以下项：\n• 停用电脑控制工具\n• 审批策略恢复为「逐批询问」",
+			func() {
+				s.ComputerEnabled = false
+				s.Approval = "逐批询问"
+				if a.Live != nil {
+					a.operation("computer-save", "POST", "/computer/settings", map[string]any{"enabled": false, "approval_policy": "ask"}, func(v any) {
+						a.Live.Data["computer"] = v
+					})
+				}
+				s.message("电脑控制设置已恢复默认。")
+			},
+		)
+	case "mcp":
+		a.requestConfirmation(
+			"恢复 MCP 编辑表单默认设置？",
+			"将重置以下项：\n• 清空当前正在编辑的 MCP 服务表单\n• 传输方式重置为 stdio、超时时间重置为 30000ms",
+			func() {
+				s.mcpForm = mcpForm{Workspace: s.Workspace, Scope: "个人", Transport: "stdio", Timeout: "30000"}
+				s.message("MCP 编辑表单已恢复默认。")
+			},
+		)
+	case "feishu":
+		a.requestConfirmation(
+			"清空飞书配置输入？",
+			"将重置以下项：\n• 清空当前填写的 App ID 与 App Secret\n• 取消进行中的扫码授权",
+			func() {
+				s.AppID = ""
+				s.AppSecret = ""
+				s.QR = false
+				s.QRAuthorized = false
+				s.Pairing = false
+				s.message("飞书配置输入已清空。")
+			},
+		)
+	}
 }
