@@ -68,8 +68,10 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 	backupMgr := commands.GetUndoManager()
 
 	readTracker := basetools.NewReadTracker()
+	var backgroundTasks *basetools.BackgroundTasks
 	if ext, ok := opts.SessionExt.(*CodingSessionExt); ok && ext != nil {
 		readTracker = ext.ReadTracker()
+		backgroundTasks = ext.BackgroundTasks()
 	}
 
 	return codingtools.BuildList(codingtools.ListOptions{
@@ -93,6 +95,7 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 		FileMutationQueue:      mutationQueue,
 		BackupManager:          backupMgr,
 		ReadTracker:            readTracker,
+		BackgroundTasks:        backgroundTasks,
 	})
 }
 

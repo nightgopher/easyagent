@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -532,6 +533,9 @@ func (s *AgentSession) MoveTo(ctx context.Context, entryID string, summary strin
 
 // Close cleans up resources.
 func (s *AgentSession) Close() error {
+	if closer, ok := s.ext.(io.Closer); ok {
+		_ = closer.Close()
+	}
 	if s.session != nil && s.session.Storage() != nil {
 		return s.session.Storage().Close()
 	}

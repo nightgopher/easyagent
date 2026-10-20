@@ -17,6 +17,7 @@ import (
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
 	"github.com/hwj123hwj/easyagent/sdk/sessionmgr"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
 )
 
 // App is the thin assembly layer for the agent.
@@ -259,6 +260,7 @@ func (a *App) LoopManager() *scheduler.LoopManager {
 // Close cleans up all resources.
 func (a *App) Close() error {
 	a.closeMCP()
+	basetools.StopBackgroundTasks()
 	if a.loopMgr != nil {
 		a.loopMgr.StopAll()
 	}

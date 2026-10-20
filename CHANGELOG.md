@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- bash 后台任务：`bash` 新增 `run_in_background` 参数，立即返回任务 ID（如 `bg-1`）；新增 `bash_output`（读取上次以来的新输出，不带参数时列出全部任务）和 `bash_kill`（终止整个进程组）。每会话最多同时运行 8 个，每个任务保留最后 1MB 输出并标注丢弃量；会话关闭和程序退出时自动终止遗留任务。前台命令超时的报错会提示改用后台运行。
+
 ### Security
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
