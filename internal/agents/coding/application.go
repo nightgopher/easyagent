@@ -134,6 +134,9 @@ func (a CodingApplication) AvailableModels() []slashcmd.ModelInfo {
 	return result
 }
 
+// SubagentsEnabled opts the coding agent into the runtime task (subagent) tool.
+func (CodingApplication) SubagentsEnabled() bool { return true }
+
 // ToolNames returns the canonical coding-agent tool names.
 func (CodingApplication) ToolNames(enableBash bool) []string {
 	return codingtools.BaseToolNames(enableBash)
