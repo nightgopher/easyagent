@@ -29,6 +29,21 @@ cp .env.example .env
 ./bin/easyagent
 ```
 
+### 安装发行版
+
+macOS 从 [Release](https://github.com/hwj123hwj/easyagent/releases/latest) 下载 `easyagent-native-darwin-arm64.dmg`。Linux 桌面安装 `easyagent-native-linux-<架构>.deb`（应用菜单入口 `easyagent-desktop`，需 libwebkit2gtk-4.1），或用 tar.gz + `easyagent-native-install-linux-<架构>.sh` 做用户级安装并支持应用内自动更新。
+
+Debian/Ubuntu 服务器安装服务端包（自动注册 systemd，监听 127.0.0.1:8080，首次安装生成含随机 `EA_SERVER_API_KEY` 的 `/etc/easyagent/easyagent.env`）：
+
+```bash
+curl -fsSL -o easyagent-server.deb https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-server_0.21.0-1_amd64.deb
+sudo dpkg -i easyagent-server.deb || sudo apt-get install -f
+sudo systemctl status easyagent        # 核心服务
+sudo systemctl enable --now easyagent-bridge   # 飞书桥接（配置后启用）
+```
+
+文件名随版本变化，按架构到 [Releases](https://github.com/hwj123hwj/easyagent/releases/latest) 选择；升级 `dpkg -i` 保留配置，`sudo dpkg --purge easyagent-server` 移除全部数据。迷你主机持续部署见 [部署文档](docs/MINI_DEPLOY.md)。
+
 当前环境变量使用 `EA_*`，旧的 `PI_GO_*` 配置需要迁移。OpenAI 兼容服务的最小配置：
 
 ```dotenv

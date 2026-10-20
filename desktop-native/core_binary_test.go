@@ -8,15 +8,16 @@ import (
 )
 
 // TestCoreBinary_PrefersBundledOverPath reproduces the Linux packaging bug:
-// the deb/tar.gz layout places the core next to the UI executable, but the
-// old lookup only checked the macOS bundle path (../Resources/easyagent)
-// and then fell back to $PATH — where an old ~/.easyagent/bin/easyagent CLI
-// (no `serve` subcommand) hijacked the launch and the UI showed 未连接.
-// The bundled core next to the exe must always win.
+// the deb/tar.gz layout places the core next to the UI executable (named
+// easyagent-core because MyGo's UI executable occupies the easyagent name),
+// but the old lookup only checked the macOS bundle path
+// (../Resources/easyagent) and then fell back to $PATH — where an old
+// ~/.easyagent/bin/easyagent CLI (no `serve` subcommand) hijacked the launch
+// and the UI showed 未连接. The bundled core next to the exe must always win.
 func TestCoreBinary_PrefersBundledOverPath(t *testing.T) {
 	dir := t.TempDir()
-	exe := filepath.Join(dir, "easyagent-native-preview")
-	core := filepath.Join(dir, "easyagent")
+	exe := filepath.Join(dir, "easyagent")
+	core := filepath.Join(dir, "easyagent-core")
 	for _, f := range []string{exe, core} {
 		if err := os.WriteFile(f, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 			t.Fatal(err)
