@@ -5,6 +5,10 @@
 ## [Unreleased]
 
 ### Security
+- 新增 [安全模型与部署加固](docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
+- 监听非回环地址时启动日志警告明文 HTTP 传输。
+- bash 危险命令识别新增管道交给 shell 执行（如 `base64 -d | sh`）和 `eval`。
+- 服务端 deb 包的 systemd 单元进一步收紧：清空 capability、独立 `/dev`，禁止修改内核日志、时钟和主机名。
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
 
 ## [v0.21.1] - 2026-10-20

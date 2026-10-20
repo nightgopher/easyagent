@@ -12,6 +12,7 @@
 | [MCP](MCP.md) | 传输、用户/项目配置、工具信任与 OAuth |
 | [技能市场](SKILL_MARKET.md) | 浏览、安装与卸载官方技能市场技能 |
 | [飞书](FEISHU.md) | 网页配置、长连接、首次配对、故障定位 |
+| [安全模型与部署加固](SECURITY_MODEL.md) | 威胁模型、哪些检查是安全边界、systemd/容器隔离、HTTPS 反向代理 |
 | [迷你主机部署](MINI_DEPLOY.md) | 自动更新、systemd 自启动、健康检查与回滚 |
 | [版本与发布](RELEASING.md) | tag、版本说明、发布校验与安装完整性 |
 | [API](API.md) | 对话、流式事件、会话和管理接口 |
