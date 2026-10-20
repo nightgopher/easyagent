@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Security
+- HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
+
 ## [v0.21.1] - 2026-10-20
 
 ### Added
