@@ -4,7 +4,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** 每台主机持有独立连接；切换只改变选择，不销毁其他主机的会话、草稿和重连任务。 */
-class HostConnections(private val settings: SettingsStore) {
+class HostConnections(
+    private val settings: SettingsStore,
+    private val onAlert: ((AgentClient, Alert) -> Unit)? = null,
+) {
     private val clients = LinkedHashMap<String, AgentClient>()
     private val mutableState = MutableStateFlow(HostSettings())
     private val mutableClient = MutableStateFlow<AgentClient?>(null)
@@ -56,7 +59,10 @@ class HostConnections(private val settings: SettingsStore) {
         for (host in next.hosts) {
             // 解密失败的配置仍可编辑/删除，但绝不降级为无令牌请求。
             if (host.token != null && !clients.containsKey(host.id)) {
-                clients[host.id] = AgentClient(host).also { it.start() }
+                clients[host.id] = AgentClient(host).also {
+                    it.onAlert = onAlert
+                    it.start()
+                }
             }
         }
         mutableState.value = next
