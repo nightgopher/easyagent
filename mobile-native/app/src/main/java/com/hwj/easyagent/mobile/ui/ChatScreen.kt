@@ -109,7 +109,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
         }
     }
 
-    // 投影对象是可变的，revision 变化时整体重新读取；倒序配合 reverseLayout 让列表自然贴底。
+    // revision 驱动列表结构与会话状态，消息字段自身可观察；倒序让列表自然贴底。
     val entries = remember(rev, sessionId) {
         buildList<Entry> {
             session.messages.forEach { add(Entry.Message(it)) }

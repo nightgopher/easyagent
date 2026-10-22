@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-## [v0.22.0] - 2026-10-22
+## [v0.22.1] - 2026-10-22
 
 ### Added
 - 桌面设置将技能市场、已安装技能和当前会话已加载技能合并为一个「技能」分区，支持子视图切换及设置搜索直达市场。
@@ -16,6 +16,7 @@
 - `read` 识别图片与二进制：PNG / JPEG / GIF / WebP 作为图片交给模型（单图上限 5MB），其他含 NUL 字节的二进制文件和 PDF 只返回类型与大小，不再把字节当文本输出；GBK 等非 UTF-8 文本仍按文本读取。
 
 ### Fixed
+- Android 消息的正文、思考、工具输出、状态与展开状态改为可观察字段，修复同一消息对象更新后界面仍停在等待态或旧内容的问题。回归验收分阶段检查等待态、连续文本、思考和工具结果刷新。
 - 修复运行中会话分叉的快照选择、丢弃消息统计和压缩后历史索引；完整保留工具结果组，损坏或 `null` 元数据得到明确处理，扩展字段与大整数精度保持不变。
 - 修复 macOS 26 下桌面图标白色底板及测试应用 LaunchServices 注册清理的路径兼容问题。
 - 模型请求在输出开始前对 429/5xx 和瞬态连接错误有限重试（`EA_MODEL_MAX_RETRIES` 默认 2）。支持秒数和日期格式的 `Retry-After`；等待超过 30 秒时返回错误，不提前重发。输出后不重试，取消立即停止。上游错误正文截断、密钥脱敏，避免完整写入会话或日志。
@@ -23,7 +24,7 @@
 - Android 移除或关闭主机连接后忽略迟到的网络回调，关闭过程可等待在途请求退出。
 
 ### Development
-- Android 新增真实 Activity 的 Compose UI 验收、Android 12/14/15 模拟器 CI 和发布门禁，覆盖多主机、加密凭据、流式输出、审批、排队、停止、重连、横屏和深色模式；发布补充清单见 [Android 发布验收](https://github.com/hwj123hwj/easyagent/blob/v0.22.0/docs/QA_ANDROID.md)。
+- Android 新增真实 Activity 的 Compose UI 验收、Android 12/14/15 模拟器 CI 和发布门禁，覆盖多主机、加密凭据、流式输出、审批、排队、停止、重连、横屏和深色模式；发布补充清单见 [Android 发布验收](https://github.com/hwj123hwj/easyagent/blob/v0.22.1/docs/QA_ANDROID.md)。
 - 新增可重复执行的 Linux deb/systemd 验收与 CI，实际检查服务启动、模型重试、前台/后台 bash、PTY、桥接 TLS/WebSocket 及加固评分。
 
 ### Removed
@@ -31,11 +32,15 @@
 - SDK 删除未接入 provider 的旧 `StreamWithRetry`、`RetryConfig`、`DefaultRetryConfig`、`RetryableStreamFunc` 和字符串判断 `IsRetryableError`；外部调用方需移除旧包装，直接调用 provider，通过 `EA_MODEL_MAX_RETRIES` 配置重试次数。实际重试由 provider 完成，HTTP 错误使用 `HTTPStatusError`。
 
 ### Security
-- 新增 [安全模型与部署加固](https://github.com/hwj123hwj/easyagent/blob/v0.22.0/docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
+- 新增 [安全模型与部署加固](https://github.com/hwj123hwj/easyagent/blob/v0.22.1/docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
 - 监听非回环地址时启动日志警告明文 HTTP 传输。
 - bash 危险命令识别新增管道交给 shell 执行（如 `base64 -d | sh`）和 `eval`。
 - 服务端 deb 包的 systemd 单元进一步收紧：清空 capability、独立 `/dev`，禁止修改内核日志、时钟和主机名。
 - HTTP / WebSocket 令牌改用常量时间比较；同一非 loopback 来源连续提交错误令牌达上限后临时封禁（`429` + `Retry-After`），认证失败写入警告日志（不含令牌）。
+
+## [v0.22.0] - 2026-10-22
+
+发布候选的 Android 15 流式显示验收未通过，未公开 Release。修复包含在 v0.22.1；原附注 tag 保留，不改写。
 
 ## [v0.21.1] - 2026-10-20
 

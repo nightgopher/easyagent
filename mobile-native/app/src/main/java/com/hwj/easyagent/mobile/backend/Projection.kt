@@ -1,5 +1,9 @@
 package com.hwj.easyagent.mobile.backend
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
@@ -8,20 +12,22 @@ import kotlinx.serialization.json.JsonObject
  * 字段语义沿用 Go 版：kind 为空且 user=false 表示助手正文；kind 为空且 text 为空表示等待占位。
  */
 class ChatMessage(val uid: Long) {
-    var user = false
-    var text = ""
-    var tool = ""
-    var kind = ""
+    // Compose may skip a row whose message identity is unchanged. Fields read
+    // by that row must notify it when streaming or expansion mutates in place.
+    var user by mutableStateOf(false)
+    var text by mutableStateOf("")
+    var tool by mutableStateOf("")
+    var kind by mutableStateOf("")
     var callId = ""
     var runId = ""
     var entryId = ""
-    var args: JsonElement? = null
-    var result = ""
-    var details: JsonObject? = null
-    var status = ""
-    var durationMs = 0.0
-    var expanded = false
-    var expansionTouched = false
+    var args by mutableStateOf<JsonElement?>(null)
+    var result by mutableStateOf("")
+    var details by mutableStateOf<JsonObject?>(null)
+    var status by mutableStateOf("")
+    var durationMs by mutableDoubleStateOf(0.0)
+    var expanded by mutableStateOf(false)
+    var expansionTouched by mutableStateOf(false)
 
     val isWaiting: Boolean get() = !user && tool == "" && kind == "" && text == ""
 }
