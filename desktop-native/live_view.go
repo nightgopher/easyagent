@@ -275,6 +275,9 @@ func (a *preview) liveToolbar(c *ui.Context) {
 		more := iconButton(c, "menu", "会话操作").OnClick(func() { a.toggleMenu(&a.MoreMenu) })
 		a.menuPanel(c, more, &a.MoreMenu, func() {
 			menuOption(c, "", "重命名会话", false).Disabled(s.RemoteID == "").OnClick(func() { a.renameNativeSession(s) })
+			if len(s.AutoApprove) > 0 {
+				menuOption(c, "shield", "撤销本会话的自动批准", false).OnClick(func() { s.AutoApprove = nil; a.MoreMenu = false; a.Live.Notice = "已撤销本会话的自动批准" })
+			}
 			label := "置顶会话"
 			if s.Pinned {
 				label = "取消置顶"
@@ -559,23 +562,48 @@ func (a *preview) queueAction(s *session, action, id, text string, done ...func(
 	})
 }
 func (a *preview) liveApproval(c *ui.Context, s *session) {
+	if a.autoApprove(s) {
+		return
+	}
 	value := s.Confirmations[0]
 	l := a.Live
-	ui.Column(c).Padding(12, 14).Gap(8).Background(c.Theme().Surface).Border(1, c.Theme().Accent.Alpha(.4)).Radius(8).Children(func() {
+	card := ui.Column(c).Label("工具审批").Padding(12, 14).Gap(8).Background(c.Theme().Surface).Border(1, c.Theme().Accent.Alpha(.4)).Radius(8)
+	// Shortcuts act only with focus in the card, so a ⌘↩ typed in the
+	// composer can never approve a command by accident.
+	inCard := card.FocusWithin()
+	card.Children(func() {
 		_, hasQuestions := object(value.Args)["questions"]
 		if hasQuestions || value.ToolName == "ask_user_question" {
 			a.text(c, "需要你回答的问题").Bold()
 			a.questionFields(c, s, value)
 		} else {
-			a.text(c, "工具需要你的批准").Bold()
-			a.note(c, value.ToolName)
-			a.note(c, value.Description)
+			busy := l.Loading["confirm/"+s.RemoteID]
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				a.text(c, "工具需要你的批准").Bold()
+				ui.Text(c, value.ToolName).Font("monospace").FontSize(11).Padding(1, 6).Radius(4).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+			})
+			// The reason (e.g. which danger rule matched) is what the user decides on.
+			if value.Description != "" {
+				reason := ui.Text(c, value.Description).Label("审批原因").FontSize(13).LineHeight(1.6)
+				if value.ToolName == "bash" {
+					reason.TextColor(c.Theme().Warning)
+				}
+			}
 			if value.Args != nil {
 				ui.Text(c, pretty(value.Args)).Font("monospace").FontSize(12).MaxLines(5)
 			}
-			ui.Row(c).Gap(8).Children(func() {
-				a.primary(c, "允许一次").Disabled(l.Loading["confirm/"+s.RemoteID]).OnClick(func() { a.confirmLive(true) })
-				a.action(c, "拒绝").Disabled(l.Loading["confirm/"+s.RemoteID]).OnClick(func() { a.confirmLive(false) })
+			ui.TextInput(c, &s.RejectReason).Label("拒绝原因").Placeholder("拒绝原因（可选，会告诉模型）").FontSize(12)
+			if inCard && !busy && c.Shortcut(ui.Cmd, ui.KeyEnter) {
+				a.confirmLive(true)
+			} else if inCard && !busy && c.Shortcut(0, ui.KeyEscape) {
+				a.confirmLive(false)
+			}
+			ui.Row(c).Gap(8).Wrap().Children(func() {
+				a.primary(c, "允许一次 ⌘↩").Label("允许一次").Tooltip("焦点在审批卡片内时可按 ⌘↩").Disabled(busy).OnClick(func() { a.confirmLive(true) })
+				if key, label := approvalScope(value); key != "" {
+					a.action(c, label).Disabled(busy).OnClick(func() { a.allowForSession(key) })
+				}
+				a.action(c, "拒绝 Esc").Label("拒绝").Disabled(busy).OnClick(func() { a.confirmLive(false) })
 			})
 		}
 	})
