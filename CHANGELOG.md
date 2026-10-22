@@ -9,6 +9,9 @@
 - bash 后台任务：`bash` 新增 `run_in_background` 参数，立即返回任务 ID（如 `bg-1`）；新增 `bash_output`（读取上次以来的新输出，不带参数时列出全部任务）和 `bash_kill`（终止整个进程组）。每会话最多同时运行 8 个，每个任务保留最后 1MB 输出并标注丢弃量；会话关闭和程序退出时自动终止遗留任务。前台命令超时的报错会提示改用后台运行。
 - `read` 识别图片与二进制：PNG / JPEG / GIF / WebP 作为图片交给模型（单图上限 5MB），其他含 NUL 字节的二进制文件和 PDF 只返回类型与大小，不再把字节当文本输出；GBK 等非 UTF-8 文本仍按文本读取。
 
+### Changed
+- 原生桌面端升级 MyGo 0.5.5 → 0.6.2：原生界面只重绘变化的部分、布局增量计算，窗口不可见时不绘制；Linux 上中日韩标点使用对应字体，Wayland 下二次启动能正确聚焦已有窗口。预览界面的 MyGo 版本号改为从编译信息读取。
+
 ### Removed
 - 编码 agent 移除三个重复工具：`multiedit`（`edit` 的 `edits` 参数已支持同一文件多处替换）、`batch`（agent loop 已自动并行执行连续的并发安全工具调用）、`read_many_files`（改为并行多次 `read`，需要按 glob 筛选时先用 `find`）。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 中的这些名称不再生效。
 
