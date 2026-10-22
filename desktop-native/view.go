@@ -534,7 +534,26 @@ func (a *preview) workbench(c *ui.Context) {
 	})
 }
 
-func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *message) {
+// latestReply returns the index of the last assistant reply, -1 if none.
+func latestReply(s *session) int {
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		if m := s.Messages[i]; !m.User && m.Tool == "" && m.Kind == "" {
+			return i
+		}
+	}
+	return -1
+}
+
+// messageActions keeps its space when hidden so revealing it never shifts text.
+func messageActions(c *ui.Context, shown bool, body func()) {
+	row := ui.Row(c).Gap(3)
+	if !shown {
+		row.Opacity(0)
+	}
+	row.Children(body)
+}
+
+func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *message, reveal bool) {
 	c := key
 	if m.User {
 		ui.Row(key).Children(func() {
@@ -543,8 +562,8 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				ui.Text(key, m.Text).Padding(12, 18).Background(c.Theme().Accent.Alpha(.12)).Radius(12).LineHeight(1.75)
 				if a.Live != nil {
 					a.messageImages(key, m)
-					ui.Row(key).Gap(3).Children(func() {
-						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text) })
+					messageActions(key, reveal, func() {
+						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制消息") })
 						iconButton(key, "git-branch", "编辑并创建分支").Disabled(!s.canForkMessage(m)).Tooltip("历史消息可随时分叉；当前轮次请等待完成").OnClick(func() { a.forkUserMessage(i) })
 					})
 				}
@@ -572,7 +591,9 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				a.renderSessionMarkdown(key, &m.Markdown, m.Text, s, "", s.Running && i == len(s.Messages)-1)
 			}
 			if !(s.Running && i == len(s.Messages)-1) {
-				ui.Row(key).Gap(3).Children(func() {
+				// The latest reply keeps its actions visible: copying or forking the
+				// answer just given is the common case.
+				messageActions(key, reveal || i == latestReply(s), func() {
 					iconButton(key, "copy", fmt.Sprintf("复制回复 %d", i)).OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制回复") })
 					iconButton(key, "git-branch", fmt.Sprintf("从回复 %d 创建分支", i)).Tooltip("从此回复创建分支（包含完整工具结果）；当前轮次请等待完成").Disabled(a.Live != nil && !s.canForkMessage(m)).OnClick(func() { a.fork(i) })
 				})
