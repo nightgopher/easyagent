@@ -104,8 +104,8 @@ class RuntimeUiTest {
             }
             // AGP uninstalls both APKs after connected tests. Shell-owned output
             // survives that cleanup and is collected as a CI artifact.
-            ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("mkdir -p /sdcard/Download/easyagent-ui")).use { it.readBytes() }
-            val pipes = instrumentation.uiAutomation.executeShellCommandRw("dd of=/sdcard/Download/easyagent-ui/$name.png")
+            ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("mkdir -p /data/local/tmp/easyagent-ui")).use { it.readBytes() }
+            val pipes = instrumentation.uiAutomation.executeShellCommandRw("dd of=/data/local/tmp/easyagent-ui/$name.png")
             ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use { stream ->
                 check(requireNotNull(bitmap).compress(Bitmap.CompressFormat.PNG, 100, stream))
             }
