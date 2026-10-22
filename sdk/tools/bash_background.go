@@ -310,6 +310,64 @@ func (t *backgroundTask) summary() string {
 	return fmt.Sprintf("%s  %s  %s  %s", t.id, status, elapsed.Round(time.Second), t.command)
 }
 
+// BackgroundTaskInfo describes a task for clients that list or stop tasks.
+type BackgroundTaskInfo struct {
+	ID       string    `json:"id"`
+	Command  string    `json:"command"`
+	Status   string    `json:"status"`
+	Running  bool      `json:"running"`
+	Started  time.Time `json:"started"`
+	Finished time.Time `json:"finished,omitempty"`
+}
+
+func (t *backgroundTask) info() BackgroundTaskInfo {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return BackgroundTaskInfo{ID: t.id, Command: t.command, Status: t.statusLocked(), Running: t.finished.IsZero(), Started: t.started, Finished: t.finished}
+}
+
+// List returns the session's tasks, oldest first.
+func (b *BackgroundTasks) List() []BackgroundTaskInfo {
+	tasks := b.list()
+	out := make([]BackgroundTaskInfo, len(tasks))
+	for i, task := range tasks {
+		out[i] = task.info()
+	}
+	return out
+}
+
+// Tail returns up to maxBytes of a task's most recent output without moving
+// the position bash_output reads from, so viewing it does not hide output
+// from the model.
+func (b *BackgroundTasks) Tail(id string, maxBytes int) (BackgroundTaskInfo, string, bool) {
+	task, ok := b.get(id)
+	if !ok {
+		return BackgroundTaskInfo{}, "", false
+	}
+	task.mu.Lock()
+	out := task.output
+	if maxBytes > 0 && len(out) > maxBytes {
+		out = out[len(out)-maxBytes:]
+	}
+	text := string(out)
+	task.mu.Unlock()
+	return task.info(), text, true
+}
+
+// Stop ends a running task and its process group; false if the ID is unknown.
+func (b *BackgroundTasks) Stop(id string) bool {
+	task, ok := b.get(id)
+	if !ok {
+		return false
+	}
+	task.kill()
+	select {
+	case <-task.done:
+	case <-time.After(5 * time.Second):
+	}
+	return true
+}
+
 // ─── bash_output ─────────────────────────────────────────────────────────────
 
 // BashOutputTool 读取后台任务的新输出；不带 task_id 时列出本会话全部后台任务。

@@ -275,6 +275,9 @@ func (s *session) event(e agentEvent) {
 					}
 				}
 				m.Result = displayText(result)
+				if m.Tool == "task" && e.Type == "tool_update" && m.Result != "" && (len(m.Steps) == 0 || m.Steps[len(m.Steps)-1] != m.Result) && len(m.Steps) < 200 {
+					m.Steps = append(m.Steps, m.Result)
+				}
 				if e.Details != nil {
 					m.Details = e.Details
 				}

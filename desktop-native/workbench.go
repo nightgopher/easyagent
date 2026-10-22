@@ -64,6 +64,9 @@ type nativeWorkbench struct {
 	TerminalGeneration                                                               uint64
 	Term                                                                             *terminal.Terminal
 	TerminalOpen, TerminalStarting                                                   bool
+	// BackgroundTask is the task whose output the 「后台」 page shows.
+	BackgroundTask    string
+	BackgroundFetched time.Time
 }
 
 func newNativeWorkbench() nativeWorkbench {
@@ -114,6 +117,8 @@ func (a *preview) refreshWorkbench() {
 		if s.RemoteID != "" {
 			a.resource("context", sessionPath(s.RemoteID)+"/context")
 		}
+	case "background":
+		a.loadBackgroundTasks(s)
 	case "tools":
 		a.resource("tools", "/tools")
 	case "profile":
@@ -142,7 +147,7 @@ func (a *preview) refreshWorkbench() {
 }
 
 var workbenchTabs = []struct{ id, label, icon string }{
-	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
+	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
 }
 
 func (a *preview) liveWorkbench(c *ui.Context) {
@@ -189,6 +194,8 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 				a.reviewWorkbench(c)
 			case "tasks", "plan":
 				a.tasksWorkbench(c)
+			case "background":
+				a.backgroundWorkbench(c)
 			case "context":
 				a.contextWorkbench(c)
 			case "tools":
@@ -201,7 +208,7 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Width(44).Padding(6, 4).Gap(2).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
-			for _, tab := range workbenchTabs[:6] {
+			for _, tab := range workbenchTabs[:7] {
 				button := iconButton(c.Key(tab.id), tab.icon, tab.label).Size(36, 34).OnClick(func() { a.openResource(tab.id) })
 				if w.Tab == tab.id {
 					button.TextColor(c.Theme().Accent).Background(c.Theme().SurfaceHover)
