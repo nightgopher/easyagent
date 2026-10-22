@@ -108,20 +108,23 @@ func (a *preview) liveChrome(c *ui.Context) {
 		}
 	})
 }
+// sidebarBucketThreshold is the number of unpinned sessions in a project from
+// which they are grouped under date headings.
+const sidebarBucketThreshold = 8
+
 func (a *preview) liveSidebar(c *ui.Context) {
 	l := a.Live
 	ui.Column(c).Width(260).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Padding(14).Gap(12).Children(func() {
 			ui.Row(c).Gap(8).Children(func() {
 				a.text(c, "对话").Bold()
-				a.note(c, fmt.Sprint(len(a.Sessions)))
 				ui.Spacer(c)
 				iconButton(c, "refresh", "刷新会话").OnClick(func() { a.refreshLiveSessions("") })
 			})
 			ui.Row(c).Gap(6).Children(func() {
 				group := ui.Row(c).Grow(1).Gap(0).AlignItems(ui.Stretch)
 				group.Children(func() {
-					flatButton(c, "plus", "新建会话").Grow(1).Height(36).Radius(6, 0, 0, 6).Padding(8, 10).TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.07)).Border(1, c.Theme().Accent.Alpha(.28)).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(a.newSession)
+					flatButton(c, "plus", "新建会话").Tooltip("在当前会话所在的项目里新建").Grow(1).Height(36).Radius(6, 0, 0, 6).Padding(8, 10).TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.07)).Border(1, c.Theme().Accent.Alpha(.28)).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(a.newSession)
 					flatButton(c, "chevron-down", "").Label("选择模式").Tooltip("选择模式").Width(26).Height(36).Padding(8, 6).Radius(0, 6, 6, 0).BorderWidth(1, 1, 1, 0).BorderColor(c.Theme().Border).Background(c.Theme().Surface).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(func() { a.toggleMenu(&a.NewMenu) })
 				})
 				popup := a.menuPanel(c, group, &a.NewMenu, func() {
@@ -189,10 +192,13 @@ func (a *preview) liveSidebar(c *ui.Context) {
 						icon(c, "folder")
 						title := filepath.Base(group)
 						ui.Text(c, title).FontSize(12).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).MaxLines(1)
-						ui.Text(c, fmt.Sprint(len(byGroup[group]))).FontSize(11).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+						// A count of one says nothing; keep it when collapsed or useful.
+						if n := len(byGroup[group]); n > 1 || collapsed {
+							ui.Text(c, fmt.Sprint(n)).FontSize(11).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+						}
 					})
 					if group != localHostName() {
-						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
+						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Tooltip("在 "+filepath.Base(group)+" 中新建会话").Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
 					}
 				})
 				if collapsed {
@@ -209,6 +215,16 @@ func (a *preview) liveSidebar(c *ui.Context) {
 				}
 				for _, s := range pinned {
 					a.sessionRow(c, s)
+				}
+				// Date headings only help once a project has many sessions; below
+				// that they add a level and a count above every row.
+				if unpinned := len(byGroup[group]) - len(pinned); unpinned < sidebarBucketThreshold {
+					for _, list := range buckets {
+						for _, s := range list {
+							a.sessionRow(c, s)
+						}
+					}
+					continue
 				}
 				first := -1
 				for i, list := range buckets {
