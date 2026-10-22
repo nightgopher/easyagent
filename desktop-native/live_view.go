@@ -269,8 +269,13 @@ func (a *preview) liveToolbar(c *ui.Context) {
 			})
 		})
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "●").FontSize(9).TextColor(c.Theme().Accent)
-			ui.Text(c, s.statusText()).FontSize(11).TextColor(c.Theme().TextMuted)
+			// Without a host the run state is unknown; say so instead of 「就绪」.
+			status, dot := s.statusText(), c.Theme().Accent
+			if !l.Connected {
+				status, dot = a.connectionLabel(), c.Theme().TextMuted
+			}
+			ui.Text(c, "●").FontSize(9).TextColor(dot)
+			ui.Text(c, status).FontSize(11).TextColor(c.Theme().TextMuted)
 		})
 		more := iconButton(c, "menu", "会话操作").OnClick(func() { a.toggleMenu(&a.MoreMenu) })
 		a.menuPanel(c, more, &a.MoreMenu, func() {
@@ -435,7 +440,8 @@ func (a *preview) liveComposer(c *ui.Context) {
 					iconButton(c, "plus", "添加附件").Disabled(!l.Connected || s.Archived || s.Sending || l.Loading["create-session"] || l.Loading["attachments/"+s.RemoteID]).OnClick(a.pickAttachments)
 					permission := flatButton(c, "shield", a.livePermission()).Disabled(s.Running || s.Pending || s.Sending || l.configBusy()).OnClick(func() { a.toggleMenu(&a.PermissionMenu) })
 					if a.livePermission() == "完全权限" {
-						permission.TextColor(c.Theme().Warning)
+						// Auto-approval must stand out from the neutral default.
+						permission.TextColor(c.Theme().Warning).Background(c.Theme().Warning.Alpha(.12)).Tooltip("完全权限：普通工具的修改与命令会自动批准")
 					}
 					a.menuPanel(c, permission, &a.PermissionMenu, func() {
 						menuCaption(c, "工具权限")
@@ -456,14 +462,27 @@ func (a *preview) liveComposer(c *ui.Context) {
 							a.note(c, "只影响当前会话。MCP 独立批准规则及工作区访问限制仍然生效；服务重启后恢复启动配置。")
 						})
 					})
-					usage := "上下文"
-					if window := number(s.Usage["context_window"]); window > 0 {
-						usage = fmt.Sprintf("约 %.1f%%", 100*number(s.Usage["estimated_tokens"])/window)
-					}
-					usageButton := flatButton(c, "activity", usage).Disabled(len(s.Usage) == 0).OnClick(func() { a.toggleMenu(&a.ContextMenu) })
-					usagePopup := a.menuPanel(c, usageButton, &a.ContextMenu, func() { a.contextUsagePanel(c, s) })
-					if usagePopup.Valid() {
-						usagePopup.Width(332).Padding(16)
+					// Context usage appears once the host reports it; an empty grey
+					// 「上下文」 read as a disabled control.
+					if len(s.Usage) > 0 {
+						usage, tip, share := "上下文", "查看上下文占用", 0.0
+						if window := number(s.Usage["context_window"]); window > 0 {
+							used := number(s.Usage["estimated_tokens"])
+							share = 100 * used / window
+							usage = fmt.Sprintf("%.0f%%", share)
+							tip = fmt.Sprintf("上下文已用约 %.0f / %.0f tokens（%.1f%%）", used, window, share)
+							if share >= 80 {
+								tip += "；接近上限，可以用 /compact 压缩"
+							}
+						}
+						usageButton := flatButton(c, "activity", usage).Label("上下文占用").Tooltip(tip).OnClick(func() { a.toggleMenu(&a.ContextMenu) })
+						if share >= 80 {
+							usageButton.TextColor(c.Theme().Warning)
+						}
+						usagePopup := a.menuPanel(c, usageButton, &a.ContextMenu, func() { a.contextUsagePanel(c, s) })
+						if usagePopup.Valid() {
+							usagePopup.Width(332).Padding(16)
+						}
 					}
 					name := s.Model
 					if name == "" {
@@ -477,7 +496,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 						a.refreshModels()
 					})
 					a.liveModelPicker(c, model)
-					flatButton(c, "", "/").Label("斜杠命令").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
+					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
 					ui.Spacer(c)
 					if l.Voice != nil {
 						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {

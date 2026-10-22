@@ -291,6 +291,25 @@ func (a *preview) toolbar(c *ui.Context) {
 		})
 	})
 }
+
+// disconnectedHint explains why new sessions and sending are unavailable and
+// offers the ways out, instead of only dimming the buttons.
+func (a *preview) disconnectedHint(c *ui.Context) {
+	l := a.Live
+	ui.Column(c).Label("未连接提示").Gap(10).Margin(18, 0, 0, 0).Padding(14, 16).Radius(8).Border(1, c.Theme().Border).Background(c.Theme().Surface).Children(func() {
+		title := "尚未连接运行主机"
+		if l.Connecting {
+			title = "正在连接运行主机…"
+		}
+		a.text(c, title).FontWeight(500)
+		a.text(c, "连接后才能新建会话和发送消息；已输入的草稿会保留。").FontSize(13).TextColor(c.Theme().TextMuted)
+		ui.Row(c).Gap(8).Children(func() {
+			a.action(c, "重新连接").Disabled(l.Connecting).OnClick(a.connectLive)
+			a.action(c, "管理运行主机").OnClick(func() { a.openSettings("connections") })
+		})
+	})
+}
+
 func (a *preview) transcript(c *ui.Context) {
 	s := a.current()
 	if a.Live != nil {
@@ -316,6 +335,8 @@ func (a *preview) transcript(c *ui.Context) {
 					}
 					if a.Live == nil {
 						a.text(c, "此预览只使用演示数据。").FontSize(12).TextColor(c.Theme().TextMuted)
+					} else if !a.Live.Connected {
+						a.disconnectedHint(c)
 					} else {
 						ui.Row(c).Wrap().Gap(12).Margin(18, 0, 0, 0).Children(func() {
 							for _, suggestion := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
@@ -462,7 +483,7 @@ func (a *preview) composer(c *ui.Context) {
 							}
 						})
 					})
-					flatButton(c, "", "/").Label("斜杠命令").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
+					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
 					ui.Spacer(c)
 					iconButton(c, "mic", a.tr("语音输入尚未接入此预览")).Disabled(true)
 					if s.Running {
