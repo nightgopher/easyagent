@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/egoist/mygo/ui"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -231,11 +232,24 @@ func (a *preview) sidebar(c *ui.Context) {
 		})
 		ui.Column(c).Padding(12).Gap(6).BorderWidth(1, 0, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 			flatButton(c, "settings", a.tr("设置")).Justify(ui.Start).OnClick(func() { a.openSettings("general") })
-			a.text(c, "MyGo 0.5.5 · Go 原生").FontSize(11).TextColor(c.Theme().TextMuted).Padding(4, 7)
+			a.text(c, mygoLabel()+" · Go 原生").FontSize(11).TextColor(c.Theme().TextMuted).Padding(4, 7)
 		})
 	})
 
 }
+
+// mygoLabel reports the linked MyGo module version, so the label follows go.mod.
+func mygoLabel() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range info.Deps {
+			if dep.Path == "github.com/egoist/mygo" {
+				return "MyGo " + strings.TrimPrefix(dep.Version, "v")
+			}
+		}
+	}
+	return "MyGo"
+}
+
 func (a *preview) toolbar(c *ui.Context) {
 	if a.Live != nil {
 		a.liveToolbar(c)
