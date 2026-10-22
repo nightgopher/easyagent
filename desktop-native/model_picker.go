@@ -1,12 +1,54 @@
 package main
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
 )
 
-type nativeModelChoice struct{ ID, Name, Provider string }
+type nativeModelChoice struct {
+	ID, Name, Provider string
+	Window             int // known context window in tokens, 0 if unknown
+}
+
+// recentModelLimit is how many recently chosen models are listed first.
+const recentModelLimit = 3
+
+// detail is the second line of a choice: provider, ID when it differs from the
+// name, and the context window when the host knows it.
+func (m nativeModelChoice) detail() string {
+	var parts []string
+	if m.Provider != "" {
+		parts = append(parts, m.Provider)
+	}
+	if m.ID != m.Name {
+		parts = append(parts, m.ID)
+	}
+	if m.Window > 0 {
+		parts = append(parts, formatWindow(m.Window)+" 上下文")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func formatWindow(tokens int) string {
+	if tokens >= 1000000 && tokens%1000000 == 0 {
+		return fmt.Sprintf("%dM", tokens/1000000)
+	}
+	return fmt.Sprintf("%dK", (tokens+500)/1000)
+}
+
+// rememberModel moves a chosen model to the front of the recent list.
+func (l *liveState) rememberModel(id string) {
+	recent := []string{id}
+	for _, m := range l.RecentModels {
+		if m != id && len(recent) < recentModelLimit {
+			recent = append(recent, m)
+		}
+	}
+	l.RecentModels = recent
+}
 
 func (a *preview) modelChoices(query string) []nativeModelChoice {
 	all := map[string]nativeModelChoice{}
@@ -23,11 +65,21 @@ func (a *preview) modelChoices(query string) []nativeModelChoice {
 		if name == "" {
 			name = id
 		}
-		all[id] = nativeModelChoice{id, name, str(item["provider"])}
+		all[id] = nativeModelChoice{id, name, str(item["provider"]), int(number(item["context_window"]))}
 	}
 	var out []nativeModelChoice
 	query = strings.ToLower(query)
-	for _, id := range a.Live.Models {
+	// Recently chosen models come first, then the host's order.
+	order := []string{}
+	seen := map[string]bool{}
+	for _, id := range append(append([]string(nil), a.Live.RecentModels...), a.Live.Models...) {
+		// A recent model the host no longer offers is skipped.
+		if !seen[id] && slices.Contains(a.Live.Models, id) {
+			seen[id] = true
+			order = append(order, id)
+		}
+	}
+	for _, id := range order {
 		choice := all[id]
 		if choice.ID == "" {
 			choice = nativeModelChoice{ID: id, Name: id}
@@ -41,7 +93,14 @@ func (a *preview) modelChoices(query string) []nativeModelChoice {
 func (a *preview) liveModelPicker(c *ui.Context, anchor ui.Element) {
 	l, s := a.Live, a.current()
 	popup := a.menuPanel(c, anchor, &a.ModelMenu, func() {
-		menuCaption(c, "选择模型 · ↑↓ 切换 · Enter 确认")
+		ui.Row(c).AlignItems(ui.Center).Children(func() {
+			menuCaption(c, "选择模型 · ↑↓ 切换 · Enter 确认")
+			ui.Spacer(c)
+			// Refreshing is a small hint beside the caption, not a list row.
+			if l.Loading["model-list"] {
+				ui.Text(c, "刷新中…").Label("正在刷新模型目录").FontSize(10).TextColor(c.Theme().TextMuted).Padding(0, 8)
+			}
+		})
 		input := ui.TextInput(c, &a.ModelSearch).Label("搜索模型").Placeholder("搜索模型…").AutoFocus().Padding(7).Background(c.Theme().Surface).Border(1, c.Theme().Border)
 		if input.Changed() {
 			l.ModelIndex = 0
@@ -71,9 +130,6 @@ func (a *preview) liveModelPicker(c *ui.Context, anchor ui.Element) {
 			}
 			return false
 		})
-		if l.Loading["model-list"] {
-			a.note(c, "正在刷新模型目录…")
-		}
 		if err := l.ResourceErrors["model-list"]; err != "" {
 			a.note(c, err)
 			a.action(c, "重试模型目录").OnClick(a.refreshModels)
@@ -100,12 +156,8 @@ func (a *preview) liveModelPicker(c *ui.Context, anchor ui.Element) {
 			button.Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 					ui.Text(c, choice.Name).FontSize(12).SingleLine().MinWidth(0)
-					if choice.Name != choice.ID || choice.Provider != "" {
-						label := choice.ID
-						if choice.Provider != "" {
-							label = choice.Provider + " · " + label
-						}
-						ui.Text(c, label).FontSize(10).TextColor(c.Theme().TextMuted).SingleLine().MinWidth(0)
+					if detail := choice.detail(); detail != "" {
+						ui.Text(c, detail).FontSize(10).TextColor(c.Theme().TextMuted).SingleLine().MinWidth(0)
 					}
 				})
 				if s.Model == choice.ID {
