@@ -3,6 +3,7 @@ package main
 import (
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -33,13 +34,15 @@ func (d *markdownDocument) render(c *ui.Context, reply string, streaming ...bool
 		d.options.Code = map[string]func(*ui.Context, *markdown.CodeBlockView){"mermaid": nativeDiagram}
 		d.options.Reveal = &markdown.Reveal{Unit: markdown.AtOnce, Fade: -1}
 		d.options.CodeBlock = func(c *ui.Context, b *markdown.CodeBlockView) {
-			ui.Column(c).Gap(8).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(6).MinWidth(0).Children(func() {
-				ui.Row(c).Padding(8, 12, 0, 12).Children(func() {
-					ui.Text(c, b.Language).FontSize(12).TextColor(c.Theme().TextMuted)
+			// Stretch to the text column and clip: long lines scroll inside the
+			// block instead of widening it past the reply.
+			ui.Column(c).Gap(4).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(6).AlignSelf(ui.Stretch).MinWidth(0).Clip().Children(func() {
+				ui.Row(c).AlignItems(ui.Center).Padding(4, 6, 0, 12).Children(func() {
+					ui.Text(c, b.Language).FontSize(12).TextColor(c.Theme().TextMuted).Unselectable()
 					ui.Spacer(c)
-					ui.Button(c, "复制代码").OnClick(func() { c.WriteClipboard(strings.TrimSuffix(b.Code(), "\n")) })
+					copyCodeButton(c, strings.TrimSuffix(b.Code(), "\n"), b.Open)
 				})
-				b.Body(c)
+				b.Body(c).MinWidth(0)
 			})
 		}
 	}
@@ -49,6 +52,29 @@ func (d *markdownDocument) render(c *ui.Context, reply string, streaming ...bool
 	} else {
 		markdown.View(c, reply, &d.options).MinWidth(0)
 	}
+}
+
+// copyCodeButton is a small icon button that shows a check for two seconds
+// after copying, so repeated clicks are not needed to confirm it worked.
+func copyCodeButton(c *ui.Context, code string, open bool) ui.Element {
+	btn := ui.ButtonBase(c).Label("复制代码").Size(26, 26).Center().Radius(5).TextColor(c.Theme().TextMuted).Disabled(open)
+	copiedAt := ui.Local(btn, "copied", func() time.Time { return time.Time{} })
+	copied := !copiedAt.IsZero() && c.Now().Sub(*copiedAt) < 2*time.Second
+	if btn.Hovered() && !open {
+		btn.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
+	}
+	glyph, tip := "copy", "复制代码"
+	if copied {
+		glyph, tip = "check", "已复制"
+		btn.TextColor(c.Theme().Accent)
+	}
+	btn.Label(tip).Children(func() { icon(c, glyph) }).Tooltip(tip)
+	if btn.Clicked() {
+		c.WriteClipboard(code)
+		*copiedAt = c.Now()
+		c.After(2 * time.Second)
+	}
+	return btn
 }
 
 func safeMarkdownLink(raw string) bool {
