@@ -175,6 +175,8 @@ POST /sessions/{id}/model
 | `GET` | `/sessions/{id}/background-tasks` | 列出会话的后台 bash 任务（ID、命令、状态、是否运行、开始/结束时间） |
 | `GET` | `/sessions/{id}/background-tasks/{task}` | 查看任务最近的输出（`?tail=` 字节数，最多 64KB）；不影响模型 `bash_output` 的读取位置 |
 | `POST` | `/sessions/{id}/background-tasks/{task}/stop` | 停止任务及其进程组 |
+| `GET` | `/sessions/{id}/loop` | 查看会话的 `/loop` 循环任务（内容、间隔秒数、开始/到期/上次执行时间），没有时为 `null` |
+| `DELETE` | `/sessions/{id}/loop` | 停止会话的循环任务；与 `/loop clear` 不同，运行中也可以停止 |
 | `GET` | `/tools` | 列出已注册工具 |
 | `POST` | `/tools/register` | 注册外部工具 |
 | `GET` | `/applications` | 列出可用应用 |

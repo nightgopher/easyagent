@@ -215,6 +215,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /sessions/{id}/compact", s.compactSession)
 	restMux.HandleFunc("GET /sessions/{id}/context", s.getContextSnapshot)
 	restMux.HandleFunc("POST /sessions/{id}/command", s.executeCommand)
+	restMux.HandleFunc("GET /sessions/{id}/loop", s.getSessionLoop)
+	restMux.HandleFunc("DELETE /sessions/{id}/loop", s.deleteSessionLoop)
 	restMux.HandleFunc("POST /tools/register", s.registerTool)
 	restMux.HandleFunc("GET /sessions/{id}/diff", s.getSessionDiff)
 	restMux.HandleFunc("GET /sessions/{id}/runs/{run}/files", s.getRunFiles)
