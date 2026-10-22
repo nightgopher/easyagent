@@ -1,7 +1,7 @@
 {
   "name": "EasyAgent",
   "identifier": "com.hwj.easyagent",
-  "version": "0.21.1",
+  "version": "0.22.0",
   "out": "build.noindex",
   "macos": {
     "signingIdentity": "44FA716814B17ADACC6F187C9DB635090A793AF8",
