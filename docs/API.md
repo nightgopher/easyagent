@@ -172,6 +172,9 @@ POST /sessions/{id}/model
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/models` | 列出可用模型 |
+| `GET` | `/sessions/{id}/background-tasks` | 列出会话的后台 bash 任务（ID、命令、状态、是否运行、开始/结束时间） |
+| `GET` | `/sessions/{id}/background-tasks/{task}` | 查看任务最近的输出（`?tail=` 字节数，最多 64KB）；不影响模型 `bash_output` 的读取位置 |
+| `POST` | `/sessions/{id}/background-tasks/{task}/stop` | 停止任务及其进程组 |
 | `GET` | `/tools` | 列出已注册工具 |
 | `POST` | `/tools/register` | 注册外部工具 |
 | `GET` | `/applications` | 列出可用应用 |

@@ -321,6 +321,13 @@ func (s *AgentSession) Agent() *agent.Agent {
 }
 
 // Config returns the current config.
+// Ext returns the application's per-session state (nil if the application has none).
+func (s *AgentSession) Ext() SessionExt {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.ext
+}
+
 func (s *AgentSession) Config() config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
