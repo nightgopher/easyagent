@@ -8,6 +8,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
@@ -39,7 +40,7 @@ class AgentClient(val config: HostConfig) {
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
     private var backoffMs = 1_000L
-    private var closed = false
+    @Volatile private var closed = false
 
     val activeChat: ChatSession? get() = activeId.value?.let { chats[it] }
 
@@ -67,7 +68,7 @@ class AgentClient(val config: HostConfig) {
         }
     }
 
-    fun shutdown() {
+    @Synchronized fun shutdown() {
         closed = true
         reconnectJob?.cancel()
         socket?.cancel()
@@ -76,6 +77,9 @@ class AgentClient(val config: HostConfig) {
         api.close()
         link.value = LinkStatus.DISCONNECTED
     }
+
+    /** Tests and other lifecycle owners can await cancelled in-flight requests. */
+    internal suspend fun awaitShutdown() { scope.coroutineContext.job.join() }
 
     fun touch() {
         revision.value++
@@ -123,7 +127,8 @@ class AgentClient(val config: HostConfig) {
         }
     }
 
-    private fun post(block: () -> Unit) {
+    @Synchronized private fun post(block: () -> Unit) {
+        if (closed) return
         scope.launch { block() }
     }
 

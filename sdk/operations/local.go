@@ -1,6 +1,7 @@
 package operations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -28,8 +29,12 @@ func (LocalBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 	if req.WorkDir != "" {
 		cmd.Dir = req.WorkDir
 	}
+	if len(req.Env) > 0 {
+		cmd.Env = append(os.Environ(), req.Env...)
+	}
+	cmd.ExtraFiles = req.ExtraFiles
 
-	out, err := combinedOutput(cmd, req.Output)
+	out, err := combinedOutput(cmd, req.Output, req.OnStart)
 	result := RunResult{
 		Output:   out,
 		ExitCode: 0,
@@ -53,13 +58,29 @@ func (LocalBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 }
 
 // combinedOutput 收集合并输出；指定 w 时直接流式写入 w，不在内存里另存一份。
-func combinedOutput(cmd *exec.Cmd, w io.Writer) ([]byte, error) {
-	if w == nil {
+// 指定 onStart 时改走 Start/Wait，在启动成功后回调进程 PID（后台任务用它记录进程组）。
+func combinedOutput(cmd *exec.Cmd, w io.Writer, onStart func(int)) ([]byte, error) {
+	if w == nil && onStart == nil {
 		return cmd.CombinedOutput()
+	}
+	var buf *bytes.Buffer
+	if w == nil {
+		buf = &bytes.Buffer{}
+		w = buf
 	}
 	cmd.Stdout = w
 	cmd.Stderr = w
-	return nil, cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	if onStart != nil {
+		onStart(cmd.Process.Pid)
+	}
+	err := cmd.Wait()
+	if buf != nil {
+		return buf.Bytes(), err
+	}
+	return nil, err
 }
 
 // LocalFileOperations performs file operations on the local filesystem.

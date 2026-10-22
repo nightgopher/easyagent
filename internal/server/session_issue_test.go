@@ -106,6 +106,9 @@ func TestForkIncludesCompleteToolResultsAndPartialAnswer(t *testing.T) {
 }
 
 func TestContinueRunUsesSavedToolResultWithoutDuplicatePrompt(t *testing.T) {
+	// 本测试关注「失败后的恢复」，要求 5xx 一次即失败；
+	// 瞬态失败重试（issue #251）由 providers 层的 mock 网关测试覆盖。
+	t.Setenv("EA_MODEL_MAX_RETRIES", "0")
 	s, _, gateway := newFileRunTestServer(t, "result.txt")
 	gateway.failAfterTool.Store(true)
 	run, _, err := s.startRun("", "write once", "continue-source")

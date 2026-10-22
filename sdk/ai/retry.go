@@ -1,122 +1,73 @@
 package ai
 
 import (
-	"context"
 	"fmt"
-	"math"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
-// RetryConfig 控制 LLM 请求的重试行为。
-type RetryConfig struct {
-	// 最大重试次数（不包括首次请求）
-	MaxRetries int
-	// 初始退避时间
-	InitialBackoff time.Duration
-	// 最大退避时间
-	MaxBackoff time.Duration
-	// 退避倍数
-	BackoffMultiplier float64
+// HTTPStatusError 表示模型 API 返回的非 200 状态码。
+// 上游响应正文不整体进入错误消息（会被 ErrorMsg 带进界面与会话记录），
+// 只保留截断成单行的简短摘录；provider 的调试日志同样限制正文长度。
+type HTTPStatusError struct {
+	StatusCode int
+	// RetryAfter 来自 Retry-After 的秒数或 HTTP-date，0 表示未提供或已过期。
+	RetryAfter time.Duration
+	// Detail 是单行截断的正文摘录，仅作简短原因展示。
+	Detail string
 }
 
-func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
-		MaxRetries:        3,
-		InitialBackoff:    1 * time.Second,
-		MaxBackoff:        30 * time.Second,
-		BackoffMultiplier: 2.0,
+func (e *HTTPStatusError) Error() string {
+	if e.Detail == "" {
+		return fmt.Sprintf("API error %d", e.StatusCode)
+	}
+	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Detail)
+}
+
+// Retryable 报告该状态码是否属于瞬态故障（429 与 5xx），值得重试。
+func (e *HTTPStatusError) Retryable() bool {
+	return e.StatusCode == http.StatusTooManyRequests || (e.StatusCode >= 500 && e.StatusCode <= 599)
+}
+
+// NewHTTPStatusError 从 HTTP 响应构造结构化状态码错误。
+// retryAfter 是原始 Retry-After 头（秒数或 HTTP-date）。
+func NewHTTPStatusError(statusCode int, retryAfter, body string) *HTTPStatusError {
+	return &HTTPStatusError{
+		StatusCode: statusCode,
+		RetryAfter: parseRetryAfter(retryAfter),
+		Detail:     truncateDetail(body),
 	}
 }
 
-// IsRetryableError 判断错误是否可以重试。
-// 可重试的错误包括：
-//   - 5xx 服务器错误
-//   - 429 速率限制
-//   - 网络超时
-//   - 连接重置
-func IsRetryableError(err error) bool {
-	if err == nil {
-		return false
+func parseRetryAfter(v string) time.Duration {
+	v = strings.TrimSpace(v)
+	if seconds, err := strconv.ParseInt(v, 10, 64); err == nil && seconds >= 0 {
+		if seconds > int64((1<<63-1)/time.Second) {
+			return time.Duration(1<<63 - 1)
+		}
+		return time.Duration(seconds) * time.Second
 	}
-	msg := err.Error()
-
-	// 5xx 错误
-	if containsAny(msg, "500", "502", "503", "504") {
-		return true
+	if date, err := http.ParseTime(v); err == nil {
+		if wait := time.Until(date); wait > 0 {
+			return wait
+		}
 	}
-
-	// 速率限制
-	if containsAny(msg, "429", "rate limit", "rate_limit", "too many requests") {
-		return true
-	}
-
-	// 网络错误
-	if containsAny(msg, "timeout", "connection reset", "EOF", "temporary") {
-		return true
-	}
-
-	// 上下文取消/超时不重试
-	if containsAny(msg, "context canceled", "context deadline exceeded") {
-		return false
-	}
-
-	return false
+	return 0
 }
 
-// RetryableStreamFunc 是可以重试的流式请求函数。
-type RetryableStreamFunc func(ctx context.Context) (*EventStream, error)
-
-// StreamWithRetry 执行带重试的流式请求。
-// 消费者从返回的 EventStream 读取事件。
-// 如果所有重试都失败，返回最后一个错误。
-func StreamWithRetry(ctx context.Context, config RetryConfig, fn RetryableStreamFunc) (*EventStream, error) {
-	var lastErr error
-
-	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
-		if attempt > 0 {
-			backoff := calculateBackoff(config, attempt)
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff):
-			}
-		}
-
-		stream, err := fn(ctx)
-		if err == nil {
-			return stream, nil
-		}
-
-		lastErr = err
-
-		// 检查是否可以重试
-		if !IsRetryableError(err) {
-			return nil, err
-		}
-
-		// 检查上下文是否已取消
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
+func truncateDetail(body string) string {
+	body = strings.TrimSpace(body)
+	if i := strings.IndexAny(body, "\r\n"); i >= 0 {
+		body = body[:i]
+	}
+	if len(body) > 200 {
+		body = body[:200]
+		for !utf8.ValidString(body) {
+			body = body[:len(body)-1]
 		}
 	}
-
-	return nil, fmt.Errorf("all %d retries exhausted: %w", config.MaxRetries, lastErr)
-}
-
-func calculateBackoff(config RetryConfig, attempt int) time.Duration {
-	backoff := time.Duration(float64(config.InitialBackoff) * math.Pow(config.BackoffMultiplier, float64(attempt-1)))
-	if backoff > config.MaxBackoff {
-		backoff = config.MaxBackoff
-	}
-	return backoff
-}
-
-func containsAny(s string, substrs ...string) bool {
-	for _, sub := range substrs {
-		if strings.Contains(s, sub) {
-			return true
-		}
-	}
-	return false
+	return body
 }

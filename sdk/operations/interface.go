@@ -28,6 +28,14 @@ type RunRequest struct {
 	// Output, when set, receives combined stdout+stderr as it is produced and
 	// RunResult.Output stays empty. Used by background tasks to read output while running.
 	Output io.Writer
+	// OnStart, when set, is called with the command's OS process ID right
+	// after a successful start. Only meaningful for local execution; remote
+	// backends may ignore it.
+	OnStart func(pid int)
+	// Env adds environment entries to local commands. Remote backends may ignore it.
+	Env []string
+	// ExtraFiles are inherited by local commands as descriptors 3 and above.
+	ExtraFiles []*os.File
 }
 
 // RunResult is the output of BashOperations.Run.

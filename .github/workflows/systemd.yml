@@ -1,0 +1,31 @@
+name: Linux systemd
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - 'deploy/systemd/**'
+      - 'scripts/build-server-deb.sh'
+      - 'scripts/check_systemd.py'
+      - '.github/workflows/systemd.yml'
+permissions:
+  contents: read
+jobs:
+  systemd:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build the deb with the real core and bridge
+        run: |
+          mkdir -p /tmp/easyagent-qa
+          CGO_ENABLED=0 go build -o /tmp/easyagent-qa/core ./cmd/easyagent
+          CGO_ENABLED=0 go build -o /tmp/easyagent-qa/bridge ./cmd/easyagent-bridge
+          CORE_BIN=/tmp/easyagent-qa/core BRIDGE_BIN=/tmp/easyagent-qa/bridge bash scripts/build-server-deb.sh 0.0.0+qa amd64 /tmp/easyagent-qa
+      - name: Exercise the installed hardened services
+        run: sudo python3 scripts/check_systemd.py --deb /tmp/easyagent-qa/easyagent-server_0.0.0+qa-1_amd64.deb

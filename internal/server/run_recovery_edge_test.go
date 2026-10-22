@@ -17,6 +17,9 @@ import (
 )
 
 func TestRestartCanResumeDurableToolTail(t *testing.T) {
+	// 本测试关注「失败后的恢复」，要求 5xx 一次即失败；
+	// 瞬态失败重试（issue #251）由 providers 层的 mock 网关测试覆盖。
+	t.Setenv("EA_MODEL_MAX_RETRIES", "0")
 	for _, snapshotFirst := range []bool{false, true} {
 		t.Run(fmt.Sprintf("snapshot_first=%t", snapshotFirst), func(t *testing.T) {
 			first, _, gateway := newFileRunTestServer(t, "effect.txt")
