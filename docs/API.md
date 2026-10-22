@@ -171,7 +171,7 @@ POST /sessions/{id}/model
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/models` | 列出可用模型 |
+| `GET` | `/models` | 列出可用模型；已知上下文窗口的模型带 `context_window`（token），未知模型不带该字段 |
 | `GET` | `/tools` | 列出已注册工具 |
 | `POST` | `/tools/register` | 注册外部工具 |
 | `GET` | `/applications` | 列出可用应用 |

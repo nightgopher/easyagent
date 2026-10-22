@@ -129,3 +129,24 @@ func TestModelDiscoveryDoesNotForwardCredentialsThroughRedirect(t *testing.T) {
 	assert.Nil(t, models)
 	assert.Equal(t, 0, redirected)
 }
+
+// Only known context windows are reported; unknown models get none rather
+// than the runtime's 128K fallback.
+func TestModelCatalogReportsKnownContextWindows(t *testing.T) {
+	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"glm-5.3-flash"},{"id":"house-model"}]}`))
+	}))
+	defer gateway.Close()
+	application := modelTestApp(t, func(cfg *config.Config) {
+		cfg.OpenAIBaseURL = gateway.URL
+		cfg.OpenAIModel = "glm-5.3-flash"
+	})
+	w := httptest.NewRecorder()
+	New(application, nil).Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
+	var catalog ModelsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
+	require.Len(t, catalog.Models, 2)
+	assert.Equal(t, 128000, catalog.Models[0].ContextWindow)
+	assert.Zero(t, catalog.Models[1].ContextWindow)
+	assert.Equal(t, 128000, catalog.Current.ContextWindow)
+}

@@ -26,6 +26,7 @@ type liveState struct {
 	SavedModelForm                                                         modelForm
 	SavedMCPForm                                                           mcpForm
 	ModelIndex                                                             int
+	RecentModels                                                           []string
 	ModelJump                                                              bool
 	ModelList                                                              ui.ListState
 	CommandIndex                                                           int
@@ -785,12 +786,14 @@ func (a *preview) switchLiveModel(name string) {
 		s.ModelChosen = true
 		s.Model = name
 		a.ModelMenu = false
+		a.Live.rememberModel(name)
 		return
 	}
 	s.InfoVersion++
 	a.operation("model/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/model", map[string]any{"model": name}, func(v any) {
 		s.InfoVersion++
 		s.Model = str(object(v)["model"])
+		a.Live.rememberModel(s.Model)
 		a.ModelMenu = false
 		if a.current() == s {
 			a.ReturnToComposer = true
