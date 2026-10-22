@@ -96,6 +96,24 @@ data class StoredMessage(
     @SerialName("tool_calls") val toolCalls: List<ToolCall> = emptyList(),
     val compaction: JsonObject? = null,
     @SerialName("tool_details") val details: JsonObject? = null,
+    val images: List<HistoryImage> = emptyList(),
+)
+
+/** An image in a user message: an attachment to fetch, or inline data. */
+@Serializable
+data class HistoryImage(
+    @SerialName("attachmentId") val attachmentId: String = "",
+    @SerialName("sessionId") val sessionId: String = "",
+    @SerialName("data_url") val dataUrl: String = "",
+)
+
+/** An attachment uploaded for the next prompt (server inputAttachment). */
+@Serializable
+data class UploadedAttachment(
+    val id: String = "",
+    val name: String = "",
+    @SerialName("mime_type") val mimeType: String = "",
+    val size: Long = 0,
 )
 
 @Serializable

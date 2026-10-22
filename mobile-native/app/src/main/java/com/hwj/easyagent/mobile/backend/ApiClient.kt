@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -17,6 +18,18 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 class ApiException(message: String, val status: Int = 0) : Exception(message)
+
+/** Reads up to [limit] bytes (InputStream.readNBytes needs API 33). */
+private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(16 shl 10)
+    while (out.size() < limit) {
+        val n = read(buffer, 0, minOf(buffer.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buffer, 0, n)
+    }
+    return out.toByteArray()
+}
 
 /** 对应 desktop-native/backend.go 的 backendClient：Bearer 鉴权的 REST 调用与 /ws 升级。 */
 class ApiClient(val baseUrl: String, private val token: String) {
@@ -41,6 +54,46 @@ class ApiClient(val baseUrl: String, private val token: String) {
     suspend fun patch(path: String, body: JsonElement): JsonElement = request("PATCH", path, body)
 
     suspend fun delete(path: String): JsonElement = request("DELETE", path, null)
+
+    /** Downloads raw bytes, e.g. an attachment image, refusing bodies over [maxBytes]. */
+    suspend fun download(path: String, maxBytes: Int = 8 shl 20): ByteArray = withContext(Dispatchers.IO) {
+        val builder = Request.Builder().url(baseUrl + path).get()
+        if (token.isNotEmpty()) builder.header("Authorization", "Bearer $token")
+        try {
+            http.newCall(builder.build()).execute().use { response ->
+                if (!response.isSuccessful) throw ApiException(errorMessage(response.code, response.body?.string().orEmpty()), response.code)
+                val body = response.body ?: throw ApiException("服务响应为空")
+                if (body.contentLength() > maxBytes) throw ApiException("文件过大，无法预览")
+                val bytes = body.byteStream().readNBytesCompat(maxBytes + 1)
+                if (bytes.size > maxBytes) throw ApiException("文件过大，无法预览")
+                bytes
+            }
+        } catch (e: SocketTimeoutException) {
+            throw ApiException("下载超时")
+        } catch (e: IOException) {
+            throw ApiException("无法连接服务，请检查主机地址和网络")
+        }
+    }
+
+    /** Posts one file as multipart/form-data, as /asr/transcribe expects. */
+    suspend fun postFile(path: String, field: String, filename: String, mime: String, bytes: ByteArray): JsonElement = withContext(Dispatchers.IO) {
+        val form = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart(field, filename, bytes.toRequestBody(mime.toMediaType()))
+            .build()
+        val builder = Request.Builder().url(baseUrl + path).post(form)
+        if (token.isNotEmpty()) builder.header("Authorization", "Bearer $token")
+        try {
+            http.newCall(builder.build()).execute().use { response ->
+                val data = response.body?.string().orEmpty()
+                if (!response.isSuccessful) throw ApiException(errorMessage(response.code, data), response.code)
+                runCatching { wireJson.parseToJsonElement(data) }.getOrElse { throw ApiException("服务响应格式无效") }
+            }
+        } catch (e: SocketTimeoutException) {
+            throw ApiException("服务处理超时")
+        } catch (e: IOException) {
+            throw ApiException("无法连接服务，请检查主机地址和网络")
+        }
+    }
 
     private suspend fun request(method: String, path: String, body: JsonElement?): JsonElement = withContext(Dispatchers.IO) {
         val builder = Request.Builder().url(baseUrl + path)
