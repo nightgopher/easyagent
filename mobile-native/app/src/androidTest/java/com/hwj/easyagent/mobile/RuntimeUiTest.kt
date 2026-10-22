@@ -49,6 +49,11 @@ class RuntimeUiTest {
         instrumentation.runOnMainSync {
             app.connections.state.value.hosts.map { it.id }.forEach(app.connections::remove)
         }
+        // The app asks for notifications when a message is first sent; grant it up
+        // front so the system dialog never covers the Compose hierarchy.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, "android.permission.POST_NOTIFICATIONS")
+        }
         activity = ActivityScenario.launch(MainActivity::class.java)
     }
 
