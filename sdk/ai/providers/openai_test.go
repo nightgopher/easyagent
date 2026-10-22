@@ -622,3 +622,274 @@ func TestStreamUsageOnlyFrameAndLiveThinking(t *testing.T) {
 	require.GreaterOrEqual(t, thinkingIndex, 0)
 	require.Greater(t, textIndex, thinkingIndex)
 }
+
+// ─── 回归：模型请求瞬态失败重试（issue #251）────────────────────────────────────
+// 429/5xx 与传输错误在收到 200 响应头之前重试；开始输出后不重试，避免界面内容重复。
+
+// fastModelRetry 把瞬态失败的退避缩到毫秒级，测试不真等 500ms/1s。
+func fastModelRetry(t *testing.T) {
+	t.Helper()
+	oldBase, oldMax := modelRetryBackoffBase, modelRetryBackoffMax
+	modelRetryBackoffBase = 2 * time.Millisecond
+	modelRetryBackoffMax = 5 * time.Millisecond
+	t.Cleanup(func() { modelRetryBackoffBase, modelRetryBackoffMax = oldBase, oldMax })
+}
+
+// TestStreamRetries429Then503ThenSucceeds：429 → 503 → 200 依次返回时该轮正常完成。
+func TestStreamRetries429Then503ThenSucceeds(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch atomic.AddInt32(&hits, 1) {
+		case 1:
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, `{"error":{"message":"rate limited"}}`, http.StatusTooManyRequests)
+		case 2:
+			http.Error(w, "upstream unavailable", http.StatusServiceUnavailable)
+		default:
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: %s\n\n", textChunk("重试成功"))
+			fmt.Fprintf(w, "data: %s\n\n", finishChunk("stop"))
+			fmt.Fprintf(w, "data: [DONE]\n\n")
+		}
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	events, msg, err := collectStream(t, p)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&hits))
+	assert.Equal(t, "重试成功", msg.Text)
+	assert.Equal(t, ai.StopReasonStop, msg.StopReason)
+
+	// EventStart 只推一次，重试不产生重复内容
+	starts := 0
+	for _, ev := range events {
+		if _, ok := ev.(ai.EventStart); ok {
+			starts++
+		}
+	}
+	assert.Equal(t, 1, starts)
+}
+
+// TestStreamHTTP4xxNoRetry：400 属请求错误，不重试。
+func TestStreamHTTP4xxNoRetry(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		http.Error(w, `{"error":{"message":"invalid request"}}`, http.StatusBadRequest)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	_, msg, err := collectStream(t, p)
+
+	require.Error(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits))
+	assert.Contains(t, err.Error(), "400")
+	assert.Equal(t, ai.StopReasonError, msg.StopReason)
+}
+
+// TestStreamHTTPRetryExhaustsBudget：默认上限 2 次，耗尽后以最后一个状态码报错。
+func TestStreamHTTPRetryExhaustsBudget(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Retry-After", "0")
+		http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	_, msg, err := collectStream(t, p)
+
+	require.Error(t, err)
+	assert.Equal(t, int32(3), atomic.LoadInt32(&hits), "首次请求 + 2 次重试")
+	assert.Contains(t, err.Error(), "503")
+	assert.Equal(t, ai.StopReasonError, msg.StopReason)
+}
+
+// TestStreamModelRetriesEnvDisable：EA_MODEL_MAX_RETRIES=0 时完全关闭瞬态重试。
+func TestStreamModelRetriesEnvDisable(t *testing.T) {
+	fastModelRetry(t)
+	t.Setenv("EA_MODEL_MAX_RETRIES", "0")
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Retry-After", "0")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	_, _, err := collectStream(t, p)
+
+	require.Error(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits))
+}
+
+// TestStreamModelRetriesEnvInvalid：非法配置在 Stream 返回前同步报错。
+func TestStreamModelRetriesEnvInvalid(t *testing.T) {
+	t.Setenv("EA_MODEL_MAX_RETRIES", "abc")
+
+	p := NewOpenAIProvider("test-key", "http://127.0.0.1:1")
+	_, err := p.Stream(context.Background(), ai.StreamRequest{Model: ai.Model{ID: "test-model"}})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "EA_MODEL_MAX_RETRIES")
+}
+
+// TestStreamRetryStopsOnContextCancel：退避等待期间 ctx 取消，立即终止不再等待。
+func TestStreamRetryStopsOnContextCancel(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Retry-After", "10")
+		http.Error(w, "rate limited", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+	stream, err := p.Stream(ctx, ai.StreamRequest{Model: ai.Model{ID: "test-model"}})
+	require.NoError(t, err)
+	for range stream.Events() {
+	}
+	_, resultErr := stream.Result()
+
+	require.Error(t, resultErr)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits))
+	assert.Contains(t, resultErr.Error(), "context canceled")
+}
+
+// TestStreamNoRetryAfterContentStarted：内容已开始输出后断开，不重试以免重复。
+func TestStreamNoRetryAfterContentStarted(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", textChunk("已输出一半"))
+		w.(http.Flusher).Flush()
+		panic(http.ErrAbortHandler) // 强制断开连接
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	_, msg, err := collectStream(t, p)
+
+	require.Error(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hits), "内容已开始，不应重试")
+	assert.Equal(t, ai.StopReasonError, msg.StopReason)
+}
+
+// TestStreamRetriesTransportError：响应头之前连接被掐断，按瞬态失败重试。
+func TestStreamRetriesTransportError(t *testing.T) {
+	fastModelRetry(t)
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			panic(http.ErrAbortHandler) // 未写响应头直接断开
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", textChunk("传输重试成功"))
+		fmt.Fprintf(w, "data: %s\n\n", finishChunk("stop"))
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	_, msg, err := collectStream(t, p)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&hits))
+	assert.Equal(t, "传输重试成功", msg.Text)
+}
+
+// TestStreamRetryHonorsRetryAfter：上游给了 Retry-After 时按其等待（不缩短退避）。
+func TestStreamRetryHonorsRetryAfter(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: %s\n\n", textChunk("ok"))
+		fmt.Fprintf(w, "data: %s\n\n", finishChunk("stop"))
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(srv.Close)
+	p := NewOpenAIProvider("test-key", srv.URL)
+
+	started := time.Now()
+	_, msg, err := collectStream(t, p)
+	elapsed := time.Since(started)
+
+	require.NoError(t, err)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&hits))
+	assert.GreaterOrEqual(t, elapsed, 900*time.Millisecond, "应等待 Retry-After 指定的 1s")
+	assert.Equal(t, "ok", msg.Text)
+}
+
+func TestStreamLongRetryAfterDoesNotRetryEarly(t *testing.T) {
+	fastModelRetry(t)
+	old := modelRetryAfterMax
+	modelRetryAfterMax = 10 * time.Millisecond
+	t.Cleanup(func() { modelRetryAfterMax = old })
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "120")
+		http.Error(w, "busy", http.StatusTooManyRequests)
+	}))
+	t.Cleanup(srv.Close)
+	_, _, err := collectStream(t, NewOpenAIProvider("test-key", srv.URL))
+	require.Error(t, err)
+	assert.Equal(t, int32(1), hits.Load())
+	var status *ai.HTTPStatusError
+	require.ErrorAs(t, err, &status)
+	assert.Equal(t, 2*time.Minute, status.RetryAfter)
+}
+
+func TestStreamHTTPAndEmptyRetryBudgetsAreIndependent(t *testing.T) {
+	fastModelRetry(t)
+	old := streamRetryDelay
+	streamRetryDelay = time.Millisecond
+	t.Cleanup(func() { streamRetryDelay = old })
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch hits.Add(1) {
+		case 1:
+			http.Error(w, "busy", 429)
+		case 2:
+			http.Error(w, "busy", 503)
+		case 3:
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", finishChunk("stop"))
+		default:
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: %s\n\ndata: %s\n\ndata: [DONE]\n\n", textChunk("recovered"), finishChunk("stop"))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	_, msg, err := collectStream(t, NewOpenAIProvider("test-key", srv.URL))
+	require.NoError(t, err)
+	assert.Equal(t, int32(4), hits.Load())
+	assert.Equal(t, "recovered", msg.Text)
+}

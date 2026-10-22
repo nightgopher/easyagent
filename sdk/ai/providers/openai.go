@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -158,6 +159,10 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 	if err != nil {
 		return nil, err
 	}
+	maxRetries, err := configuredModelMaxRetries()
+	if err != nil {
+		return nil, err
+	}
 	stream := ai.NewEventStream(8)
 
 	oaiReq := p.buildOpenAIRequest(req, true)
@@ -185,7 +190,10 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 		// 断流重试：上游（如 glm coding 端点）长思考静默期会被前置 LB 掐断，
 		// 客户端读到 unexpected EOF，或收到无内容的 finish_reason。只要一个
 		// delta 都没收到，原样重发是安全的（内容尚未开始）。
+		// httpRetries 另行计数收到 200 响应头之前的瞬态失败（429/5xx、传输错误）。
 		idleRetries := 0
+		httpRetries := 0
+		streamRetries := 0
 		for attempt := 1; ; attempt++ {
 			streamCtx, cancel := context.WithCancel(ctx)
 			started := time.Now()
@@ -202,14 +210,37 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 			resp, err := p.client.Do(httpReq)
 			if err != nil {
 				cancel()
+				// 尚无任何输出内容，传输失败可安全重试；ctx 已取消则立即终止
+				if ctx.Err() == nil && retryableTransportError(err) && httpRetries < maxRetries {
+					httpRetries++
+					slog.Warn("model request transport error, retrying",
+						"provider", p.Name(), "attempt", attempt, "retries", httpRetries, "err", err)
+					if _, ok := waitModelRetry(ctx, httpRetries, 0); ok {
+						continue
+					}
+					fail(ctx.Err())
+					return
+				}
 				fail(err)
 				return
 			}
 			if resp.StatusCode != http.StatusOK {
-				respBody, _ := io.ReadAll(resp.Body)
-				resp.Body.Close()
+				statusErr := modelHTTPError(resp, p.Name(), p.apiKey)
 				cancel()
-				fail(fmt.Errorf("API error %d: %s", resp.StatusCode, string(respBody)))
+				if statusErr.Retryable() && ctx.Err() == nil && httpRetries < maxRetries {
+					httpRetries++
+					slog.Warn("model request failed, retrying",
+						"provider", p.Name(), "attempt", attempt, "retries", httpRetries,
+						"status", resp.StatusCode, "retry_after", statusErr.RetryAfter)
+					if _, ok := waitModelRetry(ctx, httpRetries, statusErr.RetryAfter); ok {
+						continue
+					}
+					if ctx.Err() != nil {
+						fail(ctx.Err())
+						return
+					}
+				}
+				fail(statusErr)
 				return
 			}
 
@@ -230,7 +261,8 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 				return // 正常完成，handleSSE 已收尾
 			}
 			// 空流（EOF 断流或伪造 finish_reason）且未被取消 → 退避后重试
-			if !received && (err == nil || retryIdle) && attempt < streamRetryAttempts && ctx.Err() == nil {
+			if !received && (err == nil || retryIdle) && streamRetries < streamRetryAttempts-1 && ctx.Err() == nil {
+				streamRetries++
 				select {
 				case <-time.After(time.Duration(attempt) * streamRetryDelay):
 					partial = ai.StreamAssistantMessage{}
