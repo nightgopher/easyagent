@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -67,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.backend.AgentClient
 import com.hwj.easyagent.mobile.backend.ChatMessage
 import com.hwj.easyagent.mobile.backend.Confirmation
+import com.hwj.easyagent.mobile.backend.HistoryImage
 import com.hwj.easyagent.mobile.backend.LinkStatus
 import com.hwj.easyagent.mobile.backend.MessageQueue
 import com.hwj.easyagent.mobile.backend.obj
@@ -150,16 +152,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 },
             )
         },
-        bottomBar = {
-            Composer(
-                draft = session.draft,
-                onDraftChange = { session.draft = it; client.touch() },
-                enabled = session.draft.isNotBlank() && !session.sending && link == LinkStatus.CONNECTED,
-                sending = session.sending,
-                queued = busy,
-                onSend = { client.sendPrompt(session, session.draft) },
-            )
-        },
+        bottomBar = { MediaComposer(client, session, link, queued = busy) },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -176,6 +169,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             m = entry.message,
                             generating = session.running && entry.message === session.messages.lastOrNull(),
                             onToggle = { client.touch() },
+                            images = { MessageImages(client, sessionId, it) },
                         )
                         is Entry.Approval -> ApprovalCard(entry.confirmation) { approved ->
                             client.confirm(session, entry.confirmation.id, approved)
@@ -196,46 +190,15 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Composer(
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    enabled: Boolean,
-    sending: Boolean,
-    queued: Boolean,
-    onSend: () -> Unit,
-) {
-    Surface(tonalElevation = 2.dp) {
-        Row(
-            modifier = Modifier
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(if (queued) "任务进行中，消息将排队发送…" else "给 EasyAgent 发消息…") },
-                maxLines = 6,
-                shape = RoundedCornerShape(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = onSend, enabled = enabled, modifier = Modifier.size(48.dp)) {
-                if (sending) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit) {
+private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit, images: @Composable (List<HistoryImage>) -> Unit) {
     when {
-        m.user -> UserBubble(m.text)
+        m.user -> Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
+            if (m.images.isNotEmpty()) {
+                images(m.images)
+                Spacer(Modifier.height(6.dp))
+            }
+            if (m.text.isNotBlank() && m.text != "[图片]".repeat(m.images.size)) UserBubble(m.text)
+        }
         m.kind == "tool" -> ToolCard(m, onToggle)
         m.kind == "thought" -> ThoughtCard(m, generating, onToggle)
         m.kind == "error" -> ErrorCard(m.text)
