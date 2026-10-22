@@ -140,6 +140,17 @@ data class AgentEvent(
     @SerialName("final_message") val final: FinalMessage? = null,
 )
 
+/** A session's watchdog loop (GET /sessions/{id}/loop). Times are RFC 3339. */
+@Serializable
+data class LoopStatus(
+    val prompt: String = "",
+    @SerialName("interval_seconds") val intervalSeconds: Long = 0,
+    @SerialName("started_at") val startedAt: String = "",
+    @SerialName("expires_at") val expiresAt: String = "",
+    @SerialName("last_run_at") val lastRunAt: String = "",
+    val pending: Boolean = false,
+)
+
 @Serializable
 data class Envelope(
     val type: String = "",

@@ -31,6 +31,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
@@ -61,6 +62,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,6 +124,8 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+    var loopDialog by remember { mutableStateOf(false) }
+    if (loopDialog) LoopDialog(client, sessionId) { loopDialog = false }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
 
     LaunchedEffect(error) {
@@ -163,6 +168,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
+                    IconButton(onClick = { loopDialog = true }) { Icon(Icons.Filled.Autorenew, contentDescription = "循环任务") }
                     if (busy) {
                         IconButton(onClick = { client.cancelRun(session) }) {
                             Icon(Icons.Filled.Stop, contentDescription = "停止当前任务", tint = MaterialTheme.colorScheme.error)
