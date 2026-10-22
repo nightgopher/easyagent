@@ -493,11 +493,12 @@ func TestNativeTerminalLateFailureDoesNotCloseReplacement(t *testing.T) {
 		t.Fatal("missing stale terminal result")
 	}
 	w := &a.Live.Workbench
-	if !w.TerminalOpen || !w.TerminalStarting || !w.matchesTerminal("local", "B") || a.Live.Error != "" {
+	tab := w.activeTerminal()
+	if !w.TerminalOpen || len(w.Terminals) != 1 || tab == nil || !tab.Starting || tab.Session != "B" || tab.Error != "" || a.Live.Error != "" {
 		t.Fatal("stale terminal response modified replacement")
 	}
 	secondOnce.Do(func() { close(secondRelease) })
-	waitNative(t, a, func() bool { return !w.TerminalStarting })
+	waitNative(t, a, func() bool { return !tab.Starting })
 }
 
 func TestNativeEditedEndpointGetsSeparateIdentity(t *testing.T) {
