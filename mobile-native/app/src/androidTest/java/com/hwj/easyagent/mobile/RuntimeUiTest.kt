@@ -96,14 +96,21 @@ class RuntimeUiTest {
     private fun screenshot(name: String) {
         ui.waitForIdle()
         if (Build.VERSION.SDK_INT >= 31) {
+            // Surface rotation can briefly make UiAutomation return no frame.
+            var bitmap: Bitmap? = null
+            ui.waitUntil(10_000) {
+                bitmap = instrumentation.uiAutomation.takeScreenshot()
+                bitmap != null
+            }
             // AGP uninstalls both APKs after connected tests. Shell-owned output
             // survives that cleanup and is collected as a CI artifact.
             ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand("mkdir -p /sdcard/Download/easyagent-ui")).use { it.readBytes() }
             val pipes = instrumentation.uiAutomation.executeShellCommandRw("dd of=/sdcard/Download/easyagent-ui/$name.png")
             ParcelFileDescriptor.AutoCloseOutputStream(pipes[1]).use { stream ->
-                check(instrumentation.uiAutomation.takeScreenshot().compress(Bitmap.CompressFormat.PNG, 100, stream))
+                check(requireNotNull(bitmap).compress(Bitmap.CompressFormat.PNG, 100, stream))
             }
             ParcelFileDescriptor.AutoCloseInputStream(pipes[0]).use { it.readBytes() }
+            bitmap?.recycle()
         }
     }
 
@@ -184,7 +191,7 @@ class RuntimeUiTest {
         instrumentation.uiAutomation.executeShellCommand("cmd uimode night yes").close()
         ui.waitUntil(5_000) { instrumentation.targetContext.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES }
         ui.waitUntil(5_000) {
-            val bitmap = instrumentation.uiAutomation.takeScreenshot()
+            val bitmap = instrumentation.uiAutomation.takeScreenshot() ?: return@waitUntil false
             val dark = Color.luminance(bitmap.getPixel(bitmap.width / 2, bitmap.height / 12)) < 0.3f
             bitmap.recycle()
             dark
