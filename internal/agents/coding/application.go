@@ -115,7 +115,9 @@ func (a CodingApplication) BuildPrompt(opts runtime.PromptBuildOptions, profileN
 // NewSessionExt creates a per-session CodingSessionExt.
 // The rebuild callback is nil initially; AgentSession injects it later via SetRebuild.
 func (a CodingApplication) NewSessionExt() runtime.SessionExt {
-	return NewCodingSessionExt(nil)
+	ext := NewCodingSessionExt(nil)
+	ext.background = basetools.NewBackgroundTasks(basetools.WithBackgroundDataDir(a.Cfg.DataDir))
+	return ext
 }
 
 // Profiles returns the list of available profile names.

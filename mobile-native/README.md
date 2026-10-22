@@ -40,6 +40,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Verify CI 与正式 Release 的验证阶段均执行上述单元测试、Lint 与 Debug APK 构建。开发版 versionName 从 `desktop-native/mygo.json` 读取，Debug versionCode 为 1；正式构建由发布脚本注入与 tag 对应的版本和递增 versionCode。
 
+UI 验收使用 `./gradlew --no-daemon :app:connectedDebugAndroidTest`，需已启动 Android 模拟器或连接测试设备。`Android UI` 工作流覆盖 API 31/34/35，正式 Release 的 Android 构建等待该矩阵通过。用例启动实际 Activity，连接带认证的本地 HTTP/WebSocket 模拟服务，覆盖凭据、主机切换、草稿、流式对话、审批、排队、停止、重连、横屏与深色模式；不调用真实模型。发布前按 [Android 验收清单](../docs/QA_ANDROID.md) 记录候选版本与人工项目。
+
 演练正式构建（需要设置 `JAVA_HOME`、`ANDROID_HOME` 并安装 Build Tools 35.0.1），从仓库根目录运行：
 
 ```sh

@@ -44,7 +44,7 @@ git push origin refs/tags/v0.1.1-rc.1
 ## 自动发布的强制检查
 
 1. 严格版本格式；附注 tag；HEAD 与 tag 一致；提交已进入 main；版本高于现有版本；对应 CHANGELOG 节非空。
-2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本和 Android 单测 / Lint / Debug 构建；Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
+2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本和 Android 单测 / Lint / Debug 构建；Android 发布构建还等待同一 SHA 的 API 31/34/35 UI 测试矩阵通过，并按 [Android 验收清单](QA_ANDROID.md) 记录候选版本和人工检查。Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
 3. 同一 SHA 构建 Linux/macOS、amd64/arm64 的核心与桥接共 8 个程序，注入相同版本。原生 DMG 在 Apple Silicon runner 构建，核验包版本与 tag 一致、Bundle ID 为 `com.hwj.easyagent`，并启动实际 bundle 核心检查健康响应和子进程回收。
 4. v0.21.0 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产、1 个签名 Android APK 和 1 个 ZIP 备用包、2 个 Linux 桌面 deb、2 个 Linux 用户级自更新 tar.gz 及配套 install 脚本与签名清单、2 个服务端 deb，加上 `release.json` 与 `checksums.txt`，共 25 项资产；v0.19.2 至 v0.20.0 保留历史的 15 项，v0.19.0 至 v0.19.1 为 14 项，v0.16.0 至 v0.18.1 为 13 项。`core_only` 清单不能发布；缺少必需文件、空文件、额外旧 Electron 文件或校验失败均阻止发布。Linux 桌面 deb 由核心 job 之后的 Linux runner 构建（amd64 直接执行包内核心校验版本，arm64 依赖同一 prepare 流水线与 deb 元数据校验），签名更新清单使用与 macOS 相同的 `MYGO_UPDATER_PRIVATE_KEY` 并在打包目录内复核签名与 URL。服务端 deb 复用核心 job 已构建并校验过 vcs 元数据的两个 Linux 二进制。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹；ZIP 须仅包含与独立 APK 字节完全一致的 `easyagent-android.apk`。
 5. 先建草稿，上传全部资产，核对 GitHub 返回的各文件 digest，再一次性公开；已公开版本拒绝重传。失败只保留草稿供检查，不公开半套文件。
