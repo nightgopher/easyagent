@@ -751,7 +751,52 @@ func (a *preview) confirmLive(approved bool) {
 		return
 	}
 	id := s.Confirmations[0].ID
+	if !approved && strings.TrimSpace(s.RejectReason) != "" {
+		a.rejectWithReason(s, id, strings.TrimSpace(s.RejectReason))
+		s.RejectReason = ""
+		return
+	}
+	s.RejectReason = ""
 	a.confirmSession(s, id, approved, nil)
+}
+
+// approvalScope returns the key and label of a session-wide approval the user
+// may grant for this request, or "" when only one-off approval is allowed.
+// bash asks only for commands matching a danger rule and delete_file removes
+// data, so neither can be allowed for the session.
+func approvalScope(value confirmation) (key, label string) {
+	switch {
+	case value.ToolName == "write" || value.ToolName == "edit" || value.ToolName == "patch":
+		return "files", "本会话允许所有文件修改"
+	case strings.HasPrefix(value.ToolName, "mcp__"):
+		return "tool:" + value.ToolName, "本会话允许此工具"
+	}
+	return "", ""
+}
+
+// allowForSession approves the pending request and every later request of the
+// same scope in this session.
+func (a *preview) allowForSession(key string) {
+	s := a.current()
+	if s.AutoApprove == nil {
+		s.AutoApprove = map[string]bool{}
+	}
+	s.AutoApprove[key] = true
+	a.confirmLive(true)
+}
+
+// autoApprove answers a pending request already covered by a session scope.
+func (a *preview) autoApprove(s *session) bool {
+	if len(s.Confirmations) == 0 || a.Live.Loading["confirm/"+s.RemoteID] {
+		return false
+	}
+	key, _ := approvalScope(s.Confirmations[0])
+	if key == "" || !s.AutoApprove[key] {
+		return false
+	}
+	a.Live.Notice = "已按本会话设置自动批准：" + s.Confirmations[0].ToolName
+	a.confirmSession(s, s.Confirmations[0].ID, true, nil)
+	return true
 }
 func (a *preview) forkLive(index int) {
 	s := a.current()
