@@ -46,7 +46,7 @@ jobs:
           working-directory: mobile-native
           script: |
             ./gradlew --no-daemon :app:connectedDebugAndroidTest
-            adb pull /sdcard/Download/easyagent-ui app/build/qa
+            adb pull /data/local/tmp/easyagent-ui app/build/qa
       - uses: actions/upload-artifact@v4
         if: always()
         with:

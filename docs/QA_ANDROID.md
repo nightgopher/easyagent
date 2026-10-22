@@ -10,7 +10,7 @@ cd mobile-native
 ./gradlew --no-daemon :app:connectedDebugAndroidTest
 ```
 
-第二条命令需要已启动的模拟器或测试设备。`Android UI` 工作流自动运行 Android 12/API 31、14/API 34、15/API 35；发布流程复用相同工作流并检验候选 SHA。报告在 `app/build/reports/androidTests/connected`，XML 在 `app/build/outputs/androidTest-results`。API 31 以上的截图由测试写入 `/sdcard/Download/easyagent-ui`，CI 收集到对应 API 的 artifact 中。
+第二条命令需要已启动的模拟器或测试设备。`Android UI` 工作流自动运行 Android 12/API 31、14/API 34、15/API 35；发布流程复用相同工作流并检验候选 SHA。报告在 `app/build/reports/androidTests/connected`，XML 在 `app/build/outputs/androidTest-results`。API 31 以上的截图由测试写入 `/data/local/tmp/easyagent-ui`，CI 收集到对应 API 的 artifact 中。
 
 `RuntimeUiTest` 使用真实 MainActivity 和本地 HTTP/WebSocket fixture，检查：
 
