@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
 class ApiException(message: String, val status: Int = 0) : Exception(message)
 
 /** Reads up to [limit] bytes (InputStream.readNBytes needs API 33). */
-private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+internal fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
     val out = java.io.ByteArrayOutputStream()
     val buffer = ByteArray(16 shl 10)
     while (out.size() < limit) {

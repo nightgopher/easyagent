@@ -5,6 +5,8 @@ import com.hwj.easyagent.mobile.backend.ChatSession
 import com.hwj.easyagent.mobile.backend.Envelope
 import com.hwj.easyagent.mobile.backend.HostConfig
 import com.hwj.easyagent.mobile.backend.LinkStatus
+import com.hwj.easyagent.mobile.backend.PendingAttachment
+import com.hwj.easyagent.mobile.backend.UploadedAttachment
 import com.hwj.easyagent.mobile.backend.wireJson
 import com.hwj.easyagent.mobile.media.wav
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +91,23 @@ class MediaTest {
         assertEquals(listOf("att_1"), inputs["attachments"]!!.jsonArray.map { it.jsonPrimitive.content })
         withTimeout(5_000) { while (s.sending) delay(10) }
         assertTrue("attachments clear once the prompt is accepted", s.attachments.isEmpty())
+    }
+
+    @Test
+    fun `acknowledging a prompt preserves attachments added while sending`() = withClient { server, client ->
+        server.enqueue(MockResponse().setBody("""{"items":[],"revision":1}""").setBodyDelay(500, TimeUnit.MILLISECONDS))
+        val s = client.chat("s1")
+        s.attachments = listOf(PendingAttachment(UploadedAttachment(id = "sent"), null))
+        client.link.value = LinkStatus.CONNECTED
+        s.running = true
+        s.draft = "first prompt"
+        client.sendPrompt(s, s.draft)
+        withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS) }!!
+        s.attachments = s.attachments + PendingAttachment(UploadedAttachment(id = "next"), null)
+        s.draft = "next prompt"
+        withTimeout(5_000) { while (s.sending) delay(10) }
+        assertEquals(listOf("next"), s.attachments.map { it.attachment.id })
+        assertEquals("next prompt", s.draft)
     }
 
     @Test

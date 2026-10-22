@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.hwj.easyagent.mobile.backend.AgentClient
+import com.hwj.easyagent.mobile.backend.readNBytesCompat
 import java.io.ByteArrayOutputStream
 
 /** A file picked on the phone, ready to upload. */
@@ -13,6 +14,7 @@ class PickedFile(val name: String, val bytes: ByteArray, val preview: ByteArray?
 
 private const val MAX_IMAGE_SIDE = 2560
 private const val PREVIEW_SIDE = 256
+const val MAX_IMAGE_SOURCE_BYTES = 32 * 1024 * 1024
 
 /**
  * Reads a picked file. Images larger than the upload limit or [MAX_IMAGE_SIDE]
@@ -21,9 +23,11 @@ private const val PREVIEW_SIDE = 256
  */
 fun readPicked(resolver: ContentResolver, uri: Uri): Pair<PickedFile?, String?> {
     val name = displayName(resolver, uri)
-    val raw = runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
-        ?: return null to "无法读取「$name」"
     val mime = resolver.getType(uri).orEmpty()
+    val limit = if (mime.startsWith("image/")) MAX_IMAGE_SOURCE_BYTES else AgentClient.MAX_ATTACHMENT_BYTES
+    val raw = runCatching { resolver.openInputStream(uri)?.use { it.readNBytesCompat(limit + 1) } }.getOrNull()
+        ?: return null to "无法读取「$name」"
+    if (raw.size > limit) return null to "「$name」超过 ${limit / 1024 / 1024} MiB，无法读取"
     if (!mime.startsWith("image/")) {
         if (raw.size > AgentClient.MAX_ATTACHMENT_BYTES) return null to "「$name」超过 4 MiB，无法上传"
         return PickedFile(name, raw, null) to null
@@ -47,6 +51,7 @@ fun readPicked(resolver: ContentResolver, uri: Uri): Pair<PickedFile?, String?> 
 
 /** A camera capture taken into [bytes] (from TakePicture into a cache file). */
 fun readCaptured(bytes: ByteArray): Pair<PickedFile?, String?> {
+    if (bytes.size > MAX_IMAGE_SOURCE_BYTES) return null to "照片超过 32 MiB，无法读取"
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
     if (bounds.outWidth <= 0) return null to "无法读取拍摄的照片"

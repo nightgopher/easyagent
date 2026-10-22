@@ -76,14 +76,22 @@ fun LoopDialog(client: AgentClient, sessionId: String, onDismiss: () -> Unit) {
         }
     }
 
+    // Capture rendered values here so dialog slots update after async requests.
+    val isLoading = loading
+    val currentLoop = loop
+    val isBusy = busy
+    val currentProblem = problem
+    val inputText = prompt
+    val selectedMinutes = minutes
+    val selectedHours = hours
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("循环任务") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                val current = loop
+                val current = currentLoop
                 when {
-                    loading -> CircularProgressIndicator(Modifier.size(24.dp))
+                    isLoading -> CircularProgressIndicator(Modifier.size(24.dp))
                     current != null -> {
                         Text(current.prompt, style = MaterialTheme.typography.bodyLarge)
                         Text(
@@ -100,7 +108,7 @@ fun LoopDialog(client: AgentClient, sessionId: String, onDismiss: () -> Unit) {
                     else -> {
                         Text("按固定间隔向本会话发送同一条消息，适合定时巡检、盯部署。", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(
-                            value = prompt,
+                            value = inputText,
                             onValueChange = { prompt = it },
                             label = { Text("每次发送的内容") },
                             modifier = Modifier.fillMaxWidth(),
@@ -109,31 +117,31 @@ fun LoopDialog(client: AgentClient, sessionId: String, onDismiss: () -> Unit) {
                         Text("间隔", style = MaterialTheme.typography.labelMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             intervals.forEach { (value, label) ->
-                                FilterChip(selected = minutes == value, onClick = { minutes = value }, label = { Text(label) })
+                                FilterChip(selected = selectedMinutes == value, onClick = { minutes = value }, label = { Text(label) })
                             }
                         }
                         Text("持续", style = MaterialTheme.typography.labelMedium)
                         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             lifetimes.forEach { (value, label) ->
-                                FilterChip(selected = hours == value, onClick = { hours = value }, label = { Text(label) })
+                                FilterChip(selected = selectedHours == value, onClick = { hours = value }, label = { Text(label) })
                             }
                         }
                         Text("服务重启后循环会停止，需要重新设置。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                problem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                currentProblem?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
             when {
-                loading -> {}
-                loop != null -> TextButton(enabled = !busy, onClick = {
+                isLoading -> {}
+                currentLoop != null -> TextButton(enabled = !isBusy, onClick = {
                     act {
                         client.stopLoop(sessionId)
                         loop = null
                     }
                 }) { Text("停止循环") }
-                else -> TextButton(enabled = !busy && prompt.isNotBlank(), onClick = {
+                else -> TextButton(enabled = !isBusy && inputText.isNotBlank(), onClick = {
                     act {
                         client.startLoop(sessionId, minutes, prompt, hours)
                         loop = client.loop(sessionId)

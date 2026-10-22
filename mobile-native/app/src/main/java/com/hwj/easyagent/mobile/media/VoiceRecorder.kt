@@ -33,13 +33,19 @@ class VoiceRecorder {
         pcm.reset()
         record = r
         running = true
-        r.startRecording()
+        if (runCatching { r.startRecording() }.isFailure) {
+            running = false
+            r.release()
+            record = null
+            return false
+        }
         worker = thread(name = "voice-recorder") {
             val buffer = ByteArray(minBuffer)
             val limit = SAMPLE_RATE * 2 * MAX_SECONDS
             while (running && pcm.size() < limit) {
                 val n = r.read(buffer, 0, buffer.size)
-                if (n > 0) synchronized(pcm) { pcm.write(buffer, 0, n) }
+                if (n <= 0) break
+                synchronized(pcm) { pcm.write(buffer, 0, minOf(n, limit - pcm.size())) }
             }
         }
         return true
@@ -60,8 +66,8 @@ class VoiceRecorder {
     private fun finish(): Boolean {
         val r = record ?: return false
         running = false
-        worker?.join(1_000)
         runCatching { r.stop() }
+        worker?.join(1_000)
         r.release()
         record = null
         worker = null

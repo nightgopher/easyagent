@@ -68,6 +68,8 @@ import com.hwj.easyagent.mobile.backend.ApiException
 import com.hwj.easyagent.mobile.backend.ChatSession
 import com.hwj.easyagent.mobile.backend.HistoryImage
 import com.hwj.easyagent.mobile.backend.LinkStatus
+import com.hwj.easyagent.mobile.backend.readNBytesCompat
+import com.hwj.easyagent.mobile.media.MAX_IMAGE_SOURCE_BYTES
 import com.hwj.easyagent.mobile.media.PickedFile
 import com.hwj.easyagent.mobile.media.VoiceRecorder
 import com.hwj.easyagent.mobile.media.readCaptured
@@ -83,12 +85,8 @@ import java.io.File
  * recording is transcribed by the host and inserted into the draft for
  * editing, never sent directly (#254, #255).
  */
-// session is mutated in place, so the same instance arrives on every frame and
-// strong skipping would skip this composable; the changing revision makes Compose
-// read the draft and attachments again.
-@Suppress("UNUSED_PARAMETER")
 @Composable
-fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, queued: Boolean, revision: Long) {
+fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, queued: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
@@ -121,7 +119,7 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
             return@rememberLauncherForActivityResult
         }
         scope.launch {
-            val result = withContext(Dispatchers.IO) { readCaptured(file.readBytes()).also { file.delete() } }
+            val result = withContext(Dispatchers.IO) { readCaptured(file.inputStream().use { it.readNBytesCompat(MAX_IMAGE_SOURCE_BYTES + 1) }).also { file.delete() } }
             upload(listOf(result))
         }
     }
@@ -144,6 +142,13 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
             } finally {
                 transcribing = false
             }
+        }
+    }
+    LaunchedEffect(recordingSince) {
+        if (recordingSince > 0) {
+            delay((VoiceRecorder.MAX_SECONDS * 1000L - (System.currentTimeMillis() - recordingSince)).coerceAtLeast(0))
+            recordingSince = 0
+            recorder.stop()?.let(::transcribe)
         }
     }
     fun startRecording() {
