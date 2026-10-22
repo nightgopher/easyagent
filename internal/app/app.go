@@ -61,6 +61,9 @@ type AppOptions struct {
 func New(opts AppOptions) (*App, error) {
 	cfg := opts.Config
 
+	// 后台任务进程组记录：异常退出（SIGKILL/崩溃）后，下次启动清理残留的后台进程
+	basetools.CleanupBackgroundTasks(cfg.DataDir)
+
 	// Provider registry
 	reg := providers.NewRegistry()
 	if err := registerProviders(reg, cfg); err != nil {

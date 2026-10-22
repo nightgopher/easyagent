@@ -9,8 +9,18 @@
 - bash 后台任务：`bash` 新增 `run_in_background` 参数，立即返回任务 ID（如 `bg-1`）；新增 `bash_output`（读取上次以来的新输出，不带参数时列出全部任务）和 `bash_kill`（终止整个进程组）。每会话最多同时运行 8 个，每个任务保留最后 1MB 输出并标注丢弃量；会话关闭和程序退出时自动终止遗留任务。前台命令超时的报错会提示改用后台运行。
 - `read` 识别图片与二进制：PNG / JPEG / GIF / WebP 作为图片交给模型（单图上限 5MB），其他含 NUL 字节的二进制文件和 PDF 只返回类型与大小，不再把字节当文本输出；GBK 等非 UTF-8 文本仍按文本读取。
 
+### Fixed
+- 模型请求在输出开始前对 429/5xx 和瞬态连接错误有限重试（`EA_MODEL_MAX_RETRIES` 默认 2）。支持秒数和日期格式的 `Retry-After`；等待超过 30 秒时返回错误，不提前重发。输出后不重试，取消立即停止。上游错误正文截断、密钥脱敏，避免完整写入会话或日志。
+- 后台 bash 进程组记录到数据目录；SIGKILL 后重启可清理已记录的本地任务。使用随机任务标记校验身份，避免按进程号或命令名误杀；文件锁保护多实例记录，仍在运行的实例保留。正常完成、取消和关闭会话时清理进程与记录。
+- Android 移除或关闭主机连接后忽略迟到的网络回调，关闭过程可等待在途请求退出。
+
+### Development
+- Android 新增真实 Activity 的 Compose UI 验收、Android 12/14/15 模拟器 CI 和发布门禁，覆盖多主机、加密凭据、流式输出、审批、排队、停止、重连、横屏和深色模式；发布补充清单见 `docs/QA_ANDROID.md`。
+- 新增可重复执行的 Linux deb/systemd 验收与 CI，实际检查服务启动、模型重试、前台/后台 bash、PTY、桥接 TLS/WebSocket 及加固评分。
+
 ### Removed
 - 编码 agent 移除三个重复工具：`multiedit`（`edit` 的 `edits` 参数已支持同一文件多处替换）、`batch`（agent loop 已自动并行执行连续的并发安全工具调用）、`read_many_files`（改为并行多次 `read`，需要按 glob 筛选时先用 `find`）。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 中的这些名称不再生效。
+- SDK 删除未接入 provider 的旧 `StreamWithRetry`、`RetryConfig`、`DefaultRetryConfig`、`RetryableStreamFunc` 和字符串判断 `IsRetryableError`；实际重试由 provider 完成，HTTP 错误使用 `HTTPStatusError`。
 
 ### Security
 - 新增 [安全模型与部署加固](docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
