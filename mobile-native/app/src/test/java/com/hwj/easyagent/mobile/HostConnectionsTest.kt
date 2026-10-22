@@ -66,6 +66,7 @@ class HostConnectionsTest {
         settings.save(a.config)
         settings.save(b.config)
         val connections = withContext(main) { HostConnections(settings) }
+        val initialClients = withContext(main) { listOfNotNull(connections.clientFor("a"), connections.clientFor("b")) }
         try {
             withContext(main) {
                 eventually {
@@ -76,7 +77,11 @@ class HostConnectionsTest {
                 block(a, b, settings, prefs, connections)
             }
         } finally {
-            withContext(main) { connections.shutdown() }
+            withContext(main) {
+                val clients = initialClients + connections.state.value.hosts.mapNotNull { connections.clientFor(it.id) }
+                connections.shutdown()
+                clients.forEach { it.awaitShutdown() }
+            }
             Dispatchers.resetMain()
             main.close()
             a.server.shutdown()
@@ -176,7 +181,9 @@ class HostConnectionsTest {
             assertEquals("", replaced.chat("shared").draft)
             assertEquals("b", connections.clientFor("b")!!.config.id)
         } finally {
+            val replaced = connections.clientFor("a")
             connections.remove("a")
+            replaced?.awaitShutdown()
             other.server.shutdown()
         }
     }
@@ -207,7 +214,9 @@ class HostConnectionsTest {
             eventually { restarted.client.value?.link?.value == LinkStatus.CONNECTED }
             assertEquals(before, b.server.requestCount)
         } finally {
+            val clients = restarted.state.value.hosts.mapNotNull { restarted.clientFor(it.id) }
             restarted.shutdown()
+            clients.forEach { it.awaitShutdown() }
         }
     }
 }

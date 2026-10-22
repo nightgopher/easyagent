@@ -34,7 +34,7 @@ class AgentClientTest {
         try {
             withContext(main) { block(server, client) }
         } finally {
-            withContext(main) { client.shutdown() }
+            withContext(main) { client.shutdown(); client.awaitShutdown() }
             Dispatchers.resetMain()
             main.close()
             server.shutdown()

@@ -47,7 +47,8 @@ func (s SSHBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 	cmd := exec.CommandContext(ctx, "ssh", args...)
 	isolateCommand(cmd)
 	cmd.WaitDelay = time.Second
-	out, err := combinedOutput(cmd, req.Output)
+	// 远程命令的 PID 不在本地，进程组记录（OnStart）只适用于本地执行
+	out, err := combinedOutput(cmd, req.Output, nil)
 
 	result := RunResult{
 		Output:   out,

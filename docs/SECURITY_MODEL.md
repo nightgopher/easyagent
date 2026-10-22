@@ -85,3 +85,15 @@ server {
 反向代理转发过来的请求来源是 `127.0.0.1`，EasyAgent 会把它当作本机请求：没设令牌时本机请求免认证，错误令牌限流也不对回环来源生效（不信任 `X-Forwarded-For`）。所以使用反向代理时**必须设置 `EA_SERVER_API_KEY`**，并在代理上自行限制请求频率。
 
 桌面端和手机端连接远程主机时，地址填 `https://agent.example.com`。
+
+## 验证 systemd 服务包
+
+在一次性的 Ubuntu/systemd 虚拟机或 CI runner 中，先用 `scripts/build-server-deb.sh` 构建候选源码的 deb，再运行：
+
+```sh
+sudo python3 scripts/check_systemd.py --deb /path/to/easyagent-server_<version>-1_<arch>.deb
+```
+
+脚本拒绝已有 EasyAgent 安装的机器；安装完成后验证两个单元、健康检查、429/503 恢复、前台 bash、后台启动/读取/终止、带认证的 PTY、飞书桥接 TLS/WS 握手，并比较加固前后的 systemd 暴露评分。模型与飞书均连接本地模拟服务，不需要业务凭据，不发送实际消息。结束时卸载验收包。PR 的 `Linux systemd` 工作流执行相同脚本。
+
+2026-10-22 在隔离的 Ubuntu 24.04 arm64、systemd 255 上通过上述检查，暴露评分从 9.0 降为 6.2。此结果验证部署约束及功能兼容性，不代表对真实飞书账号或公网链路的验收。

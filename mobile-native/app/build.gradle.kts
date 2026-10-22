@@ -16,6 +16,7 @@ android {
         applicationId = "com.hwj.easyagent.mobile"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         versionCode = providers.gradleProperty("easyagentVersionCode").orElse("1").get().toInt()
         // Keep development builds on the same version as the desktop client.
         versionName = providers.gradleProperty("easyagentVersion").getOrElse(
@@ -53,6 +54,7 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions { animationsDisabled = true }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
@@ -72,6 +74,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
