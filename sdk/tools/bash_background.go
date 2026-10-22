@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -51,14 +52,26 @@ func stopTasks(tasks []*backgroundTask) {
 
 // BackgroundTasks 保存一个会话的后台 bash 任务。会话内的 bash、bash_output、bash_kill 共享同一实例。
 type BackgroundTasks struct {
-	mu    sync.Mutex
-	next  int
-	tasks map[string]*backgroundTask
+	mu     sync.Mutex
+	next   int
+	tasks  map[string]*backgroundTask
+	ledger *orphanLedger
+}
+
+type BackgroundTasksOption func(*BackgroundTasks)
+
+// WithBackgroundDataDir enables orphan recovery for local tasks in this registry.
+func WithBackgroundDataDir(dataDir string) BackgroundTasksOption {
+	return func(tasks *BackgroundTasks) { tasks.ledger = newOrphanLedger(dataDir) }
 }
 
 // NewBackgroundTasks creates an empty per-session task registry.
-func NewBackgroundTasks() *BackgroundTasks {
-	return &BackgroundTasks{tasks: map[string]*backgroundTask{}}
+func NewBackgroundTasks(options ...BackgroundTasksOption) *BackgroundTasks {
+	tasks := &BackgroundTasks{tasks: map[string]*backgroundTask{}}
+	for _, option := range options {
+		option(tasks)
+	}
+	return tasks
 }
 
 // Close 终止本会话所有仍在运行的后台任务。
@@ -81,6 +94,7 @@ type backgroundTask struct {
 	done    chan struct{}
 
 	mu       sync.Mutex
+	pgid     int    // 进程组长 PID（setsid 后即进程组 ID），启动成功后由 OnStart 填入
 	output   []byte // 末尾 maxBackgroundOutput 字节
 	written  int64  // 累计写入字节数
 	readPos  int64  // bash_output 已返回到的累计位置
@@ -88,6 +102,18 @@ type backgroundTask struct {
 	exitCode int
 	runErr   error
 	finished time.Time
+}
+
+func (t *backgroundTask) setPGID(pid int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.pgid = pid
+}
+
+func (t *backgroundTask) currPGID() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.pgid
 }
 
 func (t *backgroundTask) Write(p []byte) (int, error) {
@@ -116,6 +142,14 @@ func (t *backgroundTask) kill() {
 func (b *BackgroundTasks) start(ops operations.BashOperations, command, workDir string) (*backgroundTask, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	token := ""
+	if b.ledger != nil {
+		var err error
+		token, err = newBackgroundProcessToken()
+		if err != nil {
+			return nil, err
+		}
+	}
 	running := 0
 	for _, task := range b.tasks {
 		if task.status() == "running" {
@@ -124,6 +158,10 @@ func (b *BackgroundTasks) start(ops operations.BashOperations, command, workDir 
 	}
 	if running >= maxBackgroundTasks {
 		return nil, fmt.Errorf("too many background tasks running (%d); stop one with bash_kill first", running)
+	}
+	marker, err := b.ledger.createMarker(token)
+	if err != nil {
+		return nil, fmt.Errorf("create background task marker: %w", err)
 	}
 	b.pruneFinishedLocked()
 	b.next++
@@ -141,7 +179,47 @@ func (b *BackgroundTasks) start(ops operations.BashOperations, command, workDir 
 		defer close(task.done)
 		defer liveTasks.Delete(task)
 		defer cancel()
-		result, err := ops.Run(ctx, operations.RunRequest{Command: command, WorkDir: workDir, Output: task})
+		defer func() {
+			if b.ledger != nil {
+				killOrphanProcessGroup(orphanRecord{PGID: task.currPGID(), Token: token})
+				b.ledger.remove(task.currPGID(), token)
+			}
+			if marker != nil {
+				marker.Close()
+				_ = os.Remove(marker.Name())
+			}
+		}()
+		var recordErr error
+		var env []string
+		var files []*os.File
+		if token != "" {
+			env = []string{backgroundProcessTokenEnv + "=" + token}
+			files = []*os.File{marker}
+		}
+		result, err := ops.Run(ctx, operations.RunRequest{
+			Command:    command,
+			WorkDir:    workDir,
+			Output:     task,
+			Env:        env,
+			ExtraFiles: files,
+			// 进程组记入数据目录：easyagent 异常退出后，下次启动据此清理残留进程
+			OnStart: func(pid int) {
+				task.setPGID(pid)
+				recordErr = b.ledger.add(orphanRecord{
+					PGID:      pid,
+					OwnerPID:  os.Getpid(),
+					Token:     token,
+					StartedAt: time.Now().Unix(),
+				})
+				if recordErr != nil {
+					cancel()
+				}
+			},
+		})
+		if recordErr != nil {
+			err = fmt.Errorf("record background task: %w", recordErr)
+			result.ExitCode = -1
+		}
 		if len(result.Output) > 0 { // 不支持流式输出的后端在结束时一次性返回
 			_, _ = task.Write(result.Output)
 		}

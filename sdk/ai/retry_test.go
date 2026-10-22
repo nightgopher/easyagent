@@ -1,93 +1,77 @@
 package ai
 
 import (
-	"context"
 	"errors"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestIsRetryableError(t *testing.T) {
+func TestHTTPStatusError_Retryable(t *testing.T) {
 	tests := []struct {
-		err    string
+		status int
 		expect bool
 	}{
-		{"API error 500: internal server error", true},
-		{"API error 502: bad gateway", true},
-		{"API error 503: service unavailable", true},
-		{"API error 429: rate limit exceeded", true},
-		{"connection reset by peer", true},
-		{"timeout waiting for response", true},
-		{"unexpected EOF", true},
-		{"API error 400: bad request", false},
-		{"invalid api key", false},
-		{"context canceled", false},
-		{"context deadline exceeded", false},
-		{"", false},
+		{http.StatusTooManyRequests, true},
+		{http.StatusInternalServerError, true},
+		{http.StatusBadGateway, true},
+		{http.StatusServiceUnavailable, true},
+		{http.StatusGatewayTimeout, true},
+		{http.StatusBadRequest, false},
+		{http.StatusUnauthorized, false},
+		{http.StatusForbidden, false},
+		{http.StatusNotFound, false},
 	}
 
 	for _, tc := range tests {
-		result := IsRetryableError(errors.New(tc.err))
-		assert.Equal(t, tc.expect, result, "IsRetryableError(%q) = %v, want %v", tc.err, result, tc.expect)
+		err := NewHTTPStatusError(tc.status, "", "")
+		assert.Equal(t, tc.expect, err.Retryable(), "status %d", tc.status)
 	}
 }
 
-func TestIsRetryableError_Nil(t *testing.T) {
-	assert.False(t, IsRetryableError(nil))
+func TestHTTPStatusError_Error(t *testing.T) {
+	err := NewHTTPStatusError(401, "", `{"error":{"message":"invalid api key"}}`+"\n")
+	assert.Equal(t, 401, err.StatusCode)
+	assert.Equal(t, `API error 401: {"error":{"message":"invalid api key"}}`, err.Error())
+
+	empty := NewHTTPStatusError(502, "", "")
+	assert.Equal(t, "API error 502", empty.Error())
 }
 
-func TestStreamWithRetry_Success(t *testing.T) {
-	config := DefaultRetryConfig()
-	config.MaxRetries = 2
+func TestHTTPStatusError_DetailTruncated(t *testing.T) {
+	long := string(make([]byte, 600))
+	err := NewHTTPStatusError(500, "", long)
+	assert.Len(t, err.Detail, 200)
 
-	callCount := 0
-	fn := func(ctx context.Context) (*EventStream, error) {
-		callCount++
-		stream := NewEventStream(4)
-		go func() {
-			defer stream.Close()
-			partial := StreamAssistantMessage{Text: "hello"}
-			_ = stream.Push(ctx, EventStart{Partial: partial})
-			_ = stream.Push(ctx, EventDone{Reason: StopReasonStop, Message: partial})
-			stream.SetResult(partial, nil)
-		}()
-		return stream, nil
-	}
-
-	stream, err := StreamWithRetry(context.Background(), config, fn)
-	assert.NoError(t, err)
-	assert.NotNil(t, stream)
-	assert.Equal(t, 1, callCount) // 不重试成功的情况
+	// 多行正文只保留首行
+	multiline := NewHTTPStatusError(500, "", "first line\nsecond line\n")
+	assert.Equal(t, "first line", multiline.Detail)
 }
 
-func TestStreamWithRetry_NonRetryableError(t *testing.T) {
-	config := DefaultRetryConfig()
-	config.MaxRetries = 3
-
-	callCount := 0
-	fn := func(ctx context.Context) (*EventStream, error) {
-		callCount++
-		return nil, errors.New("invalid api key")
-	}
-
-	_, err := StreamWithRetry(context.Background(), config, fn)
-	assert.Error(t, err)
-	assert.Equal(t, 1, callCount) // 不重试不可重试的错误
+func TestHTTPStatusError_RetryAfter(t *testing.T) {
+	assert.Equal(t, 5*time.Second, NewHTTPStatusError(429, "5", "").RetryAfter)
+	assert.Equal(t, time.Duration(0), NewHTTPStatusError(429, "", "").RetryAfter)
+	// 已过期的 HTTP-date 不增加等待。
+	assert.Equal(t, time.Duration(0), NewHTTPStatusError(429, time.Now().Add(-time.Minute).UTC().Format(http.TimeFormat), "").RetryAfter)
+	// 负数按未提供处理
+	assert.Equal(t, time.Duration(0), NewHTTPStatusError(429, "-3", "").RetryAfter)
 }
 
-func TestStreamWithRetry_ContextCancelled(t *testing.T) {
-	config := DefaultRetryConfig()
-	config.MaxRetries = 3
-	config.InitialBackoff = 0 // 快速重试
+// 编译期保证 HTTPStatusError 实现 error 接口。
+var _ error = (*HTTPStatusError)(nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+func TestHTTPStatusError_AsErrors(t *testing.T) {
+	var target *HTTPStatusError
+	ok := errors.As(error(NewHTTPStatusError(429, "1", "")), &target)
+	assert.True(t, ok)
+	assert.Equal(t, http.StatusTooManyRequests, target.StatusCode)
+}
 
-	fn := func(ctx context.Context) (*EventStream, error) {
-		return nil, errors.New("API error 500: internal")
-	}
-
-	_, err := StreamWithRetry(ctx, config, fn)
-	assert.Error(t, err)
+func TestHTTPStatusErrorRetryAfterDate(t *testing.T) {
+	future := time.Now().Add(time.Minute).UTC().Truncate(time.Second)
+	err := NewHTTPStatusError(429, future.Format(http.TimeFormat), "busy")
+	assert.InDelta(t, time.Until(future).Seconds(), err.RetryAfter.Seconds(), 1)
+	assert.False(t, NewHTTPStatusError(700, "", "").Retryable())
 }

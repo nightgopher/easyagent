@@ -2,13 +2,20 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
+
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 )
 
 // 流式 LLM 响应的总时长可以远超常规 HTTP 请求，而 http.Client.Timeout 会把
@@ -26,6 +33,83 @@ var streamIdleTimeout = 300 * time.Second
 const streamRetryAttempts = 3
 
 var streamRetryDelay = time.Second
+
+// 收到 200 响应头之前的瞬态失败（429/5xx、传输错误）的重试上限，与空流重试相互独立。
+// 可用 EA_MODEL_MAX_RETRIES 覆盖。变量化以便测试。
+var modelMaxRetries = 2
+
+// 瞬态失败的退避：500ms 起指数退避，封顶 8s。Retry-After 超过 30s 时
+// 直接报错交给用户稍后重试，不提前重发。变量化以便测试。
+var (
+	modelRetryBackoffBase = 500 * time.Millisecond
+	modelRetryBackoffMax  = 8 * time.Second
+	modelRetryAfterMax    = 30 * time.Second
+)
+
+// modelRetryBackoff 返回第 n 次（从 1 起）瞬态失败重试前的退避时间。
+func modelRetryBackoff(n int) time.Duration {
+	d := modelRetryBackoffBase
+	for i := 1; i < n; i++ {
+		d *= 2
+		if d >= modelRetryBackoffMax {
+			return modelRetryBackoffMax
+		}
+	}
+	return d
+}
+
+// waitModelRetry 等待一次重试间隔，取消或超过自动等待上限时不重试。
+func waitModelRetry(ctx context.Context, n int, retryAfter time.Duration) (time.Duration, bool) {
+	wait := retryAfter
+	if wait <= 0 {
+		wait = modelRetryBackoff(n)
+	}
+	if wait > modelRetryAfterMax {
+		return wait, false
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return wait, false
+	case <-timer.C:
+		return wait, true
+	}
+}
+
+func retryableTransportError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	var network net.Error
+	return (errors.As(err, &network) && (network.Timeout() || network.Temporary())) ||
+		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, syscall.EPIPE)
+}
+
+func modelHTTPError(resp *http.Response, provider, apiKey string) *ai.HTTPStatusError {
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<10))
+	detail := string(body)
+	if apiKey != "" {
+		detail = strings.ReplaceAll(detail, apiKey, "[redacted]")
+	}
+	slog.Debug("model api error", "provider", provider, "status", resp.StatusCode, "body", detail)
+	return ai.NewHTTPStatusError(resp.StatusCode, resp.Header.Get("Retry-After"), detail)
+}
+
+func configuredModelMaxRetries() (int, error) {
+	value := strings.TrimSpace(os.Getenv("EA_MODEL_MAX_RETRIES"))
+	if value == "" {
+		return modelMaxRetries, nil
+	}
+	n, err := strconv.Atoi(value)
+	if err != nil || n < 0 || n > 10 {
+		return 0, fmt.Errorf("EA_MODEL_MAX_RETRIES must be an integer between 0 and 10")
+	}
+	return n, nil
+}
 
 func newStreamHTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()

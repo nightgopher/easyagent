@@ -41,6 +41,11 @@ jobs:
     uses: ./.github/workflows/verify.yml
     with:
       ref: ${{ needs.validate.outputs.sha }}
+  android-ui:
+    needs: validate
+    uses: ./.github/workflows/android-ui.yml
+    with:
+      ref: ${{ needs.validate.outputs.sha }}
   core:
     needs: [validate, verify]
     runs-on: ubuntu-latest
@@ -113,7 +118,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   android:
-    needs: [validate, verify]
+    needs: [validate, verify, android-ui]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
