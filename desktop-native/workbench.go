@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,7 +45,6 @@ type nativeWorkbench struct {
 	KBSearchAt                                                                       time.Time
 	SavedFiles                                                                       map[string]fileWorkspace
 	RestoredFiles                                                                    map[string]bool
-	PendingTerminalText, TerminalError                                               string
 	KBView, KBCategory, KBTag                                                        string
 	PendingReviewPath                                                                string
 	Scope                                                                            string
@@ -60,29 +58,27 @@ type nativeWorkbench struct {
 	Files                                                                            map[string]*nativeFile
 	Tabs                                                                             []string
 	Diff                                                                             *editor.DiffState
-	TerminalHost, TerminalSession, TerminalWorkspace                                 string
-	TerminalGeneration                                                               uint64
-	Term                                                                             *terminal.Terminal
-	TerminalOpen, TerminalStarting                                                   bool
+	// Terminals are the open shells; TerminalOpen shows the panel.
+	Terminals                      []*terminalTab
+	ActiveTerminal, NextTerminalID int
+	TerminalOpen                   bool
+	// BackgroundTask is the task whose output the 「后台」 page shows.
+	BackgroundTask    string
+	BackgroundFetched time.Time
 }
 
 func newNativeWorkbench() nativeWorkbench {
 	return nativeWorkbench{Tab: "files", Files: map[string]*nativeFile{}, SavedFiles: map[string]fileWorkspace{}, RestoredFiles: map[string]bool{}}
 }
-func (w *nativeWorkbench) matchesTerminal(host, sid string) bool {
-	return w.TerminalHost == host && w.TerminalSession == sid
-}
+
+// close ends every shell; used when the host connection is replaced.
 func (w *nativeWorkbench) close() {
-	w.TerminalGeneration++
-	w.TerminalHost, w.TerminalSession, w.TerminalWorkspace = "", "", ""
-	if w.Term != nil {
-		_ = w.Term.Close()
-		w.Term = nil
+	for _, t := range w.Terminals {
+		t.close()
 	}
+	w.Terminals = nil
+	w.ActiveTerminal = 0
 	w.TerminalOpen = false
-	w.TerminalStarting = false
-	w.PendingTerminalText = ""
-	w.TerminalError = ""
 }
 func (a *preview) workspacePath(resource, path, sid string) string {
 	return "/workspace/" + resource + query(map[string]string{"path": path, "session_id": sid})
@@ -114,6 +110,8 @@ func (a *preview) refreshWorkbench() {
 		if s.RemoteID != "" {
 			a.resource("context", sessionPath(s.RemoteID)+"/context")
 		}
+	case "background":
+		a.loadBackgroundTasks(s)
 	case "tools":
 		a.resource("tools", "/tools")
 	case "profile":
@@ -142,7 +140,7 @@ func (a *preview) refreshWorkbench() {
 }
 
 var workbenchTabs = []struct{ id, label, icon string }{
-	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
+	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
 }
 
 func (a *preview) liveWorkbench(c *ui.Context) {
@@ -189,6 +187,8 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 				a.reviewWorkbench(c)
 			case "tasks", "plan":
 				a.tasksWorkbench(c)
+			case "background":
+				a.backgroundWorkbench(c)
 			case "context":
 				a.contextWorkbench(c)
 			case "tools":
@@ -201,7 +201,7 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Width(44).Padding(6, 4).Gap(2).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
-			for _, tab := range workbenchTabs[:6] {
+			for _, tab := range workbenchTabs[:7] {
 				button := iconButton(c.Key(tab.id), tab.icon, tab.label).Size(36, 34).OnClick(func() { a.openResource(tab.id) })
 				if w.Tab == tab.id {
 					button.TextColor(c.Theme().Accent).Background(c.Theme().SurfaceHover)
@@ -222,33 +222,60 @@ func (a *preview) liveTerminal(c *ui.Context) {
 		height = 280
 	}
 	height = min(height, max(120, windowHeight-400))
+	active := w.activeTerminal()
 	ui.Column(c).Height(height).MinHeight(120).BorderWidth(1, 0, 0, 0).BorderColor(c.Theme().Border).Children(func() {
-		ui.Row(c).Height(32).Padding(0, 12).Gap(8).AlignItems(ui.Center).Children(func() {
-			a.note(c, "终端 · "+filepath.Base(w.TerminalWorkspace))
-			ui.Spacer(c)
-			iconButton(c, "x", "关闭终端").Tooltip("收起终端（保持 shell 运行）").OnClick(func() { w.TerminalOpen = false })
+		ui.Row(c).Height(32).Padding(0, 8, 0, 12).Gap(4).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Label("终端标签").Gap(2).Grow(1).MinWidth(0).Clip().Children(func() {
+				for _, tab := range w.Terminals {
+					a.terminalTabButton(c.Key(tab.ID), tab, tab == active)
+				}
+			})
+			iconButton(c, "plus", "新建终端").Size(26, 26).Disabled(len(w.Terminals) >= maxTerminalTabs).OnClick(func() { a.newTerminal() })
+			iconButton(c, "x", "收起终端").Tooltip("收起终端（shell 保持运行）").Size(26, 26).OnClick(func() { w.TerminalOpen = false })
 		})
-		if w.Term != nil {
+		if active == nil {
+			ui.Row(c).Padding(4, 12).Children(func() { a.note(c, "没有打开的终端") })
+		} else if active.Term != nil {
 			select {
-			case <-w.Term.Done():
+			case <-active.Term.Done():
 				ui.Row(c).Gap(8).Padding(4, 12).Children(func() {
 					a.note(c, "终端已断开")
-					a.action(c, "重新连接终端").OnClick(func() { w.close(); a.toggleTerminal() })
+					a.action(c, "重新连接终端").OnClick(func() { w.closeTerminal(active); a.newTerminal() })
 				})
 			default:
 			}
-			terminal.View(c, w.Term).Grow(1).FillWidth()
+			terminal.View(c.Key(active.ID), active.Term).Grow(1).FillWidth()
+		} else if active.Error != "" {
+			ui.Column(c).Gap(6).Padding(4, 12).Children(func() {
+				a.note(c, active.Error)
+				a.action(c, "重新连接终端").AlignSelf(ui.Start).OnClick(func() { w.closeTerminal(active); a.newTerminal() })
+			})
 		} else {
-			if w.TerminalError != "" {
-				a.note(c, w.TerminalError)
-				a.action(c, "重新连接终端").OnClick(func() { w.close(); a.toggleTerminal() })
-			} else {
-				a.note(c, "正在连接终端…")
-			}
+			ui.Row(c).Padding(4, 12).Children(func() { a.note(c, "正在连接终端…") })
 		}
 		a.resizeEdge(c, "调整终端高度", true, height, 120, min(720, windowHeight-400), func(value float32) { a.Settings.Preferences.TerminalHeight = value; a.Settings.savePreferences() })
 	})
 }
+
+func (a *preview) terminalTabButton(c *ui.Context, tab *terminalTab, selected bool) {
+	w := &a.Live.Workbench
+	ui.Row(c).Gap(0).AlignItems(ui.Center).Radius(5).Background(func() ui.Color {
+		if selected {
+			return c.Theme().SurfaceHover
+		}
+		return ui.Color{}
+	}()).Children(func() {
+		button := ui.ButtonBase(c).Label("切换终端："+tab.title()).Padding(4, 8).OnClick(func() { w.ActiveTerminal = tab.ID })
+		button.Children(func() {
+			text := ui.Text(c, tab.title()).FontSize(11).SingleLine()
+			if !selected {
+				text.TextColor(c.Theme().TextMuted)
+			}
+		})
+		iconButton(c, "x", "关闭终端："+tab.title()).Tooltip("关闭此终端（结束 shell）").Size(20, 20).OnClick(func() { w.closeTerminal(tab) })
+	})
+}
+
 func (a *preview) saveNativeFile(f *nativeFile) {
 	if f.Host != a.Live.Config.ActiveHost {
 		a.Live.Error = "文件属于其他运行主机，未写入"
@@ -443,82 +470,20 @@ func (t *remoteTerminal) Resize(cols, rows int) error {
 	return t.writeJSON(map[string]any{"type": "resize", "cols": cols, "rows": rows})
 }
 func (t *remoteTerminal) Close() error { return t.conn.Close() }
+
+// toggleTerminal shows or hides the terminal panel, opening a first shell
+// for the current session when none exists.
 func (a *preview) toggleTerminal() {
-	l := a.Live
-	w := &l.Workbench
+	w := &a.Live.Workbench
 	if w.TerminalOpen {
 		w.TerminalOpen = false
 		return
 	}
-	if w.matchesTerminal(l.Config.ActiveHost, a.current().RemoteID) && (w.TerminalStarting || w.Term != nil) {
+	if len(w.Terminals) > 0 {
 		w.TerminalOpen = true
 		return
 	}
-	w.close()
-	s := a.current()
-	if s.RemoteID == "" {
-		l.Error = "请先创建会话，再打开终端"
-		return
-	}
-	if l.Client == nil {
-		l.Error = "请先连接运行主机"
-		return
-	}
-	w.TerminalOpen = true
-	w.TerminalStarting = true
-	w.TerminalGeneration++
-	generation := w.TerminalGeneration
-	w.TerminalHost, w.TerminalSession, w.TerminalWorkspace = l.Config.ActiveHost, s.RemoteID, s.Workspace
-	epoch, ctx, b, sid := l.epoch, l.hostCtx, l.Client, s.RemoteID
-	go func() {
-		u, _ := url.Parse(b.URL + "/terminal" + query(map[string]string{"session_id": sid, "cols": "80", "rows": "24"}))
-		if u.Scheme == "https" {
-			u.Scheme = "wss"
-		} else {
-			u.Scheme = "ws"
-		}
-		h := http.Header{}
-		h.Set("Authorization", "Bearer "+b.Token)
-		conn, resp, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
-		if err != nil && resp != nil {
-			err = terminalHandshakeError(resp)
-		}
-		var term *terminal.Terminal
-		if err == nil {
-			conn.SetReadLimit(128 << 10)
-			term, err = terminal.New(terminal.Options{Conn: &remoteTerminal{conn: conn}, Scrollback: 4 << 20})
-			if err != nil {
-				_ = conn.Close()
-			}
-		}
-		a.postOwned(epoch, func() {
-			if generation != w.TerminalGeneration || !w.matchesTerminal(l.Config.ActiveHost, a.current().RemoteID) {
-				if term != nil {
-					_ = term.Close()
-				}
-				return
-			}
-			w.TerminalStarting = false
-			if err != nil {
-				w.TerminalError = "终端连接失败：" + err.Error()
-				w.PendingTerminalText = ""
-				return
-			}
-			if a.current().RemoteID != sid {
-				_ = term.Close()
-				return
-			}
-			w.Term = term
-			if w.PendingTerminalText != "" {
-				term.Send([]byte(w.PendingTerminalText))
-				w.PendingTerminalText = ""
-			}
-		}, func() {
-			if term != nil {
-				_ = term.Close()
-			}
-		})
-	}()
+	a.newTerminal()
 }
 
 var _ io.ReadWriteCloser = (*remoteTerminal)(nil)

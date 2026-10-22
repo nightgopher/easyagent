@@ -21,6 +21,8 @@ type message struct {
 	Tool                                         string
 	Expanded                                     bool
 	Markdown                                     markdownDocument
+	// Steps are a task (subagent) call's progress lines, one per tool it ran.
+	Steps []string
 }
 type nativePlanEntry struct{ Content, Status string }
 type session struct {
@@ -58,6 +60,11 @@ type session struct {
 	Pending                                      bool
 	Reply                                        []rune
 	Position                                     int
+	// AutoApprove holds approval scopes the user allowed for the rest of this
+	// session in this window (see approvalScope); RejectReason is the optional
+	// reason typed on the approval card.
+	AutoApprove  map[string]bool
+	RejectReason string
 }
 type preview struct {
 	UpdaterReady                                                                   bool

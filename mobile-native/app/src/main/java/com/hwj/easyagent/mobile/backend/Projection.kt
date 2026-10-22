@@ -1,6 +1,7 @@
 package com.hwj.easyagent.mobile.backend
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -28,9 +29,12 @@ class ChatMessage(val uid: Long) {
     var durationMs by mutableDoubleStateOf(0.0)
     var expanded by mutableStateOf(false)
     var expansionTouched by mutableStateOf(false)
+    var images by mutableStateOf<List<HistoryImage>>(emptyList())
 
     val isWaiting: Boolean get() = !user && tool == "" && kind == "" && text == ""
 }
+
+class PendingAttachment(val attachment: UploadedAttachment, val preview: ByteArray?)
 
 class ChatSession(val id: String) {
     val messages = ArrayList<ChatMessage>()
@@ -40,11 +44,15 @@ class ChatSession(val id: String) {
     var queue = MessageQueue()
     var running = false
     var pending = false
-    var sending = false
+    var sending by mutableStateOf(false)
     var pendingRequest = ""
     var sentDraft = ""
-    var draft = ""
+    var sentAttachments: Set<String> = emptySet()
+    var draft by mutableStateOf("")
     var usage: JsonObject? = null
+    /** Attachments uploaded for the next prompt, with a local thumbnail when it is an image. */
+    var attachments by mutableStateOf<List<PendingAttachment>>(emptyList())
+    var uploading by mutableIntStateOf(0)
     private var nextUid = 1L
 
     val runId: String get() = run?.id ?: ""
@@ -60,7 +68,7 @@ class ChatSession(val id: String) {
         val tools = HashMap<String, ChatMessage>()
         for (m in records) {
             when (m.role) {
-                "user" -> add { user = true; text = displayText(m.content); entryId = m.entryId }
+                "user" -> add { user = true; text = displayText(m.content); entryId = m.entryId; images = m.images }
                 "assistant" -> {
                     if (m.thinking != "") add { tool = "思考过程"; text = m.thinking; kind = "thought" }
                     val body = displayText(m.content)

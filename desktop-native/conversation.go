@@ -165,7 +165,10 @@ func (a *preview) conversationRow(c *ui.Context, s *session, index, selected int
 			s.FindJump = false
 		}
 	}
-	row.Children(func() { a.conversationMessage(c, s, index, s.Messages[index]) })
+	// Message actions stay hidden until the row is hovered or holds focus, so
+	// history reads cleanly; keyboard users reveal them by tabbing in.
+	reveal := row.Hovered() || row.FocusWithin()
+	row.Children(func() { a.conversationMessage(c, s, index, s.Messages[index], reveal) })
 }
 
 type toolGroupState struct {
@@ -253,10 +256,6 @@ func (a *preview) toolGroup(c *ui.Context, s *session, start, end, selected int)
 			ui.Text(c, title).FontSize(12).Grow(1).MinWidth(0).SingleLine()
 			ui.Text(c, status).FontSize(10).TextColor(c.Theme().TextMuted)
 		})
-		if a.Live != nil && len(tools) > 0 {
-			anchor := tools[len(tools)-1]
-			iconButton(c, "git-branch", "从工具结果创建分支").Disabled(!s.canForkMessage(anchor) || running).Tooltip("包含本组完整工具结果；当前轮次请等待完成").OnClick(func() { a.forkLive(end - 1) })
-		}
 		if !state.Open {
 			return
 		}
@@ -284,7 +283,7 @@ func toolFilePath(m *message) string {
 }
 func toolDescription(m *message) string {
 	args := object(m.Args)
-	for _, key := range []string{"command", "path", "file_path", "pattern", "query", "url"} {
+	for _, key := range []string{"command", "path", "file_path", "pattern", "query", "url", "description"} {
 		if text := str(args[key]); text != "" {
 			return text
 		}
@@ -297,6 +296,12 @@ var toolExitCode = regexp.MustCompile(`(?i)exit\s*code:?\s*(-?\d+)`)
 var ansiSequence = regexp.MustCompile("\\x1b\\[[0-?]*[ -/]*[@-~]")
 
 func toolSummary(m *message) string {
+	if m.Tool == "task" {
+		if n := len(m.Steps); n > 0 {
+			return fmt.Sprintf("%d 步", n)
+		}
+		return ""
+	}
 	if m.Status != "完成" {
 		return ""
 	}
@@ -341,7 +346,11 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 				color = c.Theme().Warning
 			}
 			ui.Row(c).TextColor(color).Children(func() { icon(c, mark) })
-			ui.Text(c, m.Tool).FontSize(12).FontWeight(500)
+			name := m.Tool
+			if m.Tool == "task" {
+				name = "子任务"
+			}
+			ui.Text(c, name).FontSize(12).FontWeight(500)
 			ui.Text(c, toolDescription(m)).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine()
 			if summary := toolSummary(m); summary != "" {
 				ui.Text(c, summary).FontSize(10).TextColor(c.Theme().TextMuted).MaxWidth(110).SingleLine()
@@ -366,6 +375,10 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			}
 			if m.Kind == "thought" || m.Kind == "compaction" {
 				a.renderSessionMarkdown(c, &m.Markdown, m.Text, a.current(), "", false)
+				return
+			}
+			if m.Tool == "task" {
+				a.subagentDetail(c, m)
 				return
 			}
 			args := object(m.Args)
@@ -402,6 +415,29 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			a.action(c, "复制输出").AlignSelf(ui.Start).OnClick(func() { c.WriteClipboard(result); c.Toast("已复制输出") })
 		})
 	})
+}
+
+// subagentDetail shows a task call as a sub-task: the steps it took and, once
+// done, its answer as rendered Markdown (#244).
+func (a *preview) subagentDetail(c *ui.Context, m *message) {
+	if len(m.Steps) > 0 {
+		nativeDisclosure(c, "steps", fmt.Sprintf("执行步骤（%d）", len(m.Steps)), func() {
+			ui.Column(c).Gap(3).Children(func() {
+				for i, step := range m.Steps {
+					ui.Text(c.Key(i), step).FontSize(11).TextColor(c.Theme().TextMuted).SingleLine().MinWidth(0)
+				}
+			})
+		})
+	}
+	if m.Status == "执行中" {
+		a.note(c, "子任务执行中…")
+		return
+	}
+	if strings.TrimSpace(m.Result) == "" {
+		a.note(c, "子任务没有返回结论")
+		return
+	}
+	a.renderSessionMarkdown(c, &m.Markdown, m.Result, a.current(), "", false)
 }
 
 func (a *preview) nativeThought(c *ui.Context, s *session, i int, m *message) {

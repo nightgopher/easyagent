@@ -201,6 +201,14 @@ func (a *preview) questionFields(c *ui.Context, s *session, value confirmation) 
 		})
 	})
 }
+
+// rejectWithReason declines with the user's reason, which the model receives
+// as the tool result so it can try another way.
+func (a *preview) rejectWithReason(s *session, id, reason string) {
+	body := map[string]any{"run_id": s.runID(), "confirmation_id": id, "approved": false, "reason": reason}
+	a.operation("confirm/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/run/confirm", body, func(any) { a.loadSession(s) })
+}
+
 func (a *preview) confirmSession(s *session, id string, approved bool, answers []questionAnswer) {
 	body := map[string]any{"run_id": s.runID(), "confirmation_id": id, "approved": approved}
 	if answers != nil {

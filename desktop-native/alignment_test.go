@@ -66,6 +66,7 @@ func TestNativeProjectCollapseAndSuggestionsPreserveDraft(t *testing.T) {
 	}
 	a.current().Messages = nil
 	a.current().Draft = "保留我的草稿"
+	a.Live.Connected = true // suggestions are offered once a host is connected
 	tt.Frame()
 	for _, label := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
 		count := 0
@@ -115,16 +116,15 @@ func TestNativeWorkbenchRailKeepsTerminalIndependent(t *testing.T) {
 	if a.Live.Workbench.Tab != "review" {
 		t.Fatal("review rail action missing")
 	}
-	a.Live.Workbench.TerminalOpen = true
-	a.Live.Workbench.TerminalHost = "local"
-	a.Live.Workbench.TerminalSession = "layout"
-	a.Live.Workbench.TerminalWorkspace = "/demo/easyagent"
+	w := &a.Live.Workbench
+	w.Terminals = []*terminalTab{{ID: 1, Host: "local", Session: "layout", Workspace: "/demo/easyagent", Starting: true}}
+	w.ActiveTerminal, w.TerminalOpen = 1, true
 	a.Workbench = false
 	tt.Frame()
-	if !tt.HasText("终端 · easyagent") {
+	if !tt.HasText("easyagent · 1") {
 		t.Fatal("terminal still depends on right workbench")
 	}
-	click(t, tt, "关闭终端")
+	click(t, tt, "收起终端")
 	if a.Live.Workbench.TerminalOpen {
 		t.Fatal("terminal close failed")
 	}

@@ -2,7 +2,12 @@
 
 package com.hwj.easyagent.mobile.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -25,6 +31,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
@@ -55,18 +62,23 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.backend.AgentClient
 import com.hwj.easyagent.mobile.backend.ChatMessage
 import com.hwj.easyagent.mobile.backend.Confirmation
+import com.hwj.easyagent.mobile.backend.HistoryImage
 import com.hwj.easyagent.mobile.backend.LinkStatus
 import com.hwj.easyagent.mobile.backend.MessageQueue
 import com.hwj.easyagent.mobile.backend.obj
@@ -100,6 +112,20 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     val error by client.error.collectAsStateWithLifecycle()
     val session = remember(sessionId) { client.chat(sessionId) }
     val snackbar = remember { SnackbarHostState() }
+    // Ask for notifications when the user first starts a task, the moment
+    // results and approvals become worth notifying about (Android 13+).
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(session.sending) {
+        if (session.sending && !NotificationPrompt.asked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            NotificationPrompt.asked = true
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    var loopDialog by remember { mutableStateOf(false) }
+    if (loopDialog) LoopDialog(client, sessionId) { loopDialog = false }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
 
     LaunchedEffect(error) {
@@ -142,6 +168,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
+                    IconButton(onClick = { loopDialog = true }) { Icon(Icons.Filled.Autorenew, contentDescription = "循环任务") }
                     if (busy) {
                         IconButton(onClick = { client.cancelRun(session) }) {
                             Icon(Icons.Filled.Stop, contentDescription = "停止当前任务", tint = MaterialTheme.colorScheme.error)
@@ -150,16 +177,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 },
             )
         },
-        bottomBar = {
-            Composer(
-                draft = session.draft,
-                onDraftChange = { session.draft = it; client.touch() },
-                enabled = session.draft.isNotBlank() && !session.sending && link == LinkStatus.CONNECTED,
-                sending = session.sending,
-                queued = busy,
-                onSend = { client.sendPrompt(session, session.draft) },
-            )
-        },
+        bottomBar = { MediaComposer(client, session, link, queued = busy) },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -176,6 +194,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             m = entry.message,
                             generating = session.running && entry.message === session.messages.lastOrNull(),
                             onToggle = { client.touch() },
+                            images = { MessageImages(client, sessionId, it) },
                         )
                         is Entry.Approval -> ApprovalCard(entry.confirmation) { approved ->
                             client.confirm(session, entry.confirmation.id, approved)
@@ -196,46 +215,15 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Composer(
-    draft: String,
-    onDraftChange: (String) -> Unit,
-    enabled: Boolean,
-    sending: Boolean,
-    queued: Boolean,
-    onSend: () -> Unit,
-) {
-    Surface(tonalElevation = 2.dp) {
-        Row(
-            modifier = Modifier
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = onDraftChange,
-                modifier = Modifier.weight(1f),
-                placeholder = { Text(if (queued) "任务进行中，消息将排队发送…" else "给 EasyAgent 发消息…") },
-                maxLines = 6,
-                shape = RoundedCornerShape(20.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            FilledIconButton(onClick = onSend, enabled = enabled, modifier = Modifier.size(48.dp)) {
-                if (sending) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit) {
+private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit, images: @Composable (List<HistoryImage>) -> Unit) {
     when {
-        m.user -> UserBubble(m.text)
+        m.user -> Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
+            if (m.images.isNotEmpty()) {
+                images(m.images)
+                Spacer(Modifier.height(6.dp))
+            }
+            if (m.text.isNotBlank() && m.text != "[图片]".repeat(m.images.size)) UserBubble(m.text)
+        }
         m.kind == "tool" -> ToolCard(m, onToggle)
         m.kind == "thought" -> ThoughtCard(m, generating, onToggle)
         m.kind == "error" -> ErrorCard(m.text)
@@ -474,3 +462,8 @@ private fun toolResult(m: ChatMessage): String {
 
 private fun truncate(text: String, limit: Int = 6000): String =
     if (text.length <= limit) text else text.take(limit) + "\n…（已截断，共 ${text.length} 字）"
+
+/** Asks for the notification permission at most once per process. */
+private object NotificationPrompt {
+    var asked = false
+}
