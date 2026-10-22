@@ -2,7 +2,12 @@
 
 package com.hwj.easyagent.mobile.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -60,9 +65,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.backend.AgentClient
 import com.hwj.easyagent.mobile.backend.ChatMessage
@@ -100,6 +107,18 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     val error by client.error.collectAsStateWithLifecycle()
     val session = remember(sessionId) { client.chat(sessionId) }
     val snackbar = remember { SnackbarHostState() }
+    // Ask for notifications when the user first starts a task, the moment
+    // results and approvals become worth notifying about (Android 13+).
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(session.sending) {
+        if (session.sending && !NotificationPrompt.asked && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            NotificationPrompt.asked = true
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
 
     LaunchedEffect(error) {
@@ -474,3 +493,8 @@ private fun toolResult(m: ChatMessage): String {
 
 private fun truncate(text: String, limit: Int = 6000): String =
     if (text.length <= limit) text else text.take(limit) + "\n…（已截断，共 ${text.length} 字）"
+
+/** Asks for the notification permission at most once per process. */
+private object NotificationPrompt {
+    var asked = false
+}
