@@ -66,6 +66,7 @@ func TestNativeProjectCollapseAndSuggestionsPreserveDraft(t *testing.T) {
 	}
 	a.current().Messages = nil
 	a.current().Draft = "保留我的草稿"
+	a.Live.Connected = true // suggestions are offered once a host is connected
 	tt.Frame()
 	for _, label := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
 		count := 0
