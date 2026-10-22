@@ -172,6 +172,8 @@ POST /sessions/{id}/model
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/models` | 列出可用模型 |
+| `GET` | `/sessions/{id}/loop` | 查看会话的 `/loop` 循环任务（内容、间隔秒数、开始/到期/上次执行时间），没有时为 `null` |
+| `DELETE` | `/sessions/{id}/loop` | 停止会话的循环任务；与 `/loop clear` 不同，运行中也可以停止 |
 | `GET` | `/tools` | 列出已注册工具 |
 | `POST` | `/tools/register` | 注册外部工具 |
 | `GET` | `/applications` | 列出可用应用 |

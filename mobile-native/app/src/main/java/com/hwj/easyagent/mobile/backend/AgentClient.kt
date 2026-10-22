@@ -12,6 +12,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -261,6 +262,31 @@ class AgentClient(val config: HostConfig) {
             put("approved", approved)
         }
         call(ApiClient.sessionPath(s.id) + "/run/confirm", body) { reload(s) }
+    }
+
+    /** The session's active loop, or null when none runs. */
+    suspend fun loop(sessionId: String): LoopStatus? {
+        val raw = api.get(ApiClient.sessionPath(sessionId) + "/loop").obj()["loop"]
+        if (raw == null || raw is JsonNull) return null
+        return wireJson.decodeFromJsonElement(LoopStatus.serializer(), raw)
+    }
+
+    /**
+     * Starts a loop through the host's /loop command, so it behaves exactly as
+     * in the TUI. Returns the command's reply; throws if the host refused.
+     */
+    suspend fun startLoop(sessionId: String, minutes: Int, prompt: String, expiresHours: Int): String {
+        val text = prompt.replace(Regex("\\s+"), " ").trim()
+        require(text.isNotEmpty()) { "循环内容不能为空" }
+        val command = "/loop ${minutes}m $text --expires ${expiresHours}h"
+        val raw = api.post(ApiClient.sessionPath(sessionId) + "/command", buildJsonObject { put("command", command) })
+        val output = raw.obj().getString("output")
+        if (loop(sessionId) == null) throw ApiException(output.ifBlank { "循环任务没有启动" })
+        return output
+    }
+
+    suspend fun stopLoop(sessionId: String) {
+        api.delete(ApiClient.sessionPath(sessionId) + "/loop")
     }
 
     fun refreshSessions() {
