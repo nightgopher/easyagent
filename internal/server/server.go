@@ -23,6 +23,7 @@ import (
 	"github.com/hwj123hwj/easyagent/internal/web"
 	"github.com/hwj123hwj/easyagent/sdk/agent"
 	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/hwj123hwj/easyagent/sdk/ai/models"
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
 )
@@ -192,6 +193,9 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /computer/permissions", s.requestComputerPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/messages", s.getSessionMessages)
 	restMux.HandleFunc("GET /sessions/{id}/info", s.getSessionInfo)
+	restMux.HandleFunc("GET /sessions/{id}/background-tasks", s.listBackgroundTasks)
+	restMux.HandleFunc("GET /sessions/{id}/background-tasks/{task}", s.getBackgroundTask)
+	restMux.HandleFunc("POST /sessions/{id}/background-tasks/{task}/stop", s.stopBackgroundTask)
 	restMux.HandleFunc("POST /sessions/{id}/permissions", s.setSessionPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/run", s.getRun)
 	restMux.HandleFunc("POST /sessions/{id}/run/cancel", s.cancelRunHTTP)
@@ -211,6 +215,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /sessions/{id}/compact", s.compactSession)
 	restMux.HandleFunc("GET /sessions/{id}/context", s.getContextSnapshot)
 	restMux.HandleFunc("POST /sessions/{id}/command", s.executeCommand)
+	restMux.HandleFunc("GET /sessions/{id}/loop", s.getSessionLoop)
+	restMux.HandleFunc("DELETE /sessions/{id}/loop", s.deleteSessionLoop)
 	restMux.HandleFunc("POST /tools/register", s.registerTool)
 	restMux.HandleFunc("GET /sessions/{id}/diff", s.getSessionDiff)
 	restMux.HandleFunc("GET /sessions/{id}/runs/{run}/files", s.getRunFiles)
@@ -591,6 +597,14 @@ type ModelInfo struct {
 	ID       string `json:"id"`
 	Provider string `json:"provider"`
 	Name     string `json:"name"`
+	// ContextWindow is set only for models whose window is known, never the
+	// runtime's 128K fallback, so clients do not show a guessed size.
+	ContextWindow int `json:"context_window,omitempty"`
+}
+
+func knownWindow(id string) int {
+	window, _ := models.LookupContextWindow(id)
+	return window
 }
 
 // ModelsResponse is the response for the models list endpoint.
@@ -626,7 +640,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		modelID = cfg.AnthropicModel
 	}
 	if modelID != "" {
-		current = &ModelInfo{ID: modelID, Provider: provider, Name: modelID}
+		current = &ModelInfo{ID: modelID, Provider: provider, Name: modelID, ContextWindow: knownWindow(modelID)}
 	}
 
 	result := ModelsResponse{Models: []ModelInfo{}, Current: current, Source: "unconfigured"}
@@ -693,9 +707,10 @@ func (s *Server) fetchGatewayModels(ctx context.Context, baseURL, apiKey string)
 			name = m.ID
 		}
 		models = append(models, ModelInfo{
-			ID:       m.ID,
-			Provider: "openai",
-			Name:     name,
+			ID:            m.ID,
+			Provider:      "openai",
+			Name:          name,
+			ContextWindow: knownWindow(m.ID),
 		})
 	}
 	return models, nil

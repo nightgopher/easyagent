@@ -108,20 +108,23 @@ func (a *preview) liveChrome(c *ui.Context) {
 		}
 	})
 }
+// sidebarBucketThreshold is the number of unpinned sessions in a project from
+// which they are grouped under date headings.
+const sidebarBucketThreshold = 8
+
 func (a *preview) liveSidebar(c *ui.Context) {
 	l := a.Live
 	ui.Column(c).Width(260).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Padding(14).Gap(12).Children(func() {
 			ui.Row(c).Gap(8).Children(func() {
 				a.text(c, "对话").Bold()
-				a.note(c, fmt.Sprint(len(a.Sessions)))
 				ui.Spacer(c)
 				iconButton(c, "refresh", "刷新会话").OnClick(func() { a.refreshLiveSessions("") })
 			})
 			ui.Row(c).Gap(6).Children(func() {
 				group := ui.Row(c).Grow(1).Gap(0).AlignItems(ui.Stretch)
 				group.Children(func() {
-					flatButton(c, "plus", "新建会话").Grow(1).Height(36).Radius(6, 0, 0, 6).Padding(8, 10).TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.07)).Border(1, c.Theme().Accent.Alpha(.28)).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(a.newSession)
+					flatButton(c, "plus", "新建会话").Tooltip("在当前会话所在的项目里新建").Grow(1).Height(36).Radius(6, 0, 0, 6).Padding(8, 10).TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.07)).Border(1, c.Theme().Accent.Alpha(.28)).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(a.newSession)
 					flatButton(c, "chevron-down", "").Label("选择模式").Tooltip("选择模式").Width(26).Height(36).Padding(8, 6).Radius(0, 6, 6, 0).BorderWidth(1, 1, 1, 0).BorderColor(c.Theme().Border).Background(c.Theme().Surface).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(func() { a.toggleMenu(&a.NewMenu) })
 				})
 				popup := a.menuPanel(c, group, &a.NewMenu, func() {
@@ -189,10 +192,13 @@ func (a *preview) liveSidebar(c *ui.Context) {
 						icon(c, "folder")
 						title := filepath.Base(group)
 						ui.Text(c, title).FontSize(12).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).MaxLines(1)
-						ui.Text(c, fmt.Sprint(len(byGroup[group]))).FontSize(11).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+						// A count of one says nothing; keep it when collapsed or useful.
+						if n := len(byGroup[group]); n > 1 || collapsed {
+							ui.Text(c, fmt.Sprint(n)).FontSize(11).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+						}
 					})
 					if group != localHostName() {
-						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
+						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Tooltip("在 "+filepath.Base(group)+" 中新建会话").Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
 					}
 				})
 				if collapsed {
@@ -209,6 +215,16 @@ func (a *preview) liveSidebar(c *ui.Context) {
 				}
 				for _, s := range pinned {
 					a.sessionRow(c, s)
+				}
+				// Date headings only help once a project has many sessions; below
+				// that they add a level and a count above every row.
+				if unpinned := len(byGroup[group]) - len(pinned); unpinned < sidebarBucketThreshold {
+					for _, list := range buckets {
+						for _, s := range list {
+							a.sessionRow(c, s)
+						}
+					}
+					continue
 				}
 				first := -1
 				for i, list := range buckets {
@@ -269,12 +285,23 @@ func (a *preview) liveToolbar(c *ui.Context) {
 			})
 		})
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "●").FontSize(9).TextColor(c.Theme().Accent)
-			ui.Text(c, s.statusText()).FontSize(11).TextColor(c.Theme().TextMuted)
+			// Without a host the run state is unknown; say so instead of 「就绪」.
+			status, dot := s.statusText(), c.Theme().Accent
+			if !l.Connected {
+				status, dot = a.connectionLabel(), c.Theme().TextMuted
+			}
+			ui.Text(c, "●").FontSize(9).TextColor(dot)
+			ui.Text(c, status).FontSize(11).TextColor(c.Theme().TextMuted)
 		})
+		if n := a.runningBackgroundTasks(s); n > 0 {
+			flatButton(c, "terminal", fmt.Sprintf("后台 %d", n)).Label("后台任务").Tooltip("本会话有后台命令正在运行").FontSize(11).OnClick(func() { a.openResource("background") })
+		}
 		more := iconButton(c, "menu", "会话操作").OnClick(func() { a.toggleMenu(&a.MoreMenu) })
 		a.menuPanel(c, more, &a.MoreMenu, func() {
 			menuOption(c, "", "重命名会话", false).Disabled(s.RemoteID == "").OnClick(func() { a.renameNativeSession(s) })
+			if len(s.AutoApprove) > 0 {
+				menuOption(c, "shield", "撤销本会话的自动批准", false).OnClick(func() { s.AutoApprove = nil; a.MoreMenu = false; a.Live.Notice = "已撤销本会话的自动批准" })
+			}
 			label := "置顶会话"
 			if s.Pinned {
 				label = "取消置顶"
@@ -435,7 +462,8 @@ func (a *preview) liveComposer(c *ui.Context) {
 					iconButton(c, "plus", "添加附件").Disabled(!l.Connected || s.Archived || s.Sending || l.Loading["create-session"] || l.Loading["attachments/"+s.RemoteID]).OnClick(a.pickAttachments)
 					permission := flatButton(c, "shield", a.livePermission()).Disabled(s.Running || s.Pending || s.Sending || l.configBusy()).OnClick(func() { a.toggleMenu(&a.PermissionMenu) })
 					if a.livePermission() == "完全权限" {
-						permission.TextColor(c.Theme().Warning)
+						// Auto-approval must stand out from the neutral default.
+						permission.TextColor(c.Theme().Warning).Background(c.Theme().Warning.Alpha(.12)).Tooltip("完全权限：普通工具的修改与命令会自动批准")
 					}
 					a.menuPanel(c, permission, &a.PermissionMenu, func() {
 						menuCaption(c, "工具权限")
@@ -456,14 +484,27 @@ func (a *preview) liveComposer(c *ui.Context) {
 							a.note(c, "只影响当前会话。MCP 独立批准规则及工作区访问限制仍然生效；服务重启后恢复启动配置。")
 						})
 					})
-					usage := "上下文"
-					if window := number(s.Usage["context_window"]); window > 0 {
-						usage = fmt.Sprintf("约 %.1f%%", 100*number(s.Usage["estimated_tokens"])/window)
-					}
-					usageButton := flatButton(c, "activity", usage).Disabled(len(s.Usage) == 0).OnClick(func() { a.toggleMenu(&a.ContextMenu) })
-					usagePopup := a.menuPanel(c, usageButton, &a.ContextMenu, func() { a.contextUsagePanel(c, s) })
-					if usagePopup.Valid() {
-						usagePopup.Width(332).Padding(16)
+					// Context usage appears once the host reports it; an empty grey
+					// 「上下文」 read as a disabled control.
+					if len(s.Usage) > 0 {
+						usage, tip, share := "上下文", "查看上下文占用", 0.0
+						if window := number(s.Usage["context_window"]); window > 0 {
+							used := number(s.Usage["estimated_tokens"])
+							share = 100 * used / window
+							usage = fmt.Sprintf("%.0f%%", share)
+							tip = fmt.Sprintf("上下文已用约 %.0f / %.0f tokens（%.1f%%）", used, window, share)
+							if share >= 80 {
+								tip += "；接近上限，可以用 /compact 压缩"
+							}
+						}
+						usageButton := flatButton(c, "activity", usage).Label("上下文占用").Tooltip(tip).OnClick(func() { a.toggleMenu(&a.ContextMenu) })
+						if share >= 80 {
+							usageButton.TextColor(c.Theme().Warning)
+						}
+						usagePopup := a.menuPanel(c, usageButton, &a.ContextMenu, func() { a.contextUsagePanel(c, s) })
+						if usagePopup.Valid() {
+							usagePopup.Width(332).Padding(16)
+						}
 					}
 					name := s.Model
 					if name == "" {
@@ -477,7 +518,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 						a.refreshModels()
 					})
 					a.liveModelPicker(c, model)
-					flatButton(c, "", "/").Label("斜杠命令").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
+					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
 					ui.Spacer(c)
 					if l.Voice != nil {
 						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
@@ -559,23 +600,48 @@ func (a *preview) queueAction(s *session, action, id, text string, done ...func(
 	})
 }
 func (a *preview) liveApproval(c *ui.Context, s *session) {
+	if a.autoApprove(s) {
+		return
+	}
 	value := s.Confirmations[0]
 	l := a.Live
-	ui.Column(c).Padding(12, 14).Gap(8).Background(c.Theme().Surface).Border(1, c.Theme().Accent.Alpha(.4)).Radius(8).Children(func() {
+	card := ui.Column(c).Label("工具审批").Padding(12, 14).Gap(8).Background(c.Theme().Surface).Border(1, c.Theme().Accent.Alpha(.4)).Radius(8)
+	// Shortcuts act only with focus in the card, so a ⌘↩ typed in the
+	// composer can never approve a command by accident.
+	inCard := card.FocusWithin()
+	card.Children(func() {
 		_, hasQuestions := object(value.Args)["questions"]
 		if hasQuestions || value.ToolName == "ask_user_question" {
 			a.text(c, "需要你回答的问题").Bold()
 			a.questionFields(c, s, value)
 		} else {
-			a.text(c, "工具需要你的批准").Bold()
-			a.note(c, value.ToolName)
-			a.note(c, value.Description)
+			busy := l.Loading["confirm/"+s.RemoteID]
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				a.text(c, "工具需要你的批准").Bold()
+				ui.Text(c, value.ToolName).Font("monospace").FontSize(11).Padding(1, 6).Radius(4).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
+			})
+			// The reason (e.g. which danger rule matched) is what the user decides on.
+			if value.Description != "" {
+				reason := ui.Text(c, value.Description).Label("审批原因").FontSize(13).LineHeight(1.6)
+				if value.ToolName == "bash" {
+					reason.TextColor(c.Theme().Warning)
+				}
+			}
 			if value.Args != nil {
 				ui.Text(c, pretty(value.Args)).Font("monospace").FontSize(12).MaxLines(5)
 			}
-			ui.Row(c).Gap(8).Children(func() {
-				a.primary(c, "允许一次").Disabled(l.Loading["confirm/"+s.RemoteID]).OnClick(func() { a.confirmLive(true) })
-				a.action(c, "拒绝").Disabled(l.Loading["confirm/"+s.RemoteID]).OnClick(func() { a.confirmLive(false) })
+			ui.TextInput(c, &s.RejectReason).Label("拒绝原因").Placeholder("拒绝原因（可选，会告诉模型）").FontSize(12)
+			if inCard && !busy && c.Shortcut(ui.Cmd, ui.KeyEnter) {
+				a.confirmLive(true)
+			} else if inCard && !busy && c.Shortcut(0, ui.KeyEscape) {
+				a.confirmLive(false)
+			}
+			ui.Row(c).Gap(8).Wrap().Children(func() {
+				a.primary(c, "允许一次 ⌘↩").Label("允许一次").Tooltip("焦点在审批卡片内时可按 ⌘↩").Disabled(busy).OnClick(func() { a.confirmLive(true) })
+				if key, label := approvalScope(value); key != "" {
+					a.action(c, label).Disabled(busy).OnClick(func() { a.allowForSession(key) })
+				}
+				a.action(c, "拒绝 Esc").Label("拒绝").Disabled(busy).OnClick(func() { a.confirmLive(false) })
 			})
 		}
 	})

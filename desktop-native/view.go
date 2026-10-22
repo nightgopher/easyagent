@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/egoist/mygo/ui"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -231,11 +232,24 @@ func (a *preview) sidebar(c *ui.Context) {
 		})
 		ui.Column(c).Padding(12).Gap(6).BorderWidth(1, 0, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 			flatButton(c, "settings", a.tr("设置")).Justify(ui.Start).OnClick(func() { a.openSettings("general") })
-			a.text(c, "MyGo 0.5.5 · Go 原生").FontSize(11).TextColor(c.Theme().TextMuted).Padding(4, 7)
+			a.text(c, mygoLabel()+" · Go 原生").FontSize(11).TextColor(c.Theme().TextMuted).Padding(4, 7)
 		})
 	})
 
 }
+
+// mygoLabel reports the linked MyGo module version, so the label follows go.mod.
+func mygoLabel() string {
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, dep := range info.Deps {
+			if dep.Path == "github.com/egoist/mygo" {
+				return "MyGo " + strings.TrimPrefix(dep.Version, "v")
+			}
+		}
+	}
+	return "MyGo"
+}
+
 func (a *preview) toolbar(c *ui.Context) {
 	if a.Live != nil {
 		a.liveToolbar(c)
@@ -277,6 +291,25 @@ func (a *preview) toolbar(c *ui.Context) {
 		})
 	})
 }
+
+// disconnectedHint explains why new sessions and sending are unavailable and
+// offers the ways out, instead of only dimming the buttons.
+func (a *preview) disconnectedHint(c *ui.Context) {
+	l := a.Live
+	ui.Column(c).Label("未连接提示").Gap(10).Margin(18, 0, 0, 0).Padding(14, 16).Radius(8).Border(1, c.Theme().Border).Background(c.Theme().Surface).Children(func() {
+		title := "尚未连接运行主机"
+		if l.Connecting {
+			title = "正在连接运行主机…"
+		}
+		a.text(c, title).FontWeight(500)
+		a.text(c, "连接后才能新建会话和发送消息；已输入的草稿会保留。").FontSize(13).TextColor(c.Theme().TextMuted)
+		ui.Row(c).Gap(8).Children(func() {
+			a.action(c, "重新连接").Disabled(l.Connecting).OnClick(a.connectLive)
+			a.action(c, "管理运行主机").OnClick(func() { a.openSettings("connections") })
+		})
+	})
+}
+
 func (a *preview) transcript(c *ui.Context) {
 	s := a.current()
 	if a.Live != nil {
@@ -302,6 +335,8 @@ func (a *preview) transcript(c *ui.Context) {
 					}
 					if a.Live == nil {
 						a.text(c, "此预览只使用演示数据。").FontSize(12).TextColor(c.Theme().TextMuted)
+					} else if !a.Live.Connected {
+						a.disconnectedHint(c)
 					} else {
 						ui.Row(c).Wrap().Gap(12).Margin(18, 0, 0, 0).Children(func() {
 							for _, suggestion := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
@@ -448,7 +483,7 @@ func (a *preview) composer(c *ui.Context) {
 							}
 						})
 					})
-					flatButton(c, "", "/").Label("斜杠命令").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
+					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
 					ui.Spacer(c)
 					iconButton(c, "mic", a.tr("语音输入尚未接入此预览")).Disabled(true)
 					if s.Running {
@@ -520,7 +555,26 @@ func (a *preview) workbench(c *ui.Context) {
 	})
 }
 
-func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *message) {
+// latestReply returns the index of the last assistant reply, -1 if none.
+func latestReply(s *session) int {
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		if m := s.Messages[i]; !m.User && m.Tool == "" && m.Kind == "" {
+			return i
+		}
+	}
+	return -1
+}
+
+// messageActions keeps its space when hidden so revealing it never shifts text.
+func messageActions(c *ui.Context, shown bool, body func()) {
+	row := ui.Row(c).Gap(3)
+	if !shown {
+		row.Opacity(0)
+	}
+	row.Children(body)
+}
+
+func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *message, reveal bool) {
 	c := key
 	if m.User {
 		ui.Row(key).Children(func() {
@@ -529,8 +583,8 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				ui.Text(key, m.Text).Padding(12, 18).Background(c.Theme().Accent.Alpha(.12)).Radius(12).LineHeight(1.75)
 				if a.Live != nil {
 					a.messageImages(key, m)
-					ui.Row(key).Gap(3).Children(func() {
-						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text) })
+					messageActions(key, reveal, func() {
+						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制消息") })
 						iconButton(key, "git-branch", "编辑并创建分支").Disabled(!s.canForkMessage(m)).Tooltip("历史消息可随时分叉；当前轮次请等待完成").OnClick(func() { a.forkUserMessage(i) })
 					})
 				}
@@ -558,7 +612,9 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				a.renderSessionMarkdown(key, &m.Markdown, m.Text, s, "", s.Running && i == len(s.Messages)-1)
 			}
 			if !(s.Running && i == len(s.Messages)-1) {
-				ui.Row(key).Gap(3).Children(func() {
+				// The latest reply keeps its actions visible: copying or forking the
+				// answer just given is the common case.
+				messageActions(key, reveal || i == latestReply(s), func() {
 					iconButton(key, "copy", fmt.Sprintf("复制回复 %d", i)).OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制回复") })
 					iconButton(key, "git-branch", fmt.Sprintf("从回复 %d 创建分支", i)).Tooltip("从此回复创建分支（包含完整工具结果）；当前轮次请等待完成").Disabled(a.Live != nil && !s.canForkMessage(m)).OnClick(func() { a.fork(i) })
 				})

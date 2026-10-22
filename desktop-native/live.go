@@ -26,6 +26,7 @@ type liveState struct {
 	SavedModelForm                                                         modelForm
 	SavedMCPForm                                                           mcpForm
 	ModelIndex                                                             int
+	RecentModels                                                           []string
 	ModelJump                                                              bool
 	ModelList                                                              ui.ListState
 	CommandIndex                                                           int
@@ -217,8 +218,8 @@ func (a *preview) liveTick() bool {
 			i = 256
 		}
 	}
-	if (l.Workbench.Term != nil || l.Workbench.TerminalStarting) && !l.Workbench.matchesTerminal(l.Config.ActiveHost, a.current().RemoteID) {
-		l.Workbench.close()
+	// Shells survive session switches; only those of another host end.
+	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
 	}
 	if time.Since(l.LastSave) > 750*time.Millisecond {
@@ -576,6 +577,7 @@ func (a *preview) loadSession(s *session) {
 	}
 	id := s.RemoteID
 	a.refreshRunResults(s)
+	a.loadBackgroundTasks(s)
 	a.call("GET", sessionPath(id)+"/run", nil, func(v any) {
 		data, _ := json.Marshal(v)
 		var e envelope
@@ -751,7 +753,52 @@ func (a *preview) confirmLive(approved bool) {
 		return
 	}
 	id := s.Confirmations[0].ID
+	if !approved && strings.TrimSpace(s.RejectReason) != "" {
+		a.rejectWithReason(s, id, strings.TrimSpace(s.RejectReason))
+		s.RejectReason = ""
+		return
+	}
+	s.RejectReason = ""
 	a.confirmSession(s, id, approved, nil)
+}
+
+// approvalScope returns the key and label of a session-wide approval the user
+// may grant for this request, or "" when only one-off approval is allowed.
+// bash asks only for commands matching a danger rule and delete_file removes
+// data, so neither can be allowed for the session.
+func approvalScope(value confirmation) (key, label string) {
+	switch {
+	case value.ToolName == "write" || value.ToolName == "edit" || value.ToolName == "patch":
+		return "files", "本会话允许所有文件修改"
+	case strings.HasPrefix(value.ToolName, "mcp__"):
+		return "tool:" + value.ToolName, "本会话允许此工具"
+	}
+	return "", ""
+}
+
+// allowForSession approves the pending request and every later request of the
+// same scope in this session.
+func (a *preview) allowForSession(key string) {
+	s := a.current()
+	if s.AutoApprove == nil {
+		s.AutoApprove = map[string]bool{}
+	}
+	s.AutoApprove[key] = true
+	a.confirmLive(true)
+}
+
+// autoApprove answers a pending request already covered by a session scope.
+func (a *preview) autoApprove(s *session) bool {
+	if len(s.Confirmations) == 0 || a.Live.Loading["confirm/"+s.RemoteID] {
+		return false
+	}
+	key, _ := approvalScope(s.Confirmations[0])
+	if key == "" || !s.AutoApprove[key] {
+		return false
+	}
+	a.Live.Notice = "已按本会话设置自动批准：" + s.Confirmations[0].ToolName
+	a.confirmSession(s, s.Confirmations[0].ID, true, nil)
+	return true
 }
 func (a *preview) forkLive(index int) {
 	s := a.current()
@@ -785,12 +832,14 @@ func (a *preview) switchLiveModel(name string) {
 		s.ModelChosen = true
 		s.Model = name
 		a.ModelMenu = false
+		a.Live.rememberModel(name)
 		return
 	}
 	s.InfoVersion++
 	a.operation("model/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/model", map[string]any{"model": name}, func(v any) {
 		s.InfoVersion++
 		s.Model = str(object(v)["model"])
+		a.Live.rememberModel(s.Model)
 		a.ModelMenu = false
 		if a.current() == s {
 			a.ReturnToComposer = true

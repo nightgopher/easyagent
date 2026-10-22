@@ -233,14 +233,7 @@ func (a *preview) filesWorkbench(c *ui.Context) {
 				menuOption(c, "folder", "在 Finder 中显示", false).Disabled(!a.Settings.host().Local).OnClick(func() { w.FileOpenMenu = false; go mygo.Shell.ShowItemInFolder(f.Path) })
 				menuOption(c, "terminal", "在终端中打开", false).Disabled(!a.Settings.host().Local).OnClick(func() {
 					w.FileOpenMenu = false
-					if !w.TerminalOpen {
-						a.toggleTerminal()
-					}
-					if w.Term != nil {
-						w.Term.Send([]byte("cd " + shellQuote(filepath.Dir(f.Path)) + "\r"))
-					} else if w.TerminalStarting {
-						w.PendingTerminalText = "cd " + shellQuote(filepath.Dir(f.Path)) + "\r"
-					}
+					a.sendToTerminal("cd " + shellQuote(filepath.Dir(f.Path)) + "\r")
 				})
 				menuOption(c, "plus", "添加到消息", false).OnClick(func() {
 					a.addFileReference(s, fileReference{Path: f.Path, Workspace: s.Workspace, Host: l.Config.ActiveHost})

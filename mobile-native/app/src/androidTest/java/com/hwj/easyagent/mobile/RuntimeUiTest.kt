@@ -1,5 +1,6 @@
 package com.hwj.easyagent.mobile
 
+import android.app.NotificationManager
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -49,11 +50,18 @@ class RuntimeUiTest {
         instrumentation.runOnMainSync {
             app.connections.state.value.hosts.map { it.id }.forEach(app.connections::remove)
         }
+        // The app asks for notifications when a message is first sent; grant it up
+        // front so the system dialog never covers the Compose hierarchy.
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, "android.permission.POST_NOTIFICATIONS")
+        }
+        instrumentation.targetContext.getSystemService(NotificationManager::class.java).cancelAll()
         activity = ActivityScenario.launch(MainActivity::class.java)
     }
 
     @After fun close() {
         instrumentation.uiAutomation.executeShellCommand("cmd uimode night no").close()
+        instrumentation.targetContext.getSystemService(NotificationManager::class.java).cancelAll()
         activity.close()
         instrumentation.runOnMainSync {
             app.connections.state.value.hosts.map { it.id }.forEach(app.connections::remove)
@@ -71,7 +79,7 @@ class RuntimeUiTest {
             instrumentation.runOnMainSync {
                 projected = app.connections.client.value?.activeChat?.messages?.joinToString(" | ") { it.text }.orEmpty()
             }
-            throw AssertionError("Missing $text\nProjected messages: $projected\n${ui.onRoot().printToString()}", error)
+            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).fetchSemanticsNodes().joinToString { it.config.toString() }}", error)
         }
     }
     private fun fill(label: String, value: String) {
@@ -248,6 +256,89 @@ class RuntimeUiTest {
         ui.onNodeWithText("bash").performClick()
         ui.waitUntil(5_000) { ui.onAllNodesWithText("完整输出").fetchSemanticsNodes().isEmpty() }
     }
+
+    @Test fun attachmentsRefreshAndSurviveAnotherPromptAcknowledgement() {
+        val host = host("附件主机")
+        connect(host)
+        openChat(host)
+        fun upload(name: String) = instrumentation.runOnMainSync {
+            val client = requireNotNull(app.connections.client.value)
+            client.uploadAttachment(client.chat("qa-session"), name, name.toByteArray(), null)
+        }
+        upload("first.txt")
+        waitText("first.txt")
+        prompt("发送第一个附件")
+        val sent = requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS))
+        assertEquals("first.txt", sent.getJSONObject("inputs").getJSONArray("attachments").getString(0))
+        upload("next.txt")
+        waitText("next.txt")
+        host.accept(sent)
+        waitText("生成中…")
+        waitText("next.txt")
+        ui.onNodeWithContentDescription("移除附件：next.txt").performClick()
+        ui.waitUntil(5_000) { ui.onAllNodesWithText("next.txt").fetchSemanticsNodes().isEmpty() }
+        ui.onNodeWithContentDescription("添加附件").performClick()
+        waitText("拍照")
+        waitText("从相册选择")
+        waitText("选择文件")
+        screenshot("media-composer")
+    }
+
+    @Test fun loopDialogCreatesAndStopsTheHostsLoop() {
+        val host = host("循环主机")
+        connect(host)
+        openChat(host)
+        ui.onNodeWithContentDescription("循环任务").performClick()
+        waitText("每次发送的内容")
+        ui.onNodeWithText("每次发送的内容").performTextReplacement("检查验收状态")
+        closeSoftKeyboard()
+        ui.onNodeWithText("开始", useUnmergedTree = true).performClick()
+        waitText("停止循环")
+        waitText("检查验收状态")
+        screenshot("loop-active")
+        ui.onNodeWithText("停止循环").performClick()
+        waitText("每次发送的内容")
+        assertTrue(host.calls.any { it.method == "DELETE" && it.path?.endsWith("/loop") == true })
+        val command = host.calls.first { it.path?.endsWith("/command") == true }
+        assertEquals("/loop 15m 检查验收状态 --expires 24h", JSONObject(command.body.clone().readUtf8()).getString("command"))
+    }
+
+    @Test fun backgroundNotificationsApproveRejectAndOpenTheRightChat() {
+        val host = host("通知主机")
+        connect(host)
+        openChat(host)
+        prompt("通知验收任务")
+        host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
+        waitText("生成中…")
+        val manager = instrumentation.targetContext.getSystemService(NotificationManager::class.java)
+        // Viewing the same chat suppresses its alert.
+        host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"foreground","tool_name":"write","description":"前台审批"}"""))
+        waitText("前台审批")
+        assertTrue(manager.activeNotifications.isEmpty())
+        ui.onNodeWithText("拒绝").performClick()
+        ui.waitUntil(5_000) { host.calls.any { it.path?.endsWith("/run/confirm") == true } }
+        activity.moveToState(Lifecycle.State.CREATED)
+        for ((id, approved) in listOf("approve" to true, "reject" to false)) {
+            host.emit("confirmation", "confirmation" to JSONObject().put("confirmation_id", id).put("tool_name", "write").put("description", "后台审批 $id"))
+            ui.waitUntil(10_000) { manager.activeNotifications.any { it.notification.actions?.size == 2 } }
+            val notification = manager.activeNotifications.first { it.notification.actions?.size == 2 }.notification
+            notification.actions[if (approved) 0 else 1].actionIntent.send()
+            ui.waitUntil(10_000) {
+                host.calls.any { it.path?.endsWith("/run/confirm") == true && JSONObject(it.body.clone().readUtf8()).optString("confirmation_id") == id }
+            }
+            val request = host.calls.first { it.path?.endsWith("/run/confirm") == true && JSONObject(it.body.clone().readUtf8()).optString("confirmation_id") == id }
+            assertEquals(approved, JSONObject(request.body.clone().readUtf8()).getBoolean("approved"))
+        }
+        host.emit("status", "state" to "completed", "streaming" to false)
+        ui.waitUntil(10_000) { manager.activeNotifications.any { it.notification.channelId == Notifier.CHANNEL_RUNS } }
+        manager.activeNotifications.first { it.notification.channelId == Notifier.CHANNEL_RUNS }.notification.contentIntent.send()
+        activity.moveToState(Lifecycle.State.RESUMED)
+        waitText("已保存的历史")
+        ui.onNodeWithContentDescription("返回").assertExists()
+        assertEquals("qa-session", app.connections.client.value?.activeId?.value)
+        screenshot("notification-opened-chat")
+    }
+
 }
 
 private class RuntimeFixture(val name: String) : AutoCloseable {
@@ -264,6 +355,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     private var requestId = ""
     private var events = JSONArray()
     private var confirmation: JSONObject? = null
+    @Volatile private var loop: JSONObject? = null
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -290,12 +382,21 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                     })
                     path == "/sessions" && request.method == "GET" -> json(JSONArray().put(JSONObject().put("id", "qa-session").put("title", title)).toString())
                     path.endsWith("/run/confirm") -> {
-                        emit("confirmed", "confirmation_id" to "c1")
+                        emit("confirmed", "confirmation_id" to JSONObject(request.body.clone().readUtf8()).getString("confirmation_id"))
                         json("{}")
                     }
                     path.endsWith("/run/cancel") -> {
                         emit("status", "state" to "cancelled", "streaming" to false)
                         json("{}")
+                    }
+                    path.endsWith("/attachments") -> json(JSONObject().put("id", JSONObject(request.body.clone().readUtf8()).getString("name")).put("name", JSONObject(request.body.clone().readUtf8()).getString("name")).put("mime_type", "text/plain").toString())
+                    path.endsWith("/loop") -> {
+                        if (request.method == "DELETE") loop = null
+                        json(JSONObject().put("loop", loop ?: JSONObject.NULL).toString())
+                    }
+                    path.endsWith("/command") -> {
+                        loop = JSONObject().put("prompt", "检查验收状态").put("interval_seconds", 900).put("started_at", "2026-10-22T00:00:00Z").put("expires_at", "2099-10-23T00:00:00Z")
+                        json("""{"output":"循环任务已启动"}""")
                     }
                     path.endsWith("/queue") -> json("""{"revision":1,"items":[{"id":"q1","prompt":"下一项任务"}]}""")
                     path.endsWith("/run") -> json(snapshot().toString())
