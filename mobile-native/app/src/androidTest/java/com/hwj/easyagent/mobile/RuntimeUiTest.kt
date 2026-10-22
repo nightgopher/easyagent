@@ -13,6 +13,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
 import com.hwj.easyagent.mobile.backend.SettingsStore
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -86,6 +87,7 @@ class RuntimeUiTest {
     }
     private fun prompt(text: String) {
         ui.onNode(hasSetTextAction()).performTextReplacement(text)
+        closeSoftKeyboard()
         ui.waitUntil(10_000) {
             ui.onAllNodes(hasContentDescription("发送") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
         }
