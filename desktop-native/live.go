@@ -218,8 +218,8 @@ func (a *preview) liveTick() bool {
 			i = 256
 		}
 	}
-	if (l.Workbench.Term != nil || l.Workbench.TerminalStarting) && !l.Workbench.matchesTerminal(l.Config.ActiveHost, a.current().RemoteID) {
-		l.Workbench.close()
+	// Shells survive session switches; only those of another host end.
+	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
 	}
 	if time.Since(l.LastSave) > 750*time.Millisecond {
