@@ -3,6 +3,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- 运行主机通常在 tailnet 内以明文 HTTP 暴露 8080，链路本身由 WireGuard 加密。 -->
     <application
@@ -29,5 +30,15 @@
         <receiver
             android:name=".ApprovalActionReceiver"
             android:exported="false" />
+        <!-- Camera captures are written to the app cache and shared with the camera app. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>
