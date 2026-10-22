@@ -577,6 +577,7 @@ func (a *preview) loadSession(s *session) {
 	}
 	id := s.RemoteID
 	a.refreshRunResults(s)
+	a.loadBackgroundTasks(s)
 	a.call("GET", sessionPath(id)+"/run", nil, func(v any) {
 		data, _ := json.Marshal(v)
 		var e envelope

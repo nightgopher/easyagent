@@ -21,6 +21,8 @@ type message struct {
 	Tool                                         string
 	Expanded                                     bool
 	Markdown                                     markdownDocument
+	// Steps are a task (subagent) call's progress lines, one per tool it ran.
+	Steps []string
 }
 type nativePlanEntry struct{ Content, Status string }
 type session struct {
