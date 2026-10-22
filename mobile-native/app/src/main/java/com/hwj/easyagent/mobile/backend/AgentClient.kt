@@ -35,6 +35,9 @@ class AgentClient(val config: HostConfig) {
     val activeId = MutableStateFlow<String?>(null)
     val revision = MutableStateFlow(0L)
 
+    /** Receives approvals and finished runs; set by the app to post notifications. */
+    var onAlert: ((AgentClient, Alert) -> Unit)? = null
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val chats = HashMap<String, ChatSession>()
     private var socket: WebSocket? = null
@@ -148,6 +151,7 @@ class AgentClient(val config: HostConfig) {
 
     private fun receive(e: Envelope) {
         val s = chats[e.sessionId] ?: return
+        val before = s.alertState()
         val pendingMatched = (e.type == "accepted" && e.requestId == s.pendingRequest) ||
             (e.type == "snapshot" && e.run != null && e.run.requestId == s.pendingRequest)
         if (s.pendingRequest != "" && pendingMatched) {
@@ -160,9 +164,14 @@ class AgentClient(val config: HostConfig) {
             error.value = e.message
         }
         s.reduce(e)
+        onAlert?.let { notify -> alertsFor(before, s).forEach { notify(this, it) } }
         if (e.type == "status" && !s.running) refreshSessions()
         touch()
     }
+
+    /** Session title for notifications, falling back to a short ID. */
+    fun titleOf(sessionId: String): String =
+        sessions.value.firstOrNull { it.id == sessionId }?.title?.takeIf { it.isNotBlank() } ?: "会话 " + sessionId.take(8)
 
     fun open(id: String) {
         activeId.value = id
@@ -261,6 +270,11 @@ class AgentClient(val config: HostConfig) {
             put("approved", approved)
         }
         call(ApiClient.sessionPath(s.id) + "/run/confirm", body) { reload(s) }
+    }
+
+    /** Answers an approval from outside the chat screen, e.g. a notification action. */
+    fun confirmById(sessionId: String, confirmationId: String, approved: Boolean) {
+        confirm(chat(sessionId), confirmationId, approved)
     }
 
     fun refreshSessions() {
