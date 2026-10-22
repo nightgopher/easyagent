@@ -83,8 +83,12 @@ import java.io.File
  * recording is transcribed by the host and inserted into the draft for
  * editing, never sent directly (#254, #255).
  */
+// session is mutated in place, so the same instance arrives on every frame and
+// strong skipping would skip this composable; the changing revision makes Compose
+// read the draft and attachments again.
+@Suppress("UNUSED_PARAMETER")
 @Composable
-fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, queued: Boolean) {
+fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, queued: Boolean, revision: Long) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }

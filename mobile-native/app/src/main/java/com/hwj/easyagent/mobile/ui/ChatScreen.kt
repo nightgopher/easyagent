@@ -152,7 +152,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 },
             )
         },
-        bottomBar = { MediaComposer(client, session, link, queued = busy) },
+        bottomBar = { MediaComposer(client, session, link, queued = busy, revision = rev) },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
