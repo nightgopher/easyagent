@@ -165,7 +165,10 @@ func (a *preview) conversationRow(c *ui.Context, s *session, index, selected int
 			s.FindJump = false
 		}
 	}
-	row.Children(func() { a.conversationMessage(c, s, index, s.Messages[index]) })
+	// Message actions stay hidden until the row is hovered or holds focus, so
+	// history reads cleanly; keyboard users reveal them by tabbing in.
+	reveal := row.Hovered() || row.FocusWithin()
+	row.Children(func() { a.conversationMessage(c, s, index, s.Messages[index], reveal) })
 }
 
 type toolGroupState struct {
@@ -253,10 +256,6 @@ func (a *preview) toolGroup(c *ui.Context, s *session, start, end, selected int)
 			ui.Text(c, title).FontSize(12).Grow(1).MinWidth(0).SingleLine()
 			ui.Text(c, status).FontSize(10).TextColor(c.Theme().TextMuted)
 		})
-		if a.Live != nil && len(tools) > 0 {
-			anchor := tools[len(tools)-1]
-			iconButton(c, "git-branch", "从工具结果创建分支").Disabled(!s.canForkMessage(anchor) || running).Tooltip("包含本组完整工具结果；当前轮次请等待完成").OnClick(func() { a.forkLive(end - 1) })
-		}
 		if !state.Open {
 			return
 		}
