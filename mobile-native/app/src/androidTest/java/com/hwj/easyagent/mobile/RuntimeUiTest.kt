@@ -67,7 +67,11 @@ class RuntimeUiTest {
             ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
         } catch (error: ComposeTimeoutException) {
             screenshot("failure")
-            throw AssertionError("Missing $text\n${ui.onRoot().printToString()}", error)
+            var projected = ""
+            instrumentation.runOnMainSync {
+                projected = app.connections.client.value?.activeChat?.messages?.joinToString(" | ") { it.text }.orEmpty()
+            }
+            throw AssertionError("Missing $text\nProjected messages: $projected\n${ui.onRoot().printToString()}", error)
         }
     }
     private fun fill(label: String, value: String) {
@@ -165,8 +169,11 @@ class RuntimeUiTest {
         val sent = host.prompts.poll(10, TimeUnit.SECONDS)
         assertNotNull("prompt must arrive over the real WebSocket", sent)
         host.accept(sent!!)
+        waitText("生成中…")
         host.emit("event", "event" to JSONObject("""{"type":"text_delta","text_delta":"流式验收回答"}"""))
         waitText("流式验收回答")
+        host.emit("event", "event" to JSONObject("""{"type":"text_delta","text_delta":"继续生成"}"""))
+        waitText("流式验收回答继续生成")
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"写入验收文件","args":{"path":"qa.txt"}}"""))
         waitText("写入验收文件")
         ui.onNodeWithText("批准").performScrollTo()
@@ -211,6 +218,36 @@ class RuntimeUiTest {
         ui.waitUntil(10_000) { host.calls.any { it.path?.endsWith("/run/confirm") == true } }
         assertFalse(JSONObject(host.calls.first { it.path?.endsWith("/run/confirm") == true }.body.readUtf8()).getBoolean("approved"))
     }
+
+    @Test fun thinkingAndToolCardsRefreshInPlace() {
+        val host = host("实时卡片主机")
+        connect(host)
+        openChat(host)
+        prompt("逐段验证实时卡片")
+        host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
+        waitText("生成中…")
+        host.emit("event", "event" to JSONObject("""{"type":"thinking_delta","text_delta":"第一段思考"}"""))
+        waitText("第一段思考")
+        host.emit("event", "event" to JSONObject("""{"type":"thinking_delta","text_delta":"第二段思考"}"""))
+        waitText("第一段思考第二段思考")
+        ui.onNodeWithText("思考过程").performClick()
+        ui.waitUntil(5_000) { ui.onAllNodesWithText("第一段思考第二段思考").fetchSemanticsNodes().isEmpty() }
+        ui.onNodeWithText("思考过程").performClick()
+        waitText("第一段思考第二段思考")
+        host.emit("event", "event" to JSONObject("""{"type":"tool_start","tool_call_id":"t1","tool_name":"bash","tool_args":{"command":"printf QA_TOOL"}}"""))
+        waitText("printf QA_TOOL")
+        waitText("执行中")
+        ui.onNodeWithText("bash").performScrollTo().performClick()
+        waitText("调用参数")
+        host.emit("event", "event" to JSONObject("""{"type":"tool_update","tool_call_id":"t1","partial_result":"第一段输出"}"""))
+        waitText("第一段输出")
+        host.emit("event", "event" to JSONObject("""{"type":"tool_end","tool_call_id":"t1","tool_result":"完整输出","duration_ms":1500}"""))
+        waitText("完整输出")
+        waitText("完成")
+        screenshot("live-message-cards")
+        ui.onNodeWithText("bash").performClick()
+        ui.waitUntil(5_000) { ui.onAllNodesWithText("完整输出").fetchSemanticsNodes().isEmpty() }
+    }
 }
 
 private class RuntimeFixture(val name: String) : AutoCloseable {
@@ -223,7 +260,9 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     @Volatile var socket: WebSocket? = null
     private val sequence = AtomicInteger()
     @Volatile private var running = false
-    @Volatile private var text = ""
+    private var runPrompt = ""
+    private var requestId = ""
+    private var events = JSONArray()
     private var confirmation: JSONObject? = null
 
     init {
@@ -255,7 +294,6 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                         json("{}")
                     }
                     path.endsWith("/run/cancel") -> {
-                        running = false
                         emit("status", "state" to "cancelled", "streaming" to false)
                         json("{}")
                     }
@@ -270,6 +308,9 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
 
     @Synchronized fun accept(prompt: JSONObject) {
         running = true
+        runPrompt = prompt.getString("prompt")
+        requestId = prompt.getString("request_id")
+        events = JSONArray()
         emit("accepted", "request_id" to prompt.getString("request_id"), "prompt" to prompt.getString("prompt"), "state" to "running")
     }
 
@@ -277,7 +318,8 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
         val value = JSONObject().put("type", type).put("session_id", "qa-session")
             .put("run_id", "qa-run").put("seq", sequence.incrementAndGet())
         for ((key, field) in fields) value.put(key, field)
-        if (type == "event") text += value.getJSONObject("event").optString("text_delta")
+        if (type == "event") events.put(value.getJSONObject("event"))
+        if (type == "status") running = value.optString("state") == "running"
         if (type == "confirmation") confirmation = value.getJSONObject("confirmation")
         if (type == "confirmed" || type == "status") confirmation = null
         check(socket?.send(value.toString()) == true)
@@ -285,11 +327,12 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
 
     @Synchronized private fun snapshot(): JSONObject {
         val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", "已保存的历史"))
-        if (text.isNotEmpty()) messages.put(JSONObject().put("role", "assistant").put("content", text))
         val value = JSONObject().put("type", "snapshot").put("session_id", "qa-session")
             .put("seq", sequence.get()).put("messages", messages)
+            .put("events", JSONArray(events.toString()))
             .put("confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
-        if (running) value.put("run", JSONObject().put("id", "qa-run").put("state", "running"))
+        if (runPrompt.isNotEmpty()) value.put("run", JSONObject().put("id", "qa-run")
+            .put("state", if (running) "running" else "cancelled").put("prompt", runPrompt).put("request_id", requestId))
         return value
     }
 
