@@ -1,6 +1,7 @@
 package com.hwj.easyagent.mobile.backend
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -43,14 +44,15 @@ class ChatSession(val id: String) {
     var queue = MessageQueue()
     var running = false
     var pending = false
-    var sending = false
+    var sending by mutableStateOf(false)
     var pendingRequest = ""
     var sentDraft = ""
-    var draft = ""
+    var sentAttachments: Set<String> = emptySet()
+    var draft by mutableStateOf("")
     var usage: JsonObject? = null
     /** Attachments uploaded for the next prompt, with a local thumbnail when it is an image. */
-    var attachments: List<PendingAttachment> = emptyList()
-    var uploading = 0
+    var attachments by mutableStateOf<List<PendingAttachment>>(emptyList())
+    var uploading by mutableIntStateOf(0)
     private var nextUid = 1L
 
     val runId: String get() = run?.id ?: ""

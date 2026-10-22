@@ -211,7 +211,9 @@ class AgentClient(val config: HostConfig) {
             put("attachments", JsonArray(s.attachments.map { JsonPrimitive(it.attachment.id) }))
             put("files", JsonArray(emptyList()))
         }
-        if (s.pendingRequest == "" || s.sentDraft != text) s.pendingRequest = requestId()
+        val attachments = s.attachments.map { it.attachment.id }.toSet()
+        if (s.pendingRequest == "" || s.sentDraft != text || s.sentAttachments != attachments) s.pendingRequest = requestId()
+        s.sentAttachments = attachments
         s.sentDraft = text
         val request = s.pendingRequest
         s.sending = true
@@ -375,7 +377,8 @@ class AgentClient(val config: HostConfig) {
 
     private fun acknowledgeDraft(s: ChatSession) {
         if (s.draft == s.sentDraft) s.draft = ""
-        s.attachments = emptyList()
+        s.attachments = s.attachments.filterNot { it.attachment.id in s.sentAttachments }
+        s.sentAttachments = emptySet()
     }
 
     /** Uploads one attachment for the session's next prompt (server limit 4 MiB). */
