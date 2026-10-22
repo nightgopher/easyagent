@@ -1,6 +1,6 @@
 # EasyAgent 原生桌面客户端
 
-MyGo v0.5.5 的原生界面，直接复用现有 EasyAgent Go 核心的 REST/WebSocket 协议。UI 不使用 React、HTML、JavaScript 或 WebView；电脑控制继续使用原有系统助手并随包提供。
+MyGo v0.6.2 的原生界面，直接复用现有 EasyAgent Go 核心的 REST/WebSocket 协议。UI 不使用 React、HTML、JavaScript 或 WebView；电脑控制继续使用原有系统助手并随包提供。
 
 正式桌面客户端，Bundle ID 为 `com.hwj.easyagent`。安装产物随正式 Release 发布（`easyagent-native-darwin-arm64.dmg`）；本机构建产物只进入 `build.noindex/`，不自动替换 `/Applications/EasyAgent.app`。
 
