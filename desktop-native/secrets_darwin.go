@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -34,6 +35,57 @@ func nativePointer(address uintptr) unsafe.Pointer {
 
 func credentialRepairError() error {
 	return errors.New("系统钥匙串无法自动读取已保存凭据，请在设置中重新填写访问令牌或模型 API 密钥；此处不需要 Mac 登录密码")
+}
+
+// The non-secret owner index selects the latest writer when more than one
+// helper generation is cached. Directory/hash order cannot establish freshness.
+// A file lock serializes updates across two simultaneously running app versions.
+func (s systemSecrets) begin() ([]string, map[string]string, func(), error) {
+	dir := filepath.Join(s.dir, "credential-helpers.noindex")
+	if s.dir == "" {
+		return nil, nil, nil, errors.New("无法定位凭据程序的应用数据目录")
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, nil, nil, err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return nil, nil, nil, errors.New("凭据程序目录必须仅当前用户可访问")
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, ".lock"), os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
+		lock.Close()
+		return nil, nil, nil, err
+	}
+	done := func() { _ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); _ = lock.Close() }
+	paths, err := s.helperPaths()
+	if err != nil {
+		done()
+		return nil, nil, nil, err
+	}
+	owners := map[string]string{}
+	data, err := os.ReadFile(filepath.Join(dir, "owners.json"))
+	if os.IsNotExist(err) {
+		err = nil
+	} else if err == nil && json.Unmarshal(data, &owners) != nil {
+		err = errors.New("凭据程序索引损坏，请重新填写凭据")
+	}
+	if err != nil || owners == nil {
+		done()
+		return nil, nil, nil, errors.New("无法读取凭据程序索引")
+	}
+	return paths, owners, done, nil
+}
+
+func (s systemSecrets) recordOwner(owners map[string]string, account, helper string) error {
+	if owners[account] == filepath.Base(helper) {
+		return nil
+	}
+	owners[account] = filepath.Base(helper)
+	return atomicJSON(filepath.Join(s.dir, "credential-helpers.noindex/owners.json"), owners)
 }
 
 // Verify every executable against the app's certificate before sending a secret.
@@ -175,23 +227,34 @@ func (s systemSecrets) request(helper, operation, account, value string) (creden
 func (s systemSecrets) Get(account string) (string, error) {
 	credentialMu.Lock()
 	defer credentialMu.Unlock()
-	paths, err := s.helperPaths()
+	paths, owners, done, err := s.begin()
 	if err != nil {
 		return "", err
 	}
-	for i, path := range paths {
-		response, err := s.request(path, "get", account, "")
-		if err != nil {
+	defer done()
+	if owner := owners[account]; owner != "" {
+		path := ""
+		for _, candidate := range paths {
+			if filepath.Base(candidate) == owner {
+				path = candidate
+			}
+		}
+		if path == "" {
 			return "", credentialRepairError()
 		}
-		if response.Found {
-			if i > 0 {
-				if err := s.save(paths[0], account, response.Value); err != nil {
-					return "", err
-				}
-			}
-			return response.Value, nil
+		response, err := s.request(path, "get", account, "")
+		if err != nil || !response.Found {
+			return "", credentialRepairError()
 		}
+		if path != paths[0] {
+			if err := s.save(paths[0], account, response.Value); err != nil {
+				return "", err
+			}
+			if err := s.recordOwner(owners, account, paths[0]); err != nil {
+				return "", err
+			}
+		}
+		return response.Value, nil
 	}
 	// A protected old item remains intact. A replacement can be saved without
 	// asking for an unrelated keychain password or weakening its access rules.
@@ -205,6 +268,9 @@ func (s systemSecrets) Get(account string) (string, error) {
 	}
 	if found {
 		if err := s.save(paths[0], account, value); err != nil {
+			return "", err
+		}
+		if err := s.recordOwner(owners, account, paths[0]); err != nil {
 			return "", err
 		}
 	}
@@ -228,22 +294,30 @@ func (s systemSecrets) Set(account, value string) error {
 	}
 	credentialMu.Lock()
 	defer credentialMu.Unlock()
-	paths, err := s.helperPaths()
+	paths, owners, done, err := s.begin()
 	if err != nil {
 		return err
 	}
-	return s.save(paths[0], account, value)
+	defer done()
+	if err := s.save(paths[0], account, value); err != nil {
+		return err
+	}
+	return s.recordOwner(owners, account, paths[0])
 }
 
 func (s systemSecrets) Delete(account string) error {
 	credentialMu.Lock()
 	defer credentialMu.Unlock()
-	paths, err := s.helperPaths()
+	paths, owners, done, err := s.begin()
 	if err != nil {
 		return err
 	}
+	defer done()
 	// The empty successor prevents cleared legacy values from reappearing.
 	if err := s.save(paths[0], account, ""); err != nil {
+		return err
+	}
+	if err := s.recordOwner(owners, account, paths[0]); err != nil {
 		return err
 	}
 	for _, path := range paths[1:] {
