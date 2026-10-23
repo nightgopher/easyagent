@@ -8,6 +8,7 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,6 +66,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -84,12 +86,17 @@ import com.hwj.easyagent.mobile.backend.MessageQueue
 import com.hwj.easyagent.mobile.backend.obj
 import com.hwj.easyagent.mobile.backend.pretty
 import com.hwj.easyagent.mobile.backend.str
+import kotlinx.serialization.json.JsonElement
 
 private sealed interface Entry {
     val key: String
 
     class Message(val message: ChatMessage) : Entry {
         override val key = "m${message.uid}"
+    }
+
+    class Tools(val messages: List<ChatMessage>) : Entry {
+        override val key = "g${messages.first().uid}"
     }
 
     class Approval(val confirmation: Confirmation) : Entry {
@@ -138,7 +145,9 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     // revision 驱动列表结构与会话状态，消息字段自身可观察；倒序让列表自然贴底。
     val entries = remember(rev, sessionId) {
         buildList<Entry> {
-            session.messages.forEach { add(Entry.Message(it)) }
+            toolRuns(session.messages).forEach { run ->
+                add(if (run.size > 1) Entry.Tools(run) else Entry.Message(run.first()))
+            }
             session.confirmations.forEach { add(Entry.Approval(it)) }
             if (session.queue.items.isNotEmpty()) add(Entry.Queue)
         }.asReversed()
@@ -196,6 +205,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             onToggle = { client.touch() },
                             images = { MessageImages(client, sessionId, it) },
                         )
+                        is Entry.Tools -> ToolGroup(entry.messages) { client.touch() }
                         is Entry.Approval -> ApprovalCard(entry.confirmation) { approved ->
                             client.confirm(session, entry.confirmation.id, approved)
                         }
@@ -375,17 +385,82 @@ private fun ToolStatusIcon(status: String, color: Color) {
     }
 }
 
+/** Consecutive tool calls folded into one row; failures open it until the user decides. */
+@Composable
+private fun ToolGroup(messages: List<ChatMessage>, onToggle: () -> Unit) {
+    var touched by rememberSaveable { mutableStateOf(false) }
+    var open by rememberSaveable { mutableStateOf(false) }
+    val failed = messages.count { it.status == "失败" || it.status == "未完成" }
+    val expanded = if (touched) open else failed > 0
+    val running = messages.lastOrNull { it.status == "执行中" }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Surface(
+            onClick = {
+                open = !expanded
+                touched = true
+                onToggle()
+            },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (running != null) CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Filled.Build, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                Text(
+                    if (running != null) "正在执行 ${running.tool}" else "已调用 ${messages.size} 个工具",
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    toolNames(messages),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (failed > 0) Text("$failed 个失败", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Icon(if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
+        }
+        if (expanded) messages.forEach { ToolCard(it, onToggle) }
+    }
+}
+
+/**
+ * Asks before a tool runs. The request reads as one line; arguments fold away,
+ * and only shell commands, which can do anything, are drawn as a warning.
+ */
 @Composable
 private fun ApprovalCard(c: Confirmation, onDecide: (Boolean) -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+    var showArgs by rememberSaveable(c.id) { mutableStateOf(false) }
+    val risky = c.toolName == "bash"
+    val accent = if (risky) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    val summary = c.description.ifEmpty { argumentSummary(c.args) }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, if (risky) accent else MaterialTheme.colorScheme.outlineVariant),
+    ) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Outlined.Shield, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("需要审批 · ${c.toolName.ifEmpty { "工具调用" }}", style = MaterialTheme.typography.titleSmall)
+                Icon(Icons.Outlined.Shield, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
+                Text("需要审批", style = MaterialTheme.typography.labelLarge, color = accent)
+                Text(
+                    c.toolName.ifEmpty { "工具调用" },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            if (c.description.isNotEmpty()) Text(c.description, style = MaterialTheme.typography.bodyMedium)
-            c.args?.let { CodeBlock(truncate(pretty(it), 1500), modifier = Modifier.fillMaxWidth()) }
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+            if (summary.isNotEmpty()) Text(summary, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            if (showArgs) c.args?.let { CodeBlock(truncate(pretty(it), 1500), modifier = Modifier.fillMaxWidth()) }
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (c.args != null) {
+                    TextButton(onClick = { showArgs = !showArgs }) { Text(if (showArgs) "收起参数" else "查看参数") }
+                }
+                Spacer(Modifier.weight(1f))
                 OutlinedButton(onClick = { onDecide(false) }) { Text("拒绝") }
                 Button(onClick = { onDecide(true) }) { Text("批准") }
             }
@@ -444,14 +519,30 @@ private fun SectionLabel(text: String) {
 
 private val ansiSequence = Regex("\u001B\\[[0-?]*[ -/]*[@-~]")
 
-private fun toolDescription(m: ChatMessage): String {
-    val args = m.args.obj()
+private fun toolDescription(m: ChatMessage): String = argumentSummary(m.args)
+
+private fun argumentSummary(arguments: JsonElement?): String {
+    val args = arguments.obj()
     for (key in listOf("command", "path", "file_path", "pattern", "query", "url")) {
         val text = args[key].str()
         if (text.isNotEmpty()) return text
     }
     return ""
 }
+
+/** Splits messages into runs: consecutive tool calls together, everything else alone. */
+internal fun toolRuns(messages: List<ChatMessage>): List<List<ChatMessage>> {
+    val runs = ArrayList<MutableList<ChatMessage>>()
+    for (m in messages) {
+        val last = runs.lastOrNull()
+        if (m.kind == "tool" && last != null && last.last().kind == "tool") last += m else runs += mutableListOf(m)
+    }
+    return runs
+}
+
+/** "bash ×2 · read", in order of first use. */
+internal fun toolNames(messages: List<ChatMessage>): String =
+    messages.groupingBy { it.tool }.eachCount().entries.joinToString(" · ") { (name, n) -> if (n > 1) "$name ×$n" else name }
 
 private fun toolResult(m: ChatMessage): String {
     var result = m.result
