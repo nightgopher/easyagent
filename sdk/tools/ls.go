@@ -139,7 +139,7 @@ func (t *LsTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate func
 func (t *LsTool) listDirectory(ctx context.Context, dirPath string, params LsParams, b *strings.Builder) {
 	entries, err := t.ops.ReadDir(ctx, dirPath)
 	if err != nil {
-		b.WriteString(fmt.Sprintf("  error: %s\n", err))
+		fmt.Fprintf(b, "  error: %s\n", err)
 		return
 	}
 
@@ -169,9 +169,9 @@ func (t *LsTool) listDirectory(ctx context.Context, dirPath string, params LsPar
 	for _, e := range fileEntries {
 		prefix := "  "
 		if e.IsDir {
-			b.WriteString(fmt.Sprintf("%s%s/  (%s)\n", prefix, e.Name, e.ModTime.Format("2006-01-02 15:04")))
+			fmt.Fprintf(b, "%s%s/  (%s)\n", prefix, e.Name, e.ModTime.Format("2006-01-02 15:04"))
 		} else {
-			b.WriteString(fmt.Sprintf("%s%s  %s  (%s)\n", prefix, e.Name, formatSize(e.Size), e.ModTime.Format("2006-01-02 15:04")))
+			fmt.Fprintf(b, "%s%s  %s  (%s)\n", prefix, e.Name, formatSize(e.Size), e.ModTime.Format("2006-01-02 15:04"))
 		}
 	}
 }
@@ -179,7 +179,7 @@ func (t *LsTool) listDirectory(ctx context.Context, dirPath string, params LsPar
 func (t *LsTool) listRecursive(ctx context.Context, dirPath string, params LsParams, b *strings.Builder, prefix string) {
 	entries, err := t.ops.ReadDir(ctx, dirPath)
 	if err != nil {
-		b.WriteString(fmt.Sprintf("%s  error: %s\n", prefix, err))
+		fmt.Fprintf(b, "%s  error: %s\n", prefix, err)
 		return
 	}
 
@@ -210,12 +210,12 @@ func (t *LsTool) listRecursive(ctx context.Context, dirPath string, params LsPar
 			displayPath = e.Name
 		}
 		if e.IsDir {
-			b.WriteString(fmt.Sprintf("  %s/  (%s)\n", displayPath, e.ModTime.Format("2006-01-02 15:04")))
+			fmt.Fprintf(b, "  %s/  (%s)\n", displayPath, e.ModTime.Format("2006-01-02 15:04"))
 			// Build full path for recursion
 			fullPath := dirPath + "/" + e.Name
 			t.listRecursive(ctx, fullPath, params, b, displayPath)
 		} else {
-			b.WriteString(fmt.Sprintf("  %s  %s  (%s)\n", displayPath, formatSize(e.Size), e.ModTime.Format("2006-01-02 15:04")))
+			fmt.Fprintf(b, "  %s  %s  (%s)\n", displayPath, formatSize(e.Size), e.ModTime.Format("2006-01-02 15:04"))
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/hwj123hwj/easyagent/internal/feishu"
 	"github.com/hwj123hwj/easyagent/sdk/config"
@@ -107,7 +108,8 @@ func main() {
 		mux.HandleFunc("/tool-callback", handler.HandleToolCallback)
 		go func() {
 			slog.Info("starting tool callback server", "addr", callbackAddr)
-			if err := http.ListenAndServe(callbackAddr, mux); err != nil && err != http.ErrServerClosed {
+			server := &http.Server{Addr: callbackAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				slog.Error("tool callback server stopped", "error", err)
 			}
 		}()

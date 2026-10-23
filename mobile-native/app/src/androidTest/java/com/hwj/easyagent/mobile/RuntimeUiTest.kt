@@ -301,6 +301,50 @@ class RuntimeUiTest {
         screenshot("media-composer")
     }
 
+    @Test fun composerSwapsMicForSendWhileTyping() {
+        val host = host("输入主机")
+        connect(host)
+        openChat(host)
+        ui.onNodeWithContentDescription("语音输入").assertExists()
+        assertTrue(ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isEmpty())
+        ui.onNode(hasSetTextAction()).performTextReplacement("检查一下")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isEmpty())
+        screenshot("composer-typing")
+        ui.onNode(hasSetTextAction()).performTextReplacement("")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test fun markdownRepliesRenderAsRichText() {
+        val host = host("排版主机")
+        host.history = """
+            已保存的历史
+
+            ## 部署结果
+            服务**已经启动**，详见 [日志](https://example.com/log)。
+
+            1. 构建镜像
+            2. 推送 `registry`
+
+            | 服务 | 状态 |
+            |---|---|
+            | api | 运行 |
+
+            ```bash
+            kubectl get pods
+            ```
+        """.trimIndent()
+        connect(host)
+        openChat(host)
+        waitText("部署结果")
+        waitText("kubectl get pods")
+        assertTrue(ui.onAllNodes(hasText("服务已经启动", substring = true)).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("Markdown markers must not be shown", ui.onAllNodes(hasText("**", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(ui.onAllNodes(hasText("| api |", substring = true)).fetchSemanticsNodes().isEmpty())
+        ui.onNodeWithContentDescription("复制代码").assertExists()
+        screenshot("markdown-reply")
+    }
+
     @Test fun loopDialogCreatesAndStopsTheHostsLoop() {
         val host = host("循环主机")
         connect(host)
@@ -377,6 +421,8 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     private var events = JSONArray()
     private var confirmation: JSONObject? = null
     @Volatile private var loop: JSONObject? = null
+    /** Assistant text of the saved history; starts with the text openChat waits for. */
+    @Volatile var history = "已保存的历史"
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -456,7 +502,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     }
 
     @Synchronized private fun snapshot(): JSONObject {
-        val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", "已保存的历史"))
+        val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", history))
         val value = JSONObject().put("type", "snapshot").put("session_id", "qa-session")
             .put("seq", sequence.get()).put("messages", messages)
             .put("events", JSONArray(events.toString()))
