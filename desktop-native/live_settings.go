@@ -681,12 +681,14 @@ func (a *preview) liveUsageSettings(c *ui.Context) {
 	total := object(m["total"])
 	total["total_tokens"] = number(total["input_tokens"]) + number(total["output_tokens"])
 	a.heading(c, "近 30 天用量概览")
-	a.note(c, "基于核心持久化的执行收据统计，包含多轮工具调用。")
+	a.note(c, "基于核心持久化的执行收据统计，包含多轮工具调用与子 Agent 用量。")
 	ui.Row(c).Gap(12).Children(func() {
 		for _, item := range []struct{ label, key string }{{"总 Tokens", "total_tokens"}, {"输入 Tokens", "input_tokens"}, {"输出 Tokens", "output_tokens"}, {"总任务数 (Runs)", "run_count"}} {
 			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(8).Padding(12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() { a.note(c, item.label); ui.Text(c, formatCount(total[item.key])).FontSize(20).Bold() })
 		}
 	})
+	child := object(total["subagent_usage"])
+	a.note(c, "其中子 Agent · 输入 "+formatCount(child["input_tokens"])+" · 输出 "+formatCount(child["output_tokens"]))
 	a.heading(c, "会话用量排行")
 	for _, raw := range list(m["sessions"]) {
 		row := object(raw)

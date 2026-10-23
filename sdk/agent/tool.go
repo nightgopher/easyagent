@@ -23,11 +23,12 @@ type Tool interface {
 //     给用户看完整、给模型看截断版。
 //   - Details: 预留的结构化附加信息（当前未使用）。
 type ToolResult struct {
-	Content    string
-	UserFacing string
-	Details    any
-	IsError    bool
-	Images     []ai.ImageBlock // Optional model-facing images, persisted with the tool result.
+	SubagentUsage *ai.SubagentUsage
+	Content       string
+	UserFacing    string
+	Details       any
+	IsError       bool
+	Images        []ai.ImageBlock // Optional model-facing images, persisted with the tool result.
 }
 
 // DisplayText 返回适合展示给用户的内容：优先 UserFacing，为空则 fallback 到 Content。
