@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,28 @@ import (
 type droppingHostSecrets struct{ memorySecrets }
 
 func (s *droppingHostSecrets) Set(string, string) error { return nil }
+
+type unreadableHostSecrets struct {
+	memorySecrets
+	reads, deletes atomic.Int32
+	deleteErr      error
+}
+
+func (s *unreadableHostSecrets) Get(account string) (string, error) {
+	if account == "host/remote" {
+		s.reads.Add(1)
+		return "", errors.New("synthetic inaccessible credential")
+	}
+	return s.memorySecrets.Get(account)
+}
+
+func (s *unreadableHostSecrets) Delete(account string) error {
+	s.deletes.Add(1)
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	return s.memorySecrets.Delete(account)
+}
 
 func hostCredentialPreview(t *testing.T, store secretStore) *preview {
 	t.Helper()
@@ -145,7 +168,7 @@ func TestHostRemovalCleansOnlyItsCredential(t *testing.T) {
 	}
 }
 
-func TestHostRemovalRestoresCredentialOnPersistenceFailure(t *testing.T) {
+func TestHostRemovalPreservesCredentialOnPersistenceFailure(t *testing.T) {
 	store := &memorySecrets{values: map[string]string{"host/remote": "synthetic-host-credential"}}
 	a := hostCredentialPreview(t, store)
 	if err := os.Mkdir(filepath.Join(a.Live.Dir, "connections.json"), 0700); err != nil {
@@ -156,6 +179,91 @@ func TestHostRemovalRestoresCredentialOnPersistenceFailure(t *testing.T) {
 	restored, _ := store.Get("host/remote")
 	if a.Live.Error == "" || len(a.Live.Config.Hosts) != 2 || restored != "synthetic-host-credential" {
 		t.Fatal("failed removal lost config or credential")
+	}
+}
+
+func TestHostRemovalWithUnreadableCredential(t *testing.T) {
+	for _, active := range []bool{false, true} {
+		for _, cleanupFailure := range []bool{false, true} {
+			t.Run(fmt.Sprintf("active=%t/cleanupFailure=%t", active, cleanupFailure), func(t *testing.T) {
+				store := &unreadableHostSecrets{memorySecrets: memorySecrets{values: map[string]string{
+					"host/remote": "synthetic-inaccessible", "host/other": "synthetic-other",
+				}}}
+				if cleanupFailure {
+					store.deleteErr = errors.New("synthetic locked keychain")
+				}
+				a := hostCredentialPreview(t, store)
+				other := a.Live.Config.Hosts[1]
+				other.ID = "other"
+				a.Live.Config.Hosts = append(a.Live.Config.Hosts, other)
+				a.Live.Drafts["remote/"] = "removed host draft"
+				a.Live.Drafts["other/"] = "other host draft"
+				a.Live.Drafts["local/"] = "local host draft"
+				if active {
+					a.Live.Config.ActiveHost = "remote"
+					a.Live.CredentialRepair = true
+				}
+				a.syncSettingsConfig()
+				a.current().Draft = "current draft"
+				a.Live.Error = "synthetic inaccessible credential"
+				a.removeLiveHost(1)
+				waitNative(t, a, func() bool { return !a.Live.Loading["configuration"] })
+				if len(a.Live.Config.Hosts) != 2 || a.Live.Config.Hosts[1].ID != "other" || a.Live.Config.ActiveHost != "local" {
+					t.Fatal("unreadable credential blocked removal or changed another host")
+				}
+				if store.reads.Load() != 0 || store.deletes.Load() != 1 {
+					t.Fatal("removal read the old credential or did not attempt cleanup")
+				}
+				if a.Live.Error != "" || a.Live.CredentialRepair || a.Settings.EditHost != "" || a.Live.Notice == "" {
+					t.Fatal("removed host left an error or stale edit form", a.Live.Error)
+				}
+				if cleanupFailure && !strings.Contains(a.Live.Notice, "未能清理") {
+					t.Fatal("credential cleanup failure was hidden")
+				}
+				if retained, _ := store.Get("host/other"); retained != "synthetic-other" || a.Live.Drafts["other/"] != "other host draft" {
+					t.Fatal("removal changed another connection's credential or draft")
+				}
+				if !active && a.current().Draft != "current draft" {
+					t.Fatal("removal changed the active host's draft")
+				}
+				if active && (a.current().Draft != "local host draft" || a.Live.Drafts["remote/"] != "current draft") {
+					t.Fatal("removing the active host mixed its draft with the local host")
+				}
+				data, err := os.ReadFile(filepath.Join(a.Live.Dir, "connections.json"))
+				var saved clientConfig
+				if err != nil || json.Unmarshal(data, &saved) != nil || len(saved.Hosts) != 2 || saved.Hosts[1].ID != "other" || saved.ActiveHost != "local" {
+					t.Fatal("removal was not persisted")
+				}
+			})
+		}
+	}
+}
+
+func TestHostRemovalPersistenceFailureDoesNotTouchCredentials(t *testing.T) {
+	store := &unreadableHostSecrets{memorySecrets: memorySecrets{values: map[string]string{"host/remote": "synthetic-inaccessible"}}}
+	a := hostCredentialPreview(t, store)
+	if err := os.Mkdir(filepath.Join(a.Live.Dir, "connections.json"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	a.removeLiveHost(1)
+	waitNative(t, a, func() bool { return !a.Live.Loading["configuration"] })
+	retained, _ := store.memorySecrets.Get("host/remote")
+	if a.Live.Error == "" || len(a.Live.Config.Hosts) != 2 || retained != "synthetic-inaccessible" || store.reads.Load() != 0 || store.deletes.Load() != 0 {
+		t.Fatal("failed profile persistence read or changed credentials")
+	}
+}
+
+func TestHostRemovalKeepsOtherHostAuthenticationError(t *testing.T) {
+	a := hostCredentialPreview(t, &memorySecrets{})
+	a.Live.Config.Hosts = append(a.Live.Config.Hosts, hostConfig{ID: "other", Name: "Other", HasToken: true})
+	a.Live.Config.ActiveHost = "other"
+	a.syncSettingsConfig()
+	a.Live.CredentialRepair = true
+	a.Live.Error = "other host requires a credential"
+	a.removeLiveHost(1)
+	waitNative(t, a, func() bool { return !a.Live.Loading["configuration"] })
+	if len(a.Live.Config.Hosts) != 2 || a.Live.Config.ActiveHost != "other" || !a.Live.CredentialRepair || a.Live.Error != "other host requires a credential" {
+		t.Fatal("removal hid the active host's authentication error")
 	}
 }
 

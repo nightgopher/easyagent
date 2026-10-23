@@ -104,6 +104,7 @@ def main():
             run(['security', 'unlock-keychain', '-p', 'synthetic-keychain-fixture', str(keychain)])
             steps = [(first, 'seed', helper), (first, 'migrate', helper), (second, 'upgrade', helper),
                      (other_id, 'reject', helper), (other_signer, 'reject', helper), (second, 'repair', helper),
+                     (second, 'remove', helper),
                      (second, 'helper-upgrade', next_helper), (second, 'rotate', next_helper),
                      (second, 'latest', third_helper), (first, 'latest', helper), (second, 'clear', third_helper),
                      (first, 'relaunch', next_helper), (second, 'relaunch', helper),
