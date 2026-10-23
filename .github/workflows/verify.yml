@@ -87,8 +87,8 @@ jobs:
       - name: Race detector and SDK/server coverage
         shell: bash
         run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./sdk/... ./internal/server/... 2>&1 | tee race.log
-      - name: Require at least 70% weighted statement coverage
-        run: python3 scripts/check_coverage.py coverage.out --minimum 70
+      - name: Require at least 71% weighted statement coverage
+        run: python3 scripts/check_coverage.py coverage.out --minimum 71
       - uses: actions/upload-artifact@v7
         if: always()
         with:
