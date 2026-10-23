@@ -46,7 +46,7 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 		check(store.Set("model", "synthetic-model"))
 		read("host/upgrade", "synthetic-host")
 		read("model", "synthetic-model")
-		for _, account := range []string{"host/migrate", "host/blocked", "model/blocked", "host/clear"} {
+		for _, account := range []string{"host/migrate", "host/blocked", "model/blocked", "host/clear", "host/remove"} {
 			check(legacy.Set(account, "synthetic-legacy"))
 			if value, found, err := legacy.Get(account); err != nil || !found || value != "synthetic-legacy" {
 				t.Fatalf("seed legacy: %v", err)
@@ -74,6 +74,22 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 				t.Fatal("repair altered protected legacy item")
 			}
 		}
+	case "remove":
+		if value, err := store.Get("host/remove"); err == nil || value != "" {
+			t.Fatal("removal fixture must have an inaccessible legacy credential")
+		}
+		config := clientConfig{ActiveHost: "local", Hosts: []hostConfig{
+			{ID: "local", Local: true}, {ID: "remove", HasToken: true}, {ID: "upgrade", HasToken: true},
+		}}
+		removed, err := persistHostRemoval(t.TempDir(), store, config, 1)
+		check(err)
+		check(removed.CleanupError)
+		if len(removed.Config.Hosts) != 2 || removed.Config.Hosts[1].ID != "upgrade" {
+			t.Fatal("removal changed another profile")
+		}
+		read("host/remove", "")
+		read("host/upgrade", "synthetic-next")
+		read("model", "synthetic-model")
 	case "helper-upgrade":
 		read("host/upgrade", "synthetic-next")
 		read("model", "synthetic-model")
@@ -99,6 +115,7 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 		check(store.Delete("host/upgrade"))
 		read("host/upgrade", "")
 	case "relaunch":
+		read("host/remove", "")
 		read("host/upgrade", "")
 		read("host/clear", "")
 		read("host/blocked", "synthetic-replacement")
