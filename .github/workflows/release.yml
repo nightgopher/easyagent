@@ -77,7 +77,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version-file: desktop-native/go.mod
       - name: Build and validate the MyGo native installer
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -103,7 +103,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version-file: desktop-native/go.mod
       - name: Build and validate the Linux native packages
         env:
           TAG: ${{ needs.validate.outputs.version }}
