@@ -3,6 +3,7 @@ package kbtools
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,9 @@ func createTestRepo(t *testing.T) string {
 
 	// ── Format 1: YAML frontmatter (issues/) ──
 	issuesDir := filepath.Join(tmpDir, "issues")
-	os.MkdirAll(issuesDir, 0755)
+	require.NoError(t, os.MkdirAll(issuesDir, 0755))
 
-	os.WriteFile(filepath.Join(issuesDir, "2026-05-05-cron-env.md"), []byte(`---
+	require.NoError(t, os.WriteFile(filepath.Join(issuesDir, "2026-05-05-cron-env.md"), []byte(`---
 project: OpenClaw
 date: 2026-05-05
 tags: [Linux, cron, 踩坑]
@@ -37,13 +38,13 @@ crontab 里设置的定时任务一直报 command not found，
 
 cron 默认不加载 .bashrc / .profile，需要在脚本里
 显式 source 或写绝对路径。
-`), 0644)
+`), 0644))
 
 	// ── Format 2: doubao-knowledge card ──
 	techDir := filepath.Join(tmpDir, "doubao-knowledge", "tech")
-	os.MkdirAll(techDir, 0755)
+	require.NoError(t, os.MkdirAll(techDir, 0755))
 
-	os.WriteFile(filepath.Join(techDir, "go-context.md"), []byte(`# Go Context 详解
+	require.NoError(t, os.WriteFile(filepath.Join(techDir, "go-context.md"), []byte(`# Go Context 详解
 
 > 来源：ChatGPT 对话 | 2026-04-10 | 11条消息
 > 分类：💻 技术/编程
@@ -58,13 +59,13 @@ Go 的 context 包用于控制 goroutine 生命周期、传递请求范围的值
 ## 标签
 `+"`Go` `并发` `Context`"+`
 
-`), 0644)
+`), 0644))
 
 	// ── Format 3: chatgpt-export conversation ──
 	exportDir := filepath.Join(tmpDir, "chatgpt-export")
-	os.MkdirAll(exportDir, 0755)
+	require.NoError(t, os.MkdirAll(exportDir, 0755))
 
-	os.WriteFile(filepath.Join(exportDir, "React_Hooks.md"), []byte(`# React Hooks 使用指南
+	require.NoError(t, os.WriteFile(filepath.Join(exportDir, "React_Hooks.md"), []byte(`# React Hooks 使用指南
 
 > URL: https://chatgpt.com/c/xxx
 > Created: 2026-03-15
@@ -76,13 +77,13 @@ What are React Hooks?
 ## 🤖 ChatGPT
 
 React Hooks 是 React 16.8 引入的新特性，允许在函数组件中使用 state。
-`), 0644)
+`), 0644))
 
 	// ── Format 4: doubao-knowledge/life (tags as comma-separated) ──
 	lifeDir := filepath.Join(tmpDir, "doubao-knowledge", "life")
-	os.MkdirAll(lifeDir, 0755)
+	require.NoError(t, os.MkdirAll(lifeDir, 0755))
 
-	os.WriteFile(filepath.Join(lifeDir, "cooking-tips.md"), []byte(`# 烹饪技巧
+	require.NoError(t, os.WriteFile(filepath.Join(lifeDir, "cooking-tips.md"), []byte(`# 烹饪技巧
 
 > 来源：豆包对话 | 2026-05-01 | 2条消息
 > 分类：🏠 生活/常识
@@ -95,18 +96,18 @@ React Hooks 是 React 16.8 引入的新特性，允许在函数组件中使用 s
 
 ## 标签
 烹饪, 厨房技巧, 生活常识
-`), 0644)
+`), 0644))
 
 	// ── Files that should be skipped ──
 	dkRoot := filepath.Join(tmpDir, "doubao-knowledge")
-	os.WriteFile(filepath.Join(dkRoot, "INDEX.md"), []byte("# Index\n"), 0644)
-	os.WriteFile(filepath.Join(dkRoot, "tags-index.json"), []byte("{}"), 0644)
-	os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Repo\n"), 0644)
+	require.NoError(t, os.WriteFile(filepath.Join(dkRoot, "INDEX.md"), []byte("# Index\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dkRoot, "tags-index.json"), []byte("{}"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "README.md"), []byte("# Repo\n"), 0644))
 
 	// ── project-journals ──
 	pjDir := filepath.Join(tmpDir, "project-journals", "easyagent")
-	os.MkdirAll(pjDir, 0755)
-	os.WriteFile(filepath.Join(pjDir, "journal.md"), []byte(`# easyagent 开发日志
+	require.NoError(t, os.MkdirAll(pjDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(pjDir, "journal.md"), []byte(`# easyagent 开发日志
 
 > 自动生成于 2026-06-24
 
@@ -114,7 +115,7 @@ React Hooks 是 React 16.8 引入的新特性，允许在函数组件中使用 s
 
 ### 🎯 目标
 - 深度对比 easyagent 架构
-`), 0644)
+`), 0644))
 
 	return tmpDir
 }

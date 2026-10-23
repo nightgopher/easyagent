@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestWebSearchValidate(t *testing.T) {
@@ -53,7 +55,7 @@ func TestWebSearchValidate(t *testing.T) {
 			if err == nil {
 				// Verify the validated params are sensible
 				var params WebSearchParams
-				json.Unmarshal(validated, &params)
+				require.NoError(t, json.Unmarshal(validated, &params))
 				if params.MaxResults > 20 {
 					t.Errorf("MaxResults should be clamped to 20, got %d", params.MaxResults)
 				}
@@ -79,7 +81,7 @@ func TestWebSearchSearXNG(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	server := httptest.NewServer(mux)
@@ -116,7 +118,7 @@ func TestWebSearchFormatOutput(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	server := httptest.NewServer(mux)

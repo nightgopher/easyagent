@@ -59,7 +59,7 @@ func newFakeNetease(t *testing.T, songs []fakeSong, unplayable map[int64]bool) *
 	mux.HandleFunc("/song/media/outer/url", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.URL.Query().Get("id")
 		var id int64
-		fmt.Sscanf(idStr, "%d", &id)
+		_, _ = fmt.Sscanf(idStr, "%d", &id)
 		if unplayable[id] {
 			w.WriteHeader(http.StatusForbidden)
 			return

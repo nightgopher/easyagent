@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"testing"
@@ -135,10 +136,10 @@ func TestLoadFromFileSkipsInvalid(t *testing.T) {
 		{"id": "valid", "provider": "", "name": "Invalid 2"},
 		{"id": "good", "provider": "openai", "name": "Good"}
 	]`
-	os.WriteFile(path, []byte(jsonContent), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(jsonContent), 0o644))
 
 	r := NewRegistry()
-	r.LoadFromFile(path)
+	require.NoError(t, r.LoadFromFile(path))
 
 	if _, ok := r.Get("good"); !ok {
 		t.Error("Expected 'good' model to be registered")
@@ -186,7 +187,7 @@ func TestNewDefaultRegistryWithConfig(t *testing.T) {
 	path := filepath.Join(tmpDir, "models.json")
 
 	jsonContent := `[{"id": "my-custom", "provider": "openai", "name": "My Custom", "context_window": 32000}]`
-	os.WriteFile(path, []byte(jsonContent), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(jsonContent), 0o644))
 
 	r := NewDefaultRegistry(path)
 
