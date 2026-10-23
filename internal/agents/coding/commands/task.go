@@ -18,8 +18,8 @@ func RegisterTaskCommands(registry *slashcmd.Registry) {
 			workspace := util.CWD()
 			args = strings.TrimSpace(args)
 
-			switch {
-			case args == "" || args == "show":
+			switch args {
+			case "", "show":
 				// Show current task
 				doc, err := handoff.Load(workspace)
 				if err != nil {
@@ -30,21 +30,21 @@ func RegisterTaskCommands(registry *slashcmd.Registry) {
 				}
 				return slashcmd.CommandResult{Output: doc.Render()}, nil
 
-			case args == "clear":
+			case "clear":
 				// Remove task file
 				if err := handoff.Clear(workspace); err != nil {
 					return slashcmd.CommandResult{}, fmt.Errorf("clear task: %w", err)
 				}
 				return slashcmd.CommandResult{Output: "📋 Task handoff cleared."}, nil
 
-			case args == "done" || args == "complete":
+			case "done", "complete":
 				// Mark task as completed
 				if err := handoff.MarkComplete(workspace); err != nil {
 					return slashcmd.CommandResult{}, fmt.Errorf("mark task complete: %w", err)
 				}
 				return slashcmd.CommandResult{Output: "✅ Task marked as completed!"}, nil
 
-			case args == "save":
+			case "save":
 				// Save current session state as task handoff
 				// Reads goal from session if available
 				goal := ""

@@ -330,15 +330,15 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 				return slashcmd.CommandResult{Output: "no active session"}, nil
 			}
 			args = strings.TrimSpace(args)
-			switch {
-			case args == "":
+			switch args {
+			case "":
 				// Show current goal
 				goal := ctx.Session.Goal()
 				if goal == "" {
 					return slashcmd.CommandResult{Output: "No goal set. Use /goal <text> to set one."}, nil
 				}
 				return slashcmd.CommandResult{Output: fmt.Sprintf("Current goal:\n  %s", goal)}, nil
-			case args == "clear":
+			case "clear":
 				// Clear the goal
 				if sess, ok := ctx.Session.(interface{ TrySetGoal(string) error }); ok {
 					if err := sess.TrySetGoal(""); err != nil {

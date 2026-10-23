@@ -39,15 +39,15 @@ func registerFeishuQR(mux *http.ServeMux, key string, managed bool) {
 			w.Header().Set("Cache-Control", "no-store")
 			w.Header().Set("Content-Type", "application/json")
 			if key == "" {
-				http.Error(w, `{"error":"飞书配置需要先设置 EA_API_KEY"}`, 403)
+				http.Error(w, `{"error":"飞书配置需要先设置 EA_API_KEY"}`, http.StatusForbidden)
 				return
 			}
 			if bearerToken(r) != key {
-				http.Error(w, `{"error":"未授权"}`, 401)
+				http.Error(w, `{"error":"未授权"}`, http.StatusUnauthorized)
 				return
 			}
 			if managed {
-				http.Error(w, `{"error":"托管桥接请使用自建应用凭据与配对设置"}`, 409)
+				http.Error(w, `{"error":"托管桥接请使用自建应用凭据与配对设置"}`, http.StatusConflict)
 				return
 			}
 			q.handle(action, w, r)
@@ -65,12 +65,12 @@ func (q *feishuQR) handle(action string, w http.ResponseWriter, r *http.Request)
 		q.code, q.result = "", nil
 		b, err := q.begin(ctx)
 		if err != nil {
-			http.Error(w, `{"error":"无法生成飞书授权，请稍后重试或使用自建应用"}`, 502)
+			http.Error(w, `{"error":"无法生成飞书授权，请稍后重试或使用自建应用"}`, http.StatusBadGateway)
 			return
 		}
 		u, err := url.Parse(b.QRURL)
 		if err != nil || u.Scheme != "https" || (u.Host != "open.feishu.cn" && u.Host != "accounts.feishu.cn" && u.Host != "open.larksuite.com" && u.Host != "accounts.larksuite.com") || b.DeviceCode == "" {
-			http.Error(w, `{"error":"飞书返回了无效授权链接"}`, 502)
+			http.Error(w, `{"error":"飞书返回了无效授权链接"}`, http.StatusBadGateway)
 			return
 		}
 		b.Interval = max(3, min(b.Interval, 30))
@@ -78,7 +78,7 @@ func (q *feishuQR) handle(action string, w http.ResponseWriter, r *http.Request)
 		q.code, q.domain = b.DeviceCode, "feishu"
 		q.interval, q.expires = time.Duration(b.Interval)*time.Second, time.Now().Add(time.Duration(b.ExpireIn)*time.Second)
 		q.next = time.Time{}
-		json.NewEncoder(w).Encode(map[string]any{"device_code": b.DeviceCode, "qr_url": b.QRURL, "user_code": b.UserCode, "interval": b.Interval, "expire_in": b.ExpireIn})
+		_ = json.NewEncoder(w).Encode(map[string]any{"device_code": b.DeviceCode, "qr_url": b.QRURL, "user_code": b.UserCode, "interval": b.Interval, "expire_in": b.ExpireIn})
 		return
 	}
 	var req struct {
@@ -94,12 +94,12 @@ func (q *feishuQR) handle(action string, w http.ResponseWriter, r *http.Request)
 		if !time.Now().Before(q.expires) {
 			q.result = nil
 		}
-		http.Error(w, `{"error":"授权已过期或已被新的授权取代"}`, 409)
+		http.Error(w, `{"error":"授权已过期或已被新的授权取代"}`, http.StatusConflict)
 		return
 	}
 	if action == "confirm" {
 		if q.result == nil {
-			http.Error(w, `{"error":"请先完成飞书授权"}`, 409)
+			http.Error(w, `{"error":"请先完成飞书授权"}`, http.StatusConflict)
 			return
 		}
 		if ctx.Err() != nil {
@@ -111,14 +111,14 @@ func (q *feishuQR) handle(action string, w http.ResponseWriter, r *http.Request)
 			return
 		}
 		q.code, q.result = "", nil
-		json.NewEncoder(w).Encode(map[string]any{"success": true, "app_id": p.AppID})
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "app_id": p.AppID})
 		return
 	}
 	if q.result == nil && !time.Now().Before(q.next) {
 		q.next = time.Now().Add(q.interval)
 		p, domain, err := q.poll(ctx, q.code, q.domain)
 		if err != nil {
-			http.Error(w, `{"error":"飞书授权查询失败，请重新授权"}`, 502)
+			http.Error(w, `{"error":"飞书授权查询失败，请重新授权"}`, http.StatusBadGateway)
 			return
 		}
 		q.domain = domain
@@ -127,5 +127,5 @@ func (q *feishuQR) handle(action string, w http.ResponseWriter, r *http.Request)
 		}
 		q.result = p
 	}
-	json.NewEncoder(w).Encode(map[string]any{"authorized": q.result != nil})
+	_ = json.NewEncoder(w).Encode(map[string]any{"authorized": q.result != nil})
 }

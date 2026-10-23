@@ -169,7 +169,7 @@ func (h *Handler) handleLyrics(w http.ResponseWriter, r *http.Request) {
 		Tlyric string `json:"tlyric"`
 	}{LRC: lyrics.LRC, Tlyric: lyrics.TransLRC}
 	jsonData, _ := json.Marshal(payload)
-	w.Write(jsonData)
+	_, _ = w.Write(jsonData)
 }
 
 func (h *Handler) getAudioURL(src Source, rawID string) (string, error) {

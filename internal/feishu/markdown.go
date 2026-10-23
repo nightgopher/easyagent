@@ -63,7 +63,7 @@ func mdToPostContent(md string) string {
 		}
 
 		// Table rows
-		if strings.Contains(line, "|") && strings.Contains(line, "|") {
+		if strings.Contains(line, "|") {
 			cells := parseTableRow(line)
 			if cells != nil {
 				var row []map[string]any
