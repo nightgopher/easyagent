@@ -6,6 +6,8 @@ EasyAgent 的唯一维护中桌面客户端是 `desktop-native/`，使用 Go / M
 
 Apple Silicon Mac 从 Release 下载 `easyagent-native-darwin-arm64.dmg`，正式安装入口为 `/Applications/EasyAgent.app`。v0.17.1 及此前的公开包使用 ad hoc 签名；从 v0.17.2 起正式构建固定证书身份以保留系统授权，尚未进行 Developer ID 签名与 Apple 公证。由于自签证书没有团队 ID，主程序通过 `desktop-native/resources/easyagent.entitlements` 关闭 hardened runtime 库验证，否则较新的 macOS 会拒绝加载随包的终端渲染等嵌入库。原生客户端已接入签名更新：设置中可检查更新，并选择自动检查或后台下载。存在活动任务、待审批操作或未保存文件时会阻止退出与更新重启。更新频道需要正式 Release 发布签名清单及归档后才可用；发布构建要求见 RELEASING.md。
 
+macOS 正式包使用 `desktop-native/AppIcon.icon` 的 Icon Composer 资源，系统负责图标圆角和缩放，兼容图标与资源包一起生成。正式打包需要 Xcode 26+；仅有 Command Line Tools 时开发构建会回退到 PNG 的旧式 ICNS，不能作为正式发布包。
+
 本机构建：
 
 ```sh
