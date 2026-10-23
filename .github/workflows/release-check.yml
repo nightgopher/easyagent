@@ -35,8 +35,6 @@ jobs:
   native-build:
     if: github.event_name == 'pull_request'
     runs-on: macos-15
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
         with:
@@ -46,12 +44,6 @@ jobs:
           go-version-file: desktop-native/go.mod
       - name: Exercise the native release builder
         run: bash scripts/check-native-release-build.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-icon-preview
-          path: desktop-native/build.noindex/icon-preview/*
-          if-no-files-found: error
-          retention-days: 3
   android-build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -73,8 +65,6 @@ jobs:
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: macos-15
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

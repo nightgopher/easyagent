@@ -83,10 +83,3 @@ for previous in json.loads(pathlib.Path(sys.argv[1]).read_text()):
         assert current != previous['hash'], 'fixture code identity did not change'
 print('Changed bundles preserve their designated requirements and reuse the identical credential helper')
 PY
-
-# Keep only the built icon resources for visual inspection on another macOS.
-# The temporary app itself is unregistered by build-native.sh and removed here.
-preview="$root/desktop-native/build.noindex/icon-preview"
-mkdir -p "$preview"
-cp desktop-native/build.noindex/darwin-arm64/EasyAgent.app/Contents/Info.plist "$preview/"
-cp desktop-native/build.noindex/darwin-arm64/EasyAgent.app/Contents/Resources/{AppIcon.icns,Assets.car} "$preview/"
