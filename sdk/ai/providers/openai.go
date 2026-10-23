@@ -468,6 +468,7 @@ func (p *OpenAIProvider) handleSSE(ctx context.Context, stream *ai.EventStream, 
 // ─── 消息转换 ────────────────────────────────────────────────────────────────────
 
 func (p *OpenAIProvider) buildOpenAIRequest(req ai.StreamRequest, stream bool) openAIRequest {
+	req.Messages = ai.MessagesForModel(req.Messages, req.Model)
 	maxTokens := 4096
 	if req.MaxTokens != nil {
 		maxTokens = *req.MaxTokens

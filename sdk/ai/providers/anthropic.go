@@ -483,6 +483,7 @@ func (p *AnthropicProvider) handleSSEEvent(
 // ─── 消息转换 ────────────────────────────────────────────────────────────────────
 
 func (p *AnthropicProvider) buildRequest(req ai.StreamRequest, stream bool) anthropicRequest {
+	req.Messages = ai.MessagesForModel(req.Messages, req.Model)
 	maxTokens := 4096
 	if req.MaxTokens != nil {
 		maxTokens = *req.MaxTokens
