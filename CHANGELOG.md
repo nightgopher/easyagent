@@ -4,8 +4,26 @@
 
 ## [Unreleased]
 
+## [v0.26.0] - 2026-10-23
+
+### Added
+- Android 回复支持 Markdown：标题、列表、引用、表格、链接和行内格式，代码块带语言标签和复制按钮，文本可选择。
+- Android 会话列表显示「运行中」「待审批 N」状态，支持搜索、按项目分组和相对时间；服务端 `GET /sessions` 为运行中的会话返回 `run_state` 与 `pending_confirmations`。
+- Android 连续的工具调用合并为一行并默认折叠，失败时自动展开。
+
 ### Changed
-- 发布清单 `release.json` 记录本次 `mobile-native/` 的源码树。Android 应用内更新遇到与已安装版本源码相同的新版本（例如只改桌面端或文档的补丁）时不再提示升级；开发构建和旧版本清单保持原有行为。
+- Android 输入框改为单行胶囊样式：「+」附件入口放进输入框，语音和发送合成一个按钮（有文字时发送，无文字时语音）。
+- Android 审批卡片改用中性配色，参数默认收起，只有 `bash` 显示警示色。
+- Android 应用图标改为与桌面客户端一致的图案。
+- 发布清单 `release.json` 记录 `mobile-native/` 源码树；安卓源码未变化的版本不再提示应用内更新。发版改为攒批，小修复先累积在 Unreleased。
+- 质量门禁：lint 基线只减不增（1287 → 121 条），覆盖率门槛提到 73%；`internal/server/server.go` 按路由拆分。
+
+### Fixed
+- `POST /tools/register` 此前一直返回 404，飞书桥接无法注册 `create_project_group` 工具。
+- `/kb/read` 可通过知识库内的符号链接读取库外文件。
+- CLI Markdown 渲染遇到未闭合的 `**` 时卡死。
+- Android 循环任务剩余时间超过 48 小时按天显示，不再出现「还剩 639900 小时」。
+- 飞书工具回调和 OAuth 回调服务增加请求头超时。
 
 ## [v0.25.0] - 2026-10-23
 
