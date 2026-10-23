@@ -294,6 +294,20 @@ class RuntimeUiTest {
         screenshot("media-composer")
     }
 
+    @Test fun composerSwapsMicForSendWhileTyping() {
+        val host = host("输入主机")
+        connect(host)
+        openChat(host)
+        ui.onNodeWithContentDescription("语音输入").assertExists()
+        assertTrue(ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isEmpty())
+        ui.onNode(hasSetTextAction()).performTextReplacement("检查一下")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isEmpty())
+        screenshot("composer-typing")
+        ui.onNode(hasSetTextAction()).performTextReplacement("")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     @Test fun markdownRepliesRenderAsRichText() {
         val host = host("排版主机")
         host.history = """
