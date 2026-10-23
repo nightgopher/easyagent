@@ -206,7 +206,7 @@ func TestRunSubagentUsagePersistsAndDoesNotRecountEarlierRuns(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprint(w, `{"data":[]}`)
+			_, _ = fmt.Fprint(w, `{"data":[]}`)
 			return
 		}
 		mu.Lock()
@@ -222,7 +222,7 @@ func TestRunSubagentUsagePersistsAndDoesNotRecountEarlierRuns(t *testing.T) {
 			chunk = toolChunk
 		}
 		usage := fmt.Sprintf(`"usage":{"prompt_tokens":%d,"completion_tokens":%d,"prompt_tokens_details":{"cached_tokens":30}}`, turn*100, turn*10)
-		fmt.Fprintf(w, "data: %s\n\ndata: {%s}\n\ndata: [DONE]\n\n", chunk, usage)
+		_, _ = fmt.Fprintf(w, "data: %s\n\ndata: {%s}\n\ndata: [DONE]\n\n", chunk, usage)
 	}))
 	defer provider.Close()
 
@@ -250,7 +250,7 @@ func TestRunSubagentUsagePersistsAndDoesNotRecountEarlierRuns(t *testing.T) {
 				t.Error("run did not shut down")
 			}
 		}
-		application.Close()
+		require.NoError(t, application.Close())
 	})
 
 	run, _, err := srv.startRun("", "write the note", "req-usage-e2e")
