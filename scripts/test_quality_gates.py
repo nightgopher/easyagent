@@ -3,7 +3,7 @@ import unittest
 from decimal import Decimal
 
 from check_coverage import coverage
-from check_lint_baseline import finding_key, new_findings
+from check_lint_baseline import finding_key, match, new_findings, pruned
 
 
 class QualityGateTests(unittest.TestCase):
@@ -30,6 +30,22 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(new_findings({"Issues": None}, baseline), [])
         with self.assertRaises(KeyError):
             new_findings({}, baseline)
+
+    def test_fixed_findings_must_leave_the_baseline(self):
+        issue = {"FromLinter": "errcheck", "Text": "unchecked error", "SourceLines": [" f()"], "Pos": {"Filename": "a.go", "Line": 10}}
+        linter, file, message, source = finding_key(issue)
+        entry = {"linter": linter, "file": file, "message": message, "source_sha256": source, "line_at_baseline": 10, "count": 2}
+        other = dict(entry, file="b.go", count=1)
+        baseline = {"policy": "kept", "findings": [entry, other]}
+        findings, unused = match({"Issues": [issue]}, baseline)
+        self.assertEqual(findings, [])
+        self.assertEqual(sum(unused.values()), 2)
+        shrunk = pruned(baseline, unused)
+        self.assertEqual(shrunk["policy"], "kept")
+        self.assertEqual(shrunk["findings"], [dict(entry, count=1)])
+        self.assertEqual(match({"Issues": [issue]}, shrunk), ([], {}))
+        # Pruning cannot make room for a finding that was never allowed.
+        self.assertEqual(len(new_findings({"Issues": [issue, issue]}, shrunk)), 1)
 
 
 if __name__ == "__main__":
