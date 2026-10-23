@@ -63,7 +63,7 @@ func TestModelImageCapabilitiesReachActualRequests(t *testing.T) {
 			cfg.Provider, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey, cfg.OpenAIModel = "openai", gateway.URL, "test-key", model
 			application, err := New(AppOptions{Config: cfg})
 			require.NoError(t, err)
-			defer application.Close()
+			defer func() { require.NoError(t, application.Close()) }()
 			sess, err := application.LoadOrCreateSession(ctx, "")
 			require.NoError(t, err)
 			stream, err := sess.PromptMessageStream(ctx, ai.UserMessage{Content: []ai.ContentBlock{
