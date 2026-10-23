@@ -321,11 +321,11 @@ func (h *Handler) cmdProjectList() string {
 		if name == "" {
 			name = chatKey
 		}
-		sb.WriteString(fmt.Sprintf("  📌 %s\n     📁 %s\n", name, route.ProjectRoot))
+		fmt.Fprintf(&sb, "  📌 %s\n     📁 %s\n", name, route.ProjectRoot)
 		if route.WorktreeBranch != "" {
-			sb.WriteString(fmt.Sprintf("     🌱 %s\n", route.WorktreeBranch))
+			fmt.Fprintf(&sb, "     🌱 %s\n", route.WorktreeBranch)
 		}
-		sb.WriteString(fmt.Sprintf("     🆔 %s\n\n", chatKey))
+		fmt.Fprintf(&sb, "     🆔 %s\n\n", chatKey)
 	}
 	return sb.String()
 }
@@ -916,14 +916,14 @@ func formatProjectWorkspace(route *ChatRoute, note string) string {
 		sb.WriteString("\n")
 	}
 	if route.SourceProjectRoot != "" && route.SourceProjectRoot != route.ProjectRoot {
-		sb.WriteString(fmt.Sprintf("📁 源项目: `%s`\n", route.SourceProjectRoot))
+		fmt.Fprintf(&sb, "📁 源项目: `%s`\n", route.SourceProjectRoot)
 	}
-	sb.WriteString(fmt.Sprintf("📁 工作区: `%s`", route.ProjectRoot))
+	fmt.Fprintf(&sb, "📁 工作区: `%s`", route.ProjectRoot)
 	if route.WorktreeBranch != "" {
-		sb.WriteString(fmt.Sprintf("\n🌱 分支: `%s`", route.WorktreeBranch))
+		fmt.Fprintf(&sb, "\n🌱 分支: `%s`", route.WorktreeBranch)
 	}
 	if route.TaskPath != "" {
-		sb.WriteString(fmt.Sprintf("\n📝 任务文件: `%s`", route.TaskPath))
+		fmt.Fprintf(&sb, "\n📝 任务文件: `%s`", route.TaskPath)
 	}
 	return sb.String()
 }

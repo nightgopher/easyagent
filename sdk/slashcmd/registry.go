@@ -81,7 +81,7 @@ func (r *Registry) Help() string {
 	b.WriteString("Available commands:\n")
 	for _, name := range names {
 		cmd := r.commands[name]
-		b.WriteString(fmt.Sprintf("  %-12s %s\n", name, cmd.Description))
+		fmt.Fprintf(&b, "  %-12s %s\n", name, cmd.Description)
 	}
 	return b.String()
 }
