@@ -72,6 +72,11 @@ def main():
         print(f'{pos["Filename"]}:{pos["Line"]}: {issue["FromLinter"]}: {issue["Text"]}')
     print(f"Lint: {len(report['Issues'] or [])} findings, {len(findings)} outside the fixed baseline")
     stale = sum(unused.values())
+    if args.prune and findings:
+        # A failed build reports only typecheck errors; pruning against it
+        # would empty the baseline.
+        print("Refusing to prune: fix the findings outside the baseline first", file=sys.stderr)
+        return 1
     if stale and args.prune:
         args.baseline.write_text(json.dumps(pruned(baseline, unused), indent=2, ensure_ascii=False) + "\n")
         print(f"Pruned {stale} fixed findings from {args.baseline}")
