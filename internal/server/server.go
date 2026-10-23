@@ -268,6 +268,7 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/models", restHandler)
 	topMux.Handle("/models/", restHandler)
 	topMux.Handle("/tools", restHandler)
+	topMux.Handle("/tools/", restHandler)
 	topMux.Handle("/commands", restHandler)
 	topMux.Handle("/mcp", restHandler)
 	topMux.Handle("/mcp/", restHandler)
