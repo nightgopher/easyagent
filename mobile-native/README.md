@@ -15,6 +15,7 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 - 语音输入：点麦克风开始录音（16 kHz WAV，最长 2 分钟），可取消；结束后由运行主机的 `POST /asr/transcribe` 转写，文字填入输入框供修改，不会直接发送。转写失败可重试或放弃；主机未配置 ASR 时显示服务端错误。
 - 循环任务：聊天页右上角「循环任务」查看当前会话的 `/loop`（内容、间隔、剩余时间、上次执行），可以停止，或选择间隔（5 分钟–1 小时）和持续时间（1 小时–3 天）新建；新建通过主机的 `/loop` 命令完成，与 TUI 行为一致。循环只保存在服务进程内存中，服务重启后需要重新设置。
 - WebSocket 断线自动重连（1s 起指数退避，上限 15s），重连后按 `after_seq` 续订，不丢事件。
+- 应用更新：启动或回到前台时自动检查正式版本（最多每 6 小时一次，可关闭）；连接页、运行主机页和会话列表「更多 → 检查更新」均可手动检查。展示新版本和更新说明，确认后下载并显示进度，支持取消、失败重试；已下载的完整 APK 可在重新检查后复用。下载流量独立于运行主机，不携带主机令牌。
 - 通知：打开过的会话出现待审批，或运行结束（完成、失败、中断）时发通知。正在前台查看该会话时不打扰。待审批通知可以直接点「批准」「拒绝」，点通知本身会切到对应主机并打开会话。首次发送消息时（Android 13 及以上）会请求通知权限，拒绝后不再发送。
   - 限制：通知依赖 App 进程和 WebSocket 存活。App 被系统回收后收不到；服务端对无人处理的审批两分钟后自动拒绝。只覆盖本次运行中打开过的会话（订阅过的会话）。
 
@@ -25,6 +26,10 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 在 Android 上打开 APK 并允许本次来源安装，或使用 `adb install -r easyagent-android.apk`。两种下载格式均可对照同一 [Release](https://github.com/hwj123hwj/easyagent/releases/latest) 的 `checksums.txt` 验证 SHA-256。
 
 从 v0.19.0 起 APK 使用固定发布证书，后续正式 APK 可以覆盖更新并保留应用数据；此前自行构建的 Debug APK 签名不同，不能直接覆盖，迁移前需自行保留连接信息，再卸载旧 Debug 应用。
+
+从 v0.25.0 起可在应用内更新：检查新版本 → 查看说明并下载 → 安装更新。客户端核对 GitHub Release、`release.json`、APK 大小与 SHA-256，并验证包名、递增版本号、Android 系统要求及与已安装应用一致的签名；安装前再次校验文件。首次点击安装会引导到 Android 的「允许此来源安装应用」，返回后打开系统安装确认。拒绝授权或取消安装会保留下载，可稍后继续；覆盖安装保留主机配置和加密凭据。应用被系统结束时不会保证后台下载继续，残留的未完成文件会清理，重开后可手动检查并重试。
+
+v0.24.0 及更早版本尚无应用内更新入口，需要先手动下载并覆盖安装一次 v0.25.0 或更新版本；之后即可使用上述流程。
 
 ## 从源码构建
 
@@ -45,7 +50,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Verify CI 与正式 Release 的验证阶段均执行上述单元测试、Lint 与 Debug APK 构建。开发版 versionName 从 `desktop-native/mygo.json` 读取，Debug versionCode 为 1；正式构建由发布脚本注入与 tag 对应的版本和递增 versionCode。
 
-UI 验收使用 `./gradlew --no-daemon :app:connectedDebugAndroidTest`，需已启动 Android 模拟器或连接测试设备。`Android UI` 工作流覆盖 API 31/34/35，正式 Release 的 Android 构建等待该矩阵通过。用例启动实际 Activity，连接带认证的本地 HTTP/WebSocket 模拟服务，覆盖凭据、主机切换、草稿、流式对话、审批、排队、停止、重连、横屏与深色模式；不调用真实模型。发布前按 [Android 验收清单](../docs/QA_ANDROID.md) 记录候选版本与人工项目。
+UI 验收使用仓库根目录的 `bash scripts/check-android-ui.sh`（生成同证书测试升级包，再运行当前版本），需已启动 Android 模拟器或连接测试设备。`Android UI` 工作流覆盖 API 31/34/35，正式 Release 的 Android 构建等待该矩阵通过。用例启动实际 Activity，连接带认证的本地 HTTP/WebSocket 模拟服务，覆盖凭据、主机切换、草稿、流式对话、审批、排队、停止、重连、横屏与深色模式；不调用真实模型。发布前按 [Android 验收清单](../docs/QA_ANDROID.md) 记录候选版本与人工项目。
 
 演练正式构建（需要设置 `JAVA_HOME`、`ANDROID_HOME` 并安装 Build Tools 35.0.1），从仓库根目录运行：
 

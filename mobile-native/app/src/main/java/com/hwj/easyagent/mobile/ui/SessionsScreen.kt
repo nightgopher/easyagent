@@ -65,6 +65,7 @@ fun SessionsScreen(
     onOpen: (String) -> Unit,
     onSelectHost: (String) -> Unit,
     onManageHosts: () -> Unit,
+    onUpdates: () -> Unit,
 ) {
     val hosts by connections.state.collectAsStateWithLifecycle()
     val sessions by client.sessions.collectAsStateWithLifecycle()
@@ -131,6 +132,7 @@ fun SessionsScreen(
                             onClick = { showArchived = !showArchived; menuOpen = false },
                         )
                         DropdownMenuItem(text = { Text("管理运行主机") }, onClick = { menuOpen = false; onManageHosts() })
+                        DropdownMenuItem(text = { Text("检查更新") }, onClick = { menuOpen = false; onUpdates() })
                     }
                 },
             )
