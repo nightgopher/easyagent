@@ -320,19 +320,20 @@ func (s *Server) kbRead(w http.ResponseWriter, r *http.Request) {
 		fullPath = repoPath + "/" + path
 	}
 
-	// Security: resolve symlinks and verify the result is inside the KB repo
-	absRepo, _ := filepath.Abs(repoPath)
 	absFile, err := filepath.Abs(fullPath)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid path: %v", err))
 		return
 	}
-	if !strings.HasPrefix(absFile+string(filepath.Separator), absRepo+string(filepath.Separator)) {
+	// Security: resolve symlinks and verify the result is inside the KB repo;
+	// a link inside the repo must not reach files outside it.
+	safePath, err := securePath(repoPath, absFile)
+	if err != nil {
 		writeError(w, http.StatusForbidden, "path is outside the knowledge base")
 		return
 	}
 
-	data, err := os.ReadFile(absFile)
+	data, err := os.ReadFile(safePath) //nolint:gosec // securePath confines the resolved path to the KB repo
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read file: %v", err))
 		return

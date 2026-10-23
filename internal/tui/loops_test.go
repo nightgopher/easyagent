@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -83,7 +84,10 @@ func startLoopProgram(t *testing.T, m *TuiModel, mgr *scheduler.LoopManager) (*t
 		unbind()
 		p.Kill()
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil && !errors.Is(err, tea.ErrProgramKilled) {
+				t.Error(err)
+			}
 		case <-time.After(3 * time.Second):
 			t.Error("TUI did not stop")
 		}

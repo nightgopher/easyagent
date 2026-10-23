@@ -389,10 +389,8 @@ func TestRunner_Run_Timeout(t *testing.T) {
 
 	// Use a very short timeout
 	result := r.Run(ctx, 1, func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+		<-ctx.Done()
+		return ctx.Err()
 	})
 
 	assert.Error(t, result.Err)

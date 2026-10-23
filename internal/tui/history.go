@@ -38,9 +38,10 @@ func (m *TuiModel) restoreHistory() {
 		case entry.User != nil:
 			var blocks []string
 			for _, block := range entry.User.Content {
-				if block.Type == "text" {
+				switch block.Type {
+				case "text":
 					blocks = append(blocks, block.Text)
-				} else if block.Type == "image" {
+				case "image":
 					blocks = append(blocks, "[image]")
 				}
 			}

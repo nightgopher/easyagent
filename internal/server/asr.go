@@ -158,7 +158,7 @@ func (h *ASRHandler) transcribe(w http.ResponseWriter, r *http.Request) {
 	result.Text = strings.TrimSpace(result.Text)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(result)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 // extFromMIME guesses file extension from MIME type for multipart upload.

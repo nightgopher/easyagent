@@ -84,8 +84,8 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 			}
 
 			var b strings.Builder
-			b.WriteString(fmt.Sprintf("Context compacted: %d → %d messages\n", from, to))
-			b.WriteString(fmt.Sprintf("Summary (%d chars):\n", utf8.RuneCountInString(summary)))
+			fmt.Fprintf(&b, "Context compacted: %d → %d messages\n", from, to)
+			fmt.Fprintf(&b, "Summary (%d chars):\n", utf8.RuneCountInString(summary))
 			b.WriteString(summary)
 			b.WriteString("\n")
 
@@ -121,7 +121,7 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 					marker = "→ "
 				}
 				lastActive := time.Unix(s.LastActive, 0).Format("2006-01-02 15:04")
-				b.WriteString(fmt.Sprintf("%s%-20s  messages=%-4d  last_active=%s\n", marker, s.ID, s.MessageCount, lastActive))
+				fmt.Fprintf(&b, "%s%-20s  messages=%-4d  last_active=%s\n", marker, s.ID, s.MessageCount, lastActive)
 			}
 			return slashcmd.CommandResult{Output: b.String()}, nil
 		},
@@ -271,7 +271,7 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 				if m.Provider == currentProvider && m.ModelID == currentModel {
 					marker = "→ "
 				}
-				b.WriteString(fmt.Sprintf("%s%s/%s\n", marker, m.Provider, m.ModelID))
+				fmt.Fprintf(&b, "%s%s/%s\n", marker, m.Provider, m.ModelID)
 			}
 			b.WriteString("\nUse /model <model-id> to switch — 粘贴上面任意 ID 即可（也支持 provider:model）")
 			return slashcmd.CommandResult{Output: b.String()}, nil
@@ -297,7 +297,7 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 				if p == currentProfile {
 					marker = "→ "
 				}
-				b.WriteString(fmt.Sprintf("%s%s\n", marker, p))
+				fmt.Fprintf(&b, "%s%s\n", marker, p)
 			}
 			return slashcmd.CommandResult{Output: b.String()}, nil
 		},
@@ -330,15 +330,15 @@ func RegisterBuiltins(registry *slashcmd.Registry) {
 				return slashcmd.CommandResult{Output: "no active session"}, nil
 			}
 			args = strings.TrimSpace(args)
-			switch {
-			case args == "":
+			switch args {
+			case "":
 				// Show current goal
 				goal := ctx.Session.Goal()
 				if goal == "" {
 					return slashcmd.CommandResult{Output: "No goal set. Use /goal <text> to set one."}, nil
 				}
 				return slashcmd.CommandResult{Output: fmt.Sprintf("Current goal:\n  %s", goal)}, nil
-			case args == "clear":
+			case "clear":
 				// Clear the goal
 				if sess, ok := ctx.Session.(interface{ TrySetGoal(string) error }); ok {
 					if err := sess.TrySetGoal(""); err != nil {
@@ -419,21 +419,21 @@ func formatContextSnapshot(s agent.ContextSnapshot) string {
 	var b strings.Builder
 	b.WriteString("Context Overview\n")
 	b.WriteString(strings.Repeat("─", 44) + "\n")
-	b.WriteString(fmt.Sprintf("Model       %s/%s\n", s.Model.Provider, s.Model.ID))
+	fmt.Fprintf(&b, "Model       %s/%s\n", s.Model.Provider, s.Model.ID)
 	if u.WindowKnown && u.ContextWindow > 0 {
 		pct := 100.0 * float64(u.EstimatedTokens) / float64(u.ContextWindow)
-		b.WriteString(fmt.Sprintf("Tokens      %s of %s (%.1f%%)\n",
-			formatTokens(u.EstimatedTokens), formatTokens(u.ContextWindow), pct))
+		fmt.Fprintf(&b, "Tokens      %s of %s (%.1f%%)\n",
+			formatTokens(u.EstimatedTokens), formatTokens(u.ContextWindow), pct)
 		b.WriteString(contextBar(u.EstimatedTokens, u.ContextWindow, 40) + "\n")
 	} else {
-		b.WriteString(fmt.Sprintf("Tokens      %s (window size unknown)\n", formatTokens(u.EstimatedTokens)))
+		fmt.Fprintf(&b, "Tokens      %s (window size unknown)\n", formatTokens(u.EstimatedTokens))
 	}
-	b.WriteString(fmt.Sprintf("Messages    %d entries\n", len(s.Messages)))
+	fmt.Fprintf(&b, "Messages    %d entries\n", len(s.Messages))
 	b.WriteString("\nToken Breakdown\n")
 	b.WriteString(strings.Repeat("─", 44) + "\n")
-	b.WriteString(fmt.Sprintf("  Messages  %7s\n", formatTokens(u.Messages)))
-	b.WriteString(fmt.Sprintf("  System    %7s\n", formatTokens(u.System)))
-	b.WriteString(fmt.Sprintf("  Tools     %7s\n", formatTokens(u.Tools)))
+	fmt.Fprintf(&b, "  Messages  %7s\n", formatTokens(u.Messages))
+	fmt.Fprintf(&b, "  System    %7s\n", formatTokens(u.System))
+	fmt.Fprintf(&b, "  Tools     %7s\n", formatTokens(u.Tools))
 	if u.LastRequest.InputTokens > 0 {
 		line := fmt.Sprintf("  Last req  %7s in / %s out", formatTokens(u.LastRequest.InputTokens), formatTokens(u.LastRequest.OutputTokens))
 		if u.LastRequest.CachedInputTokens != nil && *u.LastRequest.CachedInputTokens > 0 {
@@ -451,7 +451,7 @@ func formatContextSnapshot(s agent.ContextSnapshot) string {
 	}
 
 	if len(s.Compactions) > 0 {
-		b.WriteString(fmt.Sprintf("\nCompactions (%d)\n", len(s.Compactions)))
+		fmt.Fprintf(&b, "\nCompactions (%d)\n", len(s.Compactions))
 		b.WriteString(strings.Repeat("─", 44) + "\n")
 		for _, c := range s.Compactions {
 			ts := time.Unix(c.Timestamp, 0).Format("01-02 15:04")
@@ -559,7 +559,7 @@ func formatHelp(registry *slashcmd.Registry) string {
 		for _, name := range sessionCmds {
 			cmd := registry.Command(name)
 			desc := cmd.Description
-			b.WriteString(fmt.Sprintf("    %-14s %s\n", "/"+name, desc))
+			fmt.Fprintf(&b, "    %-14s %s\n", "/"+name, desc)
 		}
 		b.WriteString("\n")
 	}
@@ -568,7 +568,7 @@ func formatHelp(registry *slashcmd.Registry) string {
 		b.WriteString("  Information & control:\n")
 		for _, name := range infoCmds {
 			cmd := registry.Command(name)
-			b.WriteString(fmt.Sprintf("    %-14s %s\n", "/"+name, cmd.Description))
+			fmt.Fprintf(&b, "    %-14s %s\n", "/"+name, cmd.Description)
 		}
 		b.WriteString("\n")
 	}
@@ -577,7 +577,7 @@ func formatHelp(registry *slashcmd.Registry) string {
 		b.WriteString("  Actions:\n")
 		for _, name := range actionCmds {
 			cmd := registry.Command(name)
-			b.WriteString(fmt.Sprintf("    %-14s %s\n", "/"+name, cmd.Description))
+			fmt.Fprintf(&b, "    %-14s %s\n", "/"+name, cmd.Description)
 		}
 		b.WriteString("\n")
 	}

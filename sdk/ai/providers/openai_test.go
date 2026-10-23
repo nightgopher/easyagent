@@ -876,9 +876,9 @@ func TestStreamHTTPAndEmptyRetryBudgetsAreIndependent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch hits.Add(1) {
 		case 1:
-			http.Error(w, "busy", 429)
+			http.Error(w, "busy", http.StatusTooManyRequests)
 		case 2:
-			http.Error(w, "busy", 503)
+			http.Error(w, "busy", http.StatusServiceUnavailable)
 		case 3:
 			w.Header().Set("Content-Type", "text/event-stream")
 			fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", finishChunk("stop"))

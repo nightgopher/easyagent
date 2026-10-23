@@ -30,7 +30,12 @@ data class SessionSummary(
     val application: String = "",
     val archived: Boolean = false,
     val pinned: Boolean = false,
+    /** "running" or "waiting_confirmation" while a run is active, else empty. */
+    @SerialName("run_state") val runState: String = "",
+    @SerialName("pending_confirmations") val pendingConfirmations: Int = 0,
 ) {
+    val running: Boolean get() = runState == "running" || runState == "waiting_confirmation"
+
     val updatedAt: String
         get() = (lastActive.takeIf { it > 0 } ?: createdAt.takeIf { it > 0 })
             ?.let { Instant.ofEpochSecond(it).toString() }.orEmpty()

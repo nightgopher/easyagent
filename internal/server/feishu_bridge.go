@@ -120,7 +120,8 @@ func runFeishuBridgeLocal(ctx context.Context, baseURL string) error {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/tool-callback", handler.HandleToolCallback)
 		go func() {
-			if err := http.ListenAndServe(callbackAddr, mux); err != nil && err != http.ErrServerClosed {
+			server := &http.Server{Addr: callbackAddr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+			if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				fmt.Println("feishu tool callback server stopped:", err)
 			}
 		}()

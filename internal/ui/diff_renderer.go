@@ -20,14 +20,14 @@ func (d *DiffRenderer) RenderEdit(filePath, oldStr, newStr string) string {
 	var sb strings.Builder
 
 	// Header
-	sb.WriteString(fmt.Sprintf("%s%s┌─ %s ─%s\n", ColorCyan, ColorBold, filePath, ColorReset))
+	fmt.Fprintf(&sb, "%s%s┌─ %s ─%s\n", ColorCyan, ColorBold, filePath, ColorReset)
 
 	// Show removed lines (oldStr)
 	if oldStr != "" {
 		oldLines := strings.Split(oldStr, "\n")
 		for _, line := range oldLines {
-			sb.WriteString(fmt.Sprintf("%s%s│ %s- %s%s\n",
-				ColorGray, ColorDim, ColorRed, line, ColorReset))
+			fmt.Fprintf(&sb, "%s%s│ %s- %s%s\n",
+				ColorGray, ColorDim, ColorRed, line, ColorReset)
 		}
 	}
 
@@ -35,13 +35,13 @@ func (d *DiffRenderer) RenderEdit(filePath, oldStr, newStr string) string {
 	if newStr != "" {
 		newLines := strings.Split(newStr, "\n")
 		for _, line := range newLines {
-			sb.WriteString(fmt.Sprintf("%s%s│ %s+ %s%s\n",
-				ColorGray, ColorDim, ColorGreen, line, ColorReset))
+			fmt.Fprintf(&sb, "%s%s│ %s+ %s%s\n",
+				ColorGray, ColorDim, ColorGreen, line, ColorReset)
 		}
 	}
 
 	// Footer
-	sb.WriteString(fmt.Sprintf("%s%s└─%s", ColorGray, ColorDim, ColorReset))
+	fmt.Fprintf(&sb, "%s%s└─%s", ColorGray, ColorDim, ColorReset)
 	return sb.String()
 }
 
@@ -49,8 +49,8 @@ func (d *DiffRenderer) RenderEdit(filePath, oldStr, newStr string) string {
 func (d *DiffRenderer) RenderWrite(filePath, content string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("%s%s┌─ %s (create/overwrite) ─%s\n",
-		ColorCyan, ColorBold, filePath, ColorReset))
+	fmt.Fprintf(&sb, "%s%s┌─ %s (create/overwrite) ─%s\n",
+		ColorCyan, ColorBold, filePath, ColorReset)
 
 	lines := strings.Split(content, "\n")
 	// Limit preview to first 20 lines
@@ -63,16 +63,16 @@ func (d *DiffRenderer) RenderWrite(filePath, content string) string {
 	}
 
 	for _, line := range displayed {
-		sb.WriteString(fmt.Sprintf("%s%s│ %s+ %s%s\n",
-			ColorGray, ColorDim, ColorGreen, line, ColorReset))
+		fmt.Fprintf(&sb, "%s%s│ %s+ %s%s\n",
+			ColorGray, ColorDim, ColorGreen, line, ColorReset)
 	}
 
 	if truncated {
-		sb.WriteString(fmt.Sprintf("%s%s│ %s... (%d more lines)%s\n",
-			ColorGray, ColorDim, ColorYellow, len(lines)-maxPreview, ColorReset))
+		fmt.Fprintf(&sb, "%s%s│ %s... (%d more lines)%s\n",
+			ColorGray, ColorDim, ColorYellow, len(lines)-maxPreview, ColorReset)
 	}
 
-	sb.WriteString(fmt.Sprintf("%s%s└─%s", ColorGray, ColorDim, ColorReset))
+	fmt.Fprintf(&sb, "%s%s└─%s", ColorGray, ColorDim, ColorReset)
 	return sb.String()
 }
 

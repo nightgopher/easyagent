@@ -1,5 +1,14 @@
 package com.hwj.easyagent.mobile.ui
 
+import com.hwj.easyagent.mobile.backend.relativeTime
+import com.hwj.easyagent.mobile.backend.groupSessions
+import com.hwj.easyagent.mobile.backend.filterSessions
+import androidx.compose.material3.Surface
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,9 +62,6 @@ import com.hwj.easyagent.mobile.backend.LinkStatus
 import com.hwj.easyagent.mobile.backend.SessionSummary
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +80,7 @@ fun SessionsScreen(
     val error by client.error.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     var showArchived by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
     var menuOpen by remember { mutableStateOf(false) }
     var hostMenuOpen by remember { mutableStateOf(false) }
     val host = hosts.hosts.firstOrNull { it.id == client.config.id } ?: client.config
@@ -87,8 +94,10 @@ fun SessionsScreen(
         }
     }
 
-    val active = sessions.filter { !it.archived }
-    val archived = sessions.filter { it.archived }
+    val matching = filterSessions(sessions, query)
+    val active = matching.filter { !it.archived }
+    val archived = matching.filter { it.archived }
+    val groups = groupSessions(active)
 
     Scaffold(
         topBar = {
@@ -152,25 +161,57 @@ fun SessionsScreen(
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             LazyColumn(modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 96.dp)) {
+                if (sessions.size > 3 || query.isNotEmpty()) {
+                    item(key = "search") {
+                        OutlinedTextField(
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = { Text("搜索会话") },
+                            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                            trailingIcon = if (query.isEmpty()) null else {
+                                { IconButton(onClick = { query = "" }) { Icon(Icons.Filled.Close, contentDescription = "清除搜索") } }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(24.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
+                }
                 if (active.isEmpty() && !loading) {
                     item {
                         Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                             Text(
-                                if (archived.isEmpty()) "还没有会话，点击右下角新建。" else "没有进行中的会话。",
+                                when {
+                                    query.isNotEmpty() -> "没有匹配「$query」的会话。"
+                                    archived.isEmpty() -> "还没有会话，点击右下角新建。"
+                                    else -> "没有进行中的会话。"
+                                },
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
                 }
-                items(active, key = { it.id }) { session ->
-                    SessionRow(
-                        session = session,
-                        onOpen = { onOpen(session.id) },
-                        onRename = { renaming = session },
-                        onDelete = { deleting = session },
-                        onTogglePinned = { client.patchSession(session.id, buildJsonObject { put("pinned", !session.pinned) }) },
-                        onToggleArchived = { client.patchSession(session.id, buildJsonObject { put("archived", !session.archived) }) },
-                    )
+                groups.forEach { group ->
+                    if (group.title.isNotEmpty()) {
+                        item(key = "group/" + group.title) {
+                            Text(
+                                group.title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+                            )
+                        }
+                    }
+                    items(group.sessions, key = { it.id }) { session ->
+                        SessionRow(
+                            session = session,
+                            onOpen = { onOpen(session.id) },
+                            onRename = { renaming = session },
+                            onDelete = { deleting = session },
+                            onTogglePinned = { client.patchSession(session.id, buildJsonObject { put("pinned", !session.pinned) }) },
+                            onToggleArchived = { client.patchSession(session.id, buildJsonObject { put("archived", !session.archived) }) },
+                        )
+                    }
                 }
                 if (showArchived && archived.isNotEmpty()) {
                     item {
@@ -240,14 +281,17 @@ private fun SessionRow(
         headlineContent = { Text(session.displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = {
             val parts = listOfNotNull(
-                formatUpdated(session.updatedAt).takeIf { it.isNotEmpty() },
-                session.workspace.substringAfterLast('/').takeIf { it.isNotEmpty() },
+                relativeTime(session.lastActive.takeIf { it > 0 } ?: session.createdAt).takeIf { it.isNotEmpty() },
+                session.workspace.trimEnd('/').substringAfterLast('/').takeIf { it.isNotEmpty() },
             )
             if (parts.isNotEmpty()) Text(parts.joinToString(" · "), maxLines = 1, overflow = TextOverflow.Ellipsis)
         },
         leadingContent = pinnedIcon,
         trailingContent = {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "会话操作") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                SessionStatus(session)
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "会话操作") }
+            }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 DropdownMenuItem(text = { Text("重命名") }, onClick = { menu = false; onRename() })
                 DropdownMenuItem(text = { Text(if (session.pinned) "取消置顶" else "置顶") }, onClick = { menu = false; onTogglePinned() })
@@ -256,6 +300,25 @@ private fun SessionRow(
             }
         },
     )
+}
+
+/** 「待审批 N」 or 「运行中」 while the host reports an active run. */
+@Composable
+private fun SessionStatus(session: SessionSummary) {
+    when {
+        session.pendingConfirmations > 0 -> Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.tertiaryContainer) {
+            Text(
+                "待审批 ${session.pendingConfirmations}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            )
+        }
+        session.running -> Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+            Text("运行中", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp))
+        }
+    }
 }
 
 @Composable
@@ -276,12 +339,4 @@ internal fun linkLabel(link: LinkStatus): String = when (link) {
     LinkStatus.CONNECTED -> "已连接"
     LinkStatus.CONNECTING -> "连接中"
     LinkStatus.DISCONNECTED -> "已断开，正在重连"
-}
-
-private val updatedFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
-
-fun formatUpdated(raw: String): String {
-    if (raw.isEmpty()) return ""
-    return runCatching { OffsetDateTime.parse(raw).atZoneSameInstant(ZoneId.systemDefault()).format(updatedFormatter) }
-        .getOrDefault(raw.take(16))
 }

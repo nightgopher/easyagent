@@ -76,18 +76,18 @@ type TuiModel struct {
 	theme *Theme
 
 	// Phase 3: completion + confirmation + model selector
-	completion    CompletionState
-	confirmation  *ConfirmationState
-	questions     *QuestionState
+	completion     CompletionState
+	confirmation   *ConfirmationState
+	questions      *QuestionState
 	questionResult chan QuestionResultMsg // pending ask_user_question reply channel
-	modelSelect   bool // Ctrl+P model selector popup active
-	modelCatalog  []CompletionItem
-	searchCatalog []CompletionItem
-	pickerID      uint64
-	toolFocus     bool
-	focusedTool   toolTarget
-	runStarted    time.Time
-	program       *tea.Program // ref to program for sending msgs
+	modelSelect    bool                   // Ctrl+P model selector popup active
+	modelCatalog   []CompletionItem
+	searchCatalog  []CompletionItem
+	pickerID       uint64
+	toolFocus      bool
+	focusedTool    toolTarget
+	runStarted     time.Time
+	program        *tea.Program // ref to program for sending msgs
 
 	// 当前 agent 流的取消函数：Ctrl+C 时真正中断底层 LLM 流/工具执行，
 	// 而不只是把 UI 状态置停。cmd goroutine 写、Update goroutine 读，需互斥。
@@ -514,7 +514,7 @@ func (m *TuiModel) View() string {
 	view := m.renderView()
 	m.frame = strings.Split(ansi.Strip(view), "\n")
 	m.frameToolTargets = make(map[int]toolTarget)
-	if !m.confirmation.IsActive() && m.height >= 5 && !(m.height == 5 && m.completion.IsActive()) && !m.quitting {
+	if !m.confirmation.IsActive() && m.height >= 5 && (m.height != 5 || !m.completion.IsActive()) && !m.quitting {
 		for row, hit := range m.viewport.toolTargets {
 			screenRow := row - m.viewport.scrollOffset
 			limit := m.viewport.height

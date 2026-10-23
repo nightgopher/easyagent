@@ -433,7 +433,7 @@ func TestView_InputAboveFooter(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 99, Height: 37})
 	m.input.insertString("你好")
 	view := m.View()
-	if !(strings.Index(view, "你好") < strings.Index(view, "Enter: send") && strings.Index(view, "Enter: send") < strings.Index(view, "ready")) {
+	if strings.Index(view, "你好") >= strings.Index(view, "Enter: send") || strings.Index(view, "Enter: send") >= strings.Index(view, "ready") {
 		t.Fatal("expected input, help, status in that order")
 	}
 	if got := lipgloss.Height(view); got != 37 {

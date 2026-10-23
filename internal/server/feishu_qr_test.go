@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -74,7 +75,7 @@ func TestQRPendingThrottleAndUntrustedURL(t *testing.T) {
 		w := httptest.NewRecorder()
 		q.handle("poll", w, httptest.NewRequest("POST", "/", strings.NewReader(`{"device_code":"issued"}`)))
 		var res map[string]any
-		json.Unmarshal(w.Body.Bytes(), &res)
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &res))
 		if w.Code != 200 || res["authorized"] != false {
 			t.Fatal(w.Body.String())
 		}
