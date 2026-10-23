@@ -148,7 +148,7 @@ def verify_identity(keychain, expected):
 
 def verify_bundle(bundle, expected):
     for path, identifier in [(bundle, "com.hwj.easyagent"),
-                             (bundle / "Contents/Resources/easyagent-credentials", "com.hwj.easyagent.credentials"),
+                             (bundle / "Contents/Resources/easyagent-credentials", "easyagent-credentials"),
                              (bundle / "Contents/Resources/cua-helper/EasyAgent Computer Use.app", "com.hwj.easyagent.cua-helper")]:
         requirement = f'=identifier "{identifier}" and certificate leaf = H"{expected}"'
         run(["codesign", "--verify", "--deep", "--strict", "-R", requirement, str(path)])

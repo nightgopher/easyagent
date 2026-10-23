@@ -12,7 +12,9 @@ import (
 )
 
 const AppID = "com.hwj.easyagent"
-const HelperID = AppID + ".credentials"
+
+// MyGo signs standalone resource executables with their filename identifier.
+const HelperID = "easyagent-credentials"
 
 // Identity returns the validated designated requirement and CodeDirectory hash.
 // A path selects static code; an empty path selects this process.
