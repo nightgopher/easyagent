@@ -85,6 +85,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Race detector and SDK/server coverage
+        shell: bash
         run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./sdk/... ./internal/server/... 2>&1 | tee race.log
       - name: Require at least 70% weighted statement coverage
         run: python3 scripts/check_coverage.py coverage.out --minimum 70
