@@ -16,7 +16,7 @@ func TestFetchGatewayModels(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"object":"list","data":[
+		_, _ = w.Write([]byte(`{"object":"list","data":[
 			{"id":"glm-4.7","object":"model"},
 			{"id":"claude-sonnet-4-6","object":"model"},
 			{"id":"","object":"model"}

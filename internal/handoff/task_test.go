@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestTaskDocumentRender(t *testing.T) {
@@ -114,7 +116,7 @@ func TestLoadAsPrompt(t *testing.T) {
 	// Save a task and verify prompt content
 	doc := NewTaskDocument("Test prompt injection")
 	doc.Progress = []string{"Did something"}
-	Save(tmpDir, doc)
+	require.NoError(t, Save(tmpDir, doc))
 
 	prompt = LoadAsPrompt(tmpDir)
 	if prompt == "" {
@@ -133,7 +135,7 @@ func TestClear(t *testing.T) {
 
 	// Save a task
 	doc := NewTaskDocument("To be cleared")
-	Save(tmpDir, doc)
+	require.NoError(t, Save(tmpDir, doc))
 
 	// Verify it exists
 	path := filepath.Join(tmpDir, TaskDir, TaskFileName)
