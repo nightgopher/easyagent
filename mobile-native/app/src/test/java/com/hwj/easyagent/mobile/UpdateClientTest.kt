@@ -42,6 +42,23 @@ class UpdateClientTest {
         }
     }
 
+    @Test fun `a release that left the Android sources untouched is not offered`() = runBlocking {
+        val tree = "b".repeat(40)
+        val withSources = manifest().removeSuffix("}") + ""","sources":{"android":"$tree"}}"""
+        MockWebServer().use { server ->
+            server.enqueue(MockResponse().setBody(release(server)))
+            server.enqueue(MockResponse().setBody(withSources))
+            assertNull(client(server).latest(installed.copy(sourceTree = tree)))
+            // Different sources, or a development build without a tree, still update.
+            server.enqueue(MockResponse().setBody(release(server)))
+            server.enqueue(MockResponse().setBody(withSources))
+            assertNotNull(client(server).latest(installed.copy(sourceTree = "c".repeat(40))))
+            server.enqueue(MockResponse().setBody(release(server)))
+            server.enqueue(MockResponse().setBody(withSources))
+            assertNotNull(client(server).latest(installed))
+        }
+    }
+
     @Test fun `only complete stable release and matching checksum can be downloaded`() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody(release(server)))

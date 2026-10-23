@@ -7,7 +7,7 @@ import subprocess
 import sys
 from urllib.parse import quote
 
-from release import release_notes, required_assets, verify_android_archive, version_key
+from release import android_source, release_notes, required_assets, verify_android_archive, version_key
 
 
 def api(method, path, data=None, optional=False):
@@ -38,7 +38,10 @@ def validate_assets(directory, tag, sha):
     manifest = json.loads((directory / "release.json").read_text())
     if isinstance(manifest, dict) and manifest.get("core_only"):
         raise ValueError("partial core-only manifests cannot be published")
-    if manifest != {"version": tag, "commit": sha, "assets": {n: hashes[n] for n in required}}:
+    expected_manifest = {"version": tag, "commit": sha, "assets": {n: hashes[n] for n in required}}
+    if "easyagent-android.apk" in required:
+        expected_manifest["sources"] = {"android": android_source(sha)}
+    if manifest != expected_manifest:
         raise ValueError("release manifest does not match the requested version, commit or files")
     checksums = "".join(f"{hashes[n]}  {n}\n" for n in sorted(expected - {"checksums.txt"}))
     if (directory / "checksums.txt").read_text() != checksums:
