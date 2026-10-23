@@ -2,10 +2,89 @@ package scheduler
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestLoopRequiresTrigger(t *testing.T) {
+	mgr := NewLoopManager()
+	defer mgr.StopAll()
+	_, err := mgr.Start("session", "run tests", time.Minute, time.Hour, nil)
+	require.Error(t, err, "an unwired entrypoint must not report a scheduled loop")
+	require.Nil(t, mgr.Get("session"))
+}
+
+func TestLoopResolverCanReadStatusAndStopCancelsTrigger(t *testing.T) {
+	mgr := NewLoopManager()
+	defer mgr.StopAll()
+	started := make(chan context.Context, 1)
+	finished := make(chan struct{})
+	mgr.SetTriggerResolver(func(id string) TriggerFunc {
+		// Resolving an entry must not hold the manager lock.
+		if mgr.Get(id) == nil {
+			return nil
+		}
+		return func(ctx context.Context, prompt string) error {
+			started <- ctx
+			<-ctx.Done()
+			close(finished)
+			return ctx.Err()
+		}
+	})
+	_, err := mgr.StartNoMinInterval("session", "run tests", time.Millisecond, time.Hour, nil)
+	require.NoError(t, err)
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("resolver blocked before dispatch")
+	}
+	mgr.Stop("session")
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("stopped loop did not cancel its trigger")
+	}
+	require.Nil(t, mgr.Get("session"))
+}
+
+func TestLoopConcurrentReplacementStopsEveryTrigger(t *testing.T) {
+	mgr := NewLoopManager()
+	defer mgr.StopAll()
+	var starters sync.WaitGroup
+	entries := make(chan *loopEntry, 20)
+	for range 20 {
+		starters.Add(1)
+		go func() {
+			defer starters.Done()
+			_, err := mgr.StartNoMinInterval("same-session", "check", time.Millisecond, time.Hour, func(ctx context.Context, _ string) error {
+				<-ctx.Done()
+				return ctx.Err()
+			})
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			mgr.mu.Lock()
+			entries <- mgr.loops["same-session"]
+			mgr.mu.Unlock()
+		}()
+	}
+	starters.Wait()
+	close(entries)
+	mgr.StopAll()
+	for entry := range entries {
+		select {
+		case <-entry.done:
+		case <-time.After(time.Second):
+			t.Fatal("replaced loop survived StopAll")
+		}
+	}
+	require.Nil(t, mgr.Get("same-session"))
+}
 
 func TestLoopStartStop(t *testing.T) {
 	mgr := NewLoopManager()

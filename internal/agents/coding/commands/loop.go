@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -103,11 +102,8 @@ func registerLoopCommand(registry *slashcmd.Registry, loopMgr *scheduler.LoopMan
 				return slashcmd.CommandResult{Output: "Prompt cannot be empty."}, nil
 			}
 
-			// Start the loop with a no-op trigger. The actual prompt injection
-			// is wired by the serve/feishu mode layer via a TriggerResolver.
-			_, err := loopMgr.Start(sessionID, promptText, interval, expiresTTL, func(ctx context.Context, _ string) error {
-				return nil
-			})
+			// The entrypoint must wire real prompt dispatch before accepting a loop.
+			_, err := loopMgr.Start(sessionID, promptText, interval, expiresTTL, nil)
 			if err != nil {
 				return slashcmd.CommandResult{}, fmt.Errorf("start loop: %w", err)
 			}
