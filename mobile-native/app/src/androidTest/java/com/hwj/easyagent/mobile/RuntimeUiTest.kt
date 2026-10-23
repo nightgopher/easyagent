@@ -1,5 +1,6 @@
 package com.hwj.easyagent.mobile
 
+import android.app.Notification
 import android.app.NotificationManager
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
@@ -84,6 +85,14 @@ class RuntimeUiTest {
     }
     private fun fill(label: String, value: String) {
         ui.onNodeWithText(label).performScrollTo().performTextReplacement(value)
+    }
+    private fun waitNotification(manager: NotificationManager, matches: (Notification) -> Boolean): Notification {
+        var notification: Notification? = null
+        ui.waitUntil(10_000) {
+            notification = manager.activeNotifications.firstOrNull { matches(it.notification) }?.notification
+            notification != null
+        }
+        return requireNotNull(notification)
     }
     private fun connect(host: RuntimeFixture, token: String = "qa-token") {
         fill("连接名称（可选）", host.name)
@@ -320,8 +329,13 @@ class RuntimeUiTest {
         activity.moveToState(Lifecycle.State.CREATED)
         for ((id, approved) in listOf("approve" to true, "reject" to false)) {
             host.emit("confirmation", "confirmation" to JSONObject().put("confirmation_id", id).put("tool_name", "write").put("description", "后台审批 $id"))
-            ui.waitUntil(10_000) { manager.activeNotifications.any { it.notification.actions?.size == 2 } }
-            val notification = manager.activeNotifications.first { it.notification.actions?.size == 2 }.notification
+            // The previous approval can still be visible while its receiver cancels
+            // it. Match this approval and use the same snapshot that satisfied the wait.
+            val notification = waitNotification(manager) {
+                it.channelId == Notifier.CHANNEL_APPROVALS &&
+                    it.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "后台审批 $id" &&
+                    it.actions?.size == 2
+            }
             notification.actions[if (approved) 0 else 1].actionIntent.send()
             ui.waitUntil(10_000) {
                 host.calls.any { it.path?.endsWith("/run/confirm") == true && JSONObject(it.body.clone().readUtf8()).optString("confirmation_id") == id }
@@ -330,8 +344,7 @@ class RuntimeUiTest {
             assertEquals(approved, JSONObject(request.body.clone().readUtf8()).getBoolean("approved"))
         }
         host.emit("status", "state" to "completed", "streaming" to false)
-        ui.waitUntil(10_000) { manager.activeNotifications.any { it.notification.channelId == Notifier.CHANNEL_RUNS } }
-        manager.activeNotifications.first { it.notification.channelId == Notifier.CHANNEL_RUNS }.notification.contentIntent.send()
+        waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }.contentIntent.send()
         activity.moveToState(Lifecycle.State.RESUMED)
         waitText("已保存的历史")
         ui.onNodeWithContentDescription("返回").assertExists()
