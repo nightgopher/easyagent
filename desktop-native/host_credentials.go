@@ -92,31 +92,28 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 	return result, nil
 }
 
-func persistHostRemoval(dir string, store secretStore, config clientConfig, index int) (clientConfig, error) {
+type removedHostProfile struct {
+	Config       clientConfig
+	CleanupError error
+}
+
+func persistHostRemoval(dir string, store secretStore, config clientConfig, index int) (removedHostProfile, error) {
 	next := cloneConfig(config)
 	host := next.Hosts[index]
-	var token string
-	var err error
-	if host.HasToken {
-		token, err = store.Get("host/" + host.ID)
-		if err != nil {
-			return config, err
-		}
-		if err = store.Delete("host/" + host.ID); err != nil {
-			return config, err
-		}
-	}
 	next.Hosts = append(next.Hosts[:index], next.Hosts[index+1:]...)
 	if next.ActiveHost == host.ID {
 		next.ActiveHost = "local"
 	}
-	if err = atomicJSON(filepath.Join(dir, "connections.json"), next); err != nil {
-		if token != "" {
-			err = errors.Join(err, verifiedHostCredential(store, host.ID, token))
-		}
-		return config, err
+	// Commit removal before credential cleanup: inaccessible credentials must
+	// neither block removal nor be lost when saving the profile fails.
+	if err := atomicJSON(filepath.Join(dir, "connections.json"), next); err != nil {
+		return removedHostProfile{Config: config}, err
 	}
-	return next, nil
+	result := removedHostProfile{Config: next}
+	if host.HasToken {
+		result.CleanupError = store.Delete("host/" + host.ID)
+	}
+	return result, nil
 }
 
 func (a *preview) reportLiveError(err error) {

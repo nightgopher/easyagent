@@ -650,14 +650,25 @@ func (a *preview) removeLiveHost(index int) {
 	a.run("configuration", func(context.Context, *backendClient) (any, error) {
 		return persistHostRemoval(l.Dir, l.Secrets, old, index)
 	}, func(value any) {
-		l.Config = value.(clientConfig)
+		removed := value.(removedHostProfile)
+		l.Config = removed.Config
 		if a.Settings.EditHost == id {
 			a.Settings.hostForm = hostForm{}
 			a.Settings.HostTokenField.CancelFocus()
 		}
-		a.syncSettingsConfig()
 		if active {
+			// Keep the source identity until switching has captured its drafts.
+			l.Config.ActiveHost = id
 			a.selectLiveHost(0)
+		} else {
+			a.syncSettingsConfig()
+		}
+		if !l.CredentialRepair {
+			l.Error = ""
+		}
+		l.Notice = "主机连接已移除。"
+		if removed.CleanupError != nil {
+			l.Notice = "连接已移除，但系统钥匙串中的旧访问令牌未能清理。"
 		}
 	})
 }
