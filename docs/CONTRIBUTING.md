@@ -37,7 +37,7 @@ python3 -m unittest discover -s scripts -p "test_release*.py"
 git diff --check
 ```
 
-质量门禁在 PR、main 推送和每周定时检查中运行：`golangci-lint v2.15.0`（errcheck/staticcheck/govet/gosec/bodyclose）、SDK/服务端 race 检测、70% 加权语句覆盖率下限，以及核心与原生客户端的 `govulncheck v1.9.0`。`verify` 汇总上述检查，任意失败或跳过都会阻止通过现有必需检查。
+质量门禁在 PR、main 推送和每周定时检查中运行：`golangci-lint v2.15.0`（errcheck/staticcheck/govet/gosec/bodyclose）、SDK/服务端 race 检测、71% 加权语句覆盖率下限，以及核心与原生客户端的 `govulncheck v1.9.0`。`verify` 汇总上述检查，任意失败或跳过都会阻止通过现有必需检查。
 
 本地可运行：
 
@@ -46,11 +46,11 @@ python3 -m unittest discover -s scripts -p "test_quality_gates.py"
 GOOS=linux golangci-lint run --issues-exit-code=0 --output.json.path=/tmp/lint-report.json
 python3 scripts/check_lint_baseline.py /tmp/lint-report.json
 go test -race -count=1 -covermode=atomic -coverprofile=/tmp/coverage.out ./sdk/... ./internal/server/...
-python3 scripts/check_coverage.py /tmp/coverage.out --minimum 70
+python3 scripts/check_coverage.py /tmp/coverage.out --minimum 71
 govulncheck ./...
 ```
 
-覆盖率初始基线为 71.4%（SDK/服务端范围），门槛不自动下降。lint 存量清单见 [`.golangci-baseline.json`](../.golangci-baseline.json)：每条记录明确文件、规则、消息、原始行号及源码哈希（Linux 完整报告共 1,287 条，保留同一行的不同规则报告），只豁免这一份历史清单；相同行号移动不误报，新增相同问题的第二处实例仍会失败。它记录待整治的存量问题，不代表已完成安全审计。基线不能在 CI 自动刷新；扩大豁免必须单独解释并评审。历史格式问题单独处理，不与功能修复混合提交。
+覆盖率初始基线为 71.4%（SDK/服务端范围），门槛只升不降：补测试使实际值稳定高出一个百分点以上时，在同一 PR 把门槛提到实际值向下取整。lint 存量清单见 [`.golangci-baseline.json`](../.golangci-baseline.json)：每条记录明确文件、规则、消息、原始行号及源码哈希（Linux 完整报告共 1,287 条，保留同一行的不同规则报告），只豁免这一份历史清单；相同行号移动不误报，新增相同问题的第二处实例仍会失败。它记录待整治的存量问题，不代表已完成安全审计。基线不能在 CI 自动刷新；扩大豁免必须单独解释并评审。基线只减不增：报告里已不存在的条目会让检查失败，修复存量问题的 PR 须用 Linux 报告（CI 的 `lint-report` 产物或上面的 `GOOS=linux` 命令）运行 `check_lint_baseline.py <报告> --prune` 删去对应条目，`--prune` 从不新增条目。历史格式问题单独处理，不与功能修复混合提交。
 
 测试失败不自动重跑成绿；保留 race 日志、覆盖率和 lint 全量报告 7 天。遇到 flaky 测试先用失败日志定位和修复；暂时豁免必须指向 issue 并注明原因、负责人和恢复条件，不静默 skip。漏洞扫描无豁免，升级受影响依赖和 Go 补丁后重新验证。Dependabot 每周提交依赖与 Actions 更新 PR，不自动合并。
 
