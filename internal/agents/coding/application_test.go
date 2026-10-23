@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 	"github.com/hwj123hwj/easyagent/sdk/config"
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
@@ -77,4 +78,22 @@ func TestGatewayEmptyCatalogDoesNotInventModels(t *testing.T) {
 	cfg := config.Default()
 	cfg.Provider, cfg.OpenAIBaseURL = "openai", server.URL
 	require.Empty(t, NewCodingApplication(cfg).AvailableModels())
+}
+
+func TestLocalImageCapabilityOverridesGateway(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "models.json")
+	require.NoError(t, os.WriteFile(file, []byte(`[{"id":"coding","provider":"openai","supports_images":false}]`), 0600))
+	t.Setenv("EA_MODELS_FILE", file)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"coding","supports_images":true}]}`))
+	}))
+	defer server.Close()
+	cfg := config.Default()
+	cfg.Provider, cfg.OpenAIBaseURL = "openai", server.URL
+	app := NewCodingApplication(cfg)
+	model := app.ResolveModel(ai.Model{ID: "coding", Provider: "openai"})
+	require.NotNil(t, model.SupportsImages)
+	require.False(t, *model.SupportsImages)
+	require.Nil(t, app.ResolveModel(ai.Model{ID: "missing", Provider: "openai"}).SupportsImages)
+	require.Nil(t, app.ResolveModel(ai.Model{ID: "coding", Provider: "anthropic"}).SupportsImages)
 }

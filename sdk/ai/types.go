@@ -103,14 +103,15 @@ type Cost struct {
 }
 
 type Model struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	API           string `json:"api"`
-	Provider      string `json:"provider"`
-	BaseURL       string `json:"base_url"`
-	ContextWindow int    `json:"context_window"`
-	MaxTokens     int    `json:"max_tokens"`
-	Cost          Cost   `json:"cost"`
+	SupportsImages *bool  `json:"supports_images,omitempty"` // nil means unknown; preserve legacy behavior
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	API            string `json:"api"`
+	Provider       string `json:"provider"`
+	BaseURL        string `json:"base_url"`
+	ContextWindow  int    `json:"context_window"`
+	MaxTokens      int    `json:"max_tokens"`
+	Cost           Cost   `json:"cost"`
 }
 
 type Usage struct {

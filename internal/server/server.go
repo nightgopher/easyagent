@@ -594,9 +594,10 @@ func (s *Server) listApplications(w http.ResponseWriter, r *http.Request) {
 
 // ModelInfo holds metadata about a single model.
 type ModelInfo struct {
-	ID       string `json:"id"`
-	Provider string `json:"provider"`
-	Name     string `json:"name"`
+	SupportsImages *bool  `json:"supports_images,omitempty"`
+	ID             string `json:"id"`
+	Provider       string `json:"provider"`
+	Name           string `json:"name"`
 	// ContextWindow is set only for models whose window is known, never the
 	// runtime's 128K fallback, so clients do not show a guessed size.
 	ContextWindow int `json:"context_window,omitempty"`
@@ -617,8 +618,11 @@ type ModelsResponse struct {
 
 // gatewayModel represents a single model entry from the gateway /v1/models API.
 type gatewayModel struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"display_name"`
+	SupportsImages  *bool    `json:"supports_images,omitempty"`
+	SupportsVision  *bool    `json:"supports_vision,omitempty"`
+	InputModalities []string `json:"input_modalities,omitempty"`
+	ID              string   `json:"id"`
+	DisplayName     string   `json:"display_name"`
 }
 
 // gatewayModelsResponse is the response shape from the gateway.
@@ -641,6 +645,7 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	}
 	if modelID != "" {
 		current = &ModelInfo{ID: modelID, Provider: provider, Name: modelID, ContextWindow: knownWindow(modelID)}
+		current.SupportsImages = s.app.ResolveModel(ai.Model{ID: modelID, Provider: provider}).SupportsImages
 	}
 
 	result := ModelsResponse{Models: []ModelInfo{}, Current: current, Source: "unconfigured"}
@@ -706,11 +711,17 @@ func (s *Server) fetchGatewayModels(ctx context.Context, baseURL, apiKey string)
 		if name == "" {
 			name = m.ID
 		}
+		images := m.SupportsImages
+		if images == nil {
+			images = ai.ImageSupport(m.SupportsVision, m.InputModalities)
+		}
+		resolved := s.app.ResolveModel(ai.Model{ID: m.ID, Provider: "openai", SupportsImages: images})
 		models = append(models, ModelInfo{
-			ID:            m.ID,
-			Provider:      "openai",
-			Name:          name,
-			ContextWindow: knownWindow(m.ID),
+			SupportsImages: resolved.SupportsImages,
+			ID:             m.ID,
+			Provider:       "openai",
+			Name:           name,
+			ContextWindow:  knownWindow(m.ID),
 		})
 	}
 	return models, nil

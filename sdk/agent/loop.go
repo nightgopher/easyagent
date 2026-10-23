@@ -739,6 +739,13 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 
 	// Accounting belongs to execution, independent of display/content hooks.
 	rawResult.SubagentUsage = preHookResult.SubagentUsage
+	if a.model.ImagesUnsupported() && len(rawResult.Images) > 0 {
+		rawResult.Images = nil
+		rawResult.Content += "\n" + ai.ImageUnsupportedMessage
+		if rawResult.UserFacing != "" {
+			rawResult.UserFacing += "\n" + ai.ImageUnsupportedMessage
+		}
+	}
 	// 9. Emit end
 	// Result 给 UI 展示，优先 UserFacing（给用户看的更详细内容）；回填 LLM 用 Content（见 appendToolResult）。
 	a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: rawResult.DisplayText(), Details: rawResult.Details, IsError: rawResult.IsError})

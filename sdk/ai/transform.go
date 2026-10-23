@@ -14,7 +14,7 @@ import (
 //   - 空消息填充
 //   - Thinking 内容处理
 type TransformOptions struct {
-	// 禁用图片支持，将图片降级为 [Image] 文本
+	// 禁用图片支持，将图片降级为明确的切换模型提示。
 	NoImageSupport bool
 
 	// 需要确保 tool_call_id 在消息中正确关联
@@ -25,6 +25,37 @@ type TransformOptions struct {
 
 	// Provider 名称，用于日志
 	ProviderName string
+}
+
+// ImageUnsupportedMessage is shared by tool feedback and outgoing requests.
+const ImageUnsupportedMessage = "[图片未发送：当前模型不支持图片输入，请切换到支持视觉的模型后重试。Image omitted: switch to a vision-capable model.]"
+
+// ImageSupport resolves explicit capability metadata without guessing from IDs.
+// Missing metadata stays unknown so custom model aliases keep working.
+func ImageSupport(explicit *bool, inputModalities []string) *bool {
+	if explicit != nil {
+		return explicit
+	}
+	if len(inputModalities) == 0 {
+		return nil
+	}
+	supported := false
+	for _, modality := range inputModalities {
+		if strings.EqualFold(strings.TrimSpace(modality), "image") {
+			supported = true
+		}
+	}
+	return &supported
+}
+
+func (m Model) ImagesUnsupported() bool { return m.SupportsImages != nil && !*m.SupportsImages }
+
+// MessagesForModel preserves stored history; it only downgrades the request copy.
+func MessagesForModel(messages []Message, model Model) []Message {
+	if !model.ImagesUnsupported() {
+		return messages
+	}
+	return TransformMessages(messages, TransformOptions{NoImageSupport: true})
 }
 
 // DefaultTransformOptions 返回默认的转换选项。
@@ -96,7 +127,7 @@ func transformUserMessage(m UserMessage, opts TransformOptions) Message {
 		if block.Type == "image" && opts.NoImageSupport {
 			newBlocks = append(newBlocks, ContentBlock{
 				Type: "text",
-				Text: "[Image]",
+				Text: ImageUnsupportedMessage,
 			})
 		} else {
 			newBlocks = append(newBlocks, block)
@@ -105,7 +136,8 @@ func transformUserMessage(m UserMessage, opts TransformOptions) Message {
 	if len(newBlocks) == 0 {
 		newBlocks = append(newBlocks, ContentBlock{Type: "text", Text: "..."})
 	}
-	return UserMessage{Content: newBlocks}
+	m.Content = newBlocks
+	return m
 }
 
 func transformAssistantMessage(m AssistantMessage, opts TransformOptions) Message {
@@ -128,12 +160,13 @@ func transformAssistantMessage(m AssistantMessage, opts TransformOptions) Messag
 }
 
 func transformToolResultMessage(m ToolResultMessage, opts TransformOptions) Message {
-	if !opts.NormalizeToolCallIDs {
-		return m
+	if opts.NoImageSupport && len(m.Images) > 0 {
+		m.Images = nil
+		m.Content += "\n" + ImageUnsupportedMessage
 	}
 
 	// 确保 ToolCallID 不为空
-	if m.ToolCallID == "" {
+	if opts.NormalizeToolCallIDs && m.ToolCallID == "" {
 		m.ToolCallID = "unknown_tool_call"
 	}
 	return m

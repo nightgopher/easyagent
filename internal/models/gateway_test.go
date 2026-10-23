@@ -2,6 +2,8 @@ package models
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -83,4 +85,22 @@ func TestMergeGatewayModelsWithTokens(t *testing.T) {
 	if !ok || gemini.ContextWindow != 1000000 {
 		t.Fatalf("gemini default window wrong: %+v", gemini)
 	}
+}
+
+func TestGatewayImageCapabilitiesAndLocalOverride(t *testing.T) {
+	var defs []GatewayModel
+	require.NoError(t, json.Unmarshal([]byte(`[ {"id":"text","input_modalities":["text"]}, {"id":"vision","supports_vision":true}, {"id":"unknown"}, {"id":"override","supports_images":true} ]`), &defs))
+	reg := NewRegistry()
+	no := false
+	reg.Register(ModelDef{ID: "override", Provider: "openai", SupportsImages: &no})
+	reg.Register(ModelDef{ID: "text", Provider: "openai"})
+	reg.MergeGatewayModels("openai", defs)
+	for id, want := range map[string]bool{"text": false, "vision": true, "override": false} {
+		m, ok := reg.Get(id)
+		require.True(t, ok)
+		require.NotNil(t, m.SupportsImages)
+		require.Equal(t, want, *m.SupportsImages)
+	}
+	m, _ := reg.Get("unknown")
+	require.Nil(t, m.SupportsImages)
 }
