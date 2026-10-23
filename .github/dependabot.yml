@@ -1,15 +1,25 @@
 version: 2
 updates:
+  # third_party/bubbletea is a patched fork wired in via `replace`; bump it by
+  # hand and run `go mod tidy` at the root, otherwise the main module breaks.
   - package-ecosystem: gomod
     directories:
       - "/"
       - "/desktop-native"
-      - "/third_party/bubbletea"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      go-minor-patch:
+        update-types:
+          - minor
+          - patch
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns:
+          - "*"
