@@ -535,7 +535,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G301: Expect directory permissions to be 0750 or less",
       "source_sha256": "272b798348b60bf3b50c8d0b37154a47031b8860926e05ccd781141c91eb35dd",
       "line_at_baseline": 1539,
@@ -543,7 +543,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G304: Potential file inclusion via variable",
       "source_sha256": "659c7019526e3aa0e9c57dd3cbeceaf1250f677db1bd24397b82360f0fdab5c3",
       "line_at_baseline": 1481,
@@ -551,7 +551,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G306: Expect WriteFile permissions to be 0600 or less",
       "source_sha256": "18a49e17748ddce51c4f10a0a047fdf0d88c8a6a55112f1b6cc0d518166e1dcb",
       "line_at_baseline": 1544,
@@ -559,7 +559,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G703: Path traversal via taint analysis",
       "source_sha256": "18a49e17748ddce51c4f10a0a047fdf0d88c8a6a55112f1b6cc0d518166e1dcb",
       "line_at_baseline": 1544,
@@ -567,7 +567,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G703: Path traversal via taint analysis",
       "source_sha256": "272b798348b60bf3b50c8d0b37154a47031b8860926e05ccd781141c91eb35dd",
       "line_at_baseline": 1539,
@@ -575,7 +575,7 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/server.go",
+      "file": "internal/server/workspace_handlers.go",
       "message": "G703: Path traversal via taint analysis",
       "source_sha256": "659c7019526e3aa0e9c57dd3cbeceaf1250f677db1bd24397b82360f0fdab5c3",
       "line_at_baseline": 1481,
