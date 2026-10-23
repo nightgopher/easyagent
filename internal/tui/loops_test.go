@@ -60,6 +60,15 @@ func startLoopProgram(t *testing.T, m *TuiModel, mgr *scheduler.LoopManager) (*t
 	events := make(chan tea.Msg, 64)
 	p := tea.NewProgram(m, tea.WithInput(nil), tea.WithOutput(io.Discard), tea.WithoutRenderer(), tea.WithoutSignalHandler(),
 		tea.WithFilter(func(_ tea.Model, msg tea.Msg) tea.Msg {
+			// Each integration case observes one scheduled turn. Stop inside the
+			// event loop before Update releases the scheduler's pending callback;
+			// stopping from the test goroutine can race with the next 20ms tick.
+			if event, ok := msg.(streamEventMsg); ok {
+				switch event.msg.(type) {
+				case StreamDoneMsg, AgentErrorMsg:
+					mgr.StopAll()
+				}
+			}
 			switch msg.(type) {
 			case streamEventMsg, ConfirmationDialogMsg:
 				events <- msg
