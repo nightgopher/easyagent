@@ -63,7 +63,7 @@ func TestFeishuTerminalWizardCancelRestoresTUI(t *testing.T) {
 		t.Run(stage, func(t *testing.T) {
 			polling := make(chan struct{}, 8)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				r.ParseForm()
+				_ = r.ParseForm()
 				w.Header().Set("Content-Type", "application/json")
 				switch r.Form.Get("action") {
 				case "init":
@@ -86,7 +86,7 @@ func TestFeishuTerminalWizardCancelRestoresTUI(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer func() { terminal.Close(); cmd.Process.Kill(); cmd.Wait() }()
+			defer func() { _ = terminal.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 			chunks := make(chan string, 256)
 			go func() {
 				defer close(chunks)
@@ -122,7 +122,9 @@ func TestFeishuTerminalWizardCancelRestoresTUI(t *testing.T) {
 			}
 			wait("What would you like")
 			// A trailing space dismisses the subcommand autocomplete before Enter.
-			io.WriteString(terminal, "/feishu setup \r")
+			if _, err := io.WriteString(terminal, "/feishu setup \r"); err != nil {
+				t.Fatal(err)
+			}
 			wait("请选择")
 			choiceAt := strings.Index(output.String(), "选择授权方式")
 			exitAt := strings.LastIndex(output.String()[:choiceAt], "\x1b[?1049l")
@@ -130,7 +132,9 @@ func TestFeishuTerminalWizardCancelRestoresTUI(t *testing.T) {
 				t.Fatal("wizard wrote into active TUI renderer")
 			}
 			if stage == "poll" {
-				io.WriteString(terminal, "\r")
+				if _, err := io.WriteString(terminal, "\r"); err != nil {
+					t.Fatal(err)
+				}
 				wait("\x1b[30;47m")
 				wait("等待授权完成")
 				select {
@@ -139,9 +143,13 @@ func TestFeishuTerminalWizardCancelRestoresTUI(t *testing.T) {
 					t.Fatal("registration never polled")
 				}
 			}
-			io.WriteString(terminal, "\x03")
+			if _, err := io.WriteString(terminal, "\x03"); err != nil {
+				t.Fatal(err)
+			}
 			wait("飞书配置已取消")
-			io.WriteString(terminal, "/alive \r")
+			if _, err := io.WriteString(terminal, "/alive \r"); err != nil {
+				t.Fatal(err)
+			}
 			wait("TERMINAL_RESTORED")
 			if strings.Contains(output.String(), "Waiting...") {
 				t.Fatal("background spinner leaked into wizard")

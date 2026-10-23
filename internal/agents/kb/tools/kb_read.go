@@ -156,7 +156,7 @@ func generateOverview(relPath string, lines []string) string {
 
 	totalLines := len(lines)
 	wordCount := 0
-	var headers []string // lines starting with #
+	var headers []string  // lines starting with #
 	var sections []string // header + first content line
 
 	scanner := bufio.NewScanner(strings.NewReader(strings.Join(lines, "\n")))
@@ -205,8 +205,8 @@ func generateOverview(relPath string, lines []string) string {
 	}
 
 	// Build output
-	b.WriteString(fmt.Sprintf("📋 概览：%s\n", relPath))
-	b.WriteString(fmt.Sprintf("   %d 行 | %d 词 | %d 个标题\n\n", totalLines, wordCount, len(headers)))
+	fmt.Fprintf(&b, "📋 概览：%s\n", relPath)
+	fmt.Fprintf(&b, "   %d 行 | %d 词 | %d 个标题\n\n", totalLines, wordCount, len(headers))
 
 	if len(sections) > 0 {
 		b.WriteString("📑 文档结构：\n")

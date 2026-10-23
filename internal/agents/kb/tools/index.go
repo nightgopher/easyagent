@@ -241,7 +241,7 @@ func parseFrontmatter(text string) (map[string]string, string, bool) {
 	if !strings.HasPrefix(trimmed, "---") {
 		return nil, text, false
 	}
-	lines := strings.SplitN(trimmed, "\n", -1)
+	lines := strings.Split(trimmed, "\n")
 	if len(lines) < 2 {
 		return nil, text, false
 	}
@@ -507,7 +507,7 @@ func isTagLike(s string) bool {
 		return false
 	}
 	for _, c := range s {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
 			return false
 		}
 	}

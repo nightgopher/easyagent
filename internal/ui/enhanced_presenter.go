@@ -217,13 +217,13 @@ func (p *EnhancedPresenter) renderEditPreview(argsBytes []byte) string {
 	// Multi-edit mode
 	if len(params.Edits) > 0 {
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("%s%s┌─ %s (%d edits) ─%s\n",
-			ColorCyan, ColorBold, params.Path, len(params.Edits), ColorReset))
+		fmt.Fprintf(&sb, "%s%s┌─ %s (%d edits) ─%s\n",
+			ColorCyan, ColorBold, params.Path, len(params.Edits), ColorReset)
 		for i, e := range params.Edits {
-			sb.WriteString(fmt.Sprintf("%s%s│ Edit %d:%s\n", ColorGray, ColorDim, i+1, ColorReset))
+			fmt.Fprintf(&sb, "%s%s│ Edit %d:%s\n", ColorGray, ColorDim, i+1, ColorReset)
 			renderEditLines(&sb, e.OldString, e.NewString)
 		}
-		sb.WriteString(fmt.Sprintf("%s%s└─%s", ColorGray, ColorDim, ColorReset))
+		fmt.Fprintf(&sb, "%s%s└─%s", ColorGray, ColorDim, ColorReset)
 		return sb.String()
 	}
 
@@ -246,14 +246,14 @@ func (p *EnhancedPresenter) renderWritePreview(argsBytes []byte) string {
 func renderEditLines(sb *strings.Builder, oldStr, newStr string) {
 	if oldStr != "" {
 		for _, line := range strings.Split(oldStr, "\n") {
-			sb.WriteString(fmt.Sprintf("%s%s│ %s- %s%s\n",
-				ColorGray, ColorDim, ColorRed, line, ColorReset))
+			fmt.Fprintf(sb, "%s%s│ %s- %s%s\n",
+				ColorGray, ColorDim, ColorRed, line, ColorReset)
 		}
 	}
 	if newStr != "" {
 		for _, line := range strings.Split(newStr, "\n") {
-			sb.WriteString(fmt.Sprintf("%s%s│ %s+ %s%s\n",
-				ColorGray, ColorDim, ColorGreen, line, ColorReset))
+			fmt.Fprintf(sb, "%s%s│ %s+ %s%s\n",
+				ColorGray, ColorDim, ColorGreen, line, ColorReset)
 		}
 	}
 }
@@ -531,7 +531,7 @@ func (p *EnhancedPresenter) FormatBashOutput(command string, output string, exit
 	var sb strings.Builder
 
 	// Command header
-	sb.WriteString(fmt.Sprintf("\n%s%s$ %s%s\n", ColorDim, ColorBold, command, ColorReset))
+	fmt.Fprintf(&sb, "\n%s%s$ %s%s\n", ColorDim, ColorBold, command, ColorReset)
 
 	// Output with subtle border
 	if output != "" {
@@ -554,9 +554,9 @@ func (p *EnhancedPresenter) FormatBashOutput(command string, output string, exit
 
 	// Status line
 	if exitCode == 0 {
-		sb.WriteString(fmt.Sprintf("  %s✓ %s%s\n", ColorGreen, formatDuration(elapsed), ColorReset))
+		fmt.Fprintf(&sb, "  %s✓ %s%s\n", ColorGreen, formatDuration(elapsed), ColorReset)
 	} else {
-		sb.WriteString(fmt.Sprintf("  %s✗ exit %d%s %s%s\n", ColorRed, exitCode, ColorReset, formatDuration(elapsed), ColorReset))
+		fmt.Fprintf(&sb, "  %s✗ exit %d%s %s%s\n", ColorRed, exitCode, ColorReset, formatDuration(elapsed), ColorReset)
 	}
 
 	return sb.String()

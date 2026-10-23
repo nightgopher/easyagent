@@ -123,6 +123,8 @@ class UpdateUiTest {
         waitText("连接运行主机")
         assertEquals(2, server.requestCount)
         check()
+        // The prompt can still show the earlier result while the manual check is in flight.
+        ui.waitUntil(10_000) { server.requestCount == 4 }
         assertEquals(4, server.requestCount)
         synchronized(calls) { assertTrue(calls.all { it == null }) }
     }

@@ -166,14 +166,13 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 	if kept < len(selectedLines) {
 		nextOffset := start + kept
-		b.WriteString(fmt.Sprintf(
-			"\n... output capped at %d characters: showing lines %d-%d of %d; continue with offset=%d (and a smaller limit when lines are very long)\n",
-			maxLen, start+1, nextOffset, totalLines, nextOffset))
+		fmt.Fprintf(&b, "\n... output capped at %d characters: showing lines %d-%d of %d; continue with offset=%d (and a smaller limit when lines are very long)\n",
+			maxLen, start+1, nextOffset, totalLines, nextOffset)
 	} else {
 		// Hint about remaining lines for large files
 		remaining := totalLines - end
 		if remaining > 0 {
-			b.WriteString(fmt.Sprintf("\n... %d more lines (use offset=%d to read further)\n", remaining, end))
+			fmt.Fprintf(&b, "\n... %d more lines (use offset=%d to read further)\n", remaining, end)
 		}
 	}
 
