@@ -3,189 +3,255 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
-	"github.com/ebitengine/purego"
+	"github.com/hwj123hwj/easyagent/desktop-native/internal/credentialstore"
 )
 
-// Keychain access through Apple's C ABI keeps the client free of cgo and shell
-// credential arguments. Values never enter JSON preferences or command lines.
-type systemSecrets struct{}
-
-var keychain struct {
-	once                         sync.Once
-	err                          error
-	security, core               uintptr
-	keyCallbacks, valueCallbacks uintptr
-	arrayCallbacks               uintptr
-	stringNew                    func(uintptr, string, uint32) uintptr
-	dataNew                      func(uintptr, *byte, int64) uintptr
-	dataLength                   func(uintptr) int64
-	dataBytes                    func(uintptr) uintptr
-	dictionary                   func(uintptr, *uintptr, *uintptr, int64, uintptr, uintptr) uintptr
-	array                        func(uintptr, *uintptr, int64, uintptr) uintptr
-	defaultKeychain              func(*uintptr) int32
-	release                      func(uintptr)
-	copy                         func(uintptr, *uintptr) int32
-	add                          func(uintptr, uintptr) int32
-	update                       func(uintptr, uintptr) int32
-	delete                       func(uintptr) int32
+type systemSecrets struct {
+	dir, helper, path string // helper/path are used only by isolated integration tests.
 }
 
-func initKeychain() error {
-	keychain.once.Do(func() {
-		k := &keychain
-		k.security, k.err = purego.Dlopen("/System/Library/Frameworks/Security.framework/Security", purego.RTLD_NOW|purego.RTLD_LOCAL)
-		if k.err != nil {
-			return
-		}
-		k.core, k.err = purego.Dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", purego.RTLD_NOW|purego.RTLD_LOCAL)
-		if k.err != nil {
-			return
-		}
-		purego.RegisterLibFunc(&k.stringNew, k.core, "CFStringCreateWithCString")
-		purego.RegisterLibFunc(&k.dataNew, k.core, "CFDataCreate")
-		purego.RegisterLibFunc(&k.dataLength, k.core, "CFDataGetLength")
-		purego.RegisterLibFunc(&k.dataBytes, k.core, "CFDataGetBytePtr")
-		purego.RegisterLibFunc(&k.dictionary, k.core, "CFDictionaryCreate")
-		purego.RegisterLibFunc(&k.release, k.core, "CFRelease")
-		purego.RegisterLibFunc(&k.copy, k.security, "SecItemCopyMatching")
-		purego.RegisterLibFunc(&k.add, k.security, "SecItemAdd")
-		purego.RegisterLibFunc(&k.update, k.security, "SecItemUpdate")
-		purego.RegisterLibFunc(&k.delete, k.security, "SecItemDelete")
-		purego.RegisterLibFunc(&k.array, k.core, "CFArrayCreate")
-		purego.RegisterLibFunc(&k.defaultKeychain, k.security, "SecKeychainCopyDefault")
-		k.keyCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeDictionaryKeyCallBacks")
-		if k.err != nil {
-			return
-		}
-		k.valueCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeDictionaryValueCallBacks")
-		if k.err != nil {
-			return
-		}
-		k.arrayCallbacks, k.err = purego.Dlsym(k.core, "kCFTypeArrayCallBacks")
-	})
-	return keychain.err
+var credentialMu sync.Mutex
+var cachedCredentialName = regexp.MustCompile(`^credentials-[a-f0-9]{40}$`)
+
+// Also used by the microphone bridge for pointers returned by Apple APIs.
+func nativePointer(address uintptr) unsafe.Pointer {
+	return *(*unsafe.Pointer)(unsafe.Pointer(&address))
 }
-func keychainConstant(name string) uintptr {
-	lib := keychain.security
-	if name == "kCFBooleanTrue" {
-		lib = keychain.core
+
+func credentialRepairError() error {
+	return errors.New("系统钥匙串无法自动读取已保存凭据，请在设置中重新填写访问令牌或模型 API 密钥；此处不需要 Mac 登录密码")
+}
+
+// Verify every executable against the app's certificate before sending a secret.
+func (s systemSecrets) helperPaths() ([]string, error) {
+	requirement, _, err := credentialstore.Identity("")
+	identifier := `identifier "` + credentialstore.AppID + `"`
+	if err != nil || !strings.Contains(requirement, identifier) || strings.Contains(requirement, "cdhash") {
+		return nil, errors.New("安全凭据保存需要固定证书签名的 EasyAgent")
 	}
-	address, err := purego.Dlsym(lib, name)
+	requirement = strings.Replace(requirement, identifier, `identifier "`+credentialstore.HelperID+`"`, 1)
+	source := s.helper
+	if source == "" {
+		executable, err := os.Executable()
+		if err != nil {
+			return nil, err
+		}
+		source = filepath.Join(filepath.Dir(executable), "../Resources/easyagent-credentials")
+	}
+	if err := credentialstore.Verify(source, 0, requirement); err != nil {
+		return nil, err
+	}
+	_, hash, err := credentialstore.Identity(source)
 	if err != nil {
-		return 0
+		return nil, err
 	}
-	return *(*uintptr)(nativePointer(address))
+	if s.dir == "" {
+		return nil, errors.New("无法定位凭据程序的应用数据目录")
+	}
+	dir := filepath.Join(s.dir, "credential-helpers.noindex")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return nil, errors.New("凭据程序目录必须仅当前用户可访问")
+	}
+	current := filepath.Join(dir, "credentials-"+hash)
+	if _, err := os.Lstat(current); os.IsNotExist(err) {
+		input, err := os.Open(source)
+		if err != nil {
+			return nil, err
+		}
+		defer input.Close()
+		output, err := os.CreateTemp(dir, ".credentials-*")
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(output.Name())
+		_, err = io.Copy(output, input)
+		if err == nil {
+			err = output.Chmod(0500)
+		}
+		closeErr := output.Close()
+		if err == nil {
+			err = closeErr
+		}
+		if err == nil {
+			err = credentialstore.Verify(output.Name(), 0, requirement)
+		}
+		if err == nil {
+			err = os.Rename(output.Name(), current)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{current}
+	for _, entry := range entries {
+		if cachedCredentialName.MatchString(entry.Name()) && entry.Name() != filepath.Base(current) {
+			paths = append(paths, filepath.Join(dir, entry.Name()))
+		}
+	}
+	for _, path := range paths {
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+			return nil, errors.New("缓存凭据程序的文件权限或类型无效")
+		}
+		if err := credentialstore.Verify(path, 0, requirement); err != nil {
+			return nil, err
+		}
+		_, actual, err := credentialstore.Identity(path)
+		if err != nil || filepath.Base(path) != "credentials-"+actual {
+			return nil, errors.New("缓存凭据程序的代码哈希不匹配")
+		}
+	}
+	return paths, nil
 }
-func keychainDictionary(keys, values []uintptr) uintptr {
-	return keychain.dictionary(0, &keys[0], &values[0], int64(len(keys)), keychain.keyCallbacks, keychain.valueCallbacks)
+
+func (s systemSecrets) request(helper, operation, account, value string) (credentialstore.Response, error) {
+	data, err := json.Marshal(credentialstore.Request{Operation: operation, Account: account, Value: value, Keychain: s.path})
+	if err != nil {
+		return credentialstore.Response{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, helper)
+	input, err := cmd.StdinPipe()
+	if err != nil {
+		return credentialstore.Response{}, err
+	}
+	outputPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return credentialstore.Response{}, err
+	}
+	if err := cmd.Start(); err != nil {
+		return credentialstore.Response{}, errors.New("无法启动安全凭据程序")
+	}
+	// Authenticate the running child before putting a secret on its stdin.
+	// Static verification alone leaves a verify/exec replacement race.
+	requirement, _, identityErr := credentialstore.Identity("")
+	requirement = strings.Replace(requirement, `identifier "`+credentialstore.AppID+`"`, `identifier "`+credentialstore.HelperID+`"`, 1)
+	if identityErr != nil || credentialstore.Verify("", cmd.Process.Pid, requirement) != nil {
+		_ = input.Close()
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return credentialstore.Response{}, errors.New("凭据程序的运行身份校验失败")
+	}
+	_, writeErr := io.Copy(input, bytes.NewReader(data))
+	_ = input.Close()
+	output, readErr := io.ReadAll(io.LimitReader(outputPipe, (100<<10)+1))
+	err = cmd.Wait()
+	if err != nil || writeErr != nil || readErr != nil || len(output) > 100<<10 {
+		return credentialstore.Response{}, errors.New("安全凭据程序未能完成请求")
+	}
+	var response credentialstore.Response
+	if json.Unmarshal(output, &response) != nil {
+		return response, errors.New("安全凭据程序响应无效")
+	}
+	if response.Error != "" {
+		return credentialstore.Response{}, errors.New(response.Error)
+	}
+	return response, nil
 }
-func keychainQuery(account string, read bool) (uintptr, uintptr, func(), error) {
-	// SecItemAdd writes to the default keychain, whereas an unscoped search
-	// follows the user's search list. That list may omit the default keychain.
-	var target uintptr
-	if keychain.defaultKeychain(&target) != 0 || target == 0 {
-		return 0, 0, nil, errors.New("无法打开默认系统钥匙串")
-	}
-	search := keychain.array(0, &target, 1, keychain.arrayCallbacks)
-	service := keychain.stringNew(0, "com.hwj.easyagent.native-preview", 0x08000100)
-	name := keychain.stringNew(0, account, 0x08000100)
-	keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount"), keychainConstant("kSecMatchSearchList")}
-	values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name, search}
-	if read {
-		keys = append(keys, keychainConstant("kSecReturnData"), keychainConstant("kSecMatchLimit"))
-		values = append(values, keychainConstant("kCFBooleanTrue"), keychainConstant("kSecMatchLimitOne"))
-	}
-	q := keychainDictionary(keys, values)
-	return q, target, func() {
-		keychain.release(q)
-		keychain.release(service)
-		keychain.release(name)
-		keychain.release(search)
-		keychain.release(target)
-	}, nil
-}
-func (systemSecrets) Get(account string) (string, error) {
-	if initKeychain() != nil {
-		return "", errors.New("系统钥匙串不可用")
-	}
-	q, _, done, err := keychainQuery(account, true)
+
+func (s systemSecrets) Get(account string) (string, error) {
+	credentialMu.Lock()
+	defer credentialMu.Unlock()
+	paths, err := s.helperPaths()
 	if err != nil {
 		return "", err
 	}
-	defer done()
-	var result uintptr
-	status := keychain.copy(q, &result)
-	if status == -25300 {
-		return "", nil
+	for i, path := range paths {
+		response, err := s.request(path, "get", account, "")
+		if err != nil {
+			return "", credentialRepairError()
+		}
+		if response.Found {
+			if i > 0 {
+				if err := s.save(paths[0], account, response.Value); err != nil {
+					return "", err
+				}
+			}
+			return response.Value, nil
+		}
 	}
-	if status != 0 || result == 0 {
-		return "", errors.New("无法从系统钥匙串读取凭据")
+	// A protected old item remains intact. A replacement can be saved without
+	// asking for an unrelated keychain password or weakening its access rules.
+	if err := credentialstore.DisableInteraction(); err != nil {
+		return "", err
 	}
-	defer keychain.release(result)
-	n := keychain.dataLength(result)
-	if n <= 0 || n > 65536 {
-		return "", errors.New("钥匙串凭据长度无效")
-	}
-	p := keychain.dataBytes(result)
-	return string(unsafe.Slice((*byte)(nativePointer(p)), int(n))), nil
-}
-func (systemSecrets) Set(account, value string) error {
-	if initKeychain() != nil {
-		return errors.New("系统钥匙串不可用，凭据未保存")
-	}
-	if value == "" {
-		return (systemSecrets{}).Delete(account)
-	}
-	q, target, done, err := keychainQuery(account, false)
+	legacy := credentialstore.Store{Path: s.path, Service: credentialstore.LegacyService}
+	value, found, err := legacy.Get(account)
 	if err != nil {
+		return "", credentialRepairError()
+	}
+	if found {
+		if err := s.save(paths[0], account, value); err != nil {
+			return "", err
+		}
+	}
+	return value, nil
+}
+
+func (s systemSecrets) save(helper, account, value string) error {
+	if _, err := s.request(helper, "set", account, value); err != nil {
 		return err
 	}
-	defer done()
-	data := []byte(value)
-	v := keychain.dataNew(0, &data[0], int64(len(data)))
-	defer keychain.release(v)
-	k := []uintptr{keychainConstant("kSecValueData")}
-	vals := []uintptr{v}
-	attrs := keychainDictionary(k, vals)
-	defer keychain.release(attrs)
-	status := keychain.update(q, attrs)
-	if status == -25300 {
-		service := keychain.stringNew(0, "com.hwj.easyagent.native-preview", 0x08000100)
-		name := keychain.stringNew(0, account, 0x08000100)
-		defer keychain.release(service)
-		defer keychain.release(name)
-		keys := []uintptr{keychainConstant("kSecClass"), keychainConstant("kSecAttrService"), keychainConstant("kSecAttrAccount"), keychainConstant("kSecValueData"), keychainConstant("kSecUseKeychain")}
-		values := []uintptr{keychainConstant("kSecClassGenericPassword"), service, name, v, target}
-		d := keychainDictionary(keys, values)
-		defer keychain.release(d)
-		status = keychain.add(d, 0)
-	}
-	if status != 0 {
-		return errors.New("系统钥匙串保存失败，配置未应用")
-	}
-	return nil
-}
-func (systemSecrets) Delete(account string) error {
-	if initKeychain() != nil {
-		return errors.New("系统钥匙串不可用")
-	}
-	q, _, done, err := keychainQuery(account, false)
-	if err != nil {
-		return err
-	}
-	defer done()
-	code := keychain.delete(q)
-	if code != 0 && code != -25300 {
-		return errors.New("无法移除钥匙串凭据")
+	read, err := s.request(helper, "get", account, "")
+	if err != nil || !read.Found || read.Value != value {
+		return errors.New("凭据保存后回读校验失败，配置未应用")
 	}
 	return nil
 }
 
-// nativePointer is only for addresses returned by Apple APIs, never Go heap addresses.
-func nativePointer(address uintptr) unsafe.Pointer {
-	return *(*unsafe.Pointer)(unsafe.Pointer(&address))
+func (s systemSecrets) Set(account, value string) error {
+	if value == "" {
+		return s.Delete(account)
+	}
+	credentialMu.Lock()
+	defer credentialMu.Unlock()
+	paths, err := s.helperPaths()
+	if err != nil {
+		return err
+	}
+	return s.save(paths[0], account, value)
+}
+
+func (s systemSecrets) Delete(account string) error {
+	credentialMu.Lock()
+	defer credentialMu.Unlock()
+	paths, err := s.helperPaths()
+	if err != nil {
+		return err
+	}
+	// The empty successor prevents cleared legacy values from reappearing.
+	if err := s.save(paths[0], account, ""); err != nil {
+		return err
+	}
+	for _, path := range paths[1:] {
+		_, _ = s.request(path, "delete", account, "")
+	}
+	if err := credentialstore.DisableInteraction(); err != nil {
+		return err
+	}
+	_ = (credentialstore.Store{Path: s.path, Service: credentialstore.LegacyService}).Delete(account)
+	return nil
 }

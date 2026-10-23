@@ -4,7 +4,7 @@ package main
 
 import "errors"
 
-type systemSecrets struct{}
+type systemSecrets struct{ dir string }
 
 func (systemSecrets) Get(string) (string, error) {
 	return "", errors.New("此原生试用版的安全凭据保存目前仅支持 macOS")

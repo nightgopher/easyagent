@@ -440,12 +440,20 @@ func (a *preview) applyLiveModel() {
 	go func() {
 		var previousKey string
 		var err error
+		keySaved := false
 		if err = l.Core.ensureIdle(ctx); err != nil {
 			a.post(epoch, func() { l.Loading["model-save"] = false; l.Error = err.Error() })
 			return
 		}
 		if old.Model.HasKey {
 			previousKey, err = secrets.Get("model")
+			if err != nil && cfg.Mode == "override" && key == "" {
+				a.post(epoch, func() { l.Loading["model-save"] = false; l.Error = err.Error() })
+				return
+			}
+			// An explicitly entered replacement must work even if the legacy
+			// key is protected by an obsolete code hash. It remains untouched.
+			err = nil
 		}
 		if err == nil && cfg.Mode == "override" {
 			if key == "" {
@@ -460,6 +468,7 @@ func (a *preview) applyLiveModel() {
 			}
 			if err == nil {
 				err = secrets.Set("model", key)
+				keySaved = err == nil
 			}
 		}
 		if err == nil {
@@ -470,9 +479,9 @@ func (a *preview) applyLiveModel() {
 			_, err = l.Core.start(ctx, dir, cfg, secrets)
 		}
 		if err != nil {
-			if previousKey != "" {
+			if keySaved && previousKey != "" {
 				_ = secrets.Set("model", previousKey)
-			} else if cfg.Mode == "override" {
+			} else if keySaved {
 				_ = secrets.Delete("model")
 			}
 			_ = atomicJSON(filepath.Join(dir, "connections.json"), old)
@@ -481,12 +490,12 @@ func (a *preview) applyLiveModel() {
 		}
 		a.post(epoch, func() {
 			l.Loading["model-save"] = false
-			a.Settings.APIKey = ""
 			if err != nil {
 				a.connectLive()
 				l.Error = "应用失败，已恢复原配置：" + err.Error()
 				return
 			}
+			a.Settings.APIKey = ""
 			l.Config = next
 			a.syncSettingsConfig()
 			a.clearModelCheck()
