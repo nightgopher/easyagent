@@ -6,6 +6,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -36,14 +37,18 @@ func (lc *LoopContext) Remaining() time.Duration {
 // for injecting the prompt into the agent and collecting results.
 type TriggerFunc func(ctx context.Context, prompt string) error
 
+// ErrNoTrigger prevents entrypoints without prompt dispatch from accepting loops.
+var ErrNoTrigger = errors.New("/loop is not supported in this interface; use easyagent chat without --legacy, or serve")
+
 // TriggerResolver resolves a sessionID to a TriggerFunc.
-// The serve/feishu mode layer sets this so loops can inject prompts into the right session.
+// The entrypoint sets this so loops can inject prompts into the right session.
 type TriggerResolver func(sessionID string) TriggerFunc
 
 type loopEntry struct {
 	context LoopContext
 	ticker  *time.Ticker
-	stopCh  chan struct{}
+	ctx     context.Context
+	cancel  context.CancelFunc
 	done    chan struct{}
 }
 
@@ -63,7 +68,7 @@ func NewLoopManager() *LoopManager {
 }
 
 // SetTriggerResolver sets the function used to resolve sessionID → TriggerFunc.
-// Called by the serve/feishu mode layer to wire prompt injection.
+// Called by the entrypoint to wire prompt injection.
 func (m *LoopManager) SetTriggerResolver(r TriggerResolver) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -108,11 +113,17 @@ func (m *LoopManager) startInternal(sessionID, prompt string, interval, ttl time
 	}
 
 	m.mu.Lock()
-	// Stop existing loop for this session
+	defer m.mu.Unlock()
+	if trigger == nil && m.resolver == nil {
+		return nil, ErrNoTrigger
+	}
+	if interval <= 0 {
+		return nil, fmt.Errorf("interval must be positive")
+	}
+	// Replace atomically so concurrent starts cannot leave an untracked loop.
 	if existing, ok := m.loops[sessionID]; ok {
 		m.stopLocked(sessionID, existing)
 	}
-	m.mu.Unlock()
 
 	now := time.Now()
 	lc := LoopContext{
@@ -122,16 +133,16 @@ func (m *LoopManager) startInternal(sessionID, prompt string, interval, ttl time
 		StartedAt: now,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
 	entry := &loopEntry{
 		context: lc,
 		ticker:  time.NewTicker(interval),
-		stopCh:  make(chan struct{}),
+		ctx:     ctx,
+		cancel:  cancel,
 		done:    make(chan struct{}),
 	}
 
-	m.mu.Lock()
 	m.loops[sessionID] = entry
-	m.mu.Unlock()
 
 	slog.Info("loop started",
 		"session", sessionID,
@@ -152,14 +163,21 @@ func (m *LoopManager) runLoop(sessionID string, entry *loopEntry, trigger Trigge
 
 	for {
 		select {
-		case <-entry.stopCh:
+		case <-entry.ctx.Done():
 			return
 
 		case <-entry.ticker.C:
+			if entry.ctx.Err() != nil {
+				return
+			}
 			// Check expiry
 			if !entry.context.IsActive() {
 				slog.Info("loop expired, auto-stopping", "session", sessionID)
-				m.Stop(sessionID)
+				m.mu.Lock()
+				if m.loops[sessionID] == entry {
+					m.stopLocked(sessionID, entry)
+				}
+				m.mu.Unlock()
 				return
 			}
 
@@ -173,18 +191,27 @@ func (m *LoopManager) runLoop(sessionID string, entry *loopEntry, trigger Trigge
 			// fallback to the trigger passed at Start time.
 			effectiveTrigger := trigger
 			m.mu.Lock()
-			if m.resolver != nil {
-				if resolved := m.resolver(sessionID); resolved != nil {
+			resolver := m.resolver
+			m.mu.Unlock()
+			if resolver != nil {
+				if resolved := resolver(sessionID); resolved != nil {
 					effectiveTrigger = resolved
 				}
 			}
-			m.mu.Unlock()
 
 			// Fire trigger with a generous context (5 minutes per run)
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			ctx, cancel := context.WithTimeout(entry.ctx, 5*time.Minute)
 			slog.Info("loop firing", "session", sessionID, "prompt", entry.context.Prompt)
 
-			if err := effectiveTrigger(ctx, entry.context.Prompt); err != nil {
+			var err error
+			if ctx.Err() != nil {
+				err = ctx.Err()
+			} else if effectiveTrigger == nil {
+				err = ErrNoTrigger
+			} else {
+				err = effectiveTrigger(ctx, entry.context.Prompt)
+			}
+			if err != nil && !errors.Is(err, context.Canceled) {
 				slog.Error("loop trigger failed", "session", sessionID, "error", err)
 			}
 			cancel()
@@ -209,12 +236,7 @@ func (m *LoopManager) Stop(sessionID string) {
 
 // stopLocked stops a loop entry. Caller must hold m.mu.
 func (m *LoopManager) stopLocked(sessionID string, entry *loopEntry) {
-	select {
-	case <-entry.stopCh:
-		// Already closed
-	default:
-		close(entry.stopCh)
-	}
+	entry.cancel()
 	delete(m.loops, sessionID)
 	slog.Info("loop stopped", "session", sessionID)
 }

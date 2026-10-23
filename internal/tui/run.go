@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/hwj123hwj/easyagent/internal/scheduler"
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
 )
@@ -30,6 +31,9 @@ func Run(session *runtime.AgentSession, cmds *slashcmd.Registry, app slashcmd.Ap
 
 	// Wire program reference so callbacks can send messages
 	m.SetProgram(p)
+	if owner, ok := app.(interface{ LoopManager() *scheduler.LoopManager }); ok && owner.LoopManager() != nil {
+		defer m.bindLoops(owner.LoopManager())()
+	}
 
 	// NOTE: Do NOT print anything to stdout before p.Run().
 	// AltScreen mode creates a separate buffer, but anything printed
