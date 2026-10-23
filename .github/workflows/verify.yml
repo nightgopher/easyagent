@@ -6,12 +6,14 @@ on:
         required: true
         type: string
   pull_request:
+  schedule:
+    - cron: "0 8 * * 1"
   push:
     branches: [main]
 permissions:
   contents: read
 jobs:
-  verify:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,6 +30,7 @@ jobs:
       - run: go test ./...
         working-directory: third_party/bubbletea
       - run: node --test scripts/web-test.mjs scripts/mcp-settings-test.mjs
+      - run: python3 -m unittest discover -s scripts -p "test_quality_gates.py"
       - run: python3 scripts/test_update_mini.py
       - run: python3 scripts/test_desktop_registration.py
       - run: python3 -m unittest discover -s scripts -p "test_release*.py"
@@ -45,3 +48,93 @@ jobs:
         working-directory: mobile-native
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - run: git diff --check
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.15.0
+          # The next step enforces the fixed legacy baseline.
+          # Tool/config/typecheck errors still fail this action.
+          args: --issues-exit-code=0 --output.json.path=lint-report.json --output.text.path=lint-report.txt
+      - name: Reject findings outside the legacy baseline
+        run: python3 scripts/check_lint_baseline.py lint-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lint-report
+          path: lint-report.*
+          retention-days: 7
+
+  race-coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Race detector and SDK/server coverage
+        run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./sdk/... ./internal/server/... 2>&1 | tee race.log
+      - name: Require at least 70% weighted statement coverage
+        run: python3 scripts/check_coverage.py coverage.out --minimum 70
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: race-coverage
+          path: |
+            coverage.out
+            race.log
+          retention-days: 7
+
+  vulnerabilities:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            module: .
+          - os: macos-15
+            module: desktop-native
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+      - run: govulncheck ./...
+
+  # Keep the existing branch-protection check name. always() prevents failed or
+  # skipped dependencies from turning the required check into a green skip.
+  verify:
+    if: always()
+    needs: [test, lint, race-coverage, vulnerabilities]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every quality check to pass
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          python3 - <<'PYVERIFY'
+          import json, os, sys
+          results = json.loads(os.environ["RESULTS"])
+          print("Required checks:", results)
+          sys.exit(0 if results and all(result == "success" for result in results) else 1)
+          PYVERIFY

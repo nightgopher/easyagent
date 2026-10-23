@@ -4,7 +4,7 @@ EasyAgent 的主要入口是桌面、Android 客户端、Go 服务内嵌 Web、�
 
 ## 环境与目录
 
-Go 版本以 [go.mod](../go.mod) 为准（当前 1.24.2）。
+Go 版本以 [go.mod](../go.mod) 为准（当前 1.26.10）。
 
 | 目录 | 用途 |
 |---|---|
@@ -36,6 +36,23 @@ python3 -m unittest discover -s scripts -p "test_release*.py"
 (cd mobile-native && ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug)
 git diff --check
 ```
+
+质量门禁在 PR、main 推送和每周定时检查中运行：`golangci-lint v2.15.0`（errcheck/staticcheck/govet/gosec/bodyclose）、SDK/服务端 race 检测、70% 加权语句覆盖率下限，以及核心与原生客户端的 `govulncheck v1.9.0`。`verify` 汇总上述检查，任意失败或跳过都会阻止通过现有必需检查。
+
+本地可运行：
+
+```bash
+python3 -m unittest discover -s scripts -p "test_quality_gates.py"
+GOOS=linux golangci-lint run --issues-exit-code=0 --output.json.path=/tmp/lint-report.json
+python3 scripts/check_lint_baseline.py /tmp/lint-report.json
+go test -race -count=1 -covermode=atomic -coverprofile=/tmp/coverage.out ./sdk/... ./internal/server/...
+python3 scripts/check_coverage.py /tmp/coverage.out --minimum 70
+govulncheck ./...
+```
+
+覆盖率初始基线为 71.4%（SDK/服务端范围），门槛不自动下降。lint 存量清单见 [`.golangci-baseline.json`](../.golangci-baseline.json)：每条记录明确文件、规则、消息、原始行号及源码哈希（Linux 完整报告共 1,287 条，保留同一行的不同规则报告），只豁免这一份历史清单；相同行号移动不误报，新增相同问题的第二处实例仍会失败。它记录待整治的存量问题，不代表已完成安全审计。基线不能在 CI 自动刷新；扩大豁免必须单独解释并评审。历史格式问题单独处理，不与功能修复混合提交。
+
+测试失败不自动重跑成绿；保留 race 日志、覆盖率和 lint 全量报告 7 天。遇到 flaky 测试先用失败日志定位和修复；暂时豁免必须指向 issue 并注明原因、负责人和恢复条件，不静默 skip。漏洞扫描无豁免，升级受影响依赖和 Go 补丁后重新验证。Dependabot 每周提交依赖与 Actions 更新 PR，不自动合并。
 
 `make test` / `make vet` 只检查根 Go 模块。三个独立构建单元与本地 TUI 依赖需要各自验证，见 [架构](ARCHITECTURE.md#客户端与构建单元)。修改 Android 或发布脚本时，额外执行 `python3 scripts/build-android.py build <临时输出目录> --test-signing` 演练 Release APK 与签名校验；此模式使用一次性测试密钥，不生成可用于正式更新的安装包。
 
