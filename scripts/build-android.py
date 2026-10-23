@@ -88,8 +88,11 @@ def build(tag, directory, test_signing=False):
             keystore.write_bytes(base64.b64decode(encoded, validate=True))
             certificate = signing_certificate()
         keystore.chmod(0o600)
+        # Only a clean tree is the committed source the release manifest names.
+        dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=normal", "--", "mobile-native"], cwd=ROOT, text=True)
+        tree = "" if dirty.strip() else subprocess.check_output(["git", "rev-parse", "HEAD:mobile-native"], cwd=ROOT, text=True).strip()
         subprocess.run([str(ROOT / "mobile-native/gradlew"), "--no-daemon", ":app:assembleRelease", ":app:lintRelease",
-                        f"-PeasyagentVersion={name}", f"-PeasyagentVersionCode={code}"],
+                        f"-PeasyagentVersion={name}", f"-PeasyagentVersionCode={code}", f"-PeasyagentSourceTree={tree}"],
                        cwd=ROOT / "mobile-native", env=env, check=True)
         apk = ROOT / "mobile-native/app/build/outputs/apk/release/app-release.apk"
         verify_apk(apk, tag, certificate, tools)

@@ -8,6 +8,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.FileProvider
+import com.hwj.easyagent.mobile.BuildConfig
 import java.io.File
 import java.security.MessageDigest
 
@@ -19,7 +20,7 @@ internal fun createAppUpdater(context: Context): AppUpdater {
     directory.listFiles()?.filter { it.extension == "part" || (it.extension == "apk" &&
         (releaseVersionCode(it.nameWithoutExtension) ?: 0) <= installed.versionCodeCompat()) }?.forEach { it.delete() }
     return AppUpdater(
-        InstalledVersion(installed.versionName.orEmpty(), installed.versionCodeCompat()), UpdateClient(), directory,
+        InstalledVersion(installed.versionName.orEmpty(), installed.versionCodeCompat(), BuildConfig.SOURCE_TREE), UpdateClient(), directory,
         object : UpdatePreferences {
             override var automatic: Boolean
                 get() = prefs.getBoolean("automatic", true)

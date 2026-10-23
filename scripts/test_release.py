@@ -53,6 +53,22 @@ class PolicyTest(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError): release.validate('v1.1.0')
             finally: os.chdir(old)
 
+    def test_android_source_is_the_mobile_tree_at_the_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old = os.getcwd(); os.chdir(tmp)
+            try:
+                def git(*args): return subprocess.run(['git', *args], check=True, capture_output=True, text=True).stdout.strip()
+                git('init', '-b', 'main'); git('config', 'user.name', 'Release Test'); git('config', 'user.email', 'test@example.invalid')
+                Path('mobile-native').mkdir(); Path('mobile-native/app.kt').write_text('app')
+                git('add', '.'); git('commit', '-m', 'app')
+                first = git('rev-parse', 'HEAD'); tree = release.android_source(first)
+                self.assertEqual(tree, git('rev-parse', 'HEAD:mobile-native'))
+                Path('desktop.txt').write_text('desktop only'); git('add', '.'); git('commit', '-m', 'desktop')
+                self.assertEqual(release.android_source(git('rev-parse', 'HEAD')), tree)
+                Path('mobile-native/app.kt').write_text('changed'); git('add', '.'); git('commit', '-m', 'mobile')
+                self.assertNotEqual(release.android_source(git('rev-parse', 'HEAD')), tree)
+            finally: os.chdir(old)
+
 
 class AssetsTest(unittest.TestCase):
     def setUp(self):
@@ -61,10 +77,21 @@ class AssetsTest(unittest.TestCase):
         self.tag, self.sha = 'v1.2.3', 'a' * 40
         for name in release.required_assets(self.tag): (self.directory / name).write_text('fixture:' + name)
         self.write_android_archive_fixture()
+        # The fixture SHA is not a real commit; the tree lookup is tested on its own.
+        for module in (release, publisher):
+            patcher = mock.patch.object(module, 'android_source', return_value='b' * 40)
+            patcher.start(); self.addCleanup(patcher.stop)
 
     def write_android_archive_fixture(self):
         with zipfile.ZipFile(self.directory / 'easyagent-android.zip', 'w') as archive:
             archive.writestr('easyagent-android.apk', (self.directory / 'easyagent-android.apk').read_bytes())
+
+    def test_manifest_names_the_android_source_tree(self):
+        release.manifest(self.directory, self.tag, self.sha)
+        self.assertEqual(json.loads((self.directory / 'release.json').read_text())['sources'], {'android': 'b' * 40})
+        publisher.validate_assets(self.directory, self.tag, self.sha)
+        with mock.patch.object(publisher, 'android_source', return_value='c' * 40), self.assertRaises(ValueError):
+            publisher.validate_assets(self.directory, self.tag, self.sha)
 
     def test_exact_manifest_and_tamper_detection(self):
         release.manifest(self.directory, self.tag, self.sha)
