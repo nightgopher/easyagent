@@ -41,6 +41,21 @@ Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MO
 
 Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSocket 的认证细节见 [API](API.md)。
 
+### 模型图片能力
+
+`EA_MODELS_FILE` 可指向本地模型目录 JSON（默认 `~/.easyagent/models.json`，不存在时读取数据目录的 `models.json`）：
+
+```json
+[
+  {"id":"my-text-model","provider":"openai","supports_images":false},
+  {"id":"my-vision-model","provider":"openai","input_modalities":["text","image"]}
+]
+```
+
+网关 `/v1/models` 的条目可提供 `supports_images`、`supports_vision` 或 `input_modalities`（按此顺序取明确值）；本地明确配置优先。缺失元数据时保持原有图片行为，不按模型名前缀推断。目录在应用初始化时加载，修改文件后需重启核心。
+
+明确不支持图片的模型会收到文字提示，要求切换视觉模型；上传图片、历史工具图片和新读取的图片/截图均不会作为图片块发往上游。工具结果也显示提示。原始用户附件仍保存在会话历史中，切换视觉模型后可继续使用。`GET /models` 的条目和当前模型通过可选 `supports_images` 字段暴露此能力。
+
 ## 工具和文件路径
 
 | 变量 | 默认值 | 作用 |

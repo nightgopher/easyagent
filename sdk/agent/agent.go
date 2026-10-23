@@ -473,7 +473,7 @@ func (a *Agent) appendToolResult(call ai.ToolCall, result ToolResult) ai.ToolRes
 	if content == "" {
 		content = "ok"
 	}
-	return ai.ToolResultMessage{ToolCallID: call.ID, Content: content, IsError: result.IsError, Details: result.Details, Images: result.Images}
+	return ai.ToolResultMessage{SubagentUsage: result.SubagentUsage, ToolCallID: call.ID, Content: content, IsError: result.IsError, Details: result.Details, Images: result.Images}
 }
 
 func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
@@ -481,7 +481,7 @@ func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
 	// 模型定义了上限则随请求下发。
 	req := ai.StreamRequest{
 		Model:      a.model,
-		Messages:   messages,
+		Messages:   ai.MessagesForModel(messages, a.model),
 		System:     a.system,
 		Tools:      a.toolDefinitions(),
 		ToolChoice: nil,

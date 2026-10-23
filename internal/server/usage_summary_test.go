@@ -196,3 +196,109 @@ func TestRunUsageAccumulatesAcrossTurnsIntoReceiptAndSummary(t *testing.T) {
 	require.Equal(t, 300, resp.Total.InputTokens)
 	require.Equal(t, 30, resp.Total.OutputTokens)
 }
+
+func TestRunSubagentUsagePersistsAndDoesNotRecountEarlierRuns(t *testing.T) {
+	var mu sync.Mutex
+	calls := 0
+	notePath := filepath.Join(t.TempDir(), "usage-note.txt")
+	toolChunk := fmt.Sprintf(`{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"write-1","type":"function","function":{"name":"task","arguments":%q}}]},"finish_reason":"tool_calls"}]}`,
+		mustJSON(t, map[string]any{"description": "inspect", "prompt": "child prompt", "model": "child-model", "max_turns": 2}))
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprint(w, `{"data":[]}`)
+			return
+		}
+		mu.Lock()
+		calls++
+		turn := calls
+		mu.Unlock()
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		messages := body["messages"].([]any)
+		w.Header().Set("Content-Type", "text/event-stream")
+		chunk := `{"choices":[{"index":0,"delta":{"content":"done"},"finish_reason":"stop"}]}`
+		if body["model"] != "child-model" && messages[len(messages)-1].(map[string]any)["role"] != "tool" {
+			chunk = toolChunk
+		}
+		usage := fmt.Sprintf(`"usage":{"prompt_tokens":%d,"completion_tokens":%d,"prompt_tokens_details":{"cached_tokens":30}}`, turn*100, turn*10)
+		_, _ = fmt.Fprintf(w, "data: %s\n\ndata: {%s}\n\ndata: [DONE]\n\n", chunk, usage)
+	}))
+	defer provider.Close()
+
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	cfg.Workspace = filepath.Dir(notePath)
+	cfg.AutoApprove = true
+	cfg.MCPConfigPath = filepath.Join(cfg.DataDir, "mcp.json")
+	cfg.Provider, cfg.OpenAIAPIKey, cfg.OpenAIBaseURL = "openai", "test-key", provider.URL
+	application, err := app.New(app.AppOptions{Config: cfg})
+	require.NoError(t, err)
+	srv := New(application, nil)
+	t.Cleanup(func() {
+		srv.cancel()
+		srv.runs.mu.Lock()
+		var done []<-chan struct{}
+		for _, run := range srv.runs.requests {
+			done = append(done, run.done)
+		}
+		srv.runs.mu.Unlock()
+		for _, channel := range done {
+			select {
+			case <-channel:
+			case <-time.After(3 * time.Second):
+				t.Error("run did not shut down")
+			}
+		}
+		require.NoError(t, application.Close())
+	})
+
+	run, _, err := srv.startRun("", "write the note", "req-usage-e2e")
+	require.NoError(t, err)
+	_, err = srv.waitRun(context.Background(), run)
+	require.NoError(t, err)
+	mu.Lock()
+	require.Equal(t, 3, calls)
+	mu.Unlock()
+
+	// Parent 100/10 + 300/30, child 200/20, each counted once.
+	require.Equal(t, 600, run.Usage.InputTokens)
+	require.Equal(t, 60, run.Usage.OutputTokens)
+	require.NotNil(t, run.Usage.CachedInputTokens)
+	require.Equal(t, 90, *run.Usage.CachedInputTokens)
+
+	data, err := os.ReadFile(srv.receiptPath("req-usage-e2e"))
+	require.NoError(t, err)
+	var receipt runReceipt
+	require.NoError(t, json.Unmarshal(data, &receipt))
+	require.Equal(t, 600, receipt.Usage.InputTokens)
+	require.Equal(t, 60, receipt.Usage.OutputTokens)
+
+	req := httptest.NewRequest("GET", "/usage/summary", nil)
+	rec := httptest.NewRecorder()
+	srv.usageSummary(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp usageSummaryResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Equal(t, 1, resp.Total.RunCount)
+	require.Equal(t, 600, resp.Total.InputTokens)
+	require.Equal(t, 60, resp.Total.OutputTokens)
+
+	require.Equal(t, 200, receipt.SubagentUsage.InputTokens)
+	require.Equal(t, 20, resp.Total.SubagentUsage.OutputTokens)
+	// Restoring receipts must preserve both the total and child breakdown.
+	restarted := New(application, nil)
+	defer restarted.cancel()
+	restarted.runs.mu.Lock()
+	restored := restarted.runs.requests[receipt.RequestID]
+	restarted.runs.mu.Unlock()
+	require.NotNil(t, restored)
+	require.Equal(t, run.SubagentUsage, restored.SubagentUsage)
+	// A later run in the same session accounts for only its own child work.
+	next, _, err := srv.startRun(run.SessionID, "another task", "req-usage-next")
+	require.NoError(t, err)
+	_, err = srv.waitRun(context.Background(), next)
+	require.NoError(t, err)
+	require.Equal(t, 500, next.SubagentUsage.InputTokens)
+	require.Equal(t, 1500, next.Usage.InputTokens)
+}

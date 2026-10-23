@@ -7,13 +7,25 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 )
 
 // GatewayModel 定义网关返回的模型项及其元数据。
 type GatewayModel struct {
-	ID              string `json:"id"`
-	MaxInputTokens  *int   `json:"max_input_tokens,omitempty"`
-	MaxOutputTokens *int   `json:"max_output_tokens,omitempty"`
+	SupportsImages  *bool    `json:"supports_images,omitempty"`
+	SupportsVision  *bool    `json:"supports_vision,omitempty"`
+	InputModalities []string `json:"input_modalities,omitempty"`
+	ID              string   `json:"id"`
+	MaxInputTokens  *int     `json:"max_input_tokens,omitempty"`
+	MaxOutputTokens *int     `json:"max_output_tokens,omitempty"`
+}
+
+func (m GatewayModel) ImageSupport() *bool {
+	if m.SupportsImages != nil {
+		return m.SupportsImages
+	}
+	return ai.ImageSupport(m.SupportsVision, m.InputModalities)
 }
 
 // FetchGatewayModels 从 OpenAI 兼容端点拉取模型列表（GET {baseURL}/models）。
@@ -92,7 +104,7 @@ func resolveDefaultContextWindow(id string) int {
 }
 
 // MergeGateway 把网关返回的模型合并进注册表：
-// 已存在的 ID 保留本地定义（含上下文窗口等元数据）不动；
+// 已存在的 ID 保留本地明确配置；网关只补充未知的图片能力；
 // 网关新增的 ID 注册其 ID 与推断窗口。
 func (r *Registry) MergeGateway(provider string, ids []string) int {
 	models := make([]GatewayModel, 0, len(ids))
@@ -106,7 +118,11 @@ func (r *Registry) MergeGateway(provider string, ids []string) int {
 func (r *Registry) MergeGatewayModels(provider string, models []GatewayModel) int {
 	added := 0
 	for _, m := range models {
-		if _, exists := r.models[m.ID]; exists {
+		if local, exists := r.models[m.ID]; exists {
+			if local.SupportsImages == nil {
+				local.SupportsImages = m.ImageSupport()
+				r.Register(local)
+			}
 			continue
 		}
 		contextWindow := resolveDefaultContextWindow(m.ID)
@@ -118,11 +134,12 @@ func (r *Registry) MergeGatewayModels(provider string, models []GatewayModel) in
 			maxTokens = *m.MaxOutputTokens
 		}
 		r.Register(ModelDef{
-			ID:            m.ID,
-			Provider:      provider,
-			Name:          m.ID,
-			ContextWindow: contextWindow,
-			MaxTokens:     maxTokens,
+			SupportsImages: m.ImageSupport(),
+			ID:             m.ID,
+			Provider:       provider,
+			Name:           m.ID,
+			ContextWindow:  contextWindow,
+			MaxTokens:      maxTokens,
 		})
 		added++
 	}

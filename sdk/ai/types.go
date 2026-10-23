@@ -66,12 +66,13 @@ func (AssistantMessage) Role() Role     { return RoleAssistant }
 func (AssistantMessage) messageMarker() {}
 
 type ToolResultMessage struct {
-	Images     []ImageBlock `json:"images,omitempty"`
-	DurationMS int64        `json:"duration_ms,omitempty"`
-	ToolCallID string       `json:"tool_call_id"`
-	Content    string       `json:"content"`
-	IsError    bool         `json:"is_error,omitempty"`
-	Details    any          `json:"details,omitempty"` // structured附加数据（如 PlayDetails），可选
+	SubagentUsage *SubagentUsage `json:"subagent_usage,omitempty"`
+	Images        []ImageBlock   `json:"images,omitempty"`
+	DurationMS    int64          `json:"duration_ms,omitempty"`
+	ToolCallID    string         `json:"tool_call_id"`
+	Content       string         `json:"content"`
+	IsError       bool           `json:"is_error,omitempty"`
+	Details       any            `json:"details,omitempty"` // structured附加数据（如 PlayDetails），可选
 }
 
 func (ToolResultMessage) Role() Role     { return RoleTool }
@@ -102,20 +103,41 @@ type Cost struct {
 }
 
 type Model struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	API           string `json:"api"`
-	Provider      string `json:"provider"`
-	BaseURL       string `json:"base_url"`
-	ContextWindow int    `json:"context_window"`
-	MaxTokens     int    `json:"max_tokens"`
-	Cost          Cost   `json:"cost"`
+	SupportsImages *bool  `json:"supports_images,omitempty"` // nil means unknown; preserve legacy behavior
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	API            string `json:"api"`
+	Provider       string `json:"provider"`
+	BaseURL        string `json:"base_url"`
+	ContextWindow  int    `json:"context_window"`
+	MaxTokens      int    `json:"max_tokens"`
+	Cost           Cost   `json:"cost"`
 }
 
 type Usage struct {
 	InputTokens       int  `json:"input_tokens"`
 	OutputTokens      int  `json:"output_tokens"`
 	CachedInputTokens *int `json:"cached_input_tokens,omitempty"`
+}
+
+// Add includes another request without retaining its mutable cache counter.
+func (u *Usage) Add(other Usage) {
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	if other.CachedInputTokens != nil {
+		cached := *other.CachedInputTokens
+		if u.CachedInputTokens != nil {
+			cached += *u.CachedInputTokens
+		}
+		u.CachedInputTokens = &cached
+	}
+}
+
+// SubagentUsage records billed work in a separate context, not parent context occupancy.
+type SubagentUsage struct {
+	Model    string `json:"model"`
+	Provider string `json:"provider"`
+	Usage    Usage  `json:"usage"`
 }
 
 type StopReason string

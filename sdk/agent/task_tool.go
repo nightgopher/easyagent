@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/hwj123hwj/easyagent/sdk/ai/models"
 	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
 )
 
@@ -39,6 +40,8 @@ type TaskToolOptions struct {
 	Tools       []Tool
 	ConfirmFunc ConfirmFunc
 	MaxTurns    int
+	// ResolveModel optionally supplies catalog metadata for an overridden model.
+	ResolveModel func(modelID, provider string) (ai.Model, error)
 }
 
 // TaskTool runs a prompt in a fresh agent and returns its final answer.
@@ -76,6 +79,9 @@ type taskParams struct {
 	Description string `json:"description"`
 	Prompt      string `json:"prompt"`
 	ReadOnly    bool   `json:"readonly,omitempty"`
+	Model       string `json:"model,omitempty"`
+	Provider    string `json:"provider,omitempty"`
+	MaxTurns    *int   `json:"max_turns,omitempty"`
 }
 
 func (t *TaskTool) Name() string { return TaskToolName }
@@ -89,6 +95,9 @@ func (t *TaskTool) Parameters() map[string]any {
 			"description": map[string]any{"type": "string", "description": "A short (3-6 word) label for the task."},
 			"prompt":      map[string]any{"type": "string", "description": "Complete instructions for the subagent, including goal, relevant paths and what to report back."},
 			"readonly":    map[string]any{"type": "boolean", "description": "Give the subagent only read-only tools (read, grep, find, ls). Readonly tasks can run in parallel."},
+			"model":       map[string]any{"type": "string", "description": "Optional model ID; defaults to the parent model."},
+			"provider":    map[string]any{"type": "string", "description": "Optional registered provider; defaults to the parent provider. Requires model."},
+			"max_turns":   map[string]any{"type": "integer", "minimum": 1, "description": "Maximum model turns; defaults to the configured subagent limit (50 by default)."},
 		},
 		"required": []string{"description", "prompt"},
 	}
@@ -105,6 +114,13 @@ func (t *TaskTool) Validate(raw json.RawMessage) (json.RawMessage, error) {
 	if strings.TrimSpace(params.Description) == "" {
 		params.Description = "subagent task"
 	}
+	if params.MaxTurns != nil && *params.MaxTurns < 1 {
+		return nil, fmt.Errorf("max_turns must be positive")
+	}
+	params.Model, params.Provider = strings.TrimSpace(params.Model), strings.TrimSpace(params.Provider)
+	if params.Provider != "" && params.Model == "" {
+		return nil, fmt.Errorf("model is required when provider is set")
+	}
 	return json.Marshal(params)
 }
 
@@ -115,20 +131,49 @@ func (t *TaskTool) IsConcurrencySafe(raw json.RawMessage) bool {
 }
 
 func (t *TaskTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate func(PartialResult)) (ToolResult, error) {
-	var params taskParams
-	if err := json.Unmarshal(raw, &params); err != nil {
+	validated, err := t.Validate(raw)
+	if err != nil {
 		return ToolResult{IsError: true}, err
+	}
+	var params taskParams
+	if err := json.Unmarshal(validated, &params); err != nil {
+		return ToolResult{IsError: true}, err
+	}
+	model := t.opts.Model
+	if params.Model != "" {
+		provider := params.Provider
+		if provider == "" {
+			provider = model.Provider
+		}
+		if t.opts.ResolveModel != nil {
+			model, err = t.opts.ResolveModel(params.Model, provider)
+			if err != nil {
+				return ToolResult{IsError: true}, err
+			}
+		} else if params.Model != model.ID || provider != model.Provider {
+			model = ai.Model{ID: params.Model, Name: params.Model, Provider: provider, ContextWindow: models.ContextWindow(params.Model), MaxTokens: models.MaxOutput(params.Model)}
+		}
+	}
+	if t.opts.Registry == nil {
+		return ToolResult{IsError: true}, fmt.Errorf("subagent provider registry is unavailable")
+	}
+	if _, ok := t.opts.Registry.Get(model.Provider); !ok {
+		return ToolResult{IsError: true}, fmt.Errorf("subagent provider %q is not registered", model.Provider)
+	}
+	maxTurns := t.opts.MaxTurns
+	if params.MaxTurns != nil {
+		maxTurns = *params.MaxTurns
 	}
 	t.mu.RLock()
 	system := t.system
 	t.mu.RUnlock()
 
 	child := New(Options{
-		Model:              t.opts.Model,
+		Model:              model,
 		Registry:           t.opts.Registry,
 		System:             system + taskSystemSuffix,
 		Tools:              t.childTools(params.ReadOnly),
-		MaxTurns:           t.opts.MaxTurns,
+		MaxTurns:           maxTurns,
 		ConfirmFunc:        t.childConfirm(params.Description),
 		LoopDetectSettings: DefaultLoopDetectSettings(),
 	})
@@ -144,17 +189,15 @@ func (t *TaskTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 			if onUpdate != nil {
 				onUpdate(PartialResult{Content: fmt.Sprintf("%s · step %d · %s", params.Description, steps, e.ToolName)})
 			}
-		case EventTurnEnd:
-			if m, ok := e.Message.(ai.AssistantMessage); ok {
-				usage.InputTokens += m.Usage.InputTokens
-				usage.OutputTokens += m.Usage.OutputTokens
-			}
+		case EventUsage:
+			usage.Add(e.Usage)
 		}
 	})
 	defer unsubscribe()
 
 	answer, err := child.Prompt(ctx, ai.NewTextUserMessage(params.Prompt))
 	mu.Lock()
+	accounting := &ai.SubagentUsage{Model: model.ID, Provider: model.Provider, Usage: usage}
 	footer := fmt.Sprintf("\n\n[subagent %q: %d tool calls, %d input / %d output tokens]", params.Description, steps, usage.InputTokens, usage.OutputTokens)
 	mu.Unlock()
 	if err != nil {
@@ -162,13 +205,13 @@ func (t *TaskTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		if text := strings.TrimSpace(answer.Text); text != "" {
 			content += "\n\nPartial answer:\n" + text
 		}
-		return ToolResult{IsError: true, Content: content + footer}, err
+		return ToolResult{IsError: true, Content: content + footer, SubagentUsage: accounting}, err
 	}
 	text := strings.TrimSpace(answer.Text)
 	if text == "" {
 		text = "(the subagent finished without a final answer)"
 	}
-	return ToolResult{Content: text + footer}, nil
+	return ToolResult{Content: text + footer, SubagentUsage: accounting}, nil
 }
 
 // childTools 返回子 agent 可用的工具；readonly 时只保留声明为并发安全的工具

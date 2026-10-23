@@ -36,3 +36,26 @@ func TestToolImagesPreserveMultiCallOrdering(t *testing.T) {
 	require.Equal(t, "image", contents[1].Type)
 	require.Equal(t, "AQID", contents[1].Source.Data)
 }
+
+func TestTextOnlyProviderPayloadsContainNoImages(t *testing.T) {
+	no := false
+	req := ai.StreamRequest{Model: ai.Model{ID: "text-only", SupportsImages: &no}, Messages: []ai.Message{
+		ai.UserMessage{Content: []ai.ContentBlock{{Type: "image", Image: &ai.ImageBlock{URL: "https://example.test/private.png"}}}},
+		ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: "read-1", Name: "read", Args: `{}`}}},
+		ai.ToolResultMessage{ToolCallID: "read-1", Content: "file.png", Images: []ai.ImageBlock{{MediaType: "image/png", Data: []byte{1, 2, 3}}}},
+	}}
+	for name, request := range map[string]any{
+		"openai":    NewOpenAIProvider("", "").buildOpenAIRequest(req, false),
+		"anthropic": NewAnthropicProvider("", "").buildRequest(req, false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			data, err := json.Marshal(request)
+			require.NoError(t, err)
+			require.NotContains(t, string(data), `"type":"image`)
+			require.NotContains(t, string(data), "private.png")
+			require.NotContains(t, string(data), "AQID")
+			require.Contains(t, string(data), "vision-capable")
+			require.Contains(t, string(data), "read-1")
+		})
+	}
+}

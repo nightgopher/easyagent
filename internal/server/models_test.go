@@ -30,7 +30,7 @@ func TestModelCatalogUsesGatewayAndAcceptsVersionedURL(t *testing.T) {
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/v1/models", r.URL.Path)
 		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
-		_, _ = w.Write([]byte(`{"data":[{"id":"real-model","display_name":"Real Model"},{"id":""}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"real-model","display_name":"Real Model","input_modalities":["text"]},{"id":""}]}`))
 	}))
 	defer gateway.Close()
 	application := modelTestApp(t, func(cfg *config.Config) {
@@ -48,6 +48,10 @@ func TestModelCatalogUsesGatewayAndAcceptsVersionedURL(t *testing.T) {
 	assert.Equal(t, "real-model", catalog.Models[0].ID)
 	assert.Equal(t, "Real Model", catalog.Models[0].Name)
 	assert.Equal(t, "real-model", catalog.Current.ID)
+	require.NotNil(t, catalog.Current.SupportsImages)
+	require.False(t, *catalog.Current.SupportsImages)
+	require.NotNil(t, catalog.Models[0].SupportsImages)
+	require.False(t, *catalog.Models[0].SupportsImages)
 }
 
 func TestModelCatalogFailureNeverInventsModels(t *testing.T) {

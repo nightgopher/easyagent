@@ -40,15 +40,19 @@ func (a *Agent) ContextSnapshot(ctx context.Context) (ContextSnapshot, error) {
 		}
 	}
 	req := a.llmRequest(history)
-	messages := make([]ContextMessage, 0, len(history))
-	for _, msg := range history {
+	messages := make([]ContextMessage, 0, len(req.Messages))
+	for _, msg := range req.Messages {
 		messages = append(messages, ContextMessage{Role: msg.Role(), Message: msg})
 	}
 	tools := req.Tools
 	if tools == nil {
 		tools = make([]ai.ToolDefinition, 0)
 	}
-	return ContextSnapshot{Model: req.Model, System: req.System, Messages: messages, Tools: tools, Usage: estimateContext(req, latestRequestUsage(history)), Compactions: records}, nil
+	usage, err := a.contextUsage(ctx, req, latestRequestUsage(history))
+	if err != nil {
+		return ContextSnapshot{}, err
+	}
+	return ContextSnapshot{Model: req.Model, System: req.System, Messages: messages, Tools: tools, Usage: usage, Compactions: records}, nil
 }
 
 func compactionInfo(trigger, instructions string, history []ai.Message, summary string, recent []ai.Message) *session.CompactionInfo {
