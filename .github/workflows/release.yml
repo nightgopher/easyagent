@@ -84,7 +84,9 @@ jobs:
           MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        run: bash scripts/build-native.sh darwin-arm64 native-dist "$TAG"
+        run: |
+          python3 scripts/check-native-keychain.py
+          bash scripts/build-native.sh darwin-arm64 native-dist "$TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: release-native
