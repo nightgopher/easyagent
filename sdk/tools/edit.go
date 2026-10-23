@@ -311,7 +311,7 @@ func (t *EditTool) doExecute(ctx context.Context, raw json.RawMessage, onUpdate 
 	}
 
 	var diffCtx strings.Builder
-	diffCtx.WriteString(fmt.Sprintf("edited %s (lines %d-%d, %d→%d lines)\n\n", cleanPath, startLine, endLine, oldLines, newLines))
+	fmt.Fprintf(&diffCtx, "edited %s (lines %d-%d, %d→%d lines)\n\n", cleanPath, startLine, endLine, oldLines, newLines)
 	for i := ctxStart; i <= ctxEnd; i++ {
 		marker := "  "
 		if i >= startLine && i <= startLine+newLines-1 {
@@ -322,7 +322,7 @@ func (t *EditTool) doExecute(ctx context.Context, raw json.RawMessage, onUpdate 
 			if len(line) > 120 {
 				line = line[:120] + "..."
 			}
-			diffCtx.WriteString(fmt.Sprintf("%s%4d | %s\n", marker, i, line))
+			fmt.Fprintf(&diffCtx, "%s%4d | %s\n", marker, i, line)
 		}
 	}
 
@@ -498,7 +498,7 @@ func buildNotFoundDiagnostic(content, oldString string) string {
 				}
 			}
 			if len(candidateLines) > 0 {
-				b.WriteString(fmt.Sprintf(". Nearest line match:\n  %s", strings.Join(candidateLines, "\n  ")))
+				fmt.Fprintf(&b, ". Nearest line match:\n  %s", strings.Join(candidateLines, "\n  "))
 			}
 		}
 	}

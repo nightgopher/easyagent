@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
 )
 
 // undoManager is a package-level backup manager shared across sessions.
@@ -49,9 +49,9 @@ func RegisterUndoCommands(registry *slashcmd.Registry) {
 				errs := undoManager.RestoreAll()
 				if len(errs) > 0 {
 					var b strings.Builder
-					b.WriteString(fmt.Sprintf("⚠️ Restored with %d error(s):\n", len(errs)))
+					fmt.Fprintf(&b, "⚠️ Restored with %d error(s):\n", len(errs))
 					for _, e := range errs {
-						b.WriteString(fmt.Sprintf("  - %v\n", e))
+						fmt.Fprintf(&b, "  - %v\n", e)
 					}
 					return slashcmd.CommandResult{Output: b.String()}, nil
 				}

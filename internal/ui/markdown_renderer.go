@@ -36,7 +36,7 @@ func RenderMarkdown(text string) string {
 			codeLang = strings.TrimSpace(codeLang)
 			result.WriteString(ColorCyan)
 			if codeLang != "" {
-				result.WriteString(fmt.Sprintf("┌─ %s ─", codeLang))
+				fmt.Fprintf(&result, "┌─ %s ─", codeLang)
 			} else {
 				result.WriteString("┌─")
 			}
@@ -119,7 +119,7 @@ func RenderMarkdown(text string) string {
 			parts := strings.SplitN(line, ". ", 2)
 			if len(parts) == 2 {
 				result.WriteString(ColorCyan)
-				result.WriteString(fmt.Sprintf("  %s. ", parts[0]))
+				fmt.Fprintf(&result, "  %s. ", parts[0])
 				result.WriteString(ColorReset)
 				result.WriteString(renderInlineMarkdown(parts[1]))
 				result.WriteString("\n")

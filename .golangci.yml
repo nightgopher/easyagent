@@ -9,6 +9,16 @@ linters:
     - govet
     - gosec
     - bodyclose
+  settings:
+    gosec:
+      excludes:
+        # G104 repeats errcheck; errcheck is the one source for unchecked errors.
+        - G104
+  exclusions:
+    # golangci-lint's standard preset: unchecked Close/Flush, fmt.*print*,
+    # os.Remove(All) and os.(Un)Setenv results, where errors are routinely ignored.
+    presets:
+      - std-error-handling
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

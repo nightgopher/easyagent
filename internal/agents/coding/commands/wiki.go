@@ -140,7 +140,7 @@ func wikiStatus(ctx slashcmd.Context) (slashcmd.CommandResult, error) {
 
 	var b strings.Builder
 	b.WriteString("📚 **LLM Wiki Status**\n\n")
-	b.WriteString(fmt.Sprintf("Path: `%s`\n", wikiRoot))
+	fmt.Fprintf(&b, "Path: `%s`\n", wikiRoot)
 
 	// Count wiki pages
 	pageCount := 0
@@ -163,12 +163,12 @@ func wikiStatus(ctx slashcmd.Context) (slashcmd.CommandResult, error) {
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("Wiki pages: %d (%d sources, %d entities, %d concepts)\n",
-		pageCount, sourceCount, entityCount, conceptCount))
+	fmt.Fprintf(&b, "Wiki pages: %d (%d sources, %d entities, %d concepts)\n",
+		pageCount, sourceCount, entityCount, conceptCount)
 
 	// Count raw sources
 	rawCount := countFiles(rawDir)
-	b.WriteString(fmt.Sprintf("Raw sources: %d\n", rawCount))
+	fmt.Fprintf(&b, "Raw sources: %d\n", rawCount)
 
 	// Recent log entries
 	logPath := filepath.Join(wikiRoot, "log.md")
