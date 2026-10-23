@@ -131,18 +131,18 @@ func (t *SaveTool) Execute(_ context.Context, params json.RawMessage, _ func(age
 	// Build markdown content with YAML frontmatter
 	var b strings.Builder
 	b.WriteString("---\n")
-	b.WriteString(fmt.Sprintf("title: %q\n", p.Title))
-	b.WriteString(fmt.Sprintf("date: %s\n", dateStr))
-	b.WriteString(fmt.Sprintf("category: %s\n", category))
+	fmt.Fprintf(&b, "title: %q\n", p.Title)
+	fmt.Fprintf(&b, "date: %s\n", dateStr)
+	fmt.Fprintf(&b, "category: %s\n", category)
 	if len(p.Tags) > 0 {
 		tagStrs := make([]string, len(p.Tags))
 		for i, tag := range p.Tags {
 			tagStrs[i] = fmt.Sprintf("%q", tag)
 		}
-		b.WriteString(fmt.Sprintf("tags: [%s]\n", strings.Join(tagStrs, ", ")))
+		fmt.Fprintf(&b, "tags: [%s]\n", strings.Join(tagStrs, ", "))
 	}
 	b.WriteString("---\n\n")
-	b.WriteString(fmt.Sprintf("# %s\n\n", p.Title))
+	fmt.Fprintf(&b, "# %s\n\n", p.Title)
 	b.WriteString(p.Content)
 	b.WriteString("\n")
 
@@ -157,14 +157,14 @@ func (t *SaveTool) Execute(_ context.Context, params json.RawMessage, _ func(age
 	ClearCache()
 
 	var b2 strings.Builder
-	b2.WriteString(fmt.Sprintf("✅ 已保存到知识库！\n\n"))
-	b2.WriteString(fmt.Sprintf("📄 `%s`\n\n", targetPath))
-	b2.WriteString(fmt.Sprintf("**标题**: %s\n", p.Title))
-	b2.WriteString(fmt.Sprintf("**分类**: %s\n", category))
+	fmt.Fprintf(&b2, "✅ 已保存到知识库！\n\n")
+	fmt.Fprintf(&b2, "📄 `%s`\n\n", targetPath)
+	fmt.Fprintf(&b2, "**标题**: %s\n", p.Title)
+	fmt.Fprintf(&b2, "**分类**: %s\n", category)
 	if len(p.Tags) > 0 {
-		b2.WriteString(fmt.Sprintf("**标签**: %s\n", strings.Join(p.Tags, ", ")))
+		fmt.Fprintf(&b2, "**标签**: %s\n", strings.Join(p.Tags, ", "))
 	}
-	b2.WriteString(fmt.Sprintf("\n可以用 `kb_read path=\"%s\"` 验证，或用 `kb_search query=\"%s\"` 重新搜索。", targetPath, p.Title))
+	fmt.Fprintf(&b2, "\n可以用 `kb_read path=\"%s\"` 验证，或用 `kb_search query=\"%s\"` 重新搜索。", targetPath, p.Title)
 
 	return agent.ToolResult{
 		Content:    b2.String(),

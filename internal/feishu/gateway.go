@@ -306,13 +306,13 @@ func (g *Gateway) WaitForTextChoice(
 	// Send formatted options message
 	var sb strings.Builder
 	if title != "" {
-		sb.WriteString(fmt.Sprintf("**%s**\n\n", title))
+		fmt.Fprintf(&sb, "**%s**\n\n", title)
 	}
 	if content != "" {
 		sb.WriteString(content + "\n\n")
 	}
 	for i, btn := range buttons {
-		sb.WriteString(fmt.Sprintf("> **%d**. %s\n", i+1, btn))
+		fmt.Fprintf(&sb, "> **%d**. %s\n", i+1, btn)
 	}
 	sb.WriteString("\n请回复序号或选项名称进行选择。")
 

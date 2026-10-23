@@ -605,8 +605,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 
 	// Compaction settings
 	compactionSettings := compaction.DefaultSettings()
-	var summarizeFunc compaction.SummarizeFunc
-	summarizeFunc = compaction.LLMSummarizer(registry, model)
+	summarizeFunc := compaction.LLMSummarizer(registry, model)
 
 	// Load context files
 	contextFiles := prompt.LoadProjectContextFiles(cwd, "")

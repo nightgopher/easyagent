@@ -65,15 +65,15 @@ func NewTaskDocument(goal string) *TaskDocument {
 func (td *TaskDocument) Render() string {
 	var b strings.Builder
 	b.WriteString("# 📋 Task Handoff\n\n")
-	b.WriteString(fmt.Sprintf("**Goal:** %s\n\n", td.Goal))
-	b.WriteString(fmt.Sprintf("**State:** %s\n\n", td.State))
-	b.WriteString(fmt.Sprintf("**Created:** %s\n", td.CreatedAt.Format("2006-01-02 15:04:05")))
-	b.WriteString(fmt.Sprintf("**Updated:** %s\n\n", td.UpdatedAt.Format("2006-01-02 15:04:05")))
+	fmt.Fprintf(&b, "**Goal:** %s\n\n", td.Goal)
+	fmt.Fprintf(&b, "**State:** %s\n\n", td.State)
+	fmt.Fprintf(&b, "**Created:** %s\n", td.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&b, "**Updated:** %s\n\n", td.UpdatedAt.Format("2006-01-02 15:04:05"))
 
 	if len(td.Progress) > 0 {
 		b.WriteString("## ✅ Progress\n\n")
 		for _, item := range td.Progress {
-			b.WriteString(fmt.Sprintf("- %s\n", item))
+			fmt.Fprintf(&b, "- %s\n", item)
 		}
 		b.WriteString("\n")
 	}
@@ -81,7 +81,7 @@ func (td *TaskDocument) Render() string {
 	if len(td.NextSteps) > 0 {
 		b.WriteString("## ➡️ Next Steps\n\n")
 		for _, item := range td.NextSteps {
-			b.WriteString(fmt.Sprintf("- [ ] %s\n", item))
+			fmt.Fprintf(&b, "- [ ] %s\n", item)
 		}
 		b.WriteString("\n")
 	}
@@ -89,7 +89,7 @@ func (td *TaskDocument) Render() string {
 	if len(td.Blockers) > 0 {
 		b.WriteString("## 🚫 Blockers\n\n")
 		for _, item := range td.Blockers {
-			b.WriteString(fmt.Sprintf("- %s\n", item))
+			fmt.Fprintf(&b, "- %s\n", item)
 		}
 		b.WriteString("\n")
 	}
@@ -97,7 +97,7 @@ func (td *TaskDocument) Render() string {
 	if len(td.FilesChanged) > 0 {
 		b.WriteString("## 📁 Files Changed\n\n")
 		for _, f := range td.FilesChanged {
-			b.WriteString(fmt.Sprintf("- `%s`\n", f))
+			fmt.Fprintf(&b, "- `%s`\n", f)
 		}
 		b.WriteString("\n")
 	}
