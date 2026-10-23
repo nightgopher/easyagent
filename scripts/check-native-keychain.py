@@ -30,7 +30,7 @@ def certificate(folder, name):
          '-config', str(config), '-keyout', str(key), '-out', str(cert)],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     run(['openssl', 'pkcs12', '-export', '-inkey', str(key), '-in', str(cert), '-out', str(archive),
-         '-passout', 'env:MACOS_CERTIFICATE_PASSWORD', '-keypbe', 'PBE-SHA1-3DES',
+         '-passout', 'env:MACOS_CERTIFICATE_PASSWORD', '-keypbe', 'PBE-SHA1-3DES',  # ggignore: environment reference, not a password
          '-certpbe', 'PBE-SHA1-3DES', '-macalg', 'sha1'])
     key.chmod(0o600)
     archive.chmod(0o600)
@@ -61,7 +61,7 @@ def main():
              '-o', str(second), '.'], cwd=ROOT / 'desktop-native')
         shutil.copy2(second, other_id)
         shutil.copy2(second, other_signer)
-        os.environ['MACOS_CERTIFICATE_PASSWORD'] = 'disposable-keychain-upgrade-fixture'
+        os.environ['MACOS_CERTIFICATE_PASSWORD'] = os.urandom(24).hex()
         expected = certificate(folder, 'first-identity')
 
         def sign(path, fingerprint, identifier='com.hwj.easyagent'):
@@ -74,8 +74,8 @@ def main():
             sign(first, expected)
             sign(second, expected)
             sign(other_id, expected, 'com.hwj.easyagent.untrusted-fixture')
-            sign(helper, expected, 'com.hwj.easyagent.credentials')
-            sign(next_helper, expected, 'com.hwj.easyagent.credentials')
+            sign(helper, expected, 'easyagent-credentials')
+            sign(next_helper, expected, 'easyagent-credentials')
         first_hash = signature(first)
         if first_hash == signature(second):
             raise RuntimeError('The two upgrade builds must have different code hashes')
