@@ -431,22 +431,6 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/kb_handler.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "24fa3d58c54e317679c12c58ac7d5ad2ea44b5f6d31e49a4307405e52b3fdb13",
-      "line_at_baseline": 335,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/kb_handler.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "24fa3d58c54e317679c12c58ac7d5ad2ea44b5f6d31e49a4307405e52b3fdb13",
-      "line_at_baseline": 335,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
       "file": "internal/server/prompt_inputs.go",
       "message": "G304: Potential file inclusion via variable",
       "source_sha256": "885ba584560202f83d53ae443064cb57e66874619e80cbb375aa0ad6522c6c13",
