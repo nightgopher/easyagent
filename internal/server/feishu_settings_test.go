@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -18,8 +19,8 @@ func fixtureSettings(t *testing.T) *feishuSettings {
 	t.Helper()
 	dir := t.TempDir()
 	f := &feishuSettings{envFile: filepath.Join(dir, "feishu.env"), ownerFile: filepath.Join(dir, "owner.json"), run: func(context.Context, string, ...string) (string, error) { return "active", nil }}
-	os.WriteFile(f.envFile, []byte("# deployment\nFEISHU_APP_ID=cli_old\nFEISHU_APP_SECRET=private_secret\nEXTRA=keep\n"), 0600)
-	os.WriteFile(f.ownerFile, []byte(`{"owner":"owner123"}`), 0600)
+	require.NoError(t, os.WriteFile(f.envFile, []byte("# deployment\nFEISHU_APP_ID=cli_old\nFEISHU_APP_SECRET=private_secret\nEXTRA=keep\n"), 0600))
+	require.NoError(t, os.WriteFile(f.ownerFile, []byte(`{"owner":"owner123"}`), 0600))
 	return f
 }
 func TestFeishuSettingsSave(t *testing.T) {
@@ -102,7 +103,7 @@ func TestFeishuSettingsAuthAndPairing(t *testing.T) {
 	}
 	state := map[string]any{"code": "one-use-code", "expires": time.Now().Add(time.Hour)}
 	b, _ := json.Marshal(state)
-	os.WriteFile(f.ownerFile, b, 0600)
+	require.NoError(t, os.WriteFile(f.ownerFile, b, 0600))
 	w := request("/settings/feishu/pairing", "test-key")
 	if w.Code != 200 || !strings.Contains(w.Body.String(), "/pair one-use-code") || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal(w.Code, w.Body.String())
@@ -113,7 +114,7 @@ func TestFeishuSettingsAuthAndPairing(t *testing.T) {
 	}
 	state["expires"] = time.Now().Add(-time.Hour)
 	b, _ = json.Marshal(state)
-	os.WriteFile(f.ownerFile, b, 0600)
+	require.NoError(t, os.WriteFile(f.ownerFile, b, 0600))
 	if w := request("/settings/feishu/pairing", "test-key"); w.Code != 409 {
 		t.Fatal(w.Code)
 	}
@@ -128,7 +129,7 @@ func TestFeishuSettingsAuthAndPairing(t *testing.T) {
 
 func TestFeishuSettingsFirstSetup(t *testing.T) {
 	f := fixtureSettings(t)
-	os.WriteFile(f.envFile, []byte("EXTRA=keep\n"), 0600)
+	require.NoError(t, os.WriteFile(f.envFile, []byte("EXTRA=keep\n"), 0600))
 	if err := f.save(context.Background(), "cli_first", "first_secret"); err != nil {
 		t.Fatal(err)
 	}

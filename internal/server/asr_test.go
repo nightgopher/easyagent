@@ -25,17 +25,19 @@ func TestASRGatewayEndpoint(t *testing.T) {
 				if err := r.ParseMultipartForm(1024); err != nil {
 					t.Error(err)
 				}
-				defer r.MultipartForm.RemoveAll()
+				defer func() { _ = r.MultipartForm.RemoveAll() }()
 				if r.FormValue("model") != "qa-asr" {
 					t.Error("lost model")
 				}
-				io.WriteString(w, `{"text":"recognized"}`)
+				_, _ = io.WriteString(w, `{"text":"recognized"}`)
 			}))
 			defer upstream.Close()
 			var b bytes.Buffer
 			m := multipart.NewWriter(&b)
 			part, _ := m.CreateFormFile("file", "qa.webm")
-			part.Write([]byte("test audio"))
+			if _, err := part.Write([]byte("test audio")); err != nil {
+				t.Fatal(err)
+			}
 			m.Close()
 			r := httptest.NewRequest("POST", "/asr/transcribe", &b)
 			r.Header.Set("Content-Type", m.FormDataContentType())

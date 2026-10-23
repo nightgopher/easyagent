@@ -249,21 +249,21 @@ func TestRegister_MixedExtensions(t *testing.T) {
 	reg := NewRegistry()
 
 	// Register a plain extension
-	reg.Register(&testExt{name: "plain"})
+	require.NoError(t, reg.Register(&testExt{name: "plain"}))
 
 	// Register a lifecycle extension
-	reg.Register(&testLifecycleExt{
+	require.NoError(t, reg.Register(&testLifecycleExt{
 		testExt:     testExt{name: "lifecycle"},
 		beforeHooks: []agent.BeforeToolCallHook{func(ctx context.Context, call agent.ToolCallContext) (agent.ToolCallContext, error) { return call, nil }},
-	})
+	}))
 
 	// Register another lifecycle extension
-	reg.Register(&testLifecycleExt{
+	require.NoError(t, reg.Register(&testLifecycleExt{
 		testExt: testExt{name: "lifecycle2"},
 		afterHooks: []agent.AfterToolCallHook{func(ctx context.Context, call agent.ToolCallContext, result agent.ToolResult) (agent.ToolResult, error) {
 			return result, nil
 		}},
-	})
+	}))
 
 	// Also add a manually registered hook
 	reg.RegisterBeforeToolCallHook(func(ctx context.Context, call agent.ToolCallContext) (agent.ToolCallContext, error) {
