@@ -1,4 +1,9 @@
 import copy
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 from decimal import Decimal
 
@@ -46,6 +51,19 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(match({"Issues": [issue]}, shrunk), ([], {}))
         # Pruning cannot make room for a finding that was never allowed.
         self.assertEqual(len(new_findings({"Issues": [issue, issue]}, shrunk)), 1)
+
+    def test_prune_refuses_a_report_with_new_findings(self):
+        issue = {"FromLinter": "errcheck", "Text": "unchecked error", "SourceLines": [" f()"], "Pos": {"Filename": "a.go", "Line": 10}}
+        broken = {"FromLinter": "typecheck", "Text": "undefined: x", "SourceLines": ["x"], "Pos": {"Filename": "b.go", "Line": 1}}
+        linter, file, message, source = finding_key(issue)
+        baseline = {"findings": [{"linter": linter, "file": file, "message": message, "source_sha256": source, "count": 1}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            report, path = Path(tmp) / "report.json", Path(tmp) / "baseline.json"
+            report.write_text(json.dumps({"Issues": [broken]}))
+            path.write_text(json.dumps(baseline))
+            run = subprocess.run([sys.executable, str(Path(__file__).with_name("check_lint_baseline.py")), str(report), "--baseline", str(path), "--prune"], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 1)
+            self.assertEqual(json.loads(path.read_text()), baseline)
 
 
 if __name__ == "__main__":
