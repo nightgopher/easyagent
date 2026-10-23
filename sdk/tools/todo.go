@@ -129,8 +129,8 @@ func (t *TodoTool) Execute(_ context.Context, raw json.RawMessage, _ func(agent.
 
 	// Build display
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Todo list updated: %d total (%d pending, %d in_progress, %d completed)\n\n",
-		len(params.Todos), pending, inProgress, completed))
+	fmt.Fprintf(&b, "Todo list updated: %d total (%d pending, %d in_progress, %d completed)\n\n",
+		len(params.Todos), pending, inProgress, completed)
 
 	// Sort: completed first, then in_progress, then pending
 	sorted := make([]TodoItem, len(params.Todos))
@@ -147,7 +147,7 @@ func (t *TodoTool) Execute(_ context.Context, raw json.RawMessage, _ func(agent.
 		} else if item.Status == "in_progress" {
 			icon = "⊡"
 		}
-		b.WriteString(fmt.Sprintf("  %s [%s] %s (%s)\n", icon, item.Priority, item.Content, item.ID))
+		fmt.Fprintf(&b, "  %s [%s] %s (%s)\n", icon, item.Priority, item.Content, item.ID)
 	}
 
 	return agent.ToolResult{Content: b.String()}, nil

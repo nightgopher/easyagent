@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
 	"github.com/hwj123hwj/easyagent/internal/music/pref"
 	"github.com/hwj123hwj/easyagent/internal/profile"
+	"github.com/hwj123hwj/easyagent/sdk/agent"
 )
 
 // Options configures the music-agent system prompt.
@@ -44,7 +44,7 @@ func BuildSystemPrompt(opts Options) string {
 	if len(opts.Tools) > 0 {
 		b.WriteString("\n## Available Tools\n\n")
 		for _, tool := range opts.Tools {
-			b.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", tool.Name(), tool.Description()))
+			fmt.Fprintf(&b, "### %s\n\n%s\n\n", tool.Name(), tool.Description())
 		}
 	}
 
@@ -57,7 +57,7 @@ func BuildSystemPrompt(opts Options) string {
 	b.WriteString("- Use the user's listening preferences (if shown above) to personalize recommendations. Prefer their favorite artists when relevant.\n")
 
 	if opts.Goal != "" {
-		b.WriteString(fmt.Sprintf("\n## Current Goal\n\n%s\n", opts.Goal))
+		fmt.Fprintf(&b, "\n## Current Goal\n\n%s\n", opts.Goal)
 	}
 
 	return b.String()
