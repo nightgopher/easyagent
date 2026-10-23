@@ -1,7 +1,11 @@
 package com.hwj.easyagent.mobile
 
 import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,15 +27,37 @@ import com.hwj.easyagent.mobile.ui.ConnectionScreen
 import com.hwj.easyagent.mobile.ui.EasyAgentTheme
 import com.hwj.easyagent.mobile.ui.HostsScreen
 import com.hwj.easyagent.mobile.ui.SessionsScreen
+import com.hwj.easyagent.mobile.ui.UpdateDialog
+import com.hwj.easyagent.mobile.updates.updateInstallIntent
 
 class MainActivity : ComponentActivity() {
+    private val updater get() = (application as EasyAgentApp).updater
+    private val installPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (updater.state.value.file == null) updater.open() // Recover a cached download after process recreation.
+        else if (packageManager.canRequestPackageInstalls()) installUpdate()
+        else updater.installationError("尚未允许安装更新，可点击安装更新后重新授权")
+    }
+
+    private fun installUpdate() {
+        if (!packageManager.canRequestPackageInstalls()) {
+            try {
+                installPermission.launch(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (_: ActivityNotFoundException) { updater.installationError("无法打开安装授权设置，请在系统设置中允许 EasyAgent 安装应用") }
+            return
+        }
+        updater.install { file ->
+            try { startActivity(updateInstallIntent(this, file)) }
+            catch (_: ActivityNotFoundException) { updater.installationError("系统无法打开安装器，请稍后重试") }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handleOpen(intent)
         setContent {
             EasyAgentTheme {
-                Root(application as EasyAgentApp)
+                Root(application as EasyAgentApp, ::installUpdate)
             }
         }
     }
@@ -45,6 +71,7 @@ class MainActivity : ComponentActivity() {
         super.onStart()
         AppVisibility.foreground = true
         (application as EasyAgentApp).connections.resume()
+        updater.foreground()
     }
 
     override fun onStop() {
@@ -60,7 +87,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun Root(app: EasyAgentApp) {
+private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
     val connections = app.connections
     val current by connections.client.collectAsStateWithLifecycle()
     val state by connections.state.collectAsStateWithLifecycle()
@@ -90,6 +117,7 @@ private fun Root(app: EasyAgentApp) {
             ConnectionScreen(
                 initial = state.hosts.firstOrNull { it.id == editingId },
                 canCancel = state.hosts.isNotEmpty(),
+                onUpdates = app.updater::open,
                 onCancel = { editing = false },
                 onSave = { config ->
                     connections.save(config)
@@ -105,6 +133,7 @@ private fun Root(app: EasyAgentApp) {
             onAdd = { editingId = null; editing = true },
             onEdit = { editingId = it.id; editing = true },
             onSelect = ::select,
+            onUpdates = app.updater::open,
         )
         else -> key(current) {
             val client = requireNotNull(current)
@@ -129,10 +158,12 @@ private fun Root(app: EasyAgentApp) {
                     onOpen = { chatId = it },
                     onSelectHost = ::select,
                     onManageHosts = { managing = true },
+                    onUpdates = app.updater::open,
                 )
             }
         }
     }
+    UpdateDialog(app.updater, onInstall)
     error?.let { message ->
         AlertDialog(
             onDismissRequest = { error = null },
