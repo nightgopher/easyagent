@@ -116,38 +116,38 @@ func (t *MaintainTool) runHealthCheck(idx *Index) agent.ToolResult {
 	report := GenerateHealthReport(idx)
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("🔍 **知识库健康报告**\n\n"))
-	b.WriteString(fmt.Sprintf("📊 **概况**: %d 条目 | %d 分类 | %d 标签\n\n", report.TotalEntries, report.Categories, report.Tags))
+	fmt.Fprintf(&b, "🔍 **知识库健康报告**\n\n")
+	fmt.Fprintf(&b, "📊 **概况**: %d 条目 | %d 分类 | %d 标签\n\n", report.TotalEntries, report.Categories, report.Tags)
 
 	// ── Metadata gaps ──
 	gapCount := 0
 	b.WriteString("### 元数据缺失\n\n")
 	if len(report.EntriesMissingTitle) > 0 {
-		b.WriteString(fmt.Sprintf("- ⚠️ **%d 条目缺标题**:\n", len(report.EntriesMissingTitle)))
+		fmt.Fprintf(&b, "- ⚠️ **%d 条目缺标题**:\n", len(report.EntriesMissingTitle))
 		for _, e := range report.EntriesMissingTitle {
 			absPath := filepath.Join(t.repoPath, e.RelPath)
-			b.WriteString(fmt.Sprintf("  - `%s`\n", absPath))
+			fmt.Fprintf(&b, "  - `%s`\n", absPath)
 		}
 		gapCount += len(report.EntriesMissingTitle)
 	}
 	if len(report.EntriesMissingSummary) > 0 {
-		b.WriteString(fmt.Sprintf("- ⚠️ **%d 条目缺摘要**:\n", len(report.EntriesMissingSummary)))
+		fmt.Fprintf(&b, "- ⚠️ **%d 条目缺摘要**:\n", len(report.EntriesMissingSummary))
 		for _, e := range report.EntriesMissingSummary {
 			absPath := filepath.Join(t.repoPath, e.RelPath)
-			b.WriteString(fmt.Sprintf("  - `%s` — %s\n", absPath, e.Title))
+			fmt.Fprintf(&b, "  - `%s` — %s\n", absPath, e.Title)
 		}
 		gapCount += len(report.EntriesMissingSummary)
 	}
 	if len(report.EntriesMissingTags) > 0 {
-		b.WriteString(fmt.Sprintf("- ⚠️ **%d 条目缺标签**:\n", len(report.EntriesMissingTags)))
+		fmt.Fprintf(&b, "- ⚠️ **%d 条目缺标签**:\n", len(report.EntriesMissingTags))
 		// Show first 10 to avoid spamming
 		for i, e := range report.EntriesMissingTags {
 			if i >= 10 {
-				b.WriteString(fmt.Sprintf("  - ...还有 %d 条\n", len(report.EntriesMissingTags)-10))
+				fmt.Fprintf(&b, "  - ...还有 %d 条\n", len(report.EntriesMissingTags)-10)
 				break
 			}
 			absPath := filepath.Join(t.repoPath, e.RelPath)
-			b.WriteString(fmt.Sprintf("  - `%s` — %s\n", absPath, e.Title))
+			fmt.Fprintf(&b, "  - `%s` — %s\n", absPath, e.Title)
 		}
 		gapCount += len(report.EntriesMissingTags)
 	}
@@ -159,12 +159,12 @@ func (t *MaintainTool) runHealthCheck(idx *Index) agent.ToolResult {
 	// ── Duplicates ──
 	b.WriteString("### 重复检测\n\n")
 	if len(report.DuplicateGroups) > 0 {
-		b.WriteString(fmt.Sprintf("⚠️ 发现 %d 组可能重复的条目:\n\n", len(report.DuplicateGroups)))
+		fmt.Fprintf(&b, "⚠️ 发现 %d 组可能重复的条目:\n\n", len(report.DuplicateGroups))
 		for i, g := range report.DuplicateGroups {
-			b.WriteString(fmt.Sprintf("%d. **%s** (%d条)\n", i+1, g.CanonicalTitle, len(g.Entries)))
+			fmt.Fprintf(&b, "%d. **%s** (%d条)\n", i+1, g.CanonicalTitle, len(g.Entries))
 			for _, e := range g.Entries {
 				absPath := filepath.Join(t.repoPath, e.RelPath)
-				b.WriteString(fmt.Sprintf("   - `%s` (%s)\n", absPath, e.Category))
+				fmt.Fprintf(&b, "   - `%s` (%s)\n", absPath, e.Category)
 			}
 			b.WriteString("\n")
 		}
@@ -175,17 +175,17 @@ func (t *MaintainTool) runHealthCheck(idx *Index) agent.ToolResult {
 	// ── Tag clusters ──
 	b.WriteString("### 标签一致性\n\n")
 	if len(report.TagClusters) > 0 {
-		b.WriteString(fmt.Sprintf("⚠️ 发现 %d 组标签不一致:\n\n", len(report.TagClusters)))
+		fmt.Fprintf(&b, "⚠️ 发现 %d 组标签不一致:\n\n", len(report.TagClusters))
 		for i, c := range report.TagClusters {
-			b.WriteString(fmt.Sprintf("%d. 建议统一为 **%s** ← %s (%d条)\n",
-				i+1, c.Canonical, strings.Join(c.Variants, " / "), c.Count))
+			fmt.Fprintf(&b, "%d. 建议统一为 **%s** ← %s (%d条)\n",
+				i+1, c.Canonical, strings.Join(c.Variants, " / "), c.Count)
 		}
 	} else {
 		b.WriteString("✅ 标签命名一致\n")
 	}
 
 	b.WriteString("\n---\n")
-	b.WriteString(fmt.Sprintf("**总结**: %s\n", report.Summary()))
+	fmt.Fprintf(&b, "**总结**: %s\n", report.Summary())
 	if gapCount == 0 && len(report.DuplicateGroups) == 0 && len(report.TagClusters) == 0 {
 		b.WriteString("\n🎉 知识库状态良好！")
 	}
@@ -199,24 +199,24 @@ func (t *MaintainTool) runDuplicateCheck(idx *Index) agent.ToolResult {
 	dups := detectDuplicateTitles(idx.Entries)
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("🔍 重复检测（共 %d 条目）\n\n", len(idx.Entries)))
+	fmt.Fprintf(&b, "🔍 重复检测（共 %d 条目）\n\n", len(idx.Entries))
 	if len(dups) == 0 {
 		b.WriteString("✅ 未发现重复条目")
 		return agent.ToolResult{Content: b.String()}
 	}
 
-	b.WriteString(fmt.Sprintf("发现 %d 组可能重复的条目:\n\n", len(dups)))
+	fmt.Fprintf(&b, "发现 %d 组可能重复的条目:\n\n", len(dups))
 	for i, g := range dups {
-		b.WriteString(fmt.Sprintf("### %d. %s (%d条)\n\n", i+1, g.CanonicalTitle, len(g.Entries)))
+		fmt.Fprintf(&b, "### %d. %s (%d条)\n\n", i+1, g.CanonicalTitle, len(g.Entries))
 		for _, e := range g.Entries {
 			absPath := filepath.Join(t.repoPath, e.RelPath)
-			b.WriteString(fmt.Sprintf("- `%s` — 分类: %s", absPath, e.Category))
+			fmt.Fprintf(&b, "- `%s` — 分类: %s", absPath, e.Category)
 			if e.Summary != "" {
 				s := e.Summary
 				if len(s) > 60 {
 					s = s[:60] + "..."
 				}
-				b.WriteString(fmt.Sprintf(" | %s", s))
+				fmt.Fprintf(&b, " | %s", s)
 			}
 			b.WriteString("\n")
 		}
@@ -233,7 +233,7 @@ func (t *MaintainTool) runTagAnalysis(idx *Index) agent.ToolResult {
 	clusters := detectTagClusters(idx.Entries)
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("🏷️ 标签分析（共 %d 个标签）\n\n", len(tagStats)))
+	fmt.Fprintf(&b, "🏷️ 标签分析（共 %d 个标签）\n\n", len(tagStats))
 
 	// ── Top tags ──
 	b.WriteString("### 使用频率 Top 20\n\n")
@@ -243,7 +243,7 @@ func (t *MaintainTool) runTagAnalysis(idx *Index) agent.ToolResult {
 		limit = len(tagStats)
 	}
 	for i := 0; i < limit; i++ {
-		b.WriteString(fmt.Sprintf("| %s | %d |\n", tagStats[i].Name, tagStats[i].Count))
+		fmt.Fprintf(&b, "| %s | %d |\n", tagStats[i].Name, tagStats[i].Count)
 	}
 	b.WriteString("\n")
 
@@ -252,8 +252,8 @@ func (t *MaintainTool) runTagAnalysis(idx *Index) agent.ToolResult {
 		b.WriteString("### ⚠️ 标签不一致\n\n")
 		b.WriteString("以下标签可能指同一概念，建议统一:\n\n")
 		for i, c := range clusters {
-			b.WriteString(fmt.Sprintf("%d. **%s** ← %s (%d条)\n",
-				i+1, c.Canonical, strings.Join(c.Variants, " / "), c.Count))
+			fmt.Fprintf(&b, "%d. **%s** ← %s (%d条)\n",
+				i+1, c.Canonical, strings.Join(c.Variants, " / "), c.Count)
 		}
 	} else {
 		b.WriteString("✅ 标签命名一致\n")
@@ -269,13 +269,13 @@ func (t *MaintainTool) runStats(idx *Index) agent.ToolResult {
 	tagStats := TagOverview(idx)
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("📊 知识库统计（共 %d 条目）\n\n", len(idx.Entries)))
+	fmt.Fprintf(&b, "📊 知识库统计（共 %d 条目）\n\n", len(idx.Entries))
 
 	// ── By category ──
 	b.WriteString("### 分类分布\n\n")
 	b.WriteString("| 分类 | 数量 |\n|------|------|\n")
 	for _, c := range catStats {
-		b.WriteString(fmt.Sprintf("| %s | %d |\n", c.Name, c.Count))
+		fmt.Fprintf(&b, "| %s | %d |\n", c.Name, c.Count)
 	}
 
 	// ── Top tags ──
@@ -286,7 +286,7 @@ func (t *MaintainTool) runStats(idx *Index) agent.ToolResult {
 		limit = len(tagStats)
 	}
 	for i := 0; i < limit; i++ {
-		b.WriteString(fmt.Sprintf("| %s | %d |\n", tagStats[i].Name, tagStats[i].Count))
+		fmt.Fprintf(&b, "| %s | %d |\n", tagStats[i].Name, tagStats[i].Count)
 	}
 
 	return agent.ToolResult{Content: b.String()}

@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
 	"github.com/hwj123hwj/easyagent/internal/profile"
+	"github.com/hwj123hwj/easyagent/sdk/agent"
 )
 
 // Options configures the kb-agent system prompt.
 type Options struct {
-	Tools      []agent.Tool
-	Goal       string
-	RepoPath   string
+	Tools       []agent.Tool
+	Goal        string
+	RepoPath    string
 	UserProfile *profile.Store // unified user profile for personalization
 }
 
@@ -20,7 +20,7 @@ type Options struct {
 func BuildSystemPrompt(opts Options) string {
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf(kbPrompt, opts.RepoPath))
+	fmt.Fprintf(&b, kbPrompt, opts.RepoPath)
 	b.WriteString("\n")
 
 	// Inject full unified user profile — KB agent is the "second brain" that
@@ -37,7 +37,7 @@ func BuildSystemPrompt(opts Options) string {
 	if len(opts.Tools) > 0 {
 		b.WriteString("\n## 可用工具\n\n")
 		for _, tool := range opts.Tools {
-			b.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", tool.Name(), tool.Description()))
+			fmt.Fprintf(&b, "### %s\n\n%s\n\n", tool.Name(), tool.Description())
 		}
 	}
 
@@ -51,7 +51,7 @@ func BuildSystemPrompt(opts Options) string {
 	b.WriteString("- 主动维护知识库健康：定期检查、发现重复时提醒合并、发现标签不一致时建议统一\n")
 
 	if opts.Goal != "" {
-		b.WriteString(fmt.Sprintf("\n## 当前目标\n\n%s\n", opts.Goal))
+		fmt.Fprintf(&b, "\n## 当前目标\n\n%s\n", opts.Goal)
 	}
 
 	return b.String()

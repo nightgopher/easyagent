@@ -205,10 +205,7 @@ func ValidateMessageSequence(messages []Message) error {
 		return nil
 	}
 
-	// 首条消息应该是 user（system 已在请求级别处理）
-	if messages[0].Role() != RoleUser {
-		// 允许，但可能某些 provider 会拒绝
-	}
+	// 首条消息应该是 user（system 已在请求级别处理）；不是 user 也允许，但可能某些 provider 会拒绝。
 
 	for i := 1; i < len(messages); i++ {
 		prev := messages[i-1].Role()

@@ -3,6 +3,7 @@ package kbtools
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,7 @@ func TestReadTool_FullMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.md")
 	content := "# Test Doc\n\nSome content here.\n"
-	os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	tool := NewReadTool(dir)
 	result, err := tool.Execute(context.Background(),
@@ -48,7 +49,7 @@ Go server with gRPC. Handles all business logic.
 
 PostgreSQL with Redis cache.
 `
-	os.WriteFile(path, []byte(content), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 
 	tool := NewReadTool(dir)
 	result, err := tool.Execute(context.Background(),
@@ -97,7 +98,7 @@ func TestReadTool_OverviewSmallerThanFull(t *testing.T) {
 			"Lots and lots of detail that should not appear in overview. " +
 			"More filler text here to make the document truly large.\n\n")
 	}
-	os.WriteFile(path, []byte(content.String()), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(content.String()), 0o644))
 
 	tool := NewReadTool(dir)
 
@@ -139,7 +140,7 @@ func TestReadTool_HintsToUseOverview(t *testing.T) {
 func TestReadTool_OverviewEmptyFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "empty.md")
-	os.WriteFile(path, []byte(""), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte(""), 0o644))
 
 	tool := NewReadTool(dir)
 	result, _ := tool.Execute(context.Background(),

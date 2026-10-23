@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
 	codingprofile "github.com/hwj123hwj/easyagent/internal/agents/coding/profile"
 	"github.com/hwj123hwj/easyagent/internal/handoff"
+	"github.com/hwj123hwj/easyagent/sdk/agent"
 	platformprompt "github.com/hwj123hwj/easyagent/sdk/prompt"
 	"github.com/hwj123hwj/easyagent/sdk/skill"
 )
@@ -50,7 +50,7 @@ func BuildSystemPrompt(opts Options) string {
 		b.WriteString("\n## Tool Summary\n\n")
 		for _, name := range toolNames {
 			if snippet, ok := snippets[name]; ok {
-				b.WriteString(fmt.Sprintf("- **%s**: %s\n", name, snippet))
+				fmt.Fprintf(&b, "- **%s**: %s\n", name, snippet)
 			}
 		}
 	}
@@ -58,7 +58,7 @@ func BuildSystemPrompt(opts Options) string {
 	if len(opts.Tools) > 0 {
 		b.WriteString("\n## Available Tools\n\n")
 		for _, tool := range opts.Tools {
-			b.WriteString(fmt.Sprintf("### %s\n\n%s\n\n", tool.Name(), tool.Description()))
+			fmt.Fprintf(&b, "### %s\n\n%s\n\n", tool.Name(), tool.Description())
 			if params := tool.Parameters(); len(params) > 0 {
 				b.WriteString(formatParameters(tool.Name(), params))
 			}
@@ -68,7 +68,7 @@ func BuildSystemPrompt(opts Options) string {
 	if len(guidelines) > 0 {
 		b.WriteString("\n## Guidelines\n\n")
 		for _, g := range guidelines {
-			b.WriteString(fmt.Sprintf("- %s\n", g))
+			fmt.Fprintf(&b, "- %s\n", g)
 		}
 	}
 
@@ -76,7 +76,7 @@ func BuildSystemPrompt(opts Options) string {
 		b.WriteString("\n# Project Context\n\n")
 		b.WriteString("Project-specific instructions and guidelines:\n\n")
 		for _, cf := range opts.ContextFiles {
-			b.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", cf.Path, cf.Content))
+			fmt.Fprintf(&b, "## %s\n\n%s\n\n", cf.Path, cf.Content)
 		}
 	}
 
@@ -121,13 +121,13 @@ func BuildSystemPrompt(opts Options) string {
 	}
 
 	b.WriteString("\n---\n")
-	b.WriteString(fmt.Sprintf("Current date: %s\n", time.Now().Format("2006-01-02")))
+	fmt.Fprintf(&b, "Current date: %s\n", time.Now().Format("2006-01-02"))
 	if opts.CWD != "" {
 		cwd := filepath.ToSlash(opts.CWD)
-		b.WriteString(fmt.Sprintf("Current working directory: %s\n", cwd))
+		fmt.Fprintf(&b, "Current working directory: %s\n", cwd)
 	}
 	if branch := getCurrentGitBranch(opts.CWD); branch != "" {
-		b.WriteString(fmt.Sprintf("Current git branch: %s\n", branch))
+		fmt.Fprintf(&b, "Current git branch: %s\n", branch)
 	}
 
 	return b.String()
@@ -239,9 +239,9 @@ func formatParameters(toolName string, params map[string]any) string {
 		if required[name] {
 			reqMark = " (required)"
 		}
-		b.WriteString(fmt.Sprintf("  - `%s` (%s)%s", name, typeStr, reqMark))
+		fmt.Fprintf(&b, "  - `%s` (%s)%s", name, typeStr, reqMark)
 		if desc != "" {
-			b.WriteString(fmt.Sprintf(": %s", desc))
+			fmt.Fprintf(&b, ": %s", desc)
 		}
 		b.WriteString("\n")
 	}

@@ -181,9 +181,9 @@ func (t *AskUserTool) RequiresConfirmation(raw json.RawMessage) (string, bool) {
 		return fmt.Sprintf("即将向用户提问:\n  %s", params.Questions[0].Question), true
 	}
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("即将向用户提问（%d 个问题）:\n", count))
+	fmt.Fprintf(&b, "即将向用户提问（%d 个问题）:\n", count)
 	for _, q := range params.Questions {
-		b.WriteString(fmt.Sprintf("  • %s\n", q.Question))
+		fmt.Fprintf(&b, "  • %s\n", q.Question)
 	}
 	return b.String(), true
 }

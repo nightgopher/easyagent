@@ -116,11 +116,11 @@ func (t *SearchTool) Execute(_ context.Context, params json.RawMessage, _ func(a
 
 	// Format output
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("📚 找到 %d 条记录（知识库共 %d 条）：\n\n", len(results), len(idx.Entries)))
+	fmt.Fprintf(&b, "📚 找到 %d 条记录（知识库共 %d 条）：\n\n", len(results), len(idx.Entries))
 	for i, r := range results {
 		e := r.Entry
 		absPath := filepath.Join(t.repoPath, e.RelPath)
-		b.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, e.Title))
+		fmt.Fprintf(&b, "%d. **%s**\n", i+1, e.Title)
 		// Metadata line
 		var meta []string
 		if e.Category != "" {
@@ -130,12 +130,12 @@ func (t *SearchTool) Execute(_ context.Context, params json.RawMessage, _ func(a
 			meta = append(meta, fmt.Sprintf("标签: %s", strings.Join(e.Tags, ", ")))
 		}
 		if len(meta) > 0 {
-			b.WriteString(fmt.Sprintf("   %s\n", strings.Join(meta, " | ")))
+			fmt.Fprintf(&b, "   %s\n", strings.Join(meta, " | "))
 		}
 		if e.Summary != "" {
-			b.WriteString(fmt.Sprintf("   > %s\n", e.Summary))
+			fmt.Fprintf(&b, "   > %s\n", e.Summary)
 		}
-		b.WriteString(fmt.Sprintf("   📄 `%s`\n\n", absPath))
+		fmt.Fprintf(&b, "   📄 `%s`\n\n", absPath)
 	}
 	b.WriteString("使用 kb_read 工具读取完整内容，参数 path 填上面的文件路径（绝对路径或相对路径均可）。")
 
