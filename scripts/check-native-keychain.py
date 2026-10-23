@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise real macOS credential upgrades without touching user credentials."""
 import base64
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
 import json
@@ -52,10 +53,12 @@ def main():
     with tempfile.TemporaryDirectory(prefix='easyagent-keychain-upgrade.', suffix='.noindex') as directory:
         folder = Path(directory)
         first, second, other_id, other_signer = [folder / name for name in ('first', 'second', 'other-id', 'other-signer')]
-        helper, next_helper = folder / 'helper', folder / 'next-helper'
+        helper, next_helper, third_helper = [folder / name for name in ('helper', 'next-helper', 'third-helper')]
         run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w', '-o', str(helper), './tools/credentials'], cwd=ROOT / 'desktop-native')
         run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w -buildid=next-helper-fixture',
              '-o', str(next_helper), './tools/credentials'], cwd=ROOT / 'desktop-native')
+        run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w -buildid=third-helper-fixture',
+             '-o', str(third_helper), './tools/credentials'], cwd=ROOT / 'desktop-native')
         run(['go', 'test', '-c', '-o', str(first), '.'], cwd=ROOT / 'desktop-native')
         run(['go', 'test', '-c', '-ldflags=-X=github.com/hwj123hwj/easyagent/desktop-native.nativeKeychainProbeBuild=second',
              '-o', str(second), '.'], cwd=ROOT / 'desktop-native')
@@ -76,10 +79,11 @@ def main():
             sign(other_id, expected, 'com.hwj.easyagent.untrusted-fixture')
             sign(helper, expected, 'easyagent-credentials')
             sign(next_helper, expected, 'easyagent-credentials')
+            sign(third_helper, expected, 'easyagent-credentials')
         first_hash = signature(first)
         if first_hash == signature(second):
             raise RuntimeError('The two upgrade builds must have different code hashes')
-        if signature(helper) == signature(next_helper):
+        if len({signature(helper), signature(next_helper), signature(third_helper)}) != 3:
             raise RuntimeError('The helper migration fixture must have different code hashes')
         second_identity = certificate(folder, 'second-identity')
         with signing.signing_keychain(second_identity):
@@ -100,7 +104,8 @@ def main():
             run(['security', 'unlock-keychain', '-p', 'synthetic-keychain-fixture', str(keychain)])
             steps = [(first, 'seed', helper), (first, 'migrate', helper), (second, 'upgrade', helper),
                      (other_id, 'reject', helper), (other_signer, 'reject', helper), (second, 'repair', helper),
-                     (second, 'helper-upgrade', next_helper), (second, 'clear', next_helper),
+                     (second, 'helper-upgrade', next_helper), (second, 'rotate', next_helper),
+                     (second, 'latest', third_helper), (first, 'latest', helper), (second, 'clear', third_helper),
                      (first, 'relaunch', next_helper), (second, 'relaunch', helper),
                      (second, 'network', next_helper), (second, 'tamper', next_helper),
                      (second, 'locked', next_helper), (second, 'relaunch', next_helper)]
@@ -119,6 +124,18 @@ def main():
                 env.pop('MYGO_UPDATER_PRIVATE_KEY', None)
                 run([str(binary), '-test.run=^TestNativeKeychainUpgradeProbe$', '-test.v', '-test.timeout=30s'],
                     env=env, timeout=40)
+            def concurrent_write(item):
+                binary, current_helper, account = item
+                concurrent_env = {**env, 'EASYAGENT_KEYCHAIN_PROBE_ACTION': 'parallel',
+                                  'EASYAGENT_KEYCHAIN_PROBE_HELPER': str(current_helper),
+                                  'EASYAGENT_KEYCHAIN_PROBE_ACCOUNT': account}
+                run([str(binary), '-test.run=^TestNativeKeychainUpgradeProbe$', '-test.v', '-test.timeout=30s'],
+                    env=concurrent_env, timeout=40)
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                list(executor.map(concurrent_write, [(first, helper, 'host/concurrent-a'),
+                                                     (second, next_helper, 'host/concurrent-b')]))
+            run([str(second), '-test.run=^TestNativeKeychainUpgradeProbe$', '-test.v', '-test.timeout=30s'],
+                env={**env, 'EASYAGENT_KEYCHAIN_PROBE_ACTION': 'parallel-result'}, timeout=40)
         finally:
             if keychain.exists():
                 run(['security', 'delete-keychain', str(keychain)])

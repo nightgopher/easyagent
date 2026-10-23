@@ -78,6 +78,21 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 		read("host/upgrade", "synthetic-next")
 		read("model", "synthetic-model")
 		read("host/migrate", "synthetic-legacy")
+	case "rotate":
+		check(store.Set("host/upgrade", "synthetic-newest"))
+		read("host/upgrade", "synthetic-newest")
+	case "latest":
+		read("host/upgrade", "synthetic-newest")
+		read("model", "synthetic-model")
+	case "parallel":
+		account := os.Getenv("EASYAGENT_KEYCHAIN_PROBE_ACCOUNT")
+		for range 3 {
+			check(store.Set(account, "synthetic-concurrent"))
+			read(account, "synthetic-concurrent")
+		}
+	case "parallel-result":
+		read("host/concurrent-a", "synthetic-concurrent")
+		read("host/concurrent-b", "synthetic-concurrent")
 	case "clear":
 		check(store.Delete("host/clear"))
 		read("host/clear", "")
@@ -89,6 +104,17 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 		read("host/blocked", "synthetic-replacement")
 		read("model/blocked", "synthetic-replacement")
 		read("model", "synthetic-model")
+		index := store.dir + "/credential-helpers.noindex/owners.json"
+		owners, err := os.ReadFile(index)
+		check(err)
+		if strings.Contains(string(owners), "synthetic-") {
+			t.Fatal("a credential leaked into the ownership index")
+		}
+		check(os.WriteFile(index, []byte("{"), 0600))
+		if value, err := store.Get("model"); err == nil || value != "" {
+			t.Fatal("corrupt ownership metadata guessed a credential generation")
+		}
+		check(os.WriteFile(index, owners, 0600))
 		read("host/migrate", "synthetic-legacy")
 	case "reject":
 		if value, err := store.Get("model"); err == nil || value != "" {
