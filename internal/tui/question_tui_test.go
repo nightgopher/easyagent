@@ -119,7 +119,7 @@ func TestQuestionState_SubmitRequiresComplete(t *testing.T) {
 
 	qs.moveFocus(1)
 	_, _ = qs.HandleKey(tea.KeyMsg{Type: tea.KeySpace}) // q0 opt0
-	done, submitted = qs.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
+	done, _ = qs.HandleKey(tea.KeyMsg{Type: tea.KeyTab})
 	assert.False(t, done) // q1 still missing
 
 	qs.moveFocus(1) // q0 opt1

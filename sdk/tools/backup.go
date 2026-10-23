@@ -20,7 +20,7 @@ import (
 type BackupManager struct {
 	mu       sync.Mutex
 	backups  map[string]*fileBackupStack // normalized path → stack
-	maxDepth int                        // max snapshots per file
+	maxDepth int                         // max snapshots per file
 }
 
 type fileBackupStack struct {
@@ -28,9 +28,9 @@ type fileBackupStack struct {
 }
 
 type fileSnapshot struct {
-	content  []byte
-	modTime  time.Time
-	isEmpty  bool // true if the file didn't exist before
+	content []byte
+	modTime time.Time
+	isEmpty bool // true if the file didn't exist before
 }
 
 // NewBackupManager creates a new BackupManager.
@@ -201,8 +201,8 @@ func (bm *BackupManager) ListBackups() []BackupInfo {
 	var infos []BackupInfo
 	for path, stack := range bm.backups {
 		infos = append(infos, BackupInfo{
-			Path:       path,
-			Snapshots:  len(stack.snapshots),
+			Path:      path,
+			Snapshots: len(stack.snapshots),
 		})
 	}
 	return infos
@@ -232,7 +232,7 @@ func (bm *BackupManager) FormatListBackups() string {
 	b.WriteString("📂 Available backups:\n\n")
 	for _, info := range infos {
 		rel := info.Path
-		b.WriteString(fmt.Sprintf("  %s (%d snapshot%s)\n", rel, info.Snapshots, pluralS(info.Snapshots)))
+		fmt.Fprintf(&b, "  %s (%d snapshot%s)\n", rel, info.Snapshots, pluralS(info.Snapshots))
 	}
 	b.WriteString("\nUse /undo to restore the last backup, or /undo all to restore everything.")
 	return b.String()

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestWebSearchValidate(t *testing.T) {
@@ -53,7 +55,7 @@ func TestWebSearchValidate(t *testing.T) {
 			if err == nil {
 				// Verify the validated params are sensible
 				var params WebSearchParams
-				json.Unmarshal(validated, &params)
+				require.NoError(t, json.Unmarshal(validated, &params))
 				if params.MaxResults > 20 {
 					t.Errorf("MaxResults should be clamped to 20, got %d", params.MaxResults)
 				}
@@ -79,7 +81,7 @@ func TestWebSearchSearXNG(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	server := httptest.NewServer(mux)
@@ -107,8 +109,6 @@ func TestWebSearchSearXNG(t *testing.T) {
 }
 
 func TestWebSearchFormatOutput(t *testing.T) {
-	tool := NewWebSearchTool()
-
 	// Test with mock SearXNG
 	mux := http.NewServeMux()
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
@@ -118,14 +118,14 @@ func TestWebSearchFormatOutput(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	})
 
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	t.Setenv("SEARXNG_URL", server.URL)
-	tool = NewWebSearchTool()
+	tool := NewWebSearchTool()
 
 	validated, _ := tool.Validate(json.RawMessage(`{"query": "test"}`))
 	result, err := tool.Execute(context.Background(), validated, nil)

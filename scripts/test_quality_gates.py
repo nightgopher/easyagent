@@ -1,9 +1,14 @@
 import copy
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 from decimal import Decimal
 
 from check_coverage import coverage
-from check_lint_baseline import finding_key, new_findings
+from check_lint_baseline import finding_key, match, new_findings, pruned
 
 
 class QualityGateTests(unittest.TestCase):
@@ -30,6 +35,35 @@ class QualityGateTests(unittest.TestCase):
         self.assertEqual(new_findings({"Issues": None}, baseline), [])
         with self.assertRaises(KeyError):
             new_findings({}, baseline)
+
+    def test_fixed_findings_must_leave_the_baseline(self):
+        issue = {"FromLinter": "errcheck", "Text": "unchecked error", "SourceLines": [" f()"], "Pos": {"Filename": "a.go", "Line": 10}}
+        linter, file, message, source = finding_key(issue)
+        entry = {"linter": linter, "file": file, "message": message, "source_sha256": source, "line_at_baseline": 10, "count": 2}
+        other = dict(entry, file="b.go", count=1)
+        baseline = {"policy": "kept", "findings": [entry, other]}
+        findings, unused = match({"Issues": [issue]}, baseline)
+        self.assertEqual(findings, [])
+        self.assertEqual(sum(unused.values()), 2)
+        shrunk = pruned(baseline, unused)
+        self.assertEqual(shrunk["policy"], "kept")
+        self.assertEqual(shrunk["findings"], [dict(entry, count=1)])
+        self.assertEqual(match({"Issues": [issue]}, shrunk), ([], {}))
+        # Pruning cannot make room for a finding that was never allowed.
+        self.assertEqual(len(new_findings({"Issues": [issue, issue]}, shrunk)), 1)
+
+    def test_prune_refuses_a_report_with_new_findings(self):
+        issue = {"FromLinter": "errcheck", "Text": "unchecked error", "SourceLines": [" f()"], "Pos": {"Filename": "a.go", "Line": 10}}
+        broken = {"FromLinter": "typecheck", "Text": "undefined: x", "SourceLines": ["x"], "Pos": {"Filename": "b.go", "Line": 1}}
+        linter, file, message, source = finding_key(issue)
+        baseline = {"findings": [{"linter": linter, "file": file, "message": message, "source_sha256": source, "count": 1}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            report, path = Path(tmp) / "report.json", Path(tmp) / "baseline.json"
+            report.write_text(json.dumps({"Issues": [broken]}))
+            path.write_text(json.dumps(baseline))
+            run = subprocess.run([sys.executable, str(Path(__file__).with_name("check_lint_baseline.py")), str(report), "--baseline", str(path), "--prune"], capture_output=True, text=True)
+            self.assertEqual(run.returncode, 1)
+            self.assertEqual(json.loads(path.read_text()), baseline)
 
 
 if __name__ == "__main__":

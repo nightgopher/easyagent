@@ -169,7 +169,7 @@ func (t *GrepTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 			lines, err := t.opsReadLines(ctx, fileGroup.file)
 			if err != nil {
 				for _, m := range fileGroup.matches {
-					b.WriteString(fmt.Sprintf("%s:%d: %s\n", m.File, m.Line, m.Content))
+					fmt.Fprintf(&b, "%s:%d: %s\n", m.File, m.Line, m.Content)
 				}
 				continue
 			}
@@ -188,17 +188,17 @@ func (t *GrepTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 					if i == m.Line {
 						prefix = "> "
 					}
-					b.WriteString(fmt.Sprintf("%s%s:%d: %s\n", prefix, m.File, i, strings.TrimSpace(lines[i-1])))
+					fmt.Fprintf(&b, "%s%s:%d: %s\n", prefix, m.File, i, strings.TrimSpace(lines[i-1]))
 				}
 				b.WriteString("\n")
 			}
 		}
 	} else {
 		for _, m := range matches {
-			b.WriteString(fmt.Sprintf("%s:%d: %s\n", m.File, m.Line, m.Content))
+			fmt.Fprintf(&b, "%s:%d: %s\n", m.File, m.Line, m.Content)
 		}
 	}
-	b.WriteString(fmt.Sprintf("\n%d matches found.", len(matches)))
+	fmt.Fprintf(&b, "\n%d matches found.", len(matches))
 
 	return agent.ToolResult{Content: TruncateOutput(b.String(), t.maxOutputLen)}, nil
 }
@@ -214,7 +214,8 @@ func (t *GrepTool) searchDir(ctx context.Context, re *regexp.Regexp, root string
 		includeRe = regexp.MustCompile(globPattern)
 	}
 
-	t.ops.Walk(ctx, root, func(path string, entry operations.DirEntry, err error) error {
+	// Walk stops early on cancellation or the max-results sentinel; both keep the matches so far.
+	_ = t.ops.Walk(ctx, root, func(path string, entry operations.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}

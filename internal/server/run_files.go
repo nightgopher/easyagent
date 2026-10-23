@@ -221,7 +221,7 @@ func (s *Server) snapshotFiles(root string) (map[string]fileState, []string) {
 			continue
 		}
 		if _, err = os.Stat(blob); errors.Is(err, os.ErrNotExist) {
-			if err = os.WriteFile(blob, data, 0600); err != nil {
+			if err = os.WriteFile(blob, data, 0600); err != nil { //nolint:gosec // blob path is derived from the content hash
 				skipped = append(skipped, rel)
 				continue
 			}
@@ -493,7 +493,7 @@ func (s *Server) downloadWorkspaceFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil {
 		writeError(w, 404, "file not found")
 		return
@@ -562,7 +562,7 @@ func (s *Server) workspaceFileData(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	info, err := os.Lstat(path)
+	info, err := os.Lstat(path) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil || !info.Mode().IsRegular() {
 		writeError(w, 404, "regular file not found")
 		return
@@ -571,7 +571,7 @@ func (s *Server) workspaceFileData(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 413, "文件超过 32 MiB，请在主机上打开")
 		return
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil {
 		writeError(w, 404, "file not found")
 		return
