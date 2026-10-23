@@ -232,6 +232,13 @@ class RuntimeUiTest {
         host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"拒绝验收操作"}"""))
         waitText("拒绝验收操作")
+        // The session list shows the pending approval without opening the chat.
+        ui.onNodeWithContentDescription("返回").performClick()
+        ui.onNodeWithContentDescription("刷新会话").performClick()
+        waitText("待审批 1")
+        screenshot("session-list-status")
+        ui.onNodeWithText(host.title).performClick()
+        waitText("拒绝验收操作")
         ui.onNodeWithText("拒绝").performScrollTo().performClick()
         ui.waitUntil(10_000) { host.calls.any { it.path?.endsWith("/run/confirm") == true } }
         assertFalse(JSONObject(host.calls.first { it.path?.endsWith("/run/confirm") == true }.body.readUtf8()).getBoolean("approved"))
@@ -440,7 +447,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                             }
                         }
                     })
-                    path == "/sessions" && request.method == "GET" -> json(JSONArray().put(JSONObject().put("id", "qa-session").put("title", title)).toString())
+                    path == "/sessions" && request.method == "GET" -> json(JSONArray().put(sessionSummary()).toString())
                     path.endsWith("/run/confirm") -> {
                         emit("confirmed", "confirmation_id" to JSONObject(request.body.clone().readUtf8()).getString("confirmation_id"))
                         json("{}")
@@ -486,12 +493,20 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
         check(socket?.send(value.toString()) == true)
     }
 
+    /** Like the server's list entry: run state only while a run is active. */
+    @Synchronized private fun sessionSummary(): JSONObject {
+        val value = JSONObject().put("id", "qa-session").put("title", title)
+        if (running) value.put("run_state", if (confirmation != null) "waiting_confirmation" else "running")
+        if (running && confirmation != null) value.put("pending_confirmations", 1)
+        return value
+    }
+
     @Synchronized private fun snapshot(): JSONObject {
         val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", history))
         val value = JSONObject().put("type", "snapshot").put("session_id", "qa-session")
             .put("seq", sequence.get()).put("messages", messages)
             .put("events", JSONArray(events.toString()))
-            .put("confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
+            .put("pending_confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
         if (runPrompt.isNotEmpty()) value.put("run", JSONObject().put("id", "qa-run")
             .put("state", if (running) "running" else "cancelled").put("prompt", runPrompt).put("request_id", requestId))
         return value
