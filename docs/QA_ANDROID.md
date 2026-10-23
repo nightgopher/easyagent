@@ -7,7 +7,7 @@
 ```sh
 cd mobile-native
 ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-./gradlew --no-daemon :app:connectedDebugAndroidTest
+bash ../scripts/check-android-ui.sh
 ```
 
 第二条命令需要已启动的模拟器或测试设备。`Android UI` 工作流自动运行 Android 12/API 31、14/API 34、15/API 35；发布流程复用相同工作流并检验候选 SHA。报告在 `app/build/reports/androidTests/connected`，XML 在 `app/build/outputs/androidTest-results`。API 31 以上的截图由测试写入 `/data/local/tmp/easyagent-ui`，CI 收集到对应 API 的 artifact 中。
@@ -21,6 +21,8 @@ cd mobile-native
 - 横屏、深色模式，并输出实际屏幕截图。
 
 测试不调用实际模型或飞书服务。它覆盖界面与客户端协议，真实运行主机的部署检查另见 [systemd 验证](SECURITY_MODEL.md#验证-systemd-服务包)。
+
+`UpdateUiTest` 另覆盖自动检查与手动入口、网络错误重试、损坏下载、包名/版本不符及签名不一致的 APK 拒绝，以及安装授权被拒绝后重新授权、系统安装确认页与取消返回。脚本临时构建同证书的 `99.0.0` Debug 测试包，并另用一次性证书重签一份；测试包只进入生成的 androidTest assets，不提交或发布。检查新版本、清单和下载使用本地 MockWebServer；系统安装器实际读取校验后的 FileProvider URI，确认页截图保存在同一 CI artifact。
 
 ## 每次发布补充检查
 
@@ -93,3 +95,13 @@ v0.22.0 的正式发布门禁在 Android 15 上发现流式文字不刷新的问
 - 正式 APK 由固定发布证书签名，发布流水线检查签名指纹、应用标识、版本和非 Debug 属性，并检查 ZIP 内 APK 与独立 APK 完全一致；最终 SHA-256 以同一 Release 的 `checksums.txt` 为准。
 - 合并检查的一次 Android 14/API 34 运行在循环任务测试清理阶段出现 Compose `SlotTable` 越界；[首次失败日志](https://github.com/hwj123hwj/easyagent/actions/runs/39924455395/attempts/1)保留。该次通知用例通过，崩溃前有 Compose/Espresso 未空闲记录；相同提交在独立 Android 14/API 34 arm64 模拟器上连续三轮完整测试通过（每轮 8 项）；CI 同 SHA 的一次诊断复跑也通过（同一运行的 attempt 2）。该问题尚未稳定复现，不将复跑通过视为根因已修复。
 - 本轮未执行实体设备的蜂窝网络、相机、麦克风/ASR 验收，也未执行正式 APK 的跨版本覆盖安装与重启恢复；此前版本的升级记录仅作历史基线，不计为本轮通过。
+
+## v0.25.0 应用内更新验收
+
+2026-10-23，功能候选为 `a40bf0579adf4f384eb437a45561606a0f59c010`。APK versionName 为 `0.25.0`，versionCode 为 `2500300`；最终发布 SHA 与资产哈希由附注 tag `v0.25.0` 和 Release 的 `release.json` / `checksums.txt` 确定。
+
+- 独立 Android 14/API 34 arm64 模拟器：47 项 JVM 单测、13 项真实 Activity UI 用例、Debug Lint 和 Release Lint 均通过；43 项发布脚本测试及临时证书 Release APK 构建校验通过。
+- 下载真实的同证书测试 APK，核对摘要、身份后到达 Android「更新此应用」确认页；拒绝未知来源安装授权、再次授权、取消安装均保留下载。实际测试错误签名、错误包名/版本和损坏字节，均不能进入安装。
+- 从 GitHub 下载 v0.24.0 正式 APK，核对 SHA-256 和固定发布证书后安装；保存测试主机及令牌，再用相同固定发布证书签名的上述候选 APK 覆盖升级。版本和签名校验通过，主机配置及加密凭据文件的 SHA-256 升级前后相同；升级后及强退重启后均恢复所选主机，并向本地模拟主机发出正确鉴权请求。
+- API 31/34/35 的 PR 与正式 Release 工作流重跑同一组 13 项 UI 用例，报告及系统安装确认截图保存在对应 Actions artifact；本地记录不替代最终 SHA 的流水线结果。
+- 实体设备、不同厂商安装器及蜂窝网络未执行人工验收；没有修改用户正在使用的桌面客户端或运行主机。旧安卓客户端需先手动覆盖安装一次 v0.25.0，后续才有应用内更新入口。
