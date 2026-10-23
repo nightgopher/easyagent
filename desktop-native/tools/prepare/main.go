@@ -124,6 +124,9 @@ func main() {
 		copyFile(license, filepath.Join(target, "licenses", name+"-LICENSE"))
 	}
 	if goos == "darwin" {
+		// No app version or VCS metadata: ordinary UI updates must not change
+		// the keychain client's CodeDirectory hash.
+		runEnv(cwd, cross, "go", "build", "-trimpath", "-buildvcs=false", "-ldflags", "-s -w", "-o", filepath.Join(target, "easyagent-credentials"), "./tools/credentials")
 		data, err := os.ReadFile(filepath.Join(cwd, "mygo.json"))
 		if err != nil {
 			panic(err)

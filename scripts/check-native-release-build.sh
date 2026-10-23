@@ -2,6 +2,7 @@
 # Exercise the native release/tag contract in an isolated checkout; never publish.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
+python3 "$root/scripts/check-native-keychain.py"
 fixture=$(python3 -c 'import tempfile; print(tempfile.mkdtemp(prefix="easyagent-native-release.", suffix=".noindex"))')
 trap 'rm -rf "$fixture"' EXIT
 git clone --quiet --no-local "$root" "$fixture/repo"
@@ -46,10 +47,11 @@ python3 - "$fixture/requirements.json" <<'PY'
 import json, pathlib, re, subprocess, sys
 app = pathlib.Path('desktop-native/build.noindex/darwin-arm64/EasyAgent.app')
 paths = [app, app / 'Contents/Resources/cua-helper/EasyAgent Computer Use.app']
+paths.append(app / 'Contents/Resources/easyagent-credentials')
 records = []
 for path in paths:
     result = subprocess.run(['codesign', '--display', '-r-', '-vvv', str(path)], check=True, capture_output=True, text=True)
-    records.append({'path': str(path), 'requirement': result.stdout.split('designated =>', 1)[1].strip(), 'hash': re.search(r'^CDHash=(.+)$', result.stderr, re.M).group(1)})
+    records.append({'path': str(path), 'stable': path.name == 'easyagent-credentials', 'requirement': result.stdout.split('designated =>', 1)[1].strip(), 'hash': re.search(r'^CDHash=(.+)$', result.stderr, re.M).group(1)})
 pathlib.Path(sys.argv[1]).write_text(json.dumps(records))
 PY
 version=v999.0.0-rc.2
@@ -74,6 +76,10 @@ for previous in json.loads(pathlib.Path(sys.argv[1]).read_text()):
     path = previous['path']
     subprocess.run(['codesign', '--verify', '--strict', '-R', '=' + previous['requirement'], path], check=True)
     result = subprocess.run(['codesign', '--display', '-r-', '-vvv', path], check=True, capture_output=True, text=True)
-    assert re.search(r'^CDHash=(.+)$', result.stderr, re.M).group(1) != previous['hash'], 'fixture code identity did not change'
-print('Both changed bundles satisfy the previous version designated requirements')
+    current = re.search(r'^CDHash=(.+)$', result.stderr, re.M).group(1)
+    if previous['stable']:
+        assert current == previous['hash'], 'ordinary app updates changed the credential helper hash'
+    else:
+        assert current != previous['hash'], 'fixture code identity did not change'
+print('Changed bundles preserve their designated requirements and reuse the identical credential helper')
 PY

@@ -14,7 +14,10 @@ func hostCredential(store secretStore, host hostConfig) (string, error) {
 		return "", nil
 	}
 	token, err := store.Get("host/" + host.ID)
-	if err != nil || strings.TrimSpace(token) == "" {
+	if err != nil {
+		return "", fmt.Errorf("%w：%v", errHostCredential, err)
+	}
+	if strings.TrimSpace(token) == "" {
 		return "", errHostCredential
 	}
 	return strings.TrimSpace(token), nil
