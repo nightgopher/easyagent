@@ -8,13 +8,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -39,10 +39,12 @@ import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -186,69 +188,91 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
                     TextButton(onClick = { failedRecording = null }) { Text("放弃") }
                 }
             }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Box {
-                    IconButton(onClick = { menu = true }, enabled = connected && !recording) {
-                        Icon(Icons.Filled.Add, contentDescription = "添加附件")
-                    }
-                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                        DropdownMenuItem(text = { Text("拍照") }, onClick = {
-                            menu = false
-                            val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-                            val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
-                            cameraFile = file
-                            runCatching {
-                                camera.launch(FileProvider.getUriForFile(context, context.packageName + ".files", file))
-                            }.onFailure { client.error.value = "无法打开相机" }
-                        })
-                        DropdownMenuItem(text = { Text("从相册选择") }, onClick = {
-                            menu = false
-                            photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        })
-                        DropdownMenuItem(text = { Text("选择文件") }, onClick = {
-                            menu = false
-                            files.launch(arrayOf("*/*"))
-                        })
-                    }
-                }
-                if (recording) {
-                    RecordingBar(
-                        since = recordingSince,
-                        modifier = Modifier.weight(1f),
-                        onCancel = { recorder.cancel(); recordingSince = 0 },
-                        onDone = {
-                            recordingSince = 0
-                            val wav = recorder.stop()
-                            if (wav == null) client.error.value = "录音太短" else transcribe(wav)
-                        },
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = session.draft,
-                        onValueChange = { session.draft = it; client.touch() },
-                        modifier = Modifier.weight(1f),
-                        placeholder = { Text(if (transcribing) "正在转写语音…" else if (queued) "任务进行中，消息将排队发送…" else "给 EasyAgent 发消息…") },
-                        maxLines = 6,
-                        shape = RoundedCornerShape(20.dp),
-                    )
-                    IconButton(
-                        onClick = {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startRecording()
-                            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        },
-                        enabled = connected && !transcribing,
-                    ) {
-                        if (transcribing) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.Filled.Mic, contentDescription = "语音输入")
-                    }
-                }
-                Spacer(Modifier.width(4.dp))
-                val canSend = session.draft.isNotBlank() && !session.sending && session.uploading == 0 && connected && !recording
-                FilledIconButton(onClick = { client.sendPrompt(session, session.draft) }, enabled = canSend, modifier = Modifier.size(48.dp)) {
-                    if (session.sending) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
+            if (recording) {
+                RecordingBar(
+                    since = recordingSince,
+                    modifier = Modifier.fillMaxWidth(),
+                    onCancel = { recorder.cancel(); recordingSince = 0 },
+                    onDone = {
+                        recordingSince = 0
+                        val wav = recorder.stop()
+                        if (wav == null) client.error.value = "录音太短" else transcribe(wav)
+                    },
+                )
+            } else {
+                // One pill: attachments inside on the left, and a single trailing
+                // action that is the mic while empty and send once there is text.
+                Surface(
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(4.dp)) {
+                        Box {
+                            IconButton(onClick = { menu = true }, enabled = connected) {
+                                Icon(Icons.Filled.Add, contentDescription = "添加附件")
+                            }
+                            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                DropdownMenuItem(text = { Text("拍照") }, onClick = {
+                                    menu = false
+                                    val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+                                    val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
+                                    cameraFile = file
+                                    runCatching {
+                                        camera.launch(FileProvider.getUriForFile(context, context.packageName + ".files", file))
+                                    }.onFailure { client.error.value = "无法打开相机" }
+                                })
+                                DropdownMenuItem(text = { Text("从相册选择") }, onClick = {
+                                    menu = false
+                                    photos.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                })
+                                DropdownMenuItem(text = { Text("选择文件") }, onClick = {
+                                    menu = false
+                                    files.launch(arrayOf("*/*"))
+                                })
+                            }
+                        }
+                        TextField(
+                            value = session.draft,
+                            onValueChange = { session.draft = it; client.touch() },
+                            modifier = Modifier.weight(1f),
+                            placeholder = { Text(if (transcribing) "正在转写语音…" else if (queued) "排队发送下一条…" else "发消息…", maxLines = 1) },
+                            maxLines = 6,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                disabledContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent,
+                                disabledIndicatorColor = Color.Transparent,
+                            ),
+                        )
+                        val hasText = session.draft.isNotBlank()
+                        when {
+                            session.sending -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                            hasText -> {
+                                val canSend = session.uploading == 0 && connected
+                                FilledIconButton(onClick = { client.sendPrompt(session, session.draft) }, enabled = canSend, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "发送")
+                                }
+                            }
+                            transcribing -> Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                            else -> IconButton(
+                                onClick = {
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startRecording()
+                                    else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                                },
+                                enabled = connected,
+                                modifier = Modifier.size(48.dp),
+                            ) {
+                                Icon(Icons.Filled.Mic, contentDescription = "语音输入")
+                            }
+                        }
                     }
                 }
             }

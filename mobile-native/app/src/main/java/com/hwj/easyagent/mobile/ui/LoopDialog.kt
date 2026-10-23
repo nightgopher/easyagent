@@ -159,9 +159,14 @@ private fun formatInterval(seconds: Long): String = when {
     else -> "$seconds 秒"
 }
 
-private fun remaining(expiresAt: String): String = runCatching {
-    val left = Duration.between(OffsetDateTime.now(), OffsetDateTime.parse(expiresAt))
-    if (left.isNegative) "已到期" else if (left.toHours() >= 1) "还剩 ${left.toHours()} 小时" else "还剩 ${left.toMinutes()} 分钟"
+internal fun remaining(expiresAt: String, now: OffsetDateTime = OffsetDateTime.now()): String = runCatching {
+    val left = Duration.between(now, OffsetDateTime.parse(expiresAt))
+    when {
+        left.isNegative -> "已到期"
+        left.toHours() >= 48 -> "还剩 ${left.toDays()} 天"
+        left.toHours() >= 1 -> "还剩 ${left.toHours()} 小时"
+        else -> "还剩 ${left.toMinutes()} 分钟"
+    }
 }.getOrDefault("")
 
 private fun clock(time: String): String = runCatching {

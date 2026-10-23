@@ -10,7 +10,7 @@ type ThinkingOptions struct {
 }
 
 func (o ThinkingOptions) Validate(provider string) error {
-	if o.Mode != "" && o.Mode != "enabled" && o.Mode != "disabled" && !(provider == "anthropic" && o.Mode == "adaptive") {
+	if o.Mode != "" && o.Mode != "enabled" && o.Mode != "disabled" && (provider != "anthropic" || o.Mode != "adaptive") {
 		return fmt.Errorf("unsupported thinking mode %q", o.Mode)
 	}
 	switch o.Effort {
@@ -19,7 +19,7 @@ func (o ThinkingOptions) Validate(provider string) error {
 		return fmt.Errorf("unsupported reasoning effort %q", o.Effort)
 	}
 	if provider == "anthropic" && o.Mode == "enabled" && o.BudgetTokens < 1024 {
-		return fmt.Errorf("Anthropic thinking requires budget_tokens >= 1024")
+		return fmt.Errorf("thinking budget_tokens must be >= 1024 for Anthropic")
 	}
 	return nil
 }

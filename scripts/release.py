@@ -95,6 +95,18 @@ def android_version(tag):
     return tag[1:], code
 
 
+def android_source(sha):
+    """Git tree of mobile-native/ at the release commit, the APK's only source.
+
+    A release whose tree matches the installed app's ships the same Android code
+    under a new version, so the in-app updater does not offer it.
+    """
+    tree = git("rev-parse", f"{sha}^{{commit}}:mobile-native")
+    if not re.fullmatch(r"[0-9a-f]{40}", tree):
+        raise ValueError("mobile-native tree must be a full SHA-1")
+    return tree
+
+
 def required_assets(tag):
     required = ASSETS
     if version_key(tag) >= version_key("v0.2.0-alpha.1"):
@@ -171,6 +183,8 @@ def manifest(directory, tag, sha, core_only=False):
     if "easyagent-android.zip" in required:
         verify_android_archive(directory / "easyagent-android.apk", directory / "easyagent-android.zip")
     data = {"version": tag, "commit": sha, "assets": assets}
+    if "easyagent-android.apk" in required:
+        data["sources"] = {"android": android_source(sha)}
     if core_only:
         data["core_only"] = True
     (directory / "release.json").write_text(json.dumps(data, sort_keys=True, indent=2) + "\n")

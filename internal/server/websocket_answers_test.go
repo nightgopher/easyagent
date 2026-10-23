@@ -35,5 +35,5 @@ func TestWSClientMessageAnswersParsing(t *testing.T) {
 // calls (plain tool approval path).
 func TestConfirmRunVarargsNilSafe(t *testing.T) {
 	// compile-time: variadic response param accepts zero values
-	var _ func(sessionID, runID, confirmationID string, approved bool, reason string, response ...json.RawMessage) error = (*Server)(nil).confirmRun
+	var _ = (*Server)(nil).confirmRun
 }

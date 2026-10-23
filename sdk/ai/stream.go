@@ -123,7 +123,7 @@ func (s *EventStream) Close() {
 }
 
 func (s *EventStream) Result() (StreamAssistantMessage, error) {
-	if s.err == nil && s.done == false {
+	if s.err == nil && !s.done {
 		return s.result, errors.New("event stream not closed")
 	}
 	return s.result, s.err
