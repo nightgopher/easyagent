@@ -20,6 +20,8 @@ type mockTestProvider struct {
 }
 
 type mockTestResponse struct {
+	err       error
+	usage     ai.Usage
 	text      string
 	toolCalls []ai.ToolCall
 	stop      ai.StopReason
@@ -43,7 +45,7 @@ func (m *mockTestProvider) Stream(ctx context.Context, req ai.StreamRequest) (*a
 
 	go func() {
 		defer stream.Close()
-		partial := ai.StreamAssistantMessage{Text: resp.text, ToolCalls: resp.toolCalls, StopReason: resp.stop}
+		partial := ai.StreamAssistantMessage{Usage: resp.usage, Text: resp.text, ToolCalls: resp.toolCalls, StopReason: resp.stop}
 
 		_ = stream.Push(ctx, ai.EventStart{Partial: partial})
 
@@ -59,7 +61,7 @@ func (m *mockTestProvider) Stream(ctx context.Context, req ai.StreamRequest) (*a
 		}
 
 		_ = stream.Push(ctx, ai.EventDone{Reason: resp.stop, Message: partial})
-		stream.SetResult(partial, nil)
+		stream.SetResult(partial, resp.err)
 	}()
 	return stream, nil
 }

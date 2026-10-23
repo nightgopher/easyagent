@@ -22,6 +22,31 @@ func (s *Session) Storage() SessionStorage {
 	return s.storage
 }
 
+// SubagentUsage sums durable tool results after a cursor on the active branch.
+// An empty cursor includes the whole branch. Compaction snapshots are not counted
+// again: original entries remain in the append-only storage path.
+func (s *Session) SubagentUsage(ctx context.Context, afterID string) (ai.Usage, error) {
+	entries, err := s.storage.GetPathToRoot(ctx, "")
+	if err != nil {
+		return ai.Usage{}, err
+	}
+	var total ai.Usage
+	found := afterID == ""
+	for _, entry := range entries {
+		if !found {
+			found = entry.ID == afterID
+			continue
+		}
+		if entry.Type == EntryTypeMessage && entry.Tool != nil && entry.Tool.SubagentUsage != nil {
+			total.Add(entry.Tool.SubagentUsage.Usage)
+		}
+	}
+	if !found {
+		return ai.Usage{}, fmt.Errorf("usage cursor %q is not on the active branch", afterID)
+	}
+	return total, nil
+}
+
 // InitFromStorage 从 storage 中加载当前 leaf，用于恢复已有会话。
 func (s *Session) InitFromStorage(ctx context.Context) error {
 	leaf, err := s.storage.GetLeaf(ctx)

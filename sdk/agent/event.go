@@ -30,6 +30,12 @@ type EventTurnEnd struct {
 
 func (EventTurnEnd) agentEventMarker() {}
 
+// EventUsage reports provider usage once per turn, including partial/error turns
+// and automatic continuations, even when tool execution prevents a turn_end.
+type EventUsage struct{ Usage ai.Usage }
+
+func (EventUsage) agentEventMarker() {}
+
 type EventToolExecutionStart struct {
 	ToolCallID string
 	ToolName   string

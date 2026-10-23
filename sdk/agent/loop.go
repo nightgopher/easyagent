@@ -215,7 +215,7 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 
 	// 用完整历史调用 LLM
 	request := a.llmRequest(history)
-	a.emit(ctx, EventContextUsage{Usage: estimateContext(request, latestRequestUsage(history))})
+	a.emitContextUsage(ctx, request, latestRequestUsage(history))
 	stream, err := provider.Stream(ctx, request)
 	if err != nil {
 		return turnResult{}, history, err
@@ -228,6 +228,7 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 	if err != nil {
 		return turnResult{}, history, err
 	}
+	defer func() { a.emit(ctx, EventUsage{Usage: message.Usage}) }()
 	if streamErr != nil {
 		message.StopReason = ai.StopReasonError
 		if errors.Is(streamErr, context.Canceled) || errors.Is(streamErr, context.DeadlineExceeded) {
@@ -249,7 +250,7 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 
 	message = autoContinueMessage(ctx, a, provider, consume, history, message)
 
-	a.emit(ctx, EventContextUsage{Usage: estimateContext(a.llmRequest(append(append([]ai.Message{}, history...), message)), message.Usage)})
+	a.emitContextUsage(ctx, a.llmRequest(append(append([]ai.Message{}, history...), message)), message.Usage)
 
 	// 将 assistant message 追加到历史
 	history = append(history, message)
@@ -302,6 +303,7 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 				}
 			}
 		}
+		a.emitContextUsage(ctx, a.llmRequest(history), message.Usage)
 		if err := ctx.Err(); err != nil {
 			return turnResult{assistant: message}, history, err
 		}
@@ -711,7 +713,7 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 			content = rawResult.Content
 		}
 		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: content, IsError: true})
-		return ai.ToolResultMessage{ToolCallID: call.ID, Content: content, IsError: true}
+		return ai.ToolResultMessage{ToolCallID: call.ID, Content: content, IsError: true, SubagentUsage: rawResult.SubagentUsage}
 	}
 
 	// 8. Run after hooks
@@ -732,9 +734,11 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 		hookErr := NewAfterHookError(err, preHookResult)
 		errMsg := fmt.Sprintf("%s (original result: %s)", hookErr.Error(), preHookResult.Content)
 		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: errMsg, IsError: true})
-		return ai.ToolResultMessage{ToolCallID: call.ID, Content: errMsg, IsError: true}
+		return ai.ToolResultMessage{ToolCallID: call.ID, Content: errMsg, IsError: true, SubagentUsage: preHookResult.SubagentUsage}
 	}
 
+	// Accounting belongs to execution, independent of display/content hooks.
+	rawResult.SubagentUsage = preHookResult.SubagentUsage
 	// 9. Emit end
 	// Result 给 UI 展示，优先 UserFacing（给用户看的更详细内容）；回填 LLM 用 Content（见 appendToolResult）。
 	a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: rawResult.DisplayText(), Details: rawResult.Details, IsError: rawResult.IsError})
@@ -826,14 +830,13 @@ func autoContinueMessage(
 			break
 		}
 		nextStreamMsg, nextErr := consume(stream)
+		message.Usage.Add(nextStreamMsg.Usage)
 		if nextErr != nil {
 			slog.Warn("auto-continue stream failed", "err", nextErr)
 			break
 		}
 		nextMsg, _ := a.handleAssistantMessage(nextStreamMsg)
 		accumulatedText += nextMsg.Text
-		message.Usage.OutputTokens += nextMsg.Usage.OutputTokens
-		message.Usage.InputTokens += nextMsg.Usage.InputTokens
 		message.StopReason = nextMsg.StopReason
 		message.StopReasonMissing = nextMsg.StopReasonMissing
 

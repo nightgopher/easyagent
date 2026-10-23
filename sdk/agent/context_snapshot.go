@@ -48,7 +48,11 @@ func (a *Agent) ContextSnapshot(ctx context.Context) (ContextSnapshot, error) {
 	if tools == nil {
 		tools = make([]ai.ToolDefinition, 0)
 	}
-	return ContextSnapshot{Model: req.Model, System: req.System, Messages: messages, Tools: tools, Usage: estimateContext(req, latestRequestUsage(history)), Compactions: records}, nil
+	usage, err := a.contextUsage(ctx, req, latestRequestUsage(history))
+	if err != nil {
+		return ContextSnapshot{}, err
+	}
+	return ContextSnapshot{Model: req.Model, System: req.System, Messages: messages, Tools: tools, Usage: usage, Compactions: records}, nil
 }
 
 func compactionInfo(trigger, instructions string, history []ai.Message, summary string, recent []ai.Message) *session.CompactionInfo {
