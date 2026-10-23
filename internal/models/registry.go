@@ -11,17 +11,20 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 	"github.com/hwj123hwj/easyagent/sdk/config"
 )
 
 // ModelDef defines a single model available for use.
 type ModelDef struct {
-	ID            string `json:"id"`               // unique identifier (e.g. "claude-sonnet-4-6")
-	Provider      string `json:"provider"`         // "anthropic", "openai", etc.
-	Name          string `json:"name"`             // display name (e.g. "Claude Sonnet 4.6")
-	ContextWindow int    `json:"context_window"`   // max context tokens (e.g. 200000)
-	MaxTokens     int    `json:"max_tokens"`       // max output tokens (e.g. 4096)
-	Hidden        bool   `json:"hidden,omitempty"` // hidden from /models list but still usable
+	SupportsImages  *bool    `json:"supports_images,omitempty"`
+	InputModalities []string `json:"input_modalities,omitempty"`
+	ID              string   `json:"id"`               // unique identifier (e.g. "claude-sonnet-4-6")
+	Provider        string   `json:"provider"`         // "anthropic", "openai", etc.
+	Name            string   `json:"name"`             // display name (e.g. "Claude Sonnet 4.6")
+	ContextWindow   int      `json:"context_window"`   // max context tokens (e.g. 200000)
+	MaxTokens       int      `json:"max_tokens"`       // max output tokens (e.g. 4096)
+	Hidden          bool     `json:"hidden,omitempty"` // hidden from /models list but still usable
 }
 
 // Registry holds all known models and provides lookup/filtering.
@@ -36,6 +39,7 @@ func NewRegistry() *Registry {
 
 // Register adds a model to the registry. Overwrites if ID already exists.
 func (r *Registry) Register(m ModelDef) {
+	m.SupportsImages = ai.ImageSupport(m.SupportsImages, m.InputModalities)
 	r.models[m.ID] = m
 }
 

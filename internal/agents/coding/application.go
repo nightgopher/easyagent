@@ -8,6 +8,7 @@ import (
 	codingtools "github.com/hwj123hwj/easyagent/internal/agents/coding/tools"
 	modelsreg "github.com/hwj123hwj/easyagent/internal/models"
 	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/hwj123hwj/easyagent/sdk/ai"
 	"github.com/hwj123hwj/easyagent/sdk/config"
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
@@ -39,6 +40,11 @@ func NewCodingApplication(cfg config.Config) CodingApplication {
 				// 本地已有的已知元数据优先覆盖最小推断
 				for _, m := range gwModels {
 					if localDef, ok := reg.Get(m.ID); ok {
+						if localDef.SupportsImages != nil {
+							mDef, _ := gatewayReg.Get(m.ID)
+							mDef.SupportsImages = localDef.SupportsImages
+							gatewayReg.Register(mDef)
+						}
 						if localDef.ContextWindow > 0 {
 							mDef, _ := gatewayReg.Get(m.ID)
 							mDef.ContextWindow = localDef.ContextWindow
@@ -137,6 +143,19 @@ func (a CodingApplication) AvailableModels() []slashcmd.ModelInfo {
 		})
 	}
 	return result
+}
+
+// ResolveModel applies the same catalog metadata to inference and model listings.
+func (a CodingApplication) ResolveModel(model ai.Model) ai.Model {
+	if a.modelReg == nil {
+		return model
+	}
+	if def, ok := a.modelReg.Get(model.ID); ok && def.Provider == model.Provider {
+		if def.SupportsImages != nil {
+			model.SupportsImages = def.SupportsImages
+		}
+	}
+	return model
 }
 
 // SubagentsEnabled opts the coding agent into the runtime task (subagent) tool.

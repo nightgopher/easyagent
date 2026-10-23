@@ -167,6 +167,12 @@ func (a *preview) contextUsagePanel(c *ui.Context, s *session) {
 			ui.Row(c).Children(func() { a.note(c, row.label); ui.Spacer(c); a.note(c, formatCount(u[row.key])) })
 		}
 		a.note(c, "图片等多模态内容未计入，实际用量以模型返回为准。")
+		if child := object(u["subagent_usage"]); number(child["input_tokens"])+number(child["output_tokens"]) > 0 {
+			ui.Divider(c)
+			ui.Text(c, "子 Agent 累计用量").FontSize(12).FontWeight(600)
+			a.note(c, "输入 "+formatCount(child["input_tokens"])+" · 输出 "+formatCount(child["output_tokens"]))
+			a.note(c, "独立上下文的实际用量，不占用当前上下文窗口。")
+		}
 		if !boolean(u["window_known"]) {
 			a.note(c, "模型容量尚未登记，分母为运行时默认预算。")
 		}

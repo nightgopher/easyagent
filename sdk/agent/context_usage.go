@@ -12,6 +12,7 @@ import (
 // ContextUsage estimates the current prompt, including system and tool schemas.
 // LastRequest is the latest provider measurement, not a sum across turns.
 type ContextUsage struct {
+	SubagentUsage   ai.Usage `json:"subagent_usage"` // cumulative separate-context work; excluded from EstimatedTokens
 	EstimatedTokens int      `json:"estimated_tokens"`
 	ContextWindow   int      `json:"context_window"`
 	WindowKnown     bool     `json:"window_known"`
@@ -49,7 +50,28 @@ func (a *Agent) ContextUsage(ctx context.Context) (ContextUsage, error) {
 	if err != nil {
 		return ContextUsage{}, err
 	}
-	return estimateContext(a.llmRequest(history), latestRequestUsage(history)), nil
+	return a.contextUsage(ctx, a.llmRequest(history), latestRequestUsage(history))
+}
+
+func (a *Agent) contextUsage(ctx context.Context, req ai.StreamRequest, last ai.Usage) (ContextUsage, error) {
+	usage := estimateContext(req, last)
+	if a.session != nil {
+		var err error
+		usage.SubagentUsage, err = a.session.SubagentUsage(ctx, "")
+		return usage, err
+	}
+	for _, msg := range req.Messages {
+		if tool, ok := msg.(ai.ToolResultMessage); ok && tool.SubagentUsage != nil {
+			usage.SubagentUsage.Add(tool.SubagentUsage.Usage)
+		}
+	}
+	return usage, nil
+}
+
+func (a *Agent) emitContextUsage(ctx context.Context, req ai.StreamRequest, last ai.Usage) {
+	if usage, err := a.contextUsage(ctx, req, last); err == nil {
+		a.emit(ctx, EventContextUsage{Usage: usage})
+	}
 }
 
 func latestRequestUsage(history []ai.Message) ai.Usage {

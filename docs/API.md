@@ -215,6 +215,8 @@ POST /sessions/{id}/model
 | `POST` | `/computer/settings` | 更新电脑控制配置：`enabled`、`approval_policy`（`ask`/`auto`）、`clear_approved_apps` |
 | `POST` | `/computer/permissions` | 在运行主机上请求辅助功能与屏幕录制等系统权限 |
 
+`usage.summary` / `GET /usage/summary` 的总量包含子 agent；`total.subagent_usage` 和 `sessions[].subagent_usage` 是其中的子任务小计（输入、输出、缓存 token）。执行收据同时保存 `usage` 总量与 `subagent_usage` 小计；上下文接口的 `subagent_usage` 仅作独立用量展示，不计入 `estimated_tokens`。
+
 技能市场端点（`/skills/market/*`，含安装任务与 SSE 进度）见 [技能市场](SKILL_MARKET.md)，受 `EA_SKILL_MARKET` 开关约束。
 
 ---
