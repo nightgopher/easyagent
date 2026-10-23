@@ -426,11 +426,11 @@ func renderTask(opts CreateOptions, info *Info, createdAt time.Time) string {
 
 	var b strings.Builder
 	b.WriteString("# Task\n\n")
-	b.WriteString(fmt.Sprintf("- Name: %s\n", opts.Name))
-	b.WriteString(fmt.Sprintf("- Source project: %s\n", info.SourceProjectPath))
-	b.WriteString(fmt.Sprintf("- Worktree root: %s\n", info.WorktreeRoot))
-	b.WriteString(fmt.Sprintf("- Branch: %s\n", info.Branch))
-	b.WriteString(fmt.Sprintf("- Created at: %s\n\n", createdAt.Format(time.RFC3339)))
+	fmt.Fprintf(&b, "- Name: %s\n", opts.Name)
+	fmt.Fprintf(&b, "- Source project: %s\n", info.SourceProjectPath)
+	fmt.Fprintf(&b, "- Worktree root: %s\n", info.WorktreeRoot)
+	fmt.Fprintf(&b, "- Branch: %s\n", info.Branch)
+	fmt.Fprintf(&b, "- Created at: %s\n\n", createdAt.Format(time.RFC3339))
 	b.WriteString("## Request\n\n")
 	b.WriteString(task)
 	b.WriteString("\n\n## Notes\n\n")

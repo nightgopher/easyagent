@@ -36,7 +36,7 @@ func RenderMarkdown(text string) string {
 			codeLang = strings.TrimSpace(codeLang)
 			result.WriteString(ColorCyan)
 			if codeLang != "" {
-				result.WriteString(fmt.Sprintf("┌─ %s ─", codeLang))
+				fmt.Fprintf(&result, "┌─ %s ─", codeLang)
 			} else {
 				result.WriteString("┌─")
 			}
@@ -119,7 +119,7 @@ func RenderMarkdown(text string) string {
 			parts := strings.SplitN(line, ". ", 2)
 			if len(parts) == 2 {
 				result.WriteString(ColorCyan)
-				result.WriteString(fmt.Sprintf("  %s. ", parts[0]))
+				fmt.Fprintf(&result, "  %s. ", parts[0])
 				result.WriteString(ColorReset)
 				result.WriteString(renderInlineMarkdown(parts[1]))
 				result.WriteString("\n")
@@ -242,15 +242,17 @@ func replacePattern(text, pattern string, transform func(string) string) string 
 		result = result[:start] + replacement + result[end+2:]
 	}
 
-	// Italic (single *)
-	for {
-		start := strings.Index(result, "*")
+	// Italic (single *). Search from a moving offset so an unclosed ** left by
+	// the bold pass is skipped instead of being found again forever.
+	for from := 0; ; {
+		start := strings.Index(result[from:], "*")
 		if start == -1 {
 			break
 		}
+		start += from
 		// Skip if it's part of ** or ***
 		if start+1 < len(result) && (result[start+1] == '*') {
-			start++
+			from = start + 2
 			continue
 		}
 		end := strings.Index(result[start+1:], "*")
@@ -261,6 +263,7 @@ func replacePattern(text, pattern string, transform func(string) string) string 
 		inner := result[start+1 : end]
 		replacement := ColorCyan + inner + ColorReset
 		result = result[:start] + replacement + result[end+1:]
+		from = start + len(replacement)
 	}
 
 	// Inline code
@@ -309,9 +312,10 @@ func renderTerminalTable(rows []string) string {
 			cells[j] = strings.TrimSpace(cells[j])
 		}
 
-		if i == 0 {
+		switch i {
+		case 0:
 			header = cells
-		} else if i == 1 {
+		case 1:
 			// Alignment row (e.g., |---|---|)
 			alignments = make([]string, len(cells))
 			for j, cell := range cells {
@@ -323,7 +327,7 @@ func renderTerminalTable(rows []string) string {
 					alignments[j] = "left"
 				}
 			}
-		} else {
+		default:
 			dataRows = append(dataRows, cells)
 		}
 	}

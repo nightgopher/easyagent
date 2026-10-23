@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestBackupSnapshotAndRestore(t *testing.T) {
@@ -12,7 +14,7 @@ func TestBackupSnapshotAndRestore(t *testing.T) {
 	path := filepath.Join(dir, "test.txt")
 
 	// Write initial content
-	os.WriteFile(path, []byte("original"), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte("original"), 0o644))
 
 	// Snapshot
 	if _, err := bm.Snapshot(path); err != nil {
@@ -20,7 +22,7 @@ func TestBackupSnapshotAndRestore(t *testing.T) {
 	}
 
 	// Modify the file
-	os.WriteFile(path, []byte("modified"), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte("modified"), 0o644))
 
 	// Verify modification
 	data, _ := os.ReadFile(path)
@@ -51,7 +53,7 @@ func TestBackupRestoreNonExistentFile(t *testing.T) {
 	}
 
 	// Create the file
-	os.WriteFile(path, []byte("newly created"), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte("newly created"), 0o644))
 
 	// Restore should delete it
 	if err := bm.Restore(path); err != nil {
@@ -71,28 +73,28 @@ func TestBackupStack(t *testing.T) {
 
 	// Write + snapshot 3 times
 	for i, content := range []string{"v1", "v2", "v3"} {
-		os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 		if _, err := bm.Snapshot(path); err != nil {
 			t.Fatalf("Snapshot %d: %v", i+1, err)
 		}
 	}
 
 	// Modify to "v4"
-	os.WriteFile(path, []byte("v4"), 0o644)
+	require.NoError(t, os.WriteFile(path, []byte("v4"), 0o644))
 
 	if bm.BackupCount(path) != 3 {
 		t.Errorf("Expected 3 backups, got %d", bm.BackupCount(path))
 	}
 
 	// First restore: v4 → v3
-	bm.Restore(path)
+	require.NoError(t, bm.Restore(path))
 	data, _ := os.ReadFile(path)
 	if string(data) != "v3" {
 		t.Errorf("Expected v3, got %s", string(data))
 	}
 
 	// Second restore: v3 → v2
-	bm.Restore(path)
+	require.NoError(t, bm.Restore(path))
 	data, _ = os.ReadFile(path)
 	if string(data) != "v2" {
 		t.Errorf("Expected v2, got %s", string(data))
@@ -107,14 +109,18 @@ func TestBackupRestoreAll(t *testing.T) {
 	path1 := filepath.Join(dir, "a.txt")
 	path2 := filepath.Join(dir, "b.txt")
 
-	os.WriteFile(path1, []byte("a-orig"), 0o644)
-	os.WriteFile(path2, []byte("b-orig"), 0o644)
+	require.NoError(t, os.WriteFile(path1, []byte("a-orig"), 0o644))
+	require.NoError(t, os.WriteFile(path2, []byte("b-orig"), 0o644))
 
-	bm.Snapshot(path1)
-	bm.Snapshot(path2)
+	if _, err := bm.Snapshot(path1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bm.Snapshot(path2); err != nil {
+		t.Fatal(err)
+	}
 
-	os.WriteFile(path1, []byte("a-mod"), 0o644)
-	os.WriteFile(path2, []byte("b-mod"), 0o644)
+	require.NoError(t, os.WriteFile(path1, []byte("a-mod"), 0o644))
+	require.NoError(t, os.WriteFile(path2, []byte("b-mod"), 0o644))
 
 	// Restore all
 	errs := bm.RestoreAll()
@@ -141,8 +147,10 @@ func TestBackupHasBackup(t *testing.T) {
 		t.Error("Should not have backup before snapshot")
 	}
 
-	os.WriteFile(path, []byte("test"), 0o644)
-	bm.Snapshot(path)
+	require.NoError(t, os.WriteFile(path, []byte("test"), 0o644))
+	if _, err := bm.Snapshot(path); err != nil {
+		t.Fatal(err)
+	}
 
 	if !bm.HasBackup(path) {
 		t.Error("Should have backup after snapshot")
@@ -154,8 +162,10 @@ func TestBackupClear(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.txt")
 
-	os.WriteFile(path, []byte("test"), 0o644)
-	bm.Snapshot(path)
+	require.NoError(t, os.WriteFile(path, []byte("test"), 0o644))
+	if _, err := bm.Snapshot(path); err != nil {
+		t.Fatal(err)
+	}
 
 	bm.Clear()
 
@@ -173,8 +183,10 @@ func TestBackupMaxDepth(t *testing.T) {
 
 	// Take 5 snapshots
 	for i := 0; i < 5; i++ {
-		os.WriteFile(path, []byte("v"+string(rune('0'+i))), 0o644)
-		bm.Snapshot(path)
+		require.NoError(t, os.WriteFile(path, []byte("v"+string(rune('0'+i))), 0o644))
+		if _, err := bm.Snapshot(path); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Should only have 3 (oldest evicted)
@@ -190,12 +202,18 @@ func TestBackupListBackups(t *testing.T) {
 	path1 := filepath.Join(dir, "a.txt")
 	path2 := filepath.Join(dir, "b.txt")
 
-	os.WriteFile(path1, []byte("a"), 0o644)
-	os.WriteFile(path2, []byte("b"), 0o644)
+	require.NoError(t, os.WriteFile(path1, []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(path2, []byte("b"), 0o644))
 
-	bm.Snapshot(path1)
-	bm.Snapshot(path1) // 2 snapshots
-	bm.Snapshot(path2)  // 1 snapshot
+	if _, err := bm.Snapshot(path1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := bm.Snapshot(path1); err != nil {
+		t.Fatal(err)
+	} // 2 snapshots
+	if _, err := bm.Snapshot(path2); err != nil {
+		t.Fatal(err)
+	} // 1 snapshot
 
 	infos := bm.ListBackups()
 	if len(infos) != 2 {

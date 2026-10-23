@@ -179,7 +179,7 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 			_, err := s.localBridge.restart(s.baseURL, s.localBridgeRun())
 			if err != nil {
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+				_ = json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 				return
 			}
 			status, err := s.localFeishuStatus()
@@ -187,7 +187,7 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 				http.Error(w, `{"error":"无法读取飞书凭据"}`, http.StatusInternalServerError)
 				return
 			}
-			json.NewEncoder(w).Encode(status)
+			_ = json.NewEncoder(w).Encode(status)
 			return
 		}
 		if f.envFile == "" || f.ownerFile == "" {
@@ -197,7 +197,7 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 					http.Error(w, `{"error":"无法读取飞书凭据"}`, http.StatusInternalServerError)
 					return
 				}
-				json.NewEncoder(w).Encode(status)
+				_ = json.NewEncoder(w).Encode(status)
 				return
 			}
 			http.Error(w, `{"error":"此服务器未启用飞书配置管理"}`, http.StatusServiceUnavailable)
@@ -213,18 +213,18 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 			}
 			b, err := os.ReadFile(f.ownerFile)
 			if err != nil || json.Unmarshal(b, &state) != nil {
-				http.Error(w, `{"error":"配对状态暂不可用，请稍后刷新"}`, 503)
+				http.Error(w, `{"error":"配对状态暂不可用，请稍后刷新"}`, http.StatusServiceUnavailable)
 				return
 			}
 			if state.Owner != "" {
-				http.Error(w, `{"error":"已经配对，无需再次绑定"}`, 409)
+				http.Error(w, `{"error":"已经配对，无需再次绑定"}`, http.StatusConflict)
 				return
 			}
 			if state.Code == "" || time.Now().After(state.Expires) {
-				http.Error(w, `{"error":"配对码已过期，请保存配置并重启桥接后重试"}`, 409)
+				http.Error(w, `{"error":"配对码已过期，请保存配置并重启桥接后重试"}`, http.StatusConflict)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"command": "/pair " + state.Code, "expires": state.Expires})
+			_ = json.NewEncoder(w).Encode(map[string]any{"command": "/pair " + state.Code, "expires": state.Expires})
 			return
 		}
 		if r.Method == "PUT" {
@@ -240,7 +240,7 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 			}
 			if err := f.save(r.Context(), strings.TrimSpace(request.AppID), strings.TrimSpace(request.Secret)); err != nil {
 				w.WriteHeader(400)
-				json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
+				_ = json.NewEncoder(w).Encode(ErrorResponse{Error: err.Error()})
 				return
 			}
 		}
@@ -249,7 +249,7 @@ func (s *Server) registerFeishuSettings(mux *http.ServeMux) {
 			http.Error(w, `{"error":"无法读取飞书配置"}`, 500)
 			return
 		}
-		json.NewEncoder(w).Encode(status)
+		_ = json.NewEncoder(w).Encode(status)
 	}
 	mux.HandleFunc("GET /settings/feishu", handler)
 	mux.HandleFunc("PUT /settings/feishu", handler)
