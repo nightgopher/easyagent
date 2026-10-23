@@ -3,8 +3,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 )
@@ -66,6 +68,40 @@ func main() {
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			os.Exit(1)
+		}
+		if runtime.GOOS == "darwin" && (len(env) == 0 || strings.HasPrefix(env[0], "EASYAGENT_TARGET_PLATFORM=darwin-")) {
+			platform := runtime.GOOS + "-" + runtime.GOARCH
+			if len(env) != 0 {
+				platform = strings.TrimPrefix(env[0], "EASYAGENT_TARGET_PLATFORM=")
+			}
+			identity := ""
+			for i, arg := range os.Args[1:] {
+				if arg == "-sign" && i+2 < len(os.Args) {
+					identity = os.Args[i+2]
+				} else if strings.HasPrefix(arg, "-sign=") {
+					identity = strings.TrimPrefix(arg, "-sign=")
+				}
+			}
+			if identity == "" {
+				var manifest struct {
+					MacOS struct{ SigningIdentity string }
+				}
+				data, err := os.ReadFile("mygo.json")
+				if err != nil || json.Unmarshal(data, &manifest) != nil {
+					os.Exit(1)
+				}
+				identity = manifest.MacOS.SigningIdentity
+			}
+			args := []string{"--force", "--sign", identity, "--identifier", "com.hwj.easyagent.credentials"}
+			if identity != "-" {
+				args = append(args, "--options", "runtime", "--timestamp")
+			}
+			args = append(args, filepath.Join("resources", platform, "easyagent-credentials"))
+			cmd := exec.Command("codesign", args...)
+			cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+			if cmd.Run() != nil {
+				os.Exit(1)
+			}
 		}
 	}
 	buildArgs := append([]string{"run", "github.com/egoist/mygo/cmd/mygo", "build"}, os.Args[1:]...)

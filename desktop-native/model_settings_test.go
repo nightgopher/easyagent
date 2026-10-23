@@ -6,8 +6,62 @@ import (
 	"github.com/egoist/mygo/ui"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
 )
+
+type unreadableModelSecrets struct {
+	memorySecrets
+	writes, deletes atomic.Int32
+}
+
+func (s *unreadableModelSecrets) Get(account string) (string, error) {
+	value, err := s.memorySecrets.Get(account)
+	if account == "model" && value == "" && err == nil {
+		return "", fmt.Errorf("旧钥匙串授权无法读取，请重新填写模型 API 密钥")
+	}
+	return value, err
+}
+func (s *unreadableModelSecrets) Set(account, value string) error {
+	s.writes.Add(1)
+	return s.memorySecrets.Set(account, value)
+}
+func (s *unreadableModelSecrets) Delete(account string) error {
+	s.deletes.Add(1)
+	return s.memorySecrets.Delete(account)
+}
+
+func TestUnreadableModelKeyWithoutReplacementDoesNotClearCredential(t *testing.T) {
+	a := alignmentPreview(t)
+	store := &unreadableModelSecrets{}
+	a.Live.Secrets = store
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: "http://127.0.0.1:1", Model: "old-model", HasKey: true}
+	a.Settings.Mode, a.Settings.Provider = "在桌面客户端配置", "OpenAI 兼容服务 / 网关"
+	a.Settings.BaseURL, a.Settings.Model = "http://127.0.0.1:1", "old-model"
+	a.applyLiveModel()
+	waitNative(t, a, func() bool { return !a.Live.Loading["model-save"] })
+	if !strings.Contains(a.Live.Error, "重新填写") || store.writes.Load() != 0 || store.deletes.Load() != 0 || !a.Live.Config.Model.HasKey {
+		t.Fatal("unreadable credential was changed before a replacement was supplied", a.Live.Error)
+	}
+}
+
+func TestReplacementModelKeyRepairsUnreadableLegacyCredential(t *testing.T) {
+	a, provider, _, calls := nativeCoreFixture(t)
+	store := &unreadableModelSecrets{}
+	a.Live.Secrets = store
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: provider.URL, Model: "fixture-model", HasKey: true}
+	a.Settings.Mode, a.Settings.Provider = "在桌面客户端配置", "OpenAI 兼容服务 / 网关"
+	a.Settings.BaseURL, a.Settings.Model, a.Settings.APIKey = provider.URL, "fixture-repaired", "fixture-replacement"
+	a.applyLiveModel()
+	waitNative(t, a, func() bool {
+		return !a.Live.Loading["model-save"] && a.Live.Config.Model.Model == "fixture-repaired" && a.Live.Connected
+	})
+	value, err := store.Get("model")
+	if err != nil || value != "fixture-replacement" || calls.Load() != 0 || store.deletes.Load() != 0 {
+		t.Fatal("replacement required access to the obsolete credential", err)
+	}
+}
 
 func TestGlobalModelSettingsLayoutAndEditing(t *testing.T) {
 	for _, width := range []int{900, 1240} {
