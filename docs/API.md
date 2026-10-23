@@ -105,7 +105,7 @@ GET /ws
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/sessions` | 列出所有会话 |
+| `GET` | `/sessions` | 列出所有会话；运行中的会话额外带 `run_state`（`running` / `waiting_confirmation`）和 `pending_confirmations` |
 | `POST` | `/sessions` | 创建新会话 |
 | `GET` | `/sessions/{id}/messages` | 获取会话消息（含压缩记录、消息 `entry_id` 与图片） |
 | `POST` | `/sessions/{id}/fork` | 分叉会话：空闲时省略参数复制完整分支；`entry_id` 保留至指定历史消息，空字符串创建空分叉；或 `before_message_index` 在第 N 条用户消息之前分叉（0 从空开始），两者互斥。运行中只能选择本轮开始前的历史点；分叉点与 `kept_messages` / `kept_user_messages` / `dropped_messages` 均基于同一历史快照，不计压缩摘要或当前轮消息 |

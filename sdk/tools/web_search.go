@@ -147,12 +147,12 @@ func (t *WebSearchTool) Execute(ctx context.Context, raw json.RawMessage, _ func
 
 	// Format results as readable text
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("🔍 Search results for: %s\n\n", params.Query))
+	fmt.Fprintf(&b, "🔍 Search results for: %s\n\n", params.Query)
 	for i, r := range results {
-		b.WriteString(fmt.Sprintf("%d. **%s**\n", i+1, r.Title))
-		b.WriteString(fmt.Sprintf("   URL: %s\n", r.URL))
+		fmt.Fprintf(&b, "%d. **%s**\n", i+1, r.Title)
+		fmt.Fprintf(&b, "   URL: %s\n", r.URL)
 		if r.Snippet != "" {
-			b.WriteString(fmt.Sprintf("   %s\n", r.Snippet))
+			fmt.Fprintf(&b, "   %s\n", r.Snippet)
 		}
 		b.WriteString("\n")
 	}

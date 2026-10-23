@@ -111,7 +111,7 @@ func (s SSHFileOperations) WriteFile(ctx context.Context, path string, data []by
 		chmodArgs := s.sshArgs()
 		chmodArgs = append(chmodArgs, fmt.Sprintf("chmod %s %s", fmt.Sprintf("%o", perm), shellQuote(path)))
 		chmodCmd := exec.CommandContext(ctx, "ssh", chmodArgs...)
-		chmodCmd.CombinedOutput() // best-effort
+		_, _ = chmodCmd.CombinedOutput() // best-effort
 	}
 
 	return nil
@@ -247,7 +247,7 @@ func parseStatOutput(output string, name string) (FileInfo, error) {
 	}
 
 	size := int64(0)
-	fmt.Sscanf(parts[0], "%d", &size)
+	_, _ = fmt.Sscanf(parts[0], "%d", &size)
 
 	mtime := time.Time{}
 	// Try common time formats
@@ -299,7 +299,7 @@ func parseLsOutput(output string) ([]DirEntry, error) {
 		isDir := strings.HasPrefix(perms, "d")
 
 		size := int64(0)
-		fmt.Sscanf(fields[4], "%d", &size)
+		_, _ = fmt.Sscanf(fields[4], "%d", &size)
 
 		entries = append(entries, DirEntry{
 			Name:  name,
@@ -320,7 +320,7 @@ func parseWalkLine(line string) (DirEntry, string, error) {
 	}
 
 	size := int64(0)
-	fmt.Sscanf(parts[0], "%d", &size)
+	_, _ = fmt.Sscanf(parts[0], "%d", &size)
 
 	isDir := strings.Contains(parts[2], "directory")
 	path := parts[3]

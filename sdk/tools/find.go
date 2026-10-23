@@ -197,7 +197,7 @@ func (t *FindTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		b.WriteString(r)
 		b.WriteByte('\n')
 	}
-	b.WriteString(fmt.Sprintf("\n%d results found.", len(results)))
+	fmt.Fprintf(&b, "\n%d results found.", len(results))
 
 	return agent.ToolResult{Content: b.String()}, nil
 }

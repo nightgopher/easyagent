@@ -132,7 +132,7 @@ func generateSynopsis(content, ref string) string {
 	var b strings.Builder
 
 	originalLen := len(content)
-	b.WriteString(fmt.Sprintf("📋 [输出概览] 原始内容 %d 字符\n\n", originalLen))
+	fmt.Fprintf(&b, "📋 [输出概览] 原始内容 %d 字符\n\n", originalLen)
 
 	// Detect content type and extract structure
 	lines := strings.Split(content, "\n")
@@ -155,9 +155,9 @@ func generateSynopsis(content, ref string) string {
 	b.WriteString(truncateToLastN(content, maxExcerptChars/2))
 
 	if ref != "" {
-		b.WriteString(fmt.Sprintf("\n\n💡 如需完整内容，调用 full_output 工具取回（ref=\"%s\"）。", ref))
+		fmt.Fprintf(&b, "\n\n💡 如需完整内容，调用 full_output 工具取回（ref=\"%s\"）。", ref)
 	} else {
-		b.WriteString(fmt.Sprintf("\n\n💡 完整内容已对用户可见（%d 字符）。如需查看完整内容请告知。", originalLen))
+		fmt.Fprintf(&b, "\n\n💡 完整内容已对用户可见（%d 字符）。如需查看完整内容请告知。", originalLen)
 	}
 
 	return b.String()
@@ -210,12 +210,12 @@ func summarizeCode(lines []string) string {
 	imports := 0
 	for _, line := range lines {
 		if importRegex.MatchString(line) && imports < 8 {
-			b.WriteString(fmt.Sprintf("  📥 %s\n", strings.TrimSpace(line)))
+			fmt.Fprintf(&b, "  📥 %s\n", strings.TrimSpace(line))
 			imports++
 			continue // don't double-count an import line as a symbol
 		}
 		if m := symbolRegex.FindStringSubmatch(line); m != nil {
-			b.WriteString(fmt.Sprintf("  • %s\n", strings.TrimSpace(m[0])))
+			fmt.Fprintf(&b, "  • %s\n", strings.TrimSpace(m[0]))
 			symbols++
 			if symbols >= maxCodeSymbols {
 				b.WriteString("  ...(更多符号省略)\n")
@@ -224,7 +224,7 @@ func summarizeCode(lines []string) string {
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("\n  共 %d 行\n", len(lines)))
+	fmt.Fprintf(&b, "\n  共 %d 行\n", len(lines))
 	return b.String()
 }
 
@@ -237,7 +237,7 @@ func summarizeMarkdown(lines []string) string {
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "#") {
-			b.WriteString(fmt.Sprintf("  %s\n", trimmed))
+			fmt.Fprintf(&b, "  %s\n", trimmed)
 			headers++
 			if headers >= maxHeadersShown {
 				b.WriteString("  ...(更多标题省略)\n")
@@ -246,7 +246,7 @@ func summarizeMarkdown(lines []string) string {
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("\n  共 %d 行\n", len(lines)))
+	fmt.Fprintf(&b, "\n  共 %d 行\n", len(lines))
 	return b.String()
 }
 
@@ -262,7 +262,7 @@ func summarizeJSON(lines []string) string {
 	for _, line := range lines {
 		if m := keyRegex.FindStringSubmatch(line); m != nil {
 			if !keys[m[1]] {
-				b.WriteString(fmt.Sprintf("  • %s\n", m[1]))
+				fmt.Fprintf(&b, "  • %s\n", m[1])
 				keys[m[1]] = true
 				if len(keys) >= 15 {
 					break
@@ -271,7 +271,7 @@ func summarizeJSON(lines []string) string {
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("\n  共 %d 行\n", len(lines)))
+	fmt.Fprintf(&b, "\n  共 %d 行\n", len(lines))
 	return b.String()
 }
 
@@ -279,9 +279,9 @@ func summarizeJSON(lines []string) string {
 func summarizeText(content string, lines []string) string {
 	var b strings.Builder
 	b.WriteString("📝 文本概要:\n")
-	b.WriteString(fmt.Sprintf("  • %d 行\n", len(lines)))
-	b.WriteString(fmt.Sprintf("  • %d 字符\n", len(content)))
-	b.WriteString(fmt.Sprintf("  • %d 词\n", len(strings.Fields(content))))
+	fmt.Fprintf(&b, "  • %d 行\n", len(lines))
+	fmt.Fprintf(&b, "  • %d 字符\n", len(content))
+	fmt.Fprintf(&b, "  • %d 词\n", len(strings.Fields(content)))
 	return b.String()
 }
 

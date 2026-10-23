@@ -9,6 +9,35 @@ linters:
     - govet
     - gosec
     - bodyclose
+  settings:
+    staticcheck:
+      checks:
+        # golangci-lint's defaults, plus: QF1001 (De Morgan rewrites) is a
+        # readability judgement, not a defect.
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1001
+    gosec:
+      excludes:
+        # G104 repeats errcheck; errcheck is the one source for unchecked errors.
+        - G104
+  exclusions:
+    # golangci-lint's standard preset: unchecked Close/Flush, fmt.*print*,
+    # os.Remove(All) and os.(Un)Setenv results, where errors are routinely ignored.
+    presets:
+      - std-error-handling
+    rules:
+      # Tests write fixtures to temporary directories and read them back by
+      # path; gosec's file and permission rules flag exactly that. errcheck
+      # and staticcheck still apply to tests.
+      - path: _test\.go
+        linters:
+          - gosec
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

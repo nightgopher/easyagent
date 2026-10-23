@@ -85,7 +85,7 @@ func TestFileMutationQueue_ContextCancel(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		q.Execute(ctx, "/tmp/blocking.go", func() (agent.ToolResult, error) {
+		_, _ = q.Execute(ctx, "/tmp/blocking.go", func() (agent.ToolResult, error) {
 			time.Sleep(200 * time.Millisecond)
 			return agent.ToolResult{}, nil
 		})

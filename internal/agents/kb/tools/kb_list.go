@@ -135,14 +135,14 @@ func (t *ListTool) Execute(_ context.Context, params json.RawMessage, _ func(age
 
 	// Format output — grouped by category for readability
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("📚 知识库（共 %d 条", len(idx.Entries)))
+	fmt.Fprintf(&b, "📚 知识库（共 %d 条", len(idx.Entries))
 	if p.Category != "" {
-		b.WriteString(fmt.Sprintf("，筛选分类: %s", p.Category))
+		fmt.Fprintf(&b, "，筛选分类: %s", p.Category)
 	}
 	if p.Tag != "" {
-		b.WriteString(fmt.Sprintf("，筛选标签: %s", p.Tag))
+		fmt.Fprintf(&b, "，筛选标签: %s", p.Tag)
 	}
-	b.WriteString(fmt.Sprintf("）— 显示 %d/%d：\n\n", len(entries), totalInCategory))
+	fmt.Fprintf(&b, "）— 显示 %d/%d：\n\n", len(entries), totalInCategory)
 
 	// Group by category for display
 	currentCategory := ""
@@ -153,10 +153,10 @@ func (t *ListTool) Execute(_ context.Context, params json.RawMessage, _ func(age
 			if displayCat == "" {
 				displayCat = "other"
 			}
-			b.WriteString(fmt.Sprintf("## %s\n\n", displayCat))
+			fmt.Fprintf(&b, "## %s\n\n", displayCat)
 		}
 		absPath := filepath.Join(t.repoPath, e.RelPath)
-		b.WriteString(fmt.Sprintf("- **%s**", e.Title))
+		fmt.Fprintf(&b, "- **%s**", e.Title)
 		var meta []string
 		if len(e.Tags) > 0 {
 			meta = append(meta, fmt.Sprintf("#%s", strings.Join(e.Tags, " #")))
@@ -169,10 +169,10 @@ func (t *ListTool) Execute(_ context.Context, params json.RawMessage, _ func(age
 			meta = append(meta, summary)
 		}
 		if len(meta) > 0 {
-			b.WriteString(fmt.Sprintf(" — %s", strings.Join(meta, " ")))
+			fmt.Fprintf(&b, " — %s", strings.Join(meta, " "))
 		}
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("  📄 `%s`\n", absPath))
+		fmt.Fprintf(&b, "  📄 `%s`\n", absPath)
 	}
 
 	b.WriteString("\n使用 kb_read 读取完整内容（参数 path 支持绝对路径或相对路径），或 kb_search 搜索特定关键词。")

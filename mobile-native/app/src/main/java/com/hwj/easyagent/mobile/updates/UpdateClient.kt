@@ -14,7 +14,8 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class UpdateException(message: String) : IOException(message)
-data class InstalledVersion(val name: String, val code: Long) {
+/** [sourceTree] is the mobile-native/ git tree a release build came from, or empty. */
+data class InstalledVersion(val name: String, val code: Long, val sourceTree: String = "") {
     val comparisonCode: Long get() = maxOf(code, releaseVersionCode("v$name") ?: code)
 }
 data class AppUpdate(val tag: String, val notes: String, val url: HttpUrl, val size: Long, val sha256: String) {
@@ -74,6 +75,9 @@ class UpdateClient internal constructor(
             manifest["assets"]?.jsonObject?.get(APK)?.jsonPrimitive?.contentOrNull != hash || manifest["core_only"]?.jsonPrimitive?.booleanOrNull == true) {
             throw UpdateException("发布清单与安装包校验信息不一致")
         }
+        // A release that left mobile-native/ untouched ships this same app under a new version.
+        val source = manifest["sources"]?.jsonObject?.get("android")?.jsonPrimitive?.contentOrNull
+        if (installed.sourceTree.isNotEmpty() && source == installed.sourceTree) return null
         return AppUpdate(tag, release.text("body").take(32_000), expectedUrl, size, hash)
     }
 
