@@ -49,6 +49,7 @@ class RuntimeUiTest {
 
     @Before fun launch() {
         instrumentation.runOnMainSync {
+            app.updater.setAutomatic(false) // Runtime fixtures must never contact GitHub.
             app.connections.state.value.hosts.map { it.id }.forEach(app.connections::remove)
         }
         // The app asks for notifications when a message is first sent; grant it up

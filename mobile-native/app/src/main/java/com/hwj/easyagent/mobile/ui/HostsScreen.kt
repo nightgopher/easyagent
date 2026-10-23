@@ -56,6 +56,7 @@ fun HostsScreen(
     onAdd: () -> Unit,
     onEdit: (HostConfig) -> Unit,
     onSelect: (String) -> Unit,
+    onUpdates: () -> Unit,
 ) {
     val state by connections.state.collectAsStateWithLifecycle()
     var deleting by remember { mutableStateOf<HostConfig?>(null) }
@@ -72,7 +73,10 @@ fun HostsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
                     }
                 },
-                actions = { IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "添加主机") } },
+                actions = {
+                    TextButton(onClick = onUpdates) { Text("检查更新") }
+                    IconButton(onClick = onAdd) { Icon(Icons.Filled.Add, contentDescription = "添加主机") }
+                },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },

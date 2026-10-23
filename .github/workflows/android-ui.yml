@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'mobile-native/**'
+      - 'scripts/check-android-ui.sh'
       - 'internal/server/**'
       - '.github/workflows/android-ui.yml'
 permissions:
@@ -45,7 +46,7 @@ jobs:
           disable-animations: true
           working-directory: mobile-native
           script: |
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest
+            bash ../scripts/check-android-ui.sh
             adb pull /data/local/tmp/easyagent-ui app/build/qa
       - uses: actions/upload-artifact@v4
         if: always()
