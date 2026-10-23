@@ -10,6 +10,7 @@ import (
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
 	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/hwj123hwj/easyagent/sdk/sessionmgr"
 	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
 )
 
@@ -23,8 +24,26 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Live run state lets clients mark sessions that are working or waiting for
+	// approval without opening each one. Fields are omitted for idle sessions.
+	type listedSession struct {
+		sessionmgr.SessionInfo
+		RunState             string `json:"run_state,omitempty"`
+		PendingConfirmations int    `json:"pending_confirmations,omitempty"`
+	}
+	listed := make([]listedSession, len(sessions))
+	s.runs.mu.Lock()
+	for i, info := range sessions {
+		listed[i] = listedSession{SessionInfo: info}
+		if state := s.runs.sessions[info.ID]; state != nil && state.run != nil && runActive(state.run) {
+			listed[i].RunState = state.run.State
+			listed[i].PendingConfirmations = len(state.run.pending)
+		}
+	}
+	s.runs.mu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sessions)
+	_ = json.NewEncoder(w).Encode(listed)
 }
 
 // ─── POST /sessions ───────────────────────────────────────────────────────────
