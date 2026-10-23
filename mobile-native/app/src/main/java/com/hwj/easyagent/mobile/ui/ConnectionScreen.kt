@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,6 +56,7 @@ fun ConnectionScreen(
     canCancel: Boolean,
     onCancel: () -> Unit,
     onSave: (HostConfig) -> Unit,
+    onUpdates: () -> Unit,
 ) {
     val id = rememberSaveable { initial?.id ?: UUID.randomUUID().toString() }
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
@@ -112,6 +114,7 @@ fun ConnectionScreen(
         topBar = {
             TopAppBar(
                 title = { Text(if (initial == null) "连接运行主机" else "编辑运行主机") },
+                actions = { TextButton(onClick = onUpdates) { Text("检查更新") } },
                 navigationIcon = {
                     if (canCancel) {
                         IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
