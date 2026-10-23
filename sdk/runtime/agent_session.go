@@ -596,6 +596,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		ContextWindow: models.ContextWindow(modelID),
 		MaxTokens:     models.MaxOutput(modelID),
 	}
+	model = s.resolveModel(model)
 
 	taskTool := s.newTaskTool(model, registry, toolList)
 	if taskTool != nil {
@@ -698,11 +699,21 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 		}
 	}
 	return agent.NewTaskTool(agent.TaskToolOptions{
+		ResolveModel: func(id, provider string) (ai.Model, error) {
+			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: models.MaxOutput(id)}), nil
+		},
 		Model:       model,
 		Registry:    registry,
 		Tools:       childTools,
 		ConfirmFunc: s.wrapConfirm(s.confirmFunc),
 	})
+}
+
+func (s *AgentSession) resolveModel(model ai.Model) ai.Model {
+	if resolver, ok := s.application.(interface{ ResolveModel(ai.Model) ai.Model }); ok {
+		return resolver.ResolveModel(model)
+	}
+	return model
 }
 
 func toolAllowed(name string, allowed, blocked []string) bool {

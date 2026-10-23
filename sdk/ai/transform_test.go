@@ -22,7 +22,7 @@ func TestTransformMessages_ImageDowngrade(t *testing.T) {
 	user := result[0].(UserMessage)
 	assert.Equal(t, 2, len(user.Content))
 	assert.Equal(t, "text", user.Content[0].Type)
-	assert.Equal(t, "[Image]", user.Content[1].Text)
+	assert.Equal(t, ImageUnsupportedMessage, user.Content[1].Text)
 }
 
 func TestTransformMessages_NoImageDowngrade(t *testing.T) {
@@ -128,4 +128,34 @@ func TestMessagesToJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, json, "hello")
 	assert.Contains(t, json, "world")
+}
+
+func TestModelImageDowngradePreservesHistoryAndMetadata(t *testing.T) {
+	no := false
+	original := []Message{
+		UserMessage{DisplayText: "uploaded image", Content: []ContentBlock{{Type: "image", Image: &ImageBlock{Data: []byte{1, 2}}}}},
+		ToolResultMessage{ToolCallID: "read-1", Content: "file.png", DurationMS: 9, Images: []ImageBlock{{Data: []byte{3, 4}}}},
+	}
+	result := MessagesForModel(original, Model{SupportsImages: &no})
+	user := result[0].(UserMessage)
+	require.Equal(t, "uploaded image", user.DisplayText)
+	require.Equal(t, "text", user.Content[0].Type)
+	require.Equal(t, ImageUnsupportedMessage, user.Content[0].Text)
+	tool := result[1].(ToolResultMessage)
+	require.Empty(t, tool.Images)
+	require.Contains(t, tool.Content, ImageUnsupportedMessage)
+	require.Equal(t, "read-1", tool.ToolCallID)
+	require.EqualValues(t, 9, tool.DurationMS)
+	require.Equal(t, "image", original[0].(UserMessage).Content[0].Type)
+	require.Len(t, original[1].(ToolResultMessage).Images, 1)
+	for _, flag := range []*bool{nil, new(bool)} {
+		if flag != nil {
+			*flag = true
+		}
+		require.Equal(t, original, MessagesForModel(original, Model{SupportsImages: flag}))
+	}
+	require.Nil(t, ImageSupport(nil, nil))
+	require.True(t, *ImageSupport(nil, []string{"text", "image"}))
+	require.False(t, *ImageSupport(nil, []string{"text"}))
+	require.False(t, *ImageSupport(&no, []string{"image"}), "explicit false wins")
 }
