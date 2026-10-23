@@ -23,14 +23,6 @@
     },
     {
       "linter": "gosec",
-      "file": "cmd/easyagent-bridge/main.go",
-      "message": "G114: Use of net/http serve function that has no support for setting timeouts",
-      "source_sha256": "cd7f524c39ee4152a3b553b134f25dd333767491aa382a4bd988a2dc3bd72862",
-      "line_at_baseline": 110,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
       "file": "internal/agents/coding/commands/wiki.go",
       "message": "G304: Potential file inclusion via variable",
       "source_sha256": "ce66f2db065912a20d66ac0cf9b0d9e5f94f8be0a9105e069d82a4dc24dc9748",
@@ -211,14 +203,6 @@
       "message": "G101: Potential hardcoded credentials",
       "source_sha256": "57e64055706ee5a57c8d933cf5cb4c87b618164b792b3f785d630b0b5674ca3d",
       "line_at_baseline": 26,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/feishu/oauth.go",
-      "message": "G112: Potential Slowloris Attack because ReadHeaderTimeout is not configured in the http.Server",
-      "source_sha256": "100c0c4ec53cb72a02b5533062f15f0c082d940d5b0dffc46467bdef4584c6a6",
-      "line_at_baseline": 63,
       "count": 1
     },
     {
@@ -415,14 +399,6 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/server/feishu_bridge.go",
-      "message": "G114: Use of net/http serve function that has no support for setting timeouts",
-      "source_sha256": "cd7f524c39ee4152a3b553b134f25dd333767491aa382a4bd988a2dc3bd72862",
-      "line_at_baseline": 123,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
       "file": "internal/server/feishu_settings.go",
       "message": "G204: Subprocess launched with variable",
       "source_sha256": "7f702314a5b6cdd89cc1ea1655a632a7a2872e360ec06f4ab59c9658b34f8143",
@@ -467,47 +443,7 @@
       "message": "G304: Potential file inclusion via variable",
       "source_sha256": "dbfffc239169cd906434e49e98f86c2000d48cf587b7fb53ffac601be5727037",
       "line_at_baseline": 592,
-      "count": 3
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/run_files.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "eab592a5a3229340c03333a8835f474b0a348f172106c09922ad4234160f9957",
-      "line_at_baseline": 496,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/run_files.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "4334f8dcb342c50b46594deda68f453a4f2f42aafc61cd21d2b46a5010c8caff",
-      "line_at_baseline": 224,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/run_files.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "ae9f926f863ca65614b6acbb1e697525731a7432240b46ea4ae7a2a890172065",
-      "line_at_baseline": 565,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/run_files.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "dbfffc239169cd906434e49e98f86c2000d48cf587b7fb53ffac601be5727037",
-      "line_at_baseline": 574,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/run_files.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "eab592a5a3229340c03333a8835f474b0a348f172106c09922ad4234160f9957",
-      "line_at_baseline": 496,
-      "count": 1
+      "count": 2
     },
     {
       "linter": "gosec",
@@ -516,54 +452,6 @@
       "source_sha256": "4a8fb9df8366633acb0563c5049115576894fd4b3ebaaef6c2e5ff7602c19b42",
       "line_at_baseline": 288,
       "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G301: Expect directory permissions to be 0750 or less",
-      "source_sha256": "272b798348b60bf3b50c8d0b37154a47031b8860926e05ccd781141c91eb35dd",
-      "line_at_baseline": 1539,
-      "count": 2
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "659c7019526e3aa0e9c57dd3cbeceaf1250f677db1bd24397b82360f0fdab5c3",
-      "line_at_baseline": 1481,
-      "count": 3
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G306: Expect WriteFile permissions to be 0600 or less",
-      "source_sha256": "18a49e17748ddce51c4f10a0a047fdf0d88c8a6a55112f1b6cc0d518166e1dcb",
-      "line_at_baseline": 1544,
-      "count": 2
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "18a49e17748ddce51c4f10a0a047fdf0d88c8a6a55112f1b6cc0d518166e1dcb",
-      "line_at_baseline": 1544,
-      "count": 2
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "272b798348b60bf3b50c8d0b37154a47031b8860926e05ccd781141c91eb35dd",
-      "line_at_baseline": 1539,
-      "count": 2
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/server/workspace_handlers.go",
-      "message": "G703: Path traversal via taint analysis",
-      "source_sha256": "659c7019526e3aa0e9c57dd3cbeceaf1250f677db1bd24397b82360f0fdab5c3",
-      "line_at_baseline": 1481,
-      "count": 3
     },
     {
       "linter": "gosec",

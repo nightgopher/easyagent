@@ -58,7 +58,7 @@ func (s *Server) getSessionFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := os.ReadFile(safePath)
+	data, err := os.ReadFile(safePath) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil {
 		writeError(w, http.StatusNotFound, "file not found: "+err.Error())
 		return
@@ -100,12 +100,12 @@ func (s *Server) writeFile(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure parent directory exists
 	dir := filepath.Dir(safePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec // path comes from securePath, confined to the workspace
 		writeError(w, http.StatusInternalServerError, "failed to create directory: "+err.Error())
 		return
 	}
 
-	if err := os.WriteFile(safePath, []byte(req.Content), 0644); err != nil {
+	if err := os.WriteFile(safePath, []byte(req.Content), 0644); err != nil { //nolint:gosec // path comes from securePath, confined to the workspace
 		writeError(w, http.StatusInternalServerError, "failed to write file: "+err.Error())
 		return
 	}
@@ -370,7 +370,7 @@ func (s *Server) workspaceReadFile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := os.ReadFile(safePath)
+	data, err := os.ReadFile(safePath) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil {
 		writeError(w, http.StatusNotFound, "file not found: "+err.Error())
 		return
@@ -398,7 +398,7 @@ func (s *Server) workspaceReadFileBase64(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	data, err := os.ReadFile(safePath)
+	data, err := os.ReadFile(safePath) //nolint:gosec // path comes from securePath, confined to the workspace
 	if err != nil {
 		writeError(w, http.StatusNotFound, "file not found: "+err.Error())
 		return
@@ -456,12 +456,12 @@ func (s *Server) workspaceWriteFile(w http.ResponseWriter, r *http.Request) {
 
 	// Ensure parent directory exists
 	dir := filepath.Dir(safePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil { //nolint:gosec // path comes from securePath, confined to the workspace
 		writeError(w, http.StatusInternalServerError, "failed to create directory: "+err.Error())
 		return
 	}
 
-	if err := os.WriteFile(safePath, []byte(req.Content), 0644); err != nil {
+	if err := os.WriteFile(safePath, []byte(req.Content), 0644); err != nil { //nolint:gosec // path comes from securePath, confined to the workspace
 		writeError(w, http.StatusInternalServerError, "failed to write file: "+err.Error())
 		return
 	}

@@ -64,6 +64,7 @@ func StartOAuthFlow(ctx context.Context) (*OAuthResult, error) {
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handleOAuthCallback(w, r, resultCh, server)
 		}),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	// Start server in goroutine
