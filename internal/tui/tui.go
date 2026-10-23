@@ -210,6 +210,8 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg = event.msg
 	}
 	switch msg := msg.(type) {
+	case loopPromptMsg:
+		return m.receiveLoopPrompt(msg)
 	case sessionPickerListMsg:
 		return m.receiveSessionList(msg)
 	case sessionPickerSwitchMsg:

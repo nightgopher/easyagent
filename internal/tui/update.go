@@ -449,14 +449,20 @@ func (m *TuiModel) acceptCompletion(insertText string) {
 
 // sendMessage dispatches user input to the agent and starts streaming.
 func (m *TuiModel) sendMessage(input string) (tea.Model, tea.Cmd) {
+	m.input.AddHistory(input)
+	m.input.Reset()
+	return m.startPrompt(context.Background(), input, nil)
+}
+
+// startPrompt shares rendering and approval handling with scheduled prompts,
+// which must leave the user's draft and input history intact.
+func (m *TuiModel) startPrompt(ctx context.Context, input string, result chan<- error) (tea.Model, tea.Cmd) {
 	// Add user message to history
 	m.messages = append(m.messages, ChatMessage{
 		Role:      "user",
 		Content:   input,
 		Timestamp: time.Now(),
 	})
-	m.input.AddHistory(input)
-	m.input.Reset()
 
 	// Start agent streaming
 	m.streaming = false
@@ -469,7 +475,7 @@ func (m *TuiModel) sendMessage(input string) (tea.Model, tea.Cmd) {
 	m.viewport.SetMessages(m.messages)
 	m.viewport.GotoBottom()
 
-	return m, tea.Batch(m.startAgentStream(input), m.spinnerTick())
+	return m, tea.Batch(m.startAgentStream(ctx, input, result), m.spinnerTick())
 }
 
 // startAgentStream runs the agent stream loop in a goroutine.
@@ -481,18 +487,28 @@ type streamEventMsg struct {
 	msg tea.Msg
 }
 
-func (m *TuiModel) startAgentStream(input string) tea.Cmd {
+func (m *TuiModel) startAgentStream(parent context.Context, input string, result chan<- error) tea.Cmd {
 	m.streamID++
 	id := m.streamID
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(parent)
 	m.registerStreamCancel(cancel)
 	program := m.program // capture before goroutine starts
 	session := m.session
 	return func() tea.Msg {
+		var runErr error
+		defer func() {
+			if result != nil {
+				if runErr == nil {
+					runErr = ctx.Err()
+				}
+				result <- runErr
+			}
+			cancel()
+		}()
 		// 可取消 ctx：Ctrl+C 中断时真正掐断底层 LLM 流与工具执行
-		defer cancel()
 		stream, err := session.PromptStream(ctx, input)
 		if err != nil {
+			runErr = err
 			return streamEventMsg{id, AgentErrorMsg{Err: err}}
 		}
 
@@ -537,7 +553,8 @@ func (m *TuiModel) startAgentStream(input string) tea.Cmd {
 				msg = LoopDetectedMsg{Tool: event.ToolName, Count: event.RepeatCount}
 
 			case agent.StreamEventError:
-				msg = AgentErrorMsg{Err: fmt.Errorf("%s", event.Error)}
+				runErr = fmt.Errorf("%s", event.Error)
+				msg = AgentErrorMsg{Err: runErr}
 
 			case agent.StreamEventDone:
 				msg = StreamDoneMsg{
@@ -564,6 +581,9 @@ func (m *TuiModel) startAgentStream(input string) tea.Cmd {
 			return nil
 		}
 		// Fallback: stream closed without a Done event
+		if ctx.Err() != nil {
+			return streamEventMsg{id, AgentErrorMsg{Err: ctx.Err()}}
+		}
 		return streamEventMsg{id, StreamDoneMsg{}}
 	}
 }
