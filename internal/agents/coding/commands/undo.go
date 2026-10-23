@@ -27,8 +27,8 @@ func RegisterUndoCommands(registry *slashcmd.Registry) {
 		Handler: func(ctx slashcmd.Context, args string) (slashcmd.CommandResult, error) {
 			args = strings.TrimSpace(args)
 
-			switch {
-			case args == "" || args == "last":
+			switch args {
+			case "", "last":
 				// Undo the last file operation
 				infos := undoManager.ListBackups()
 				if len(infos) == 0 {
@@ -44,7 +44,7 @@ func RegisterUndoCommands(registry *slashcmd.Registry) {
 					Output: fmt.Sprintf("↩️ Restored %s from backup.", target.Path),
 				}, nil
 
-			case args == "all":
+			case "all":
 				// Restore all files
 				errs := undoManager.RestoreAll()
 				if len(errs) > 0 {
@@ -59,13 +59,13 @@ func RegisterUndoCommands(registry *slashcmd.Registry) {
 					Output: "↩️ All files restored from backups.",
 				}, nil
 
-			case args == "list":
+			case "list":
 				// List available backups
 				return slashcmd.CommandResult{
 					Output: undoManager.FormatListBackups(),
 				}, nil
 
-			case args == "clear":
+			case "clear":
 				// Clear all backups (frees memory, cannot be undone)
 				undoManager.Clear()
 				return slashcmd.CommandResult{

@@ -139,12 +139,8 @@ func (t *EditTool) Validate(raw json.RawMessage) (json.RawMessage, error) {
 				return nil, fmt.Errorf("edits[%d]: old_string is required", i)
 			}
 		}
-	} else {
-		// 单编辑模式：必须有 old_string/new_string。
-		// 注意：old_string="" 是合法的（用于创建新文件），
-		// 但 new_string 也为空则无意义。
-		// 我们允许 old_string=""（创建文件），不做额外限制。
 	}
+	// 单编辑模式：old_string="" 是合法的（用于创建新文件），不做额外限制。
 	return json.Marshal(params)
 }
 

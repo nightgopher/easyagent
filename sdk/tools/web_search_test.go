@@ -107,8 +107,6 @@ func TestWebSearchSearXNG(t *testing.T) {
 }
 
 func TestWebSearchFormatOutput(t *testing.T) {
-	tool := NewWebSearchTool()
-
 	// Test with mock SearXNG
 	mux := http.NewServeMux()
 	mux.HandleFunc("/search", func(w http.ResponseWriter, r *http.Request) {
@@ -125,7 +123,7 @@ func TestWebSearchFormatOutput(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("SEARXNG_URL", server.URL)
-	tool = NewWebSearchTool()
+	tool := NewWebSearchTool()
 
 	validated, _ := tool.Validate(json.RawMessage(`{"query": "test"}`))
 	result, err := tool.Execute(context.Background(), validated, nil)

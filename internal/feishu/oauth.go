@@ -93,18 +93,18 @@ func StartOAuthFlow(ctx context.Context) (*OAuthResult, error) {
 	// Wait for callback or timeout
 	select {
 	case result := <-resultCh:
-		server.Shutdown(context.Background())
+		_ = server.Shutdown(context.Background())
 		if result.ErrorMessage != "" {
 			return result, fmt.Errorf("%s", result.ErrorMessage)
 		}
 		return result, nil
 
 	case <-time.After(5 * time.Minute):
-		server.Shutdown(context.Background())
+		_ = server.Shutdown(context.Background())
 		return nil, fmt.Errorf("OAuth login timed out (5 minutes)")
 
 	case <-ctx.Done():
-		server.Shutdown(context.Background())
+		_ = server.Shutdown(context.Background())
 		return nil, ctx.Err()
 	}
 }

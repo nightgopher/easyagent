@@ -214,7 +214,8 @@ func (t *GrepTool) searchDir(ctx context.Context, re *regexp.Regexp, root string
 		includeRe = regexp.MustCompile(globPattern)
 	}
 
-	t.ops.Walk(ctx, root, func(path string, entry operations.DirEntry, err error) error {
+	// Walk stops early on cancellation or the max-results sentinel; both keep the matches so far.
+	_ = t.ops.Walk(ctx, root, func(path string, entry operations.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
