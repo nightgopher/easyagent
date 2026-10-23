@@ -129,8 +129,9 @@ func TestHistoryDetail(t *testing.T) {
 	if len(topArtists) == 0 || topArtists[0] != "artist1" {
 		t.Errorf("expected top artist 'artist1', got %v", topArtists)
 	}
+	// All songs have count 1, so any of them may come first.
 	if len(topSongs) == 0 || topSongs[0] != "song3" && topSongs[0] != "song1" && topSongs[0] != "song2" {
-		// all songs have count 1, so tie-break alphabetical
+		t.Errorf("expected a known top song, got %v", topSongs)
 	}
 }
 

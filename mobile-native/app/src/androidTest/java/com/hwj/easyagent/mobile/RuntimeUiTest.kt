@@ -194,6 +194,9 @@ class RuntimeUiTest {
         waitText("流式验收回答继续生成")
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"写入验收文件","args":{"path":"qa.txt"}}"""))
         waitText("写入验收文件")
+        assertTrue("approval arguments start folded", ui.onAllNodesWithText("qa.txt", substring = true).fetchSemanticsNodes().isEmpty())
+        ui.onNodeWithText("查看参数").performScrollTo().performClick()
+        waitText("qa.txt")
         ui.onNodeWithText("批准").performScrollTo()
         screenshot("tool-approval")
         ui.onNodeWithText("批准").performClick()
@@ -232,6 +235,13 @@ class RuntimeUiTest {
         host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"拒绝验收操作"}"""))
         waitText("拒绝验收操作")
+        // The session list shows the pending approval without opening the chat.
+        ui.onNodeWithContentDescription("返回").performClick()
+        ui.onNodeWithContentDescription("刷新会话").performClick()
+        waitText("待审批 1")
+        screenshot("session-list-status")
+        ui.onNodeWithText(host.title).performClick()
+        waitText("拒绝验收操作")
         ui.onNodeWithText("拒绝").performScrollTo().performClick()
         ui.waitUntil(10_000) { host.calls.any { it.path?.endsWith("/run/confirm") == true } }
         assertFalse(JSONObject(host.calls.first { it.path?.endsWith("/run/confirm") == true }.body.readUtf8()).getBoolean("approved"))
@@ -265,6 +275,14 @@ class RuntimeUiTest {
         screenshot("live-message-cards")
         ui.onNodeWithText("bash").performClick()
         ui.waitUntil(5_000) { ui.onAllNodesWithText("完整输出").fetchSemanticsNodes().isEmpty() }
+        host.emit("event", "event" to JSONObject("""{"type":"tool_start","tool_call_id":"t2","tool_name":"read","tool_args":{"path":"qa.txt"}}"""))
+        host.emit("event", "event" to JSONObject("""{"type":"tool_end","tool_call_id":"t2","tool_result":"文件内容","duration_ms":200}"""))
+        waitText("已调用 2 个工具")
+        ui.onAllNodesWithText("printf QA_TOOL").fetchSemanticsNodes().let { assertTrue("grouped calls start folded", it.isEmpty()) }
+        screenshot("tool-group")
+        ui.onNodeWithText("已调用 2 个工具").performClick()
+        waitText("printf QA_TOOL")
+        waitText("qa.txt")
     }
 
     @Test fun attachmentsRefreshAndSurviveAnotherPromptAcknowledgement() {
@@ -292,6 +310,50 @@ class RuntimeUiTest {
         waitText("从相册选择")
         waitText("选择文件")
         screenshot("media-composer")
+    }
+
+    @Test fun composerSwapsMicForSendWhileTyping() {
+        val host = host("输入主机")
+        connect(host)
+        openChat(host)
+        ui.onNodeWithContentDescription("语音输入").assertExists()
+        assertTrue(ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isEmpty())
+        ui.onNode(hasSetTextAction()).performTextReplacement("检查一下")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("发送")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isEmpty())
+        screenshot("composer-typing")
+        ui.onNode(hasSetTextAction()).performTextReplacement("")
+        ui.waitUntil(5_000) { ui.onAllNodes(hasContentDescription("语音输入")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test fun markdownRepliesRenderAsRichText() {
+        val host = host("排版主机")
+        host.history = """
+            已保存的历史
+
+            ## 部署结果
+            服务**已经启动**，详见 [日志](https://example.com/log)。
+
+            1. 构建镜像
+            2. 推送 `registry`
+
+            | 服务 | 状态 |
+            |---|---|
+            | api | 运行 |
+
+            ```bash
+            kubectl get pods
+            ```
+        """.trimIndent()
+        connect(host)
+        openChat(host)
+        waitText("部署结果")
+        waitText("kubectl get pods")
+        assertTrue(ui.onAllNodes(hasText("服务已经启动", substring = true)).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("Markdown markers must not be shown", ui.onAllNodes(hasText("**", substring = true)).fetchSemanticsNodes().isEmpty())
+        assertTrue(ui.onAllNodes(hasText("| api |", substring = true)).fetchSemanticsNodes().isEmpty())
+        ui.onNodeWithContentDescription("复制代码").assertExists()
+        screenshot("markdown-reply")
     }
 
     @Test fun loopDialogCreatesAndStopsTheHostsLoop() {
@@ -370,6 +432,8 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     private var events = JSONArray()
     private var confirmation: JSONObject? = null
     @Volatile private var loop: JSONObject? = null
+    /** Assistant text of the saved history; starts with the text openChat waits for. */
+    @Volatile var history = "已保存的历史"
 
     init {
         server.dispatcher = object : Dispatcher() {
@@ -394,7 +458,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                             }
                         }
                     })
-                    path == "/sessions" && request.method == "GET" -> json(JSONArray().put(JSONObject().put("id", "qa-session").put("title", title)).toString())
+                    path == "/sessions" && request.method == "GET" -> json(JSONArray().put(sessionSummary()).toString())
                     path.endsWith("/run/confirm") -> {
                         emit("confirmed", "confirmation_id" to JSONObject(request.body.clone().readUtf8()).getString("confirmation_id"))
                         json("{}")
@@ -440,12 +504,20 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
         check(socket?.send(value.toString()) == true)
     }
 
+    /** Like the server's list entry: run state only while a run is active. */
+    @Synchronized private fun sessionSummary(): JSONObject {
+        val value = JSONObject().put("id", "qa-session").put("title", title)
+        if (running) value.put("run_state", if (confirmation != null) "waiting_confirmation" else "running")
+        if (running && confirmation != null) value.put("pending_confirmations", 1)
+        return value
+    }
+
     @Synchronized private fun snapshot(): JSONObject {
-        val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", "已保存的历史"))
+        val messages = JSONArray().put(JSONObject().put("role", "assistant").put("content", history))
         val value = JSONObject().put("type", "snapshot").put("session_id", "qa-session")
             .put("seq", sequence.get()).put("messages", messages)
             .put("events", JSONArray(events.toString()))
-            .put("confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
+            .put("pending_confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
         if (runPrompt.isNotEmpty()) value.put("run", JSONObject().put("id", "qa-run")
             .put("state", if (running) "running" else "cancelled").put("prompt", runPrompt).put("request_id", requestId))
         return value

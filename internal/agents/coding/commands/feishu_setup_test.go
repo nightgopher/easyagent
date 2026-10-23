@@ -171,7 +171,9 @@ func TestFeishuChoiceCancellationDoesNotConsumeNextInput(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("input cancellation hung")
 	}
-	writer.Write([]byte("next\n"))
+	if _, err := writer.Write([]byte("next\n")); err != nil {
+		t.Fatal(err)
+	}
 	b := make([]byte, 5)
 	if _, err := io.ReadFull(in, b); err != nil || string(b) != "next\n" {
 		t.Fatal("cancelled reader stole subsequent input", string(b), err)

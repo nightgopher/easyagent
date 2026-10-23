@@ -312,10 +312,7 @@ func parseSkillFile(filePath string) (*Skill, []Diagnostic) {
 
 func validateName(name, parentDirName, filePath string) []string {
 	var errs []string
-	if name != parentDirName && filepath.Base(filePath) != skillFileName {
-		// 对于非 SKILL.md 文件，不强求 name 与目录名匹配
-		// 但仍然检查格式
-	}
+	// 对于非 SKILL.md 文件，不强求 name 与目录名匹配，但仍然检查格式。
 	if len(name) > maxNameLength {
 		errs = append(errs, fmt.Sprintf("name exceeds %d characters (%d)", maxNameLength, len(name)))
 	}
@@ -366,9 +363,9 @@ func FormatForSystemPrompt(skills []Skill) string {
 
 	for _, skill := range visible {
 		b.WriteString("  <skill>\n")
-		b.WriteString(fmt.Sprintf("    <name>%s</name>\n", escapeXML(skill.Name)))
-		b.WriteString(fmt.Sprintf("    <description>%s</description>\n", escapeXML(skill.Description)))
-		b.WriteString(fmt.Sprintf("    <location>%s</location>\n", escapeXML(skill.FilePath)))
+		fmt.Fprintf(&b, "    <name>%s</name>\n", escapeXML(skill.Name))
+		fmt.Fprintf(&b, "    <description>%s</description>\n", escapeXML(skill.Description))
+		fmt.Fprintf(&b, "    <location>%s</location>\n", escapeXML(skill.FilePath))
 		b.WriteString("  </skill>\n")
 	}
 
@@ -380,8 +377,8 @@ func FormatForSystemPrompt(skills []Skill) string {
 // 用于将技能内容注入到用户消息中。
 func FormatInvocation(skill Skill, additionalInstructions string) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("<skill name=\"%s\" location=\"%s\">\n", escapeXML(skill.Name), escapeXML(skill.FilePath)))
-	b.WriteString(fmt.Sprintf("References are relative to %s.\n\n", escapeXML(skill.BaseDir)))
+	fmt.Fprintf(&b, "<skill name=\"%s\" location=\"%s\">\n", escapeXML(skill.Name), escapeXML(skill.FilePath))
+	fmt.Fprintf(&b, "References are relative to %s.\n\n", escapeXML(skill.BaseDir))
 	b.WriteString(skill.Content)
 	b.WriteString("\n</skill>")
 	if additionalInstructions != "" {
