@@ -312,10 +312,7 @@ func parseSkillFile(filePath string) (*Skill, []Diagnostic) {
 
 func validateName(name, parentDirName, filePath string) []string {
 	var errs []string
-	if name != parentDirName && filepath.Base(filePath) != skillFileName {
-		// 对于非 SKILL.md 文件，不强求 name 与目录名匹配
-		// 但仍然检查格式
-	}
+	// 对于非 SKILL.md 文件，不强求 name 与目录名匹配，但仍然检查格式。
 	if len(name) > maxNameLength {
 		errs = append(errs, fmt.Sprintf("name exceeds %d characters (%d)", maxNameLength, len(name)))
 	}

@@ -216,7 +216,7 @@ func (h *Handler) cmdCompact(ctx context.Context, chatKey string) string {
 		TrimmedTo   int    `json:"trimmed_to"`
 	}
 	if err := json.Unmarshal(data, &result); err != nil {
-		return fmt.Sprintf("✅ 压缩完成（响应解析失败）")
+		return "✅ 压缩完成（响应解析失败）"
 	}
 
 	return fmt.Sprintf("✅ 对话已压缩\n📦 压缩前消息数: %d\n📦 压缩后消息数: %d", result.TrimmedFrom, result.TrimmedTo)
@@ -1003,8 +1003,7 @@ func (h *Handler) forwardCommand(ctx context.Context, chatKey, text string) stri
 		var errResp struct {
 			Error string `json:"error"`
 		}
-		json.Unmarshal(data, &errResp)
-		if errResp.Error != "" {
+		if json.Unmarshal(data, &errResp) == nil && errResp.Error != "" {
 			return fmt.Sprintf("❌ %s", errResp.Error)
 		}
 		return fmt.Sprintf("❌ 命令执行失败 (HTTP %d)", resp.StatusCode)

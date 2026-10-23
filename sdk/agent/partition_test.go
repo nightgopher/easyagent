@@ -37,7 +37,7 @@ func TestPartitionToolCalls_MixedSafeAndUnsafe(t *testing.T) {
 		{ID: "c2", Name: "safe_grep", Args: `{}`},
 		{ID: "c3", Name: "unsafe_edit", Args: `{}`},
 	}
-	batches := partitionToolCalls(nil, ag, calls)
+	batches := partitionToolCalls(context.Background(), ag, calls)
 	require.Len(t, batches, 2)
 	assert.True(t, batches[0].safe)
 	assert.Len(t, batches[0].calls, 2)
@@ -56,7 +56,7 @@ func TestPartitionToolCalls_AllSafe(t *testing.T) {
 		{ID: "c1", Name: "read", Args: `{}`},
 		{ID: "c2", Name: "grep", Args: `{}`},
 	}
-	batches := partitionToolCalls(nil, ag, calls)
+	batches := partitionToolCalls(context.Background(), ag, calls)
 	require.Len(t, batches, 1)
 	assert.True(t, batches[0].safe)
 	assert.Len(t, batches[0].calls, 2)
@@ -73,7 +73,7 @@ func TestPartitionToolCalls_AllUnsafe(t *testing.T) {
 		{ID: "c1", Name: "edit", Args: `{}`},
 		{ID: "c2", Name: "write", Args: `{}`},
 	}
-	batches := partitionToolCalls(nil, ag, calls)
+	batches := partitionToolCalls(context.Background(), ag, calls)
 	require.Len(t, batches, 2)
 	for _, b := range batches {
 		assert.False(t, b.safe)
@@ -95,12 +95,12 @@ func (bothTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate func(
 	return ToolResult{}, nil
 }
 func (bothTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
-func (bothTool) ExecutionMode() ExecutionMode              { return ExecutionModeSequential }
+func (bothTool) ExecutionMode() ExecutionMode             { return ExecutionModeSequential }
 
 func TestPartitionToolCalls_ToolWithModeSequentialOverridesSafe(t *testing.T) {
 	ag := &Agent{tools: map[string]Tool{"both": bothTool{}}}
 	calls := []ai.ToolCall{{ID: "c1", Name: "both", Args: `{}`}}
-	batches := partitionToolCalls(nil, ag, calls)
+	batches := partitionToolCalls(context.Background(), ag, calls)
 	require.Len(t, batches, 1)
 	assert.False(t, batches[0].safe, "ToolWithMode.Sequential should override ConcurrencySafeChecker")
 }

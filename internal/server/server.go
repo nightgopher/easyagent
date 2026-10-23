@@ -248,7 +248,7 @@ func (s *Server) Handler() http.Handler {
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
 
-	var restHandler http.Handler = s.admissionMiddleware(restMux)
+	var restHandler = s.admissionMiddleware(restMux)
 	restHandler = s.authMiddleware(restHandler)
 	restHandler = corsMiddleware(s)(restHandler)
 	restHandler = recoveryMiddleware(restHandler)

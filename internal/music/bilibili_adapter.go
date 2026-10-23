@@ -95,7 +95,7 @@ func (a *BilibiliAdapter) GetRankings(ctx context.Context) ([]RankingEntry, erro
 
 func (a *BilibiliAdapter) GetTopList(ctx context.Context, rawID string) (*PlaylistDetail, error) {
 	rid := 0
-	fmt.Sscanf(rawID, "ranking:%d", &rid)
+	_, _ = fmt.Sscanf(rawID, "ranking:%d", &rid) // Unparsable IDs fall back to the overall ranking (0).
 
 	items, err := a.client.GetRanking(rid)
 	if err != nil {

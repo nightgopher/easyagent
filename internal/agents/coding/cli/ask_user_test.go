@@ -32,11 +32,11 @@ func TestParseAnswerChoice(t *testing.T) {
 	assert.Equal(t, []int{1}, idxs)
 	assert.Empty(t, text)
 
-	idxs, text, ok = parseAnswerChoice("1,3", 3)
+	idxs, _, ok = parseAnswerChoice("1,3", 3)
 	assert.True(t, ok)
 	assert.Equal(t, []int{1, 3}, idxs)
 
-	idxs, text, ok = parseAnswerChoice("2，3", 3) // 中文逗号
+	idxs, _, ok = parseAnswerChoice("2，3", 3) // 中文逗号
 	assert.True(t, ok)
 	assert.Equal(t, []int{2, 3}, idxs)
 
