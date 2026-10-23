@@ -194,6 +194,9 @@ class RuntimeUiTest {
         waitText("流式验收回答继续生成")
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"写入验收文件","args":{"path":"qa.txt"}}"""))
         waitText("写入验收文件")
+        assertTrue("approval arguments start folded", ui.onAllNodesWithText("qa.txt", substring = true).fetchSemanticsNodes().isEmpty())
+        ui.onNodeWithText("查看参数").performScrollTo().performClick()
+        waitText("qa.txt")
         ui.onNodeWithText("批准").performScrollTo()
         screenshot("tool-approval")
         ui.onNodeWithText("批准").performClick()
@@ -265,6 +268,14 @@ class RuntimeUiTest {
         screenshot("live-message-cards")
         ui.onNodeWithText("bash").performClick()
         ui.waitUntil(5_000) { ui.onAllNodesWithText("完整输出").fetchSemanticsNodes().isEmpty() }
+        host.emit("event", "event" to JSONObject("""{"type":"tool_start","tool_call_id":"t2","tool_name":"read","tool_args":{"path":"qa.txt"}}"""))
+        host.emit("event", "event" to JSONObject("""{"type":"tool_end","tool_call_id":"t2","tool_result":"文件内容","duration_ms":200}"""))
+        waitText("已调用 2 个工具")
+        ui.onAllNodesWithText("printf QA_TOOL").fetchSemanticsNodes().let { assertTrue("grouped calls start folded", it.isEmpty()) }
+        screenshot("tool-group")
+        ui.onNodeWithText("已调用 2 个工具").performClick()
+        waitText("printf QA_TOOL")
+        waitText("qa.txt")
     }
 
     @Test fun attachmentsRefreshAndSurviveAnotherPromptAcknowledgement() {
