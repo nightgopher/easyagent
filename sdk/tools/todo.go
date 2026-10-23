@@ -142,9 +142,10 @@ func (t *TodoTool) Execute(_ context.Context, raw json.RawMessage, _ func(agent.
 
 	for _, item := range sorted {
 		icon := "☐"
-		if item.Status == "completed" {
+		switch item.Status {
+		case "completed":
 			icon = "☑"
-		} else if item.Status == "in_progress" {
+		case "in_progress":
 			icon = "⊡"
 		}
 		fmt.Fprintf(&b, "  %s [%s] %s (%s)\n", icon, item.Priority, item.Content, item.ID)
