@@ -206,8 +206,12 @@ func TestManager_MessageCount(t *testing.T) {
 	sessionPath := mgr.SessionPath(id)
 	f, err := os.OpenFile(sessionPath, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
-	f.WriteString(`{"id":"e1","type":"message","timestamp":1234,"parent_id":""}` + "\n")
-	f.WriteString(`{"id":"e2","type":"leaf","timestamp":1235,"target_id":"e1"}` + "\n")
+	if _, err := f.WriteString(`{"id":"e1","type":"message","timestamp":1234,"parent_id":""}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(`{"id":"e2","type":"leaf","timestamp":1235,"target_id":"e1"}` + "\n"); err != nil {
+		t.Fatal(err)
+	}
 	f.Close()
 	sess.Storage().Close()
 

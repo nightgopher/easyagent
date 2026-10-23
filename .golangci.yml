@@ -31,6 +31,13 @@ linters:
     # os.Remove(All) and os.(Un)Setenv results, where errors are routinely ignored.
     presets:
       - std-error-handling
+    rules:
+      # Tests write fixtures to temporary directories and read them back by
+      # path; gosec's file and permission rules flag exactly that. errcheck
+      # and staticcheck still apply to tests.
+      - path: _test\.go
+        linters:
+          - gosec
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
