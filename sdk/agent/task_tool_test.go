@@ -3,6 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -10,16 +13,103 @@ import (
 
 	"github.com/hwj123hwj/easyagent/sdk/ai"
 	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
+	"github.com/hwj123hwj/easyagent/sdk/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // recordingProvider 按顺序回放脚本响应，并记录每次请求，用来检查父子上下文是否隔离。
 type recordingProvider struct {
-	mu        sync.Mutex
-	inner     *mockTestProvider
-	requests  []ai.StreamRequest
-	blockFrom int // 第几次调用起阻塞到 ctx 取消（0 表示不阻塞）
+	mu            sync.Mutex
+	inner         *mockTestProvider
+	requests      []ai.StreamRequest
+	cancelOnBlock context.CancelFunc
+	blockFrom     int // 第几次调用起阻塞到 ctx 取消（0 表示不阻塞）
+}
+
+func TestTaskModelTurnsAndUsage(t *testing.T) {
+	cached := 7
+	p := &recordingProvider{inner: &mockTestProvider{responses: []mockTestResponse{
+		{toolCalls: []ai.ToolCall{{ID: "c1", Name: "safe", Args: `{}`}}, stop: ai.StopReasonToolUse, usage: ai.Usage{InputTokens: 11, OutputTokens: 3, CachedInputTokens: &cached}},
+		{text: "done", stop: ai.StopReasonStop, usage: ai.Usage{InputTokens: 17, OutputTokens: 5, CachedInputTokens: &cached}},
+	}}}
+	_, task := newTaskTestAgent(p, nil, &concurrentSafeTool{})
+	result, err := task.Execute(context.Background(), json.RawMessage(`{"prompt":"inspect","model":"child-model","max_turns":1}`), nil)
+	require.NoError(t, err)
+	require.Len(t, p.requests, 1, "explicit limit prevents a second model request")
+	require.Equal(t, "child-model", p.requests[0].Model.ID)
+	require.Equal(t, "mock_test", p.requests[0].Model.Provider)
+	require.Equal(t, ai.Usage{InputTokens: 11, OutputTokens: 3, CachedInputTokens: &cached}, result.SubagentUsage.Usage)
+	require.Equal(t, "child-model", result.SubagentUsage.Model)
+	for _, raw := range []string{`{"prompt":"x","max_turns":0}`, `{"prompt":"x","max_turns":-1}`, `{"prompt":"x","provider":"unknown"}`} {
+		_, err := task.Validate(json.RawMessage(raw))
+		require.Error(t, err)
+	}
+	_, err = task.Execute(context.Background(), json.RawMessage(`{"prompt":"x","model":"x","provider":"unknown"}`), nil)
+	require.ErrorContains(t, err, "not registered")
+}
+
+func TestTaskUsageSurvivesFailureAndHooks(t *testing.T) {
+	for _, failure := range []bool{false, true} {
+		t.Run(fmt.Sprint(failure), func(t *testing.T) {
+			p := &recordingProvider{inner: &mockTestProvider{responses: []mockTestResponse{
+				{toolCalls: []ai.ToolCall{{ID: "c1", Name: "safe", Args: `{}`}}, stop: ai.StopReasonToolUse, usage: ai.Usage{InputTokens: 11, OutputTokens: 3}},
+				{text: "done", stop: ai.StopReasonStop, usage: ai.Usage{InputTokens: 17, OutputTokens: 5}},
+			}}}
+			if failure {
+				p.blockFrom = 2
+			}
+			parent, task := newTaskTestAgent(p, nil, &concurrentSafeTool{})
+			ctx, cancel := context.WithCancel(context.Background())
+			p.cancelOnBlock = cancel
+			defer cancel()
+			if !failure {
+				parent.lifecycleHooks.After = []AfterToolCallHook{func(_ context.Context, _ ToolCallContext, _ ToolResult) (ToolResult, error) {
+					return ToolResult{}, errors.New("hook failed")
+				}}
+			}
+			msg := executeOneTool(ctx, parent, ai.ToolCall{ID: "task-1", Name: task.Name(), Args: `{"prompt":"inspect"}`}).(ai.ToolResultMessage)
+			require.True(t, msg.IsError)
+			require.NotNil(t, msg.SubagentUsage)
+			want := ai.Usage{InputTokens: 28, OutputTokens: 8}
+			if failure {
+				want = ai.Usage{InputTokens: 11, OutputTokens: 3}
+			}
+			require.Equal(t, want, msg.SubagentUsage.Usage)
+		})
+	}
+}
+
+func TestTaskUsagePersistsAcrossCompactionAndRestart(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	storage := session.NewJSONLStorage(path)
+	require.NoError(t, storage.Init())
+	sess := session.New(storage)
+	usage := ai.Usage{InputTokens: 110, OutputTokens: 20}
+	msg := ai.ToolResultMessage{ToolCallID: "task-1", Content: "child answer", SubagentUsage: &ai.SubagentUsage{Model: "child", Provider: "mock_test", Usage: usage}}
+	require.NoError(t, sess.AppendMessage(ctx, msg))
+	boundary, err := storage.GetLeaf(ctx)
+	require.NoError(t, err)
+	require.NoError(t, sess.AppendCompactionKeeping(ctx, "summary", []ai.Message{msg}, nil))
+	require.NoError(t, storage.Close())
+	storage = session.NewJSONLStorage(path)
+	require.NoError(t, storage.Init())
+	t.Cleanup(func() { _ = storage.Close() })
+	restored := session.New(storage)
+	require.NoError(t, restored.InitFromStorage(ctx))
+	total, err := restored.SubagentUsage(ctx, "")
+	require.NoError(t, err)
+	require.Equal(t, usage, total, "retained compaction copies must not count twice")
+	later, err := restored.SubagentUsage(ctx, boundary)
+	require.NoError(t, err)
+	require.Equal(t, ai.Usage{}, later, "later runs must not recount earlier tasks")
+	a := New(Options{Model: ai.Model{ID: "t"}, Session: restored})
+	snapshot, err := a.ContextSnapshot(ctx)
+	require.NoError(t, err)
+	require.Equal(t, usage, snapshot.Usage.SubagentUsage)
+	require.Zero(t, snapshot.Usage.LastRequest.InputTokens)
+	require.Less(t, snapshot.Usage.EstimatedTokens, usage.InputTokens)
 }
 
 func (p *recordingProvider) Name() string { return "mock_test" }
@@ -32,6 +122,9 @@ func (p *recordingProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 	n := len(p.requests)
 	p.mu.Unlock()
 	if p.blockFrom > 0 && n >= p.blockFrom {
+		if p.cancelOnBlock != nil {
+			p.cancelOnBlock()
+		}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
@@ -151,4 +244,14 @@ func TestTaskToolCancelsWithParent(t *testing.T) {
 func TestTaskToolRequiresPrompt(t *testing.T) {
 	_, err := NewTaskTool(TaskToolOptions{}).Validate(json.RawMessage(`{"description":"x"}`))
 	assert.Error(t, err)
+}
+
+func TestTaskPartialFailureUsage(t *testing.T) {
+	p := &recordingProvider{inner: &mockTestProvider{responses: []mockTestResponse{
+		{text: "partial", stop: ai.StopReasonError, usage: ai.Usage{InputTokens: 19, OutputTokens: 2}, err: errors.New("stream failed")},
+	}}}
+	_, task := newTaskTestAgent(p, nil)
+	result, err := task.Execute(context.Background(), json.RawMessage(`{"prompt":"inspect"}`), nil)
+	require.Error(t, err)
+	require.Equal(t, ai.Usage{InputTokens: 19, OutputTokens: 2}, result.SubagentUsage.Usage)
 }

@@ -37,6 +37,7 @@ type pendingConfirmation struct {
 
 // sessionRun is owned by the session, never by a socket or HTTP request.
 type sessionRun struct {
+	SubagentUsage    ai.Usage `json:"subagent_usage"`
 	baseEntryID      *string
 	Anchors          []map[string]any `json:"message_anchors,omitempty"`
 	CanContinue      bool             `json:"can_continue,omitempty"`
@@ -210,6 +211,16 @@ func (s *Server) consumeRun(ctx context.Context, run *sessionRun, stream <-chan 
 		run.State = "completed"
 	}
 	if sess, ok := s.app.SessionStore().Get(run.SessionID); ok {
+		// Read durable results after this run's cursor, including cancelled tools
+		// and pre-compaction entries. Stream delivery can stop on cancellation.
+		if run.baseEntryID != nil {
+			if usage, err := sess.Session().SubagentUsage(s.ctx, *run.baseEntryID); err == nil {
+				run.SubagentUsage = usage
+				run.Usage.Add(usage)
+			} else {
+				slog.Error("cannot read subagent usage", "run_id", run.ID, "error", err)
+			}
+		}
 		messages, err := sess.Session().BuildContext(s.ctx)
 		ids, idErr := sess.Session().BuildContextEntryIDs(s.ctx)
 		if err == nil && idErr == nil && len(ids) == len(messages) {
