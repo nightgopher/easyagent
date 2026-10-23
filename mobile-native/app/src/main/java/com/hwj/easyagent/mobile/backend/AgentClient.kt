@@ -57,7 +57,8 @@ class AgentClient(val config: HostConfig) {
         refreshSessions()
         scope.launch {
             while (isActive) {
-                delay(60_000)
+                // Poll faster while a session works so list badges stay current.
+                delay(if (sessions.value.any { it.running }) 10_000 else 60_000)
                 if (link.value == LinkStatus.CONNECTED) refreshSessions()
             }
         }
