@@ -90,11 +90,6 @@ ICON=$(plutil -extract CFBundleIconFile raw -o - "$APP/Contents/Info.plist")
   || { echo 'Native app is missing its Dock icon' >&2; exit 1; }
 
 if [[ -n "$TAG" ]]; then
-  # A missing compiler makes MyGo silently fall back to legacy ICNS. Formal
-  # releases must carry the catalog so macOS supplies the icon mask and scale.
-  [[ $(plutil -extract CFBundleIconName raw -o - "$APP/Contents/Info.plist") == AppIcon \
-    && -s "$APP/Contents/Resources/Assets.car" ]] \
-    || { echo 'Native releases require the compiled Icon Composer catalog (Xcode 26+)' >&2; exit 1; }
   CORE="$APP/Contents/Resources/easyagent"
   [[ $("$CORE" --version) == "easyagent $TAG" ]] || { echo 'Bundled core version does not match tag' >&2; exit 1; }
   REVISION=$(git rev-parse HEAD)

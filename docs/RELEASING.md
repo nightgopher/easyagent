@@ -43,8 +43,6 @@ git push origin refs/tags/v0.1.1-rc.1
 
 ## 自动发布的强制检查
 
-macOS 正式打包需要 Xcode 26+ 编译 `desktop-native/AppIcon.icon`。安装包必须包含 `Assets.car`、兼容的 `AppIcon.icns` 以及 `CFBundleIconName=AppIcon`；编译器缺失或编译失败时阻止发布，不接受 MyGo 的旧式图标回退。
-
 1. 严格版本格式；附注 tag；HEAD 与 tag 一致；提交已进入 main；版本高于现有版本；对应 CHANGELOG 节非空。
 2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本和 Android 单测 / Lint / Debug 构建；Android 发布构建还等待同一 SHA 的 API 31/34/35 UI 测试矩阵通过，并按 [Android 验收清单](QA_ANDROID.md) 记录候选版本和人工检查。Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
 3. 同一 SHA 构建 Linux/macOS、amd64/arm64 的核心与桥接共 8 个程序，注入相同版本。原生 DMG 在 Apple Silicon runner 构建，核验包版本与 tag 一致、Bundle ID 为 `com.hwj.easyagent`，并启动实际 bundle 核心检查健康响应和子进程回收。
