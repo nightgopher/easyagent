@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"testing"
 )
 
@@ -25,7 +26,7 @@ func TestMdToPostContent_PlainText(t *testing.T) {
 func TestMdToPostContent_Bold(t *testing.T) {
 	result := mdToPostContent("this is **bold** text")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	// Should contain a styled element
 	encoded, _ := json.Marshal(post)
@@ -37,7 +38,7 @@ func TestMdToPostContent_Bold(t *testing.T) {
 func TestMdToPostContent_InlineCode(t *testing.T) {
 	result := mdToPostContent("use `code` here")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "background") {
@@ -48,7 +49,7 @@ func TestMdToPostContent_InlineCode(t *testing.T) {
 func TestMdToPostContent_Heading(t *testing.T) {
 	result := mdToPostContent("# Title\n## Subtitle")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "#") || !contains(encoded, "##") {
@@ -59,7 +60,7 @@ func TestMdToPostContent_Heading(t *testing.T) {
 func TestMdToPostContent_Link(t *testing.T) {
 	result := mdToPostContent("[click here](https://example.com)")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "https://example.com") {
@@ -70,7 +71,7 @@ func TestMdToPostContent_Link(t *testing.T) {
 func TestMdToPostContent_CodeBlock(t *testing.T) {
 	result := mdToPostContent("before\n```go\nfmt.Println(\"hi\")\n```\nafter")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "fmt.Println") {
@@ -81,7 +82,7 @@ func TestMdToPostContent_CodeBlock(t *testing.T) {
 func TestMdToPostContent_Table(t *testing.T) {
 	result := mdToPostContent("| Name | Value |\n|---|---|\n| foo | bar |")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "foo") || !contains(encoded, "bar") {
@@ -92,7 +93,7 @@ func TestMdToPostContent_Table(t *testing.T) {
 func TestMdToPostContent_List(t *testing.T) {
 	result := mdToPostContent("- item 1\n- item 2")
 	var post map[string]any
-	json.Unmarshal([]byte(result), &post)
+	require.NoError(t, json.Unmarshal([]byte(result), &post))
 
 	encoded, _ := json.Marshal(post)
 	if !contains(encoded, "item 1") || !contains(encoded, "item 2") {

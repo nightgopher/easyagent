@@ -493,17 +493,7 @@ func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
 }
 
 func (a *Agent) handleAssistantMessage(message ai.StreamAssistantMessage) (ai.AssistantMessage, error) {
-	assistant := ai.AssistantMessage{
-		Text:               message.Text,
-		Thinking:           message.Thinking,
-		ThinkingBlocks:     message.ThinkingBlocks,
-		ThinkingDurationMS: message.ThinkingDurationMS,
-		ToolCalls:          message.ToolCalls,
-		StopReason:         message.StopReason,
-		StopReasonMissing:  message.StopReasonMissing,
-		ErrorMsg:           message.ErrorMsg,
-		Usage:              message.Usage,
-	}
+	assistant := ai.AssistantMessage(message)
 	return assistant, nil
 }
 

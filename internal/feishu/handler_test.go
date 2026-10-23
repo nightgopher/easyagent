@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"encoding/json"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -353,7 +354,7 @@ func TestLoadRoutes_MissingFile(t *testing.T) {
 func TestLoadRoutes_InvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	routesFile := filepath.Join(dir, "routes.json")
-	os.WriteFile(routesFile, []byte("not json"), 0o644)
+	require.NoError(t, os.WriteFile(routesFile, []byte("not json"), 0o644))
 
 	h := &Handler{
 		routes:     make(map[string]*ChatRoute),

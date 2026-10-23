@@ -229,7 +229,7 @@ private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit
         m.kind == "error" -> ErrorCard(m.text)
         m.kind == "compaction" -> Note("上下文已压缩", m.text)
         m.isWaiting -> WaitingRow()
-        else -> MarkdownLite(m.text, Modifier.fillMaxWidth())
+        else -> MarkdownView(m.text, Modifier.fillMaxWidth())
     }
 }
 

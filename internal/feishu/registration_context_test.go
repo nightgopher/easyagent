@@ -14,7 +14,7 @@ func TestRegistrationRequestCancelsInFlight(t *testing.T) {
 	entered := make(chan struct{})
 	released := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.ParseForm()
+		_ = r.ParseForm()
 		close(entered)
 		<-r.Context().Done()
 		close(released)

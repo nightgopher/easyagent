@@ -150,7 +150,7 @@ func (s *Server) buildPromptMessage(sess *runtime.AgentSession, prompt string, i
 		return message, fmt.Errorf("too many attachments or file references")
 	}
 	display, totalImages := prompt, 0
-	appendFile := func(path, label, mime string) error {
+	appendFile := func(path, label string) error {
 		safe, err := securePath(sess.Workspace(), path)
 		if err != nil {
 			return err
@@ -164,9 +164,11 @@ func (s *Server) buildPromptMessage(sess *runtime.AgentSession, prompt string, i
 			return err
 		}
 		defer file.Close()
+		var mime string
 		{
 			header := make([]byte, 512)
 			count, _ := file.ReadAt(header, 0)
+			// Sniff the type from the bytes; a declared MIME type is not trusted.
 			mime = http.DetectContentType(header[:count])
 		}
 		limit := int64(64 * 1024)
@@ -219,7 +221,7 @@ func (s *Server) buildPromptMessage(sess *runtime.AgentSession, prompt string, i
 		if json.Unmarshal(data, &attachment) != nil || attachment.ID != id || attachment.Workspace != sess.Workspace() {
 			return message, fmt.Errorf("attachment workspace mismatch")
 		}
-		if err := appendFile(attachment.Path, attachment.Name, attachment.MimeType); err != nil {
+		if err := appendFile(attachment.Path, attachment.Name); err != nil {
 			return message, err
 		}
 	}
@@ -227,7 +229,7 @@ func (s *Server) buildPromptMessage(sess *runtime.AgentSession, prompt string, i
 		if filepath.Clean(ref.Workspace) != filepath.Clean(sess.Workspace()) {
 			return message, fmt.Errorf("file reference belongs to another workspace")
 		}
-		if err := appendFile(ref.Path, ref.Path, ""); err != nil {
+		if err := appendFile(ref.Path, ref.Path); err != nil {
 			return message, err
 		}
 	}

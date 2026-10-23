@@ -166,12 +166,8 @@ func addTableBrSpacing(text string) string {
 			if len(out) > 0 && out[len(out)-1] != "" {
 				out = append(out, "")
 			}
-			// Add <br> before the blank line
+			// Add <br> before the blank line, then the blank line before the table.
 			out = append(out, "<br>")
-			// Ensure blank line between <br> and table
-			if len(out) > 0 && out[len(out)-1] != "<br>" {
-				// already added
-			}
 			out = append(out, "")
 		}
 

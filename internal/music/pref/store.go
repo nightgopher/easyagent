@@ -132,7 +132,7 @@ func (s *Store) Summary() string {
 
 	var b strings.Builder
 	b.WriteString("## 用户听歌偏好\n")
-	b.WriteString(fmt.Sprintf("累计播放 %d 首。", s.agg.TotalPlays))
+	fmt.Fprintf(&b, "累计播放 %d 首。", s.agg.TotalPlays)
 
 	// Top 5 artists — fixed count, never grows
 	topArtists := topN(s.agg.ArtistCounts, 5)

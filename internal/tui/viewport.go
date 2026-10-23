@@ -289,9 +289,7 @@ func (v *MessageViewport) renderMessage(msg ChatMessage, messageIndex, baseRow i
 	case "assistant":
 		// Assistant content: full Markdown rendering via glamour
 		rendered := v.md.Render(msg.Content)
-		for _, line := range strings.Split(rendered, "\n") {
-			lines = append(lines, line)
-		}
+		lines = append(lines, strings.Split(rendered, "\n")...)
 	case "system":
 		// System content: italic dim text
 		for _, line := range strings.Split(msg.Content, "\n") {
