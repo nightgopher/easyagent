@@ -1,4 +1,3 @@
 build.noindex/
 resources/*
-!resources/icon.png
 !resources/easyagent.entitlements
