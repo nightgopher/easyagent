@@ -460,7 +460,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
         val value = JSONObject().put("type", "snapshot").put("session_id", "qa-session")
             .put("seq", sequence.get()).put("messages", messages)
             .put("events", JSONArray(events.toString()))
-            .put("confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
+            .put("pending_confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
         if (runPrompt.isNotEmpty()) value.put("run", JSONObject().put("id", "qa-run")
             .put("state", if (running) "running" else "cancelled").put("prompt", runPrompt).put("request_id", requestId))
         return value
