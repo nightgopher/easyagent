@@ -193,6 +193,26 @@ func TestHostRemovalWithUnreadableCredential(t *testing.T) {
 					store.deleteErr = errors.New("synthetic locked keychain")
 				}
 				a := hostCredentialPreview(t, store)
+				if active {
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path == "/ws" {
+							connection, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+							if err != nil {
+								return
+							}
+							defer connection.Close()
+							for {
+								if _, _, err := connection.ReadMessage(); err != nil {
+									return
+								}
+							}
+						}
+						fmt.Fprint(w, `[]`)
+					}))
+					t.Cleanup(server.Close)
+					client, _ := newBackendClient(server.URL, "")
+					a.Live.Core = &localBackend{client: client, done: make(chan struct{})}
+				}
 				other := a.Live.Config.Hosts[1]
 				other.ID = "other"
 				a.Live.Config.Hosts = append(a.Live.Config.Hosts, other)
