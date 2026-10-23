@@ -481,7 +481,7 @@ func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
 	// 模型定义了上限则随请求下发。
 	req := ai.StreamRequest{
 		Model:      a.model,
-		Messages:   messages,
+		Messages:   ai.MessagesForModel(messages, a.model),
 		System:     a.system,
 		Tools:      a.toolDefinitions(),
 		ToolChoice: nil,
