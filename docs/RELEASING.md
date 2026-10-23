@@ -20,7 +20,7 @@
 | GitHub Release | 经验证的 tag；对外可下载版本，带明确变更说明与校验和 |
 | 迷你主机持续部署 | 跟踪 main 的完整 SHA；日常开发更新，构建验证后重启与回滚 |
 
-合并 PR 不等于发布新版本，也不需要为每个修复立刻打 tag。迷你主机保持当前 main 更新模式；不把它的 SHA 版本伪装成已发布 tag。服务暂停更新、回滚与自启动见 [部署运维](MINI_DEPLOY.md)。本地 `make build` 的 `git describe` 信息用于开发定位，带提交距离或 dirty 后缀的构建不是正式 Release。
+合并 PR 不等于发布新版本，也不需要为每个修复立刻打 tag。每个版本都会重建并分发全部 25 项资产，客户端随之提示更新，因此连续的小修复先累积在 `Unreleased`，凑成一批有实际价值的变化或遇到需要尽快送达用户的修复时再发版；同一天内不为单个小修复连发补丁版本。迷你主机保持当前 main 更新模式；不把它的 SHA 版本伪装成已发布 tag。服务暂停更新、回滚与自启动见 [部署运维](MINI_DEPLOY.md)。本地 `make build` 的 `git describe` 信息用于开发定位，带提交距离或 dirty 后缀的构建不是正式 Release。
 
 ## 准备版本
 
@@ -74,6 +74,8 @@ EA_VERSION=v0.1.0 bash scripts/install.sh
 SHA-256 用于检测下载损坏，信任根仍是 GitHub HTTPS 和发布权限。新版 Release 同时受 GitHub 不可变发布保护；下载完整资产后可运行 `sha256sum --check checksums.txt` 核验，macOS 可用 `shasum -a 256 -c checksums.txt`。
 
 ## Android 签名与发布
+
+完整 Release 仍总是包含 APK，但 `release.json` 额外记录 `"sources": {"android": <发布提交中 mobile-native/ 的 git tree>}`，发布前由 `publish-release.py` 按同一提交重新计算核对。正式构建在 `mobile-native/` 无未提交修改时把同一 tree 写入 `BuildConfig.SOURCE_TREE`。应用内更新发现最新版本的 tree 与已安装应用相同（本次没有改动 Android 源码）时不提示升级；开发构建的 tree 为空，旧版本清单没有该字段，均按版本号正常比较。APK 只依赖 `mobile-native/` 和版本号，因此不按其他目录判断；桌面客户端内嵌 Go 核心，几乎每个版本都有变化，不做同类跳过。
 
 APK 名称固定为 `easyagent-android.apk`，应用标识为 `com.hwj.easyagent.mobile`，要求 Android 8.0 / API 26 及以上。从 v0.19.0（含其预发布）起 APK 是完整 Release 的必需资产；从 v0.19.2（含其预发布）起还须提供 `easyagent-android.zip`，供直接下载 APK 反复中断的手机浏览器改用 ZIP。解压后安装其中的 `easyagent-android.apk`；构建、生成清单及上传前均检查 ZIP 中只有这一文件，且与独立 APK 完全一致。两种格式与其他文件一并上传到草稿、验证 digest 后公开，不补传到已经锁定的旧 Release。
 
