@@ -72,8 +72,12 @@ func (t *BashTool) Description() string {
 func (t *BashTool) Parameters() map[string]any {
 	properties := map[string]any{
 		"command": map[string]any{"type": "string", "description": "The shell command to execute."},
-		"timeout": map[string]any{"type": "integer", "description": "Timeout in seconds (default 120). Set a longer timeout for builds or tests."},
 	}
+	timeoutDesc := "Timeout in seconds (default 120). Set a longer timeout for builds or tests."
+	if t.background != nil {
+		timeoutDesc = "Timeout in seconds (default 120). A command still running when it expires is moved to a background task (read with bash_output, stop with bash_kill) instead of being killed."
+	}
+	properties["timeout"] = map[string]any{"type": "integer", "description": timeoutDesc}
 	if t.background != nil {
 		properties["run_in_background"] = map[string]any{"type": "boolean", "description": "Start the command in the background and return a task id immediately, for dev servers, watchers or long builds. Read output with bash_output and stop it with bash_kill. timeout does not apply."}
 	}
@@ -123,6 +127,16 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		params.Timeout = DefaultBashTimeoutSeconds
 	}
 
+	// 有后台任务表时前台执行改为「启动任务 + 等到超时」：超时未完成不杀进程，
+	// 移交任务表返回 backgrounded，避免跑了一半的构建/测试作废。sleep 开头的
+	// 命令超时后再等也没有产出，维持直接终止。
+	if t.background != nil && !backgroundsPoorly(params.Command) {
+		return t.executeForegroundTask(ctx, params, onUpdate)
+	}
+	return t.runForeground(ctx, params, onUpdate)
+}
+
+func (t *BashTool) runForeground(ctx context.Context, params BashParams, onUpdate func(agent.PartialResult)) (agent.ToolResult, error) {
 	req := operations.RunRequest{
 		Command: params.Command,
 		Timeout: time.Duration(params.Timeout) * time.Second,
@@ -133,14 +147,8 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	defer stopProgress()
 	result, runErr := t.ops.Run(ctx, req)
 
-	output := string(result.Output)
+	output := t.displayOutput(result.Output)
 
-	// Keep output and failure together so the model sees both the cause and progress.
-	if isBinaryOutput(output) {
-		output = fmt.Sprintf("Command produced binary output (%d bytes). Use file redirection to save output.", len(result.Output))
-	} else {
-		output = TruncateOutput(stripANSI(output), t.maxOutputLen)
-	}
 	var failure error
 	switch {
 	case errors.Is(runErr, context.DeadlineExceeded):
@@ -168,6 +176,103 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 
 	return agent.ToolResult{Content: output}, nil
+}
+
+// executeForegroundTask runs the command as a registry task and waits up to
+// params.Timeout: finished in time reports like a normal foreground run; a
+// still-running command is handed to the background table instead of killed.
+// User cancellation still stops the process immediately.
+func (t *BashTool) executeForegroundTask(ctx context.Context, params BashParams, onUpdate func(agent.PartialResult)) (agent.ToolResult, error) {
+	task, err := t.background.start(t.ops, params.Command, t.workspace)
+	if err != nil {
+		// 注册表已满等启动前失败：退回杀死式超时，命令仍然执行一次。
+		return t.runForeground(ctx, params, onUpdate)
+	}
+
+	stopProgress := t.reportProgress(ctx, params.Timeout, onUpdate)
+	defer stopProgress()
+
+	timer := time.NewTimer(time.Duration(params.Timeout) * time.Second)
+	defer timer.Stop()
+	select {
+	case <-task.done:
+		return t.finishedTaskResult(task)
+	case <-timer.C:
+		return t.backgroundedResult(task, params.Timeout)
+	case <-ctx.Done():
+		task.kill()
+		select {
+		case <-task.done:
+		case <-time.After(3 * time.Second):
+		}
+		return t.interruptedTaskResult(task, ctx.Err())
+	}
+}
+
+func (t *BashTool) finishedTaskResult(task *backgroundTask) (agent.ToolResult, error) {
+	_, out := task.readNew()
+	output := t.displayOutput([]byte(out))
+	exitCode, runErr := task.finishState()
+
+	var failure error
+	switch {
+	case errors.Is(runErr, context.Canceled):
+		failure = fmt.Errorf("command canceled")
+	case runErr != nil:
+		failure = runErr
+	case exitCode != 0:
+		failure = fmt.Errorf("command exited with code %d", exitCode)
+	}
+	if failure != nil {
+		if output != "" {
+			output += "\n\n"
+		}
+		output += failure.Error()
+		return agent.ToolResult{Content: output, IsError: true}, failure
+	}
+	return agent.ToolResult{Content: output}, nil
+}
+
+func (t *BashTool) backgroundedResult(task *backgroundTask, timeoutSeconds int) (agent.ToolResult, error) {
+	// 读走并展示已有输出：readPos 前移后，bash_output 只返回新输出，不重复。
+	_, out := task.readNew()
+	content := fmt.Sprintf("Command timed out after %ds and was moved to background task %s instead of being killed.\n", timeoutSeconds, task.id)
+	if output := t.displayOutput([]byte(out)); output != "" {
+		content += "\nOutput so far:\n" + output + "\n"
+	}
+	content += fmt.Sprintf("\nRead new output with bash_output (task_id %q); stop it with bash_kill.", task.id)
+	return agent.ToolResult{Content: content}, nil
+}
+
+func (t *BashTool) interruptedTaskResult(task *backgroundTask, cause error) (agent.ToolResult, error) {
+	var failure error
+	if errors.Is(cause, context.DeadlineExceeded) {
+		failure = fmt.Errorf("command interrupted: request deadline exceeded")
+	} else {
+		failure = fmt.Errorf("command canceled")
+	}
+	_, out := task.readNew()
+	output := t.displayOutput([]byte(out))
+	if output != "" {
+		output += "\n\n"
+	}
+	output += failure.Error()
+	return agent.ToolResult{Content: output, IsError: true}, failure
+}
+
+// displayOutput applies the foreground output rules to raw command output.
+func (t *BashTool) displayOutput(raw []byte) string {
+	if isBinaryOutput(string(raw)) {
+		return fmt.Sprintf("Command produced binary output (%d bytes). Use file redirection to save output.", len(raw))
+	}
+	return TruncateOutput(stripANSI(string(raw)), t.maxOutputLen)
+}
+
+// sleepPrefix 只匹配以 sleep 开头的命令：这类命令超时后没有继续等待的价值。
+var sleepPrefix = regexp.MustCompile(`^\s*sleep\b`)
+
+func backgroundsPoorly(command string) bool {
+	return sleepPrefix.MatchString(command)
 }
 
 func (t *BashTool) startBackground(command string) (agent.ToolResult, error) {
