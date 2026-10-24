@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/session"
 	"github.com/stretchr/testify/require"
 )
 

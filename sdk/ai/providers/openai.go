@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // OpenAIProvider 通过 HTTP 调用 OpenAI Chat Completions API。

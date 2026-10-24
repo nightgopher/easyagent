@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // 流事件读到关闭后再取 Result：保留 provider 的部分输出和原始错误，

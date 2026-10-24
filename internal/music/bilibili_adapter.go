@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/internal/music/bilibili"
+	"github.com/nightgopher/easyagent/internal/music/bilibili"
 )
 
 // ────────────────────────────────────────────────────────────────────────────

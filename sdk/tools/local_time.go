@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // LocalTimeTool returns the current wall-clock local time.

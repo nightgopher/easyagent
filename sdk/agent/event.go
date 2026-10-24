@@ -1,8 +1,8 @@
 package agent
 
 import (
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/session"
 )
 
 type AgentEvent interface {

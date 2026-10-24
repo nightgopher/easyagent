@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/sdk/session"
 )
 
 // Manager manages session persistence and indexing.

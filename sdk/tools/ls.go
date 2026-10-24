@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/operations"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/operations"
 )
 
 // LsTool 列出目录内容，显示文件/目录名称、大小和修改时间。

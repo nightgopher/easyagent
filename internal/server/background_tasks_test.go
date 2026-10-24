@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
+	basetools "github.com/nightgopher/easyagent/sdk/tools"
 	"github.com/stretchr/testify/require"
 )
 

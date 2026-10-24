@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 func subTestRegistry() *slashcmd.Registry {

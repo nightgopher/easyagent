@@ -3,7 +3,7 @@ package agent
 import (
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // MaxTokens 为 nil 时 provider 兜底 4096，会截断长回复（见 issue #168）：

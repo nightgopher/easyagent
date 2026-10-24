@@ -14,8 +14,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/session"
 )
 
 // Receipts persist admission and the final result, not the live event stream.

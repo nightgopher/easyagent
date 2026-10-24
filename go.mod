@@ -1,4 +1,4 @@
-module github.com/hwj123hwj/easyagent
+module github.com/nightgopher/easyagent
 
 go 1.26.10
 

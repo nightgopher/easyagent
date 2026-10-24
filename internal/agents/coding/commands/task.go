@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/internal/handoff"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
-	"github.com/hwj123hwj/easyagent/sdk/util"
+	"github.com/nightgopher/easyagent/internal/handoff"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/util"
 )
 
 // RegisterTaskCommands registers /task slash commands for TASK.md handoff management.

@@ -3,9 +3,9 @@ package agent
 import (
 	"context"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/compaction"
-	"github.com/hwj123hwj/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/compaction"
+	"github.com/nightgopher/easyagent/sdk/session"
 )
 
 // ContextSnapshot is the current logical provider input, before provider-specific

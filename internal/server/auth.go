@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 // 访问控制模型（默认安全，本地零配置可用）：

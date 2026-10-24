@@ -4,7 +4,7 @@ English summary: report vulnerabilities privately via GitHub's **Report a vulner
 
 ## 支持版本
 
-个人维护项目，只修复最新正式 Release 与其对应的 main 代码；历史版本不再维护，升级请见 [Releases](https://github.com/hwj123hwj/easyagent/releases)。
+个人维护项目，只修复最新正式 Release 与其对应的 main 代码；历史版本不再维护，升级请见 [Releases](https://github.com/nightgopher/easyagent/releases)。
 
 ## 私下上报
 

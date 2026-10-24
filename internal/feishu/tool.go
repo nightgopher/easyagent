@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 // ToolCallbackRequest mirrors agent.ToolCallbackRequest for the bridge side.

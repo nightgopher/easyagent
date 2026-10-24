@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/sdk/tools"
 )
 
 // QuestionDialogMsg opens the interactive ask_user_question overlay.

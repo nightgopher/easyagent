@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 var ErrNotGitRepository = errors.New("not a git repository")

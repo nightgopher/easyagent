@@ -16,7 +16,7 @@ Provider 必须收到协议完成标记才确认成功；缺少终态的 EOF、�
 
 消息写入失败会阻止后续执行；JSONL 的 `Write` 和 `Sync` 都成功后才更新内存索引。失败或取消时尝试用独立的收尾上下文保存部分消息（`error` / `aborted`）；存储本身失败会返回错误，不能承诺部分结果已经持久化。
 
-固定对照版本为 ZCode `ba61ca16`，参考其业务错误优先、取消时保存部分输出和工具声明保存后再执行的原则；缺终态 EOF 检查与 JSONL 同步错误传播由本项目的 Go 契约实现。源码对照与差异说明见 [PR #130](https://github.com/hwj123hwj/easyagent/pull/130)。
+固定对照版本为 ZCode `ba61ca16`，参考其业务错误优先、取消时保存部分输出和工具声明保存后再执行的原则；缺终态 EOF 检查与 JSONL 同步错误传播由本项目的 Go 契约实现。源码对照与差异说明见 [PR #130](https://github.com/nightgopher/easyagent/pull/130)。
 
 ## 工具执行生命周期
 

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/feishu"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/feishu"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 	"github.com/muesli/cancelreader"
 	qrcode "github.com/skip2/go-qrcode"
 )

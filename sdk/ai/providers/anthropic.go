@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // AnthropicProvider 通过 HTTP 直接调用 Anthropic Messages API。
