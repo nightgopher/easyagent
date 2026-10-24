@@ -50,7 +50,7 @@ func (a *preview) liveLocalSkills(c *ui.Context) {
 		icon(c, "search")
 		ui.TextInput(c, &s.LocalSkillQuery).Label("搜索我的技能").Placeholder("搜索技能名称或描述…").Grow(1).MinWidth(0).FontSize(13).Padding(8, 12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(6)
 	})
-	a.note(c, "主机上全局技能目录里的全部技能，不论是手写的、其他工具装的还是从市场安装的。项目目录里的技能不在这里显示。文件变更后新建会话生效。")
+	a.note(c, "主机上全局技能目录里的全部技能，不论是手写的、其他工具装的还是从市场安装的。项目目录里的技能在工作区面板的「技能」里看。文件变更后，新建会话或在那里点「刷新技能」即可生效。")
 
 	if len(skills) == 0 && l.Loading[localSkillsKey] {
 		a.note(c, "正在加载技能…")
@@ -121,7 +121,7 @@ func (a *preview) localSkillRow(c *ui.Context, skill map[string]any) {
 				a.action(c, "使用").OnClick(func() { a.current().Draft += "\n使用技能 " + name + " "; a.closeSettings() })
 			}
 			if l.activeHostLocal() {
-				a.action(c, "打开文件夹").OnClick(func() { a.revealOutsideWorkspace(path) })
+				a.action(c, "打开文件夹").OnClick(func() { a.showInFileManager(path) })
 			}
 			switch {
 			case managed && m.ConfirmName == dirName:

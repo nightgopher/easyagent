@@ -218,6 +218,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /workspace/file-data", s.workspaceFileData)
 	restMux.HandleFunc("GET /sessions/{id}/run-files", s.listRunFiles)
 	restMux.HandleFunc("GET /sessions/{id}/capabilities", s.getCapabilities)
+	restMux.HandleFunc("POST /sessions/{id}/skills/refresh", s.refreshSessionSkills)
 	restMux.HandleFunc("GET /skills/local", s.listLocalSkills)
 	restMux.HandleFunc("GET /sessions/{id}/file", s.getSessionFile)
 	restMux.HandleFunc("PUT /sessions/{id}/file", s.writeFile)

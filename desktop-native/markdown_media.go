@@ -118,15 +118,20 @@ var openLocalDirectory = func(dir string) error { return mygo.Shell.OpenPath(dir
 // session workspace. On this machine the file's folder is opened, never the file itself: the path
 // comes from model output, so launching it could run a program.
 func (a *preview) revealOutsideWorkspace(target string) {
-	l := a.Live
-	if !l.activeHostLocal() {
-		l.Error = "该文件不在会话工作区内，无法在远程主机上预览"
+	if !a.Live.activeHostLocal() {
+		a.Live.Error = "该文件不在会话工作区内，无法在远程主机上预览"
 		return
 	}
+	a.showInFileManager(target)
+}
+
+// showInFileManager opens the folder holding target (or target itself when it is a folder) in the
+// system file manager. Only meaningful for paths on this machine.
+func (a *preview) showInFileManager(target string) {
 	native := filepath.FromSlash(target)
 	info, err := os.Stat(native)
 	if err != nil {
-		l.Error = "文件不存在：" + target
+		a.Live.Error = "文件不存在：" + target
 		return
 	}
 	if !info.IsDir() {
