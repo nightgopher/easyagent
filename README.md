@@ -2,6 +2,8 @@
 
 **Go 驱动的个人 AI 编程助手与 Agent 工作台，支持桌面、Android、Web、TUI、飞书和 MCP。**
 
+[English](README_EN.md) | 文档索引：[docs](docs/)
+
 在对话中阅读与修改代码、执行工具、查看过程与结果，并保留可继续的历史会话。日常使用以桌面或浏览器工作区为中心，也可以从终端或已配对的飞书账号发起任务。底层 Agent 能力通过公共 Go SDK 复用。
 
 ## 能做什么
@@ -18,7 +20,7 @@
 
 ## 从源码开始
 
-需要 Go（版本以 [go.mod](go.mod) 为准，当前为 1.24.2）。
+需要 Go（版本以 [go.mod](go.mod) 为准，当前为 1.26.10）。
 
 ```bash
 git clone https://github.com/hwj123hwj/easyagent.git
