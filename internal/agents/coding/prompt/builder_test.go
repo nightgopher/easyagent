@@ -20,6 +20,18 @@ func TestBuildSystemPrompt_Default(t *testing.T) {
 	assert.Contains(t, prompt, "Current date:")
 }
 
+func TestBuildSystemPrompt_DefaultExplainsMCP(t *testing.T) {
+	prompt := BuildSystemPrompt(Options{})
+	assert.Contains(t, prompt, "mcp__<server>__<tool>")
+	assert.Contains(t, prompt, "~/.easyagent/mcp.json")
+	assert.Contains(t, prompt, "cannot add or install an MCP server yourself")
+	// /mcp does not add servers, so the prompt must not send the model there to configure one.
+	assert.Contains(t, prompt, "only list, reconnect, enable, disable and trust")
+	assert.Contains(t, prompt, "once this task has finished")
+	// A custom prompt replaces the default text entirely, MCP guidance included.
+	assert.NotContains(t, BuildSystemPrompt(Options{CustomPrompt: "You are a test agent."}), "mcp.json")
+}
+
 func TestBuildSystemPrompt_CustomPrompt(t *testing.T) {
 	prompt := BuildSystemPrompt(Options{CustomPrompt: "You are a test agent."})
 	assert.Contains(t, prompt, "You are a test agent.")
