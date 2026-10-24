@@ -39,6 +39,7 @@ type session struct {
 	UpdatedAt                                    string
 	Plan                                         []nativePlanEntry
 	RemoteID, Workspace, Application, AccessMode string
+	Home                                         string // the host's home directory, for expanding "~/" in file links
 	ModelChosen                                  bool
 	Pinned, Sending                              bool
 	Run                                          *runInfo
