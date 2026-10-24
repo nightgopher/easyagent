@@ -27,6 +27,8 @@ type ReadParams struct {
 	Path   string `json:"path"`
 	Offset int    `json:"offset,omitempty"`
 	Limit  int    `json:"limit,omitempty"`
+	// Pages 选择 PDF 的提取范围（"3" 或 "1-5"）；只对 PDF 生效。
+	Pages string `json:"pages,omitempty"`
 }
 
 // ReadToolOption configures a ReadTool during construction.
@@ -69,7 +71,7 @@ func NewReadTool(opts ...ReadToolOption) *ReadTool {
 }
 func (t *ReadTool) Name() string { return "read" }
 func (t *ReadTool) Description() string {
-	return "Read a file from disk. Text files are returned with line numbers; PNG, JPEG, GIF and WebP images are returned as images; other binary files return only their type and size."
+	return "Read a file from disk. Text files are returned with line numbers; PDFs return extracted text for the requested pages; PNG, JPEG, GIF and WebP images are returned as images; other binary files return only their type and size."
 }
 func (t *ReadTool) Parameters() map[string]any {
 	return map[string]any{
@@ -78,6 +80,7 @@ func (t *ReadTool) Parameters() map[string]any {
 			"path":   map[string]any{"type": "string", "description": "Absolute or relative path to the file."},
 			"offset": map[string]any{"type": "integer", "description": "Starting line number (0-indexed, default 0)."},
 			"limit":  map[string]any{"type": "integer", "description": "Maximum number of lines to read (default 2000)."},
+			"pages":  map[string]any{"type": "string", "description": "For PDFs only: a page number or an ascending range like 1-5 (at most 50 pages per call). Default: the first 10 pages."},
 		},
 		"required": []string{"path"},
 	}
@@ -92,6 +95,9 @@ func (t *ReadTool) Validate(raw json.RawMessage) (json.RawMessage, error) {
 	}
 	if params.Limit <= 0 {
 		params.Limit = 2000
+	}
+	if err := validatePDFPagesSpec(params.Pages); err != nil {
+		return nil, err
 	}
 	return json.Marshal(params)
 }
@@ -123,6 +129,10 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 			modTime = stat.ModTime
 		}
 		t.readTracker.Record(cleanPath, data, modTime)
+	}
+
+	if mediaType := http.DetectContentType(data); mediaType == "application/pdf" {
+		return t.readPDF(params.Path, data, params.Pages), nil
 	}
 
 	if result, ok := readNonText(params.Path, data); ok {
@@ -205,15 +215,11 @@ func readNonText(path string, data []byte) (agent.ToolResult, bool) {
 	if len(head) > 8192 {
 		head = head[:8192]
 	}
-	// 与 git 相同只看 NUL 字节：GBK 等非 UTF-8 文本仍按文本返回。PDF 不一定含 NUL，单独识别。
-	if mediaType != "application/pdf" && bytes.IndexByte(head, 0) < 0 {
+	// 与 git 相同只看 NUL 字节：GBK 等非 UTF-8 文本仍按文本返回（PDF 已提前分流）。
+	if bytes.IndexByte(head, 0) < 0 {
 		return agent.ToolResult{}, false
 	}
-	hint := "it is not shown as text"
-	if mediaType == "application/pdf" {
-		hint = "PDF text is not extracted; use a converter such as pdftotext through bash if available"
-	}
-	return agent.ToolResult{Content: fmt.Sprintf("Binary file %s (%s, %d bytes); %s.", path, mediaType, len(data), hint)}, true
+	return agent.ToolResult{Content: fmt.Sprintf("Binary file %s (%s, %d bytes); it is not shown as text.", path, mediaType, len(data))}, true
 }
 
 // IsConcurrencySafe implements agent.ConcurrencySafeChecker.
