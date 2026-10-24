@@ -207,11 +207,11 @@ func TestSettingsCopyParity(t *testing.T) {
 		}
 	}
 
-	// 4. Capabilities 3 subviews navigation
+	// 4. Capabilities subviews navigation
 	a := newPreview()
 	a.openSettings("capabilities")
-	if a.Settings.CapabilityTab != "installed" {
-		t.Fatalf("expected default capability tab to be 'installed', got %q", a.Settings.CapabilityTab)
+	if a.Settings.CapabilityTab != "mine" {
+		t.Fatalf("expected default capability tab to be 'mine', got %q", a.Settings.CapabilityTab)
 	}
 	a.openSettings("skillMarket")
 	if a.Settings.Tab != "capabilities" || a.Settings.CapabilityTab != "market" {

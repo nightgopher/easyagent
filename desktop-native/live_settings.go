@@ -72,9 +72,7 @@ func (a *preview) loadSettingsPage() {
 	case "mcp":
 		a.resource("mcp", "/mcp"+query(map[string]string{"workspace": s.Workspace}))
 	case "capabilities":
-		if a.current().RemoteID != "" {
-			a.resource("capabilities", sessionPath(a.current().RemoteID)+"/capabilities")
-		}
+		a.refreshSkillLists()
 	case "feishu":
 		a.resource("feishu", "/settings/feishu")
 	case "skillMarket":
@@ -770,25 +768,21 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 func (a *preview) liveCapabilitySettings(c *ui.Context) {
 	s := &a.Settings
 	if s.CapabilityTab == "" {
-		s.CapabilityTab = "installed"
+		s.CapabilityTab = "mine"
 	}
 	ui.Row(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 		tabs := []struct{ id, label string }{
-			{"installed", "已安装"},
-			{"session", "当前会话已加载"},
+			{"mine", "我的技能"},
 			{"market", "市场"},
 		}
 		for _, t := range tabs {
 			selected := s.CapabilityTab == t.id
 			btn := a.action(c, t.label).OnClick(func() {
 				s.CapabilityTab = t.id
-				if t.id == "installed" {
-					a.marketRead("installed", "/skills/market/installed", nil)
-				} else if t.id == "market" {
-					if s.SkillFilter == "已安装" {
-						s.SkillFilter = "推荐"
-					}
-					a.searchMarket()
+				if t.id == "market" {
+					a.openSkillMarket()
+				} else {
+					a.loadLocalSkills()
 				}
 			})
 			if selected {
@@ -796,80 +790,12 @@ func (a *preview) liveCapabilitySettings(c *ui.Context) {
 			}
 		}
 	})
-
-	switch s.CapabilityTab {
-	case "market":
+	if s.CapabilityTab == "market" {
 		a.liveMarketSettings(c)
-	case "session":
-		if a.current().RemoteID == "" {
-			a.note(c, "选择一个项目会话后查看实际加载的技能。")
-			a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() { s.CapabilityTab = "market" })
-			return
-		}
-		if a.resourceFeedback(c, "capabilities", a.loadSettingsPage) {
-			return
-		}
-		m := object(a.Live.Data["capabilities"])
-		a.heading(c, "当前会话的能力")
-		a.note(c, "项目："+str(m["workspace"]))
-		a.note(c, "默认读取项目与个人 .agents/skills，兼容 .claude/skills。同名技能以项目为先；文件变更后新建会话加载。")
-		skills := list(m["skills"])
-		a.heading(c, fmt.Sprintf("已加载技能 · %d", len(skills)))
-		if len(skills) == 0 {
-			a.note(c, "当前没有加载技能。")
-		}
-		for _, raw := range skills {
-			skill := object(raw)
-			scope, invocation := "个人", "仅显式调用"
-			if str(skill["scope"]) == "project" {
-				scope = "项目"
-			}
-			if boolean(skill["model_invocation"]) {
-				invocation = "可由模型调用"
-			}
-			nativeDisclosure(c, str(skill["name"]), str(skill["name"])+" · "+scope+" · "+invocation, func() {
-				a.note(c, str(skill["description"]))
-				nativePre(c, str(skill["source"]))
-				a.action(c, "使用技能").AlignSelf(ui.Start).OnClick(func() { a.current().Draft += "\n使用技能 " + str(skill["name"]) + " "; a.closeSettings() })
-			})
-		}
-	case "installed":
-		fallthrough
-	default:
-		a.heading(c, "已安装技能")
-		a.note(c, "本机/主机技能目录与项目目录中的技能。文件变更后新建会话生效。")
-		installed := list(object(a.Live.Data["installed"])["installed"])
-		loading := a.Live.Loading["installed"]
-		if len(installed) == 0 && loading {
-			a.note(c, "正在加载已安装技能…")
-			return
-		}
-		if len(installed) == 0 {
-			a.note(c, "暂无已安装技能，可前往「市场」子视图安装新技能。")
-			a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(func() {
-				s.CapabilityTab = "market"
-				if s.SkillFilter == "已安装" {
-					s.SkillFilter = "推荐"
-				}
-				a.searchMarket()
-			})
-			return
-		}
-		w, _ := c.Size()
-		available := min(float32(780), w-240-64)
-		columns := max(1, int((available+12)/272))
-		if w <= 640 {
-			columns = 1
-		}
-		ui.Grid(c).Columns(columns).Gap(12).AlignItems(ui.Stretch).Children(func() {
-			for _, raw := range installed {
-				a.marketCard(c, object(raw), true, loading)
-			}
-		})
+		return
 	}
+	a.liveLocalSkills(c)
 }
-
-// Keep map iteration out of the view so keyed form rows remain stable.
 func sortedKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
