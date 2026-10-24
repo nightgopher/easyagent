@@ -112,6 +112,10 @@ func (a *preview) refreshWorkbench() {
 		}
 	case "background":
 		a.loadBackgroundTasks(s)
+	case "skills":
+		if s.RemoteID != "" {
+			a.resource("capabilities", sessionPath(s.RemoteID)+"/capabilities")
+		}
 	case "tools":
 		a.resource("tools", "/tools")
 	case "profile":
@@ -140,7 +144,7 @@ func (a *preview) refreshWorkbench() {
 }
 
 var workbenchTabs = []struct{ id, label, icon string }{
-	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
+	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"skills", "技能", "code"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
 }
 
 func (a *preview) liveWorkbench(c *ui.Context) {
@@ -193,6 +197,8 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 				a.contextWorkbench(c)
 			case "tools":
 				ui.Scroll(c).Grow(1).MinHeight(0).Padding(12).Children(func() { ui.Text(c, pretty(l.Data[w.Tab])).Font("monospace").FontSize(11).LineHeight(1.5).Selectable() })
+			case "skills":
+				a.skillsWorkbench(c)
 			case "profile":
 				a.profileWorkbench(c)
 			case "kb":
@@ -201,7 +207,7 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 			}
 		})
 		ui.Column(c).Width(44).Padding(6, 4).Gap(2).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
-			for _, tab := range workbenchTabs[:7] {
+			for _, tab := range workbenchTabs[:8] {
 				button := iconButton(c.Key(tab.id), tab.icon, tab.label).Size(36, 34).OnClick(func() { a.openResource(tab.id) })
 				if w.Tab == tab.id {
 					button.TextColor(c.Theme().Accent).Background(c.Theme().SurfaceHover)
