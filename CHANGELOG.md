@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Security
+- 移除源码中硬编码的飞书预注册内置应用 App Secret，改为从 `FEISHU_BUILTIN_APP_SECRET` 环境变量读取；曾在公开仓库出现的旧密钥视为已泄露，需在飞书开放平台轮换。
+
 ## [v0.26.1] - 2026-10-23
 
 ### Fixed
