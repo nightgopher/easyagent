@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -41,7 +43,10 @@ func markdownFileReferences(source string) string {
 	}
 	return strings.Join(lines, "\n")
 }
-func resolveMarkdownFile(workspace, base, href string) (string, error) {
+
+// resolveMarkdownFile turns a link target into an absolute path on the active host. "~/" is expanded with
+// home, the host's own home directory as reported by the host, never the client machine's.
+func resolveMarkdownFile(workspace, home, base, href string) (string, error) {
 	if strings.HasPrefix(href, "ea-file:") {
 		var err error
 		href, err = url.PathUnescape(strings.TrimPrefix(href, "ea-file:"))
@@ -57,7 +62,11 @@ func resolveMarkdownFile(workspace, base, href string) (string, error) {
 	}
 	href = strings.ReplaceAll(href, "\\", "/")
 	if strings.HasPrefix(href, "~/") {
-		return "", errors.New("请使用当前主机上的绝对路径")
+		home = strings.ReplaceAll(home, "\\", "/")
+		if !strings.HasPrefix(home, "/") && !(len(home) > 2 && home[1] == ':') {
+			return "", errors.New("无法确定当前主机的家目录，请升级该主机上的 EasyAgent 后重试")
+		}
+		href = path.Join(home, href[2:])
 	}
 	if !strings.HasPrefix(href, "/") && !(len(href) > 2 && href[1] == ':') {
 		directory := strings.ReplaceAll(workspace, "\\", "/")
@@ -67,6 +76,63 @@ func resolveMarkdownFile(workspace, base, href string) (string, error) {
 		href = path.Join(directory, href)
 	}
 	return path.Clean(href), nil
+}
+
+// pathInsideWorkspace reports whether target lies in workspace. Both are absolute paths on the host;
+// the comparison is lexical, like the host's own check, and case-insensitive for Windows drive paths.
+func pathInsideWorkspace(workspace, target string) bool {
+	root := strings.TrimRight(path.Clean(strings.ReplaceAll(workspace, "\\", "/")), "/")
+	target = path.Clean(strings.ReplaceAll(target, "\\", "/"))
+	if len(root) > 1 && root[1] == ':' {
+		root, target = strings.ToLower(root), strings.ToLower(target)
+	}
+	return target == root || strings.HasPrefix(target, root+"/")
+}
+
+func (l *liveState) activeHostLocal() bool {
+	for _, h := range l.Config.Hosts {
+		if h.ID == l.Config.ActiveHost {
+			return h.Local
+		}
+	}
+	return false
+}
+
+// hostHome is the home directory of the host serving s. The host reports it; the local host falls
+// back to this machine's own home, which is the same directory.
+func (a *preview) hostHome(s *session) string {
+	if s.Home != "" {
+		return s.Home
+	}
+	if a.Live != nil && a.Live.activeHostLocal() {
+		home, _ := os.UserHomeDir()
+		return home
+	}
+	return ""
+}
+
+// openLocalDirectory shows a folder in the system file manager; tests replace it.
+var openLocalDirectory = func(dir string) error { return mygo.Shell.OpenPath(dir) }
+
+// revealOutsideWorkspace handles a link to a file the host will not serve because it is outside the
+// session workspace. On this machine the file's folder is opened, never the file itself: the path
+// comes from model output, so launching it could run a program.
+func (a *preview) revealOutsideWorkspace(target string) {
+	l := a.Live
+	if !l.activeHostLocal() {
+		l.Error = "该文件不在会话工作区内，无法在远程主机上预览"
+		return
+	}
+	native := filepath.FromSlash(target)
+	info, err := os.Stat(native)
+	if err != nil {
+		l.Error = "文件不存在：" + target
+		return
+	}
+	if !info.IsDir() {
+		native = filepath.Dir(native)
+	}
+	go openLocalDirectory(native)
 }
 func decodeNativeImage(data []byte, name string) (ui.ImageSource, error) {
 	if len(data) > 8<<20 {
@@ -83,7 +149,8 @@ func (a *preview) renderSessionMarkdown(c *ui.Context, d *markdownDocument, text
 		return
 	}
 	l := a.Live
-	scope := strconv.FormatUint(l.epoch, 10) + "\x00" + l.Config.ActiveHost + "\x00" + s.RemoteID + "\x00" + s.Workspace + "\x00" + base
+	home := a.hostHome(s)
+	scope := strconv.FormatUint(l.epoch, 10) + "\x00" + l.Config.ActiveHost + "\x00" + s.RemoteID + "\x00" + s.Workspace + "\x00" + home + "\x00" + base
 	if d.MediaScope != scope {
 		d.MediaScope = scope
 		d.options = markdown.Options{}
@@ -98,12 +165,18 @@ func (a *preview) renderSessionMarkdown(c *ui.Context, d *markdownDocument, text
 				d.Anchor = strings.ToLower(strings.TrimPrefix(href, "#"))
 				return
 			}
-			target, err := resolveMarkdownFile(workspace, base, href)
+			target, err := resolveMarkdownFile(workspace, home, base, href)
 			if err != nil {
 				l.Error = err.Error()
 				return
 			}
 			if a.current() != s {
+				return
+			}
+			// The host only serves files inside the session workspace, so anything else is
+			// shown in the local file manager (this machine only) instead of failing to open.
+			if workspace != "" && !pathInsideWorkspace(workspace, target) {
+				a.revealOutsideWorkspace(target)
 				return
 			}
 			a.openResource("files")
@@ -148,7 +221,7 @@ func (a *preview) renderSessionMarkdown(c *ui.Context, d *markdownDocument, text
 				}
 				return decodeNativeImage(data, u.Path)
 			}
-			target, err := resolveMarkdownFile(workspace, base, href)
+			target, err := resolveMarkdownFile(workspace, home, base, href)
 			if err != nil {
 				return nil, err
 			}

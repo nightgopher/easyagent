@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/hwj123hwj/easyagent/internal/app"
@@ -142,6 +143,8 @@ func TestSessionInfoReportsPathPolicyBehindAuthentication(t *testing.T) {
 		var info map[string]any
 		require.NoError(t, json.NewDecoder(w.Body).Decode(&info))
 		assert.Equal(t, allow, info["allow_outside_workspace"])
+		wantHome, _ := os.UserHomeDir()
+		assert.Equal(t, wantHome, info["home"], "clients expand ~/ against the host's home")
 	}
 }
 

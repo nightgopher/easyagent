@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 )
@@ -202,15 +204,110 @@ func TestNativeQRAndPairingLifecycle(t *testing.T) {
 		t.Fatal("dismissed QR authorized after late response")
 	}
 }
+func TestMarkdownHomeLinksExpandWithTheHostHome(t *testing.T) {
+	for _, tc := range []struct{ workspace, home, href, want string }{
+		{"/w", "/home/q", "~/projects/a.md", "/home/q/projects/a.md"},
+		{"/w", "/Users/me", "ea-file:" + url.PathEscape("~/develop/x y.blend"), "/Users/me/develop/x y.blend"},
+		{`C:\w`, `C:\Users\me`, `~\docs\a.md`, "C:/Users/me/docs/a.md"},
+		{"/w", "/home/q", "~/../etc/passwd", "/home/etc/passwd"},
+	} {
+		got, err := resolveMarkdownFile(tc.workspace, tc.home, "", tc.href)
+		if err != nil || got != tc.want {
+			t.Fatal(tc, got, err)
+		}
+	}
+	for _, home := range []string{"", "relative/home", "~"} {
+		if _, err := resolveMarkdownFile("/w", home, "", "~/a.md"); err == nil || !strings.Contains(err.Error(), "家目录") {
+			t.Fatalf("home %q: want an error naming the home directory, got %v", home, err)
+		}
+	}
+	// Only "~/" is special: other tilde names stay ordinary relative files such as "~tmp/a.txt".
+	if got, err := resolveMarkdownFile("/w", "/home/q", "", "~tmp/a.txt"); err != nil || got != "/w/~tmp/a.txt" {
+		t.Fatal(got, err)
+	}
+}
+func TestPathInsideWorkspace(t *testing.T) {
+	for _, tc := range []struct {
+		workspace, target string
+		want              bool
+	}{
+		{"/w", "/w", true}, {"/w", "/w/a/b.go", true}, {"/w/", "/w/a.go", true},
+		{"/w", "/w2/a.go", false}, {"/w", "/other/a.go", false}, {"/w/p", "/w/a.go", false},
+		{"/", "/anything", true},
+		{`C:\Work`, "c:/work/src/a.go", true}, {`C:\Work`, "D:/work/a.go", false},
+	} {
+		if got := pathInsideWorkspace(tc.workspace, tc.target); got != tc.want {
+			t.Fatal(tc, got)
+		}
+	}
+}
+func TestOutsideWorkspaceLinksOpenTheLocalFolderOnly(t *testing.T) {
+	a := alignmentPreview(t)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "model.blend")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	opened := make(chan string, 1)
+	openLocalDirectory = func(p string) error { opened <- p; return nil }
+	t.Cleanup(func() { openLocalDirectory = func(p string) error { return mygo.Shell.OpenPath(p) } })
+
+	a.revealOutsideWorkspace(filepath.ToSlash(file))
+	select {
+	case got := <-opened:
+		if got != dir {
+			t.Fatalf("opened %q, want the file's folder %q (never the file)", got, dir)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("local folder was not opened")
+	}
+
+	a.Live.Error = ""
+	a.revealOutsideWorkspace(filepath.ToSlash(filepath.Join(dir, "missing.blend")))
+	if !strings.Contains(a.Live.Error, "文件不存在") {
+		t.Fatal("missing file should report an error, got", a.Live.Error)
+	}
+
+	a.Live.Error = ""
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.ActiveHost = "mini"
+	a.revealOutsideWorkspace(filepath.ToSlash(file))
+	select {
+	case got := <-opened:
+		t.Fatal("remote host must not open a local folder, opened", got)
+	case <-time.After(200 * time.Millisecond):
+	}
+	if !strings.Contains(a.Live.Error, "远程主机") {
+		t.Fatal("remote host should explain why it cannot preview, got", a.Live.Error)
+	}
+}
+func TestHostHomeUsesTheHostReportedDirectory(t *testing.T) {
+	a := alignmentPreview(t)
+	s := a.current()
+	s.Home = "/home/q"
+	if got := a.hostHome(s); got != "/home/q" {
+		t.Fatal("host-reported home must win, got", got)
+	}
+	s.Home = ""
+	local, _ := os.UserHomeDir()
+	if got := a.hostHome(s); got != local {
+		t.Fatalf("local host without a reported home falls back to this machine: got %q want %q", got, local)
+	}
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.ActiveHost = "mini"
+	if got := a.hostHome(s); got != "" {
+		t.Fatal("a remote host without a reported home must stay unknown, got", got)
+	}
+}
 func TestNativeMarkdownFilesAndImages(t *testing.T) {
 	for _, tc := range []struct{ workspace, base, href, want string }{{"/w", "/w/docs/a.md", "../main.go", "/w/main.go"}, {`C:\w`, "", "src/main.go", "C:/w/src/main.go"}, {"/w", "", "/tmp/file.go", "/tmp/file.go"}} {
-		got, err := resolveMarkdownFile(tc.workspace, tc.base, tc.href)
+		got, err := resolveMarkdownFile(tc.workspace, "", tc.base, tc.href)
 		if err != nil || got != tc.want {
 			t.Fatal(tc, got, err)
 		}
 	}
 	for _, href := range []string{"//example.com/file", "javascript:alert(1)", "a\x00b"} {
-		if _, err := resolveMarkdownFile("/w", "", href); err == nil {
+		if _, err := resolveMarkdownFile("/w", "", "", href); err == nil {
 			t.Fatal("invalid href accepted", href)
 		}
 	}
