@@ -23,7 +23,17 @@ import (
 // BuiltinAppID is the pre-registered Feishu app for easyagent.
 // Users scan a QR code with this app_id to authorize the bot.
 const BuiltinAppID = "cli_a94f42eb71f9dccc"
-const BuiltinAppSecret = "GJkOZto6hbML2QWdEkqE4chkwSiArva7"
+
+// builtinAppSecret returns the pre-registered app's secret from the
+// FEISHU_BUILTIN_APP_SECRET environment variable. The value previously
+// shipped in source and must be treated as leaked.
+func builtinAppSecret() (string, error) {
+	value := strings.TrimSpace(os.Getenv("FEISHU_BUILTIN_APP_SECRET"))
+	if value == "" {
+		return "", fmt.Errorf("内置应用密钥未配置：请在环境中设置 FEISHU_BUILTIN_APP_SECRET（旧密钥已从源码移除并轮换），或改用 /feishu setup 扫码创建自建应用")
+	}
+	return value, nil
+}
 
 // Feishu domain (mainland China). Use open.larksuite.com for international.
 const FeishuDomain = "https://open.feishu.cn"
@@ -46,6 +56,11 @@ type OAuthResult struct {
 // 4. Exchanges code for user token
 // 5. Returns the credentials
 func StartOAuthFlow(ctx context.Context) (*OAuthResult, error) {
+	// Fail before opening a browser or a local server when the secret is absent.
+	if _, err := builtinAppSecret(); err != nil {
+		return nil, err
+	}
+
 	// Pick a random port for the callback server
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -140,8 +155,13 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request, resultCh chan<-
 
 // exchangeCodeForToken exchanges the OAuth code for a user access token.
 func exchangeCodeForToken(code string) OAuthResult {
+	appSecret, err := builtinAppSecret()
+	if err != nil {
+		return OAuthResult{ErrorMessage: err.Error()}
+	}
+
 	// Step 1: Get app_access_token
-	appToken, err := getAppAccessToken(BuiltinAppID, BuiltinAppSecret)
+	appToken, err := getAppAccessToken(BuiltinAppID, appSecret)
 	if err != nil {
 		return OAuthResult{ErrorMessage: fmt.Sprintf("get app_access_token: %v", err)}
 	}
@@ -167,7 +187,7 @@ func exchangeCodeForToken(code string) OAuthResult {
 
 	return OAuthResult{
 		AppID:       BuiltinAppID,
-		AppSecret:   BuiltinAppSecret,
+		AppSecret:   appSecret,
 		UserOpenID:  openID,
 		AccessToken: tokenResp.AccessToken,
 		BotName:     botName,
