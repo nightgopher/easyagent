@@ -125,6 +125,7 @@ GET /ws
 | `POST` | `/sessions/{id}/queue` | 队列操作：body 为 `{"action":"add\|edit\|remove\|pause\|resume\|send_now","id":"...","prompt":"...","inputs":{...}}`，冲突返回 409 |
 | `POST` | `/sessions/{id}/attachments` | 上传工作区附件，body 为 `{"name":"...","data":"<base64>"}`（1 字节–4MiB），图片校验尺寸上限 32M 像素 |
 | `GET` | `/sessions/{id}/capabilities` | 会话实际加载的技能与工具清单（含来源与调用方式） |
+| `GET` | `/skills/local` | 主机全局技能目录里的全部技能（手写的、其他工具装的、市场安装的），含来源目录、是否市场安装、被同名技能覆盖的提示和加载警告；目录与会话加载时一致 |
 | `PATCH` | `/sessions/{id}` | 更新会话偏好：`title`（1–160 字符）、`pinned`、`archived` |
 | `POST` | `/sessions/{id}/run/cancel` | body 为 `{"run_id":"..."}` |
 | `POST` | `/sessions/{id}/run/confirm` | body 为 `{"run_id":"...","confirmation_id":"...","approved":true}`；提问须同时提交 `answers`，见下文 |

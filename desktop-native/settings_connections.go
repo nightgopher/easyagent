@@ -213,12 +213,11 @@ func (s *settingsState) toggleAdvanced() {
 func (a *preview) capabilitySettings(c *ui.Context) {
 	s := &a.Settings
 	if s.CapabilityTab == "" {
-		s.CapabilityTab = "installed"
+		s.CapabilityTab = "mine"
 	}
 	ui.Row(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 		tabs := []struct{ id, label string }{
-			{"installed", "已安装"},
-			{"session", "当前会话已加载"},
+			{"mine", "我的技能"},
 			{"market", "市场"},
 		}
 		for _, t := range tabs {
@@ -235,27 +234,8 @@ func (a *preview) capabilitySettings(c *ui.Context) {
 	switch s.CapabilityTab {
 	case "market":
 		a.skillSettings(c)
-	case "session":
-		ui.Row(c).Children(func() {
-			a.heading(c, "当前会话的能力")
-			ui.Spacer(c)
-			a.action(c, "刷新").OnClick(func() { s.message("示例能力目录已刷新。") })
-		})
-		ui.Text(c, a.tr("项目")+"："+s.Workspace).FontSize(13)
-		a.note(c, "这里展示预览会话的示例能力。正式客户端按项目与个人 .agents/skills 加载。")
-		a.heading(c, "已加载技能 · 1")
-		ui.Column(c).Gap(10).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Padding(12, 0).Children(func() {
-			flatButton(c, "chevron-right", "code-review").Justify(ui.Start).TextColor(c.Theme().Text).OnClick(func() { s.CapabilityOpen = !s.CapabilityOpen })
-			a.note(c, "项目 · 可由模型调用")
-			if s.CapabilityOpen {
-				a.note(c, "检查当前修改的功能与回归风险。")
-				ui.Text(c, ".agents/skills/code-review/SKILL.md").Font("monospace").FontSize(12).Selectable()
-			}
-		})
-	case "installed":
-		fallthrough
 	default:
-		a.heading(c, "已安装技能")
+		a.heading(c, "我的技能")
 		a.note(c, "本机/主机个人技能目录与项目目录中的技能。文件变更后新建会话生效。")
 		var installed []*demoSkill
 		for _, skill := range s.Skills {
