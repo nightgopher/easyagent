@@ -19,7 +19,7 @@ func TestVerifySignedRelease(t *testing.T) {
 	os.WriteFile(config, b, 0600)
 	archive := []byte("native bundle fixture")
 	sum := sha256.Sum256(archive)
-	manifest := map[string]any{"version": "1.2.3", "url": "https://github.com/hwj123hwj/easyagent/releases/download/v1.2.3/easyagent-1.2.3-darwin-arm64.tar.gz", "size": len(archive), "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))}
+	manifest := map[string]any{"version": "1.2.3", "url": "https://github.com/nightgopher/easyagent/releases/download/v1.2.3/easyagent-1.2.3-darwin-arm64.tar.gz", "size": len(archive), "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))}
 	save := func() {
 		b, _ := json.Marshal(manifest)
 		os.WriteFile(filepath.Join(dir, "update-darwin-arm64.json"), b, 0600)
@@ -54,7 +54,7 @@ func TestVerifySignedReleaseLinux(t *testing.T) {
 	os.WriteFile(config, b, 0600)
 	archive := []byte("linux bundle fixture")
 	sum := sha256.Sum256(archive)
-	manifest := map[string]any{"version": "1.2.3", "url": "https://github.com/hwj123hwj/easyagent/releases/download/v1.2.3/easyagent-1.2.3-linux-amd64.tar.gz", "size": len(archive), "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))}
+	manifest := map[string]any{"version": "1.2.3", "url": "https://github.com/nightgopher/easyagent/releases/download/v1.2.3/easyagent-1.2.3-linux-amd64.tar.gz", "size": len(archive), "signature": base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))}
 	mb, _ := json.Marshal(manifest)
 	os.WriteFile(filepath.Join(dir, "update-linux-amd64.json"), mb, 0600)
 	os.WriteFile(filepath.Join(dir, "easyagent-1.2.3-linux-amd64.tar.gz"), archive, 0600)
