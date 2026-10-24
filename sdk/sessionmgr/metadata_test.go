@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/sessionmgr"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/sessionmgr"
 	"github.com/stretchr/testify/require"
 )
 

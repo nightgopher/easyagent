@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/mcp"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/mcp"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )

@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/extensions"
-	"github.com/hwj123hwj/easyagent/sdk/sessionmgr"
+	"github.com/nightgopher/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/extensions"
+	"github.com/nightgopher/easyagent/sdk/sessionmgr"
 	"github.com/stretchr/testify/require"
 )
 

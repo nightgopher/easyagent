@@ -1,7 +1,7 @@
 package compaction
 
 import (
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

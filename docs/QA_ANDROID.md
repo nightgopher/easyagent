@@ -37,7 +37,7 @@ bash ../scripts/check-android-ui.sh
 
 ## v0.22.0 模拟器基线
 
-2026-10-22，功能基线为 `cc76ac4e7636e4ff2aebdd6b7f560c301522243d`，使用 Debug APK 与模拟运行主机。[API 31/34/35 CI 报告与截图](https://github.com/hwj123hwj/easyagent/actions/runs/39828974883)均通过；正式发布另对 tag 指向的确定 SHA 重跑相同矩阵，最终提交与资产校验值记录在 Release 的 `release.json` 和 `checksums.txt` 中。
+2026-10-22，功能基线为 `cc76ac4e7636e4ff2aebdd6b7f560c301522243d`，使用 Debug APK 与模拟运行主机。[API 31/34/35 CI 报告与截图](https://github.com/nightgopher/easyagent/actions/runs/39828974883)均通过；正式发布另对 tag 指向的确定 SHA 重跑相同矩阵，最终提交与资产校验值记录在 Release 的 `release.json` 和 `checksums.txt` 中。
 
 | 环境 | 结果 |
 |---|---|
@@ -91,9 +91,9 @@ v0.22.0 的正式发布门禁在 Android 15 上发现流式文字不刷新的问
 2026-10-23，候选集成 #286–#289。正式 APK 的 versionName 为 `0.24.0`、versionCode 为 `2400300`；最终候选 SHA 由附注 tag `v0.24.0` 确定，记录于 Release 的 `release.json`。
 
 - Android 通知回归测试按当前审批内容精确等待通知，并复用同一次查询取得的通知对象，避免旧审批通知尚未撤销时误点或二次查询时通知已消失；审批请求、前台抑制和点按返回会话的断言保留。
-- 合并前的 Android 12/API 31、14/API 34、15/API 35 UI 回归通过。正式发布对 tag 对应 SHA 重跑完整矩阵，并保存测试报告与截图；报告可从 [Release 工作流](https://github.com/hwj123hwj/easyagent/actions/workflows/release.yml) 的 `v0.24.0` 运行查看。
+- 合并前的 Android 12/API 31、14/API 34、15/API 35 UI 回归通过。正式发布对 tag 对应 SHA 重跑完整矩阵，并保存测试报告与截图；报告可从 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml) 的 `v0.24.0` 运行查看。
 - 正式 APK 由固定发布证书签名，发布流水线检查签名指纹、应用标识、版本和非 Debug 属性，并检查 ZIP 内 APK 与独立 APK 完全一致；最终 SHA-256 以同一 Release 的 `checksums.txt` 为准。
-- 合并检查的一次 Android 14/API 34 运行在循环任务测试清理阶段出现 Compose `SlotTable` 越界；[首次失败日志](https://github.com/hwj123hwj/easyagent/actions/runs/39924455395/attempts/1)保留。该次通知用例通过，崩溃前有 Compose/Espresso 未空闲记录；相同提交在独立 Android 14/API 34 arm64 模拟器上连续三轮完整测试通过（每轮 8 项）；CI 同 SHA 的一次诊断复跑也通过（同一运行的 attempt 2）。该问题尚未稳定复现，不将复跑通过视为根因已修复。
+- 合并检查的一次 Android 14/API 34 运行在循环任务测试清理阶段出现 Compose `SlotTable` 越界；[首次失败日志](https://github.com/nightgopher/easyagent/actions/runs/39924455395/attempts/1)保留。该次通知用例通过，崩溃前有 Compose/Espresso 未空闲记录；相同提交在独立 Android 14/API 34 arm64 模拟器上连续三轮完整测试通过（每轮 8 项）；CI 同 SHA 的一次诊断复跑也通过（同一运行的 attempt 2）。该问题尚未稳定复现，不将复跑通过视为根因已修复。
 - 本轮未执行实体设备的蜂窝网络、相机、麦克风/ASR 验收，也未执行正式 APK 的跨版本覆盖安装与重启恢复；此前版本的升级记录仅作历史基线，不计为本轮通过。
 
 ## v0.25.0 应用内更新验收

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // GatewayModel 定义网关返回的模型项及其元数据。

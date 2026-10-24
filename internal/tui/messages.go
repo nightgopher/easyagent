@@ -3,7 +3,7 @@ package tui
 import (
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // SlashCmdDoneMsg carries the result of a slash command that the TUI ran

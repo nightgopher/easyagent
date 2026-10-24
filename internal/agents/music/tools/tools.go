@@ -1,9 +1,9 @@
 package musictools
 
 import (
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/internal/music"
-	"github.com/hwj123hwj/easyagent/internal/music/pref"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/internal/music"
+	"github.com/nightgopher/easyagent/internal/music/pref"
 )
 
 // ListOptions controls how the music-agent toolset is assembled.

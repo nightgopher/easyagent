@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/models"
-	"github.com/hwj123hwj/easyagent/sdk/compaction"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/models"
+	"github.com/nightgopher/easyagent/sdk/compaction"
 )
 
 // ContextUsage estimates the current prompt, including system and tool schemas.

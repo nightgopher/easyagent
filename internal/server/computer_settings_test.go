@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/internal/computer"
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/computer"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/stretchr/testify/require"
 )
 

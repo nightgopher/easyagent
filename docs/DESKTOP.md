@@ -41,4 +41,4 @@ macOS 的默认钥匙串与全局搜索列表可能不一致。凭据的读写�
 
 Electron / React 的 `desktop/`（含共用前端的 Capacitor Android 外壳）已退役，不再构建、测试或发布。从 v0.16.0 起 Release 不再要求 Electron DMG；已发布版本与资产不变。
 
-历史源码与文档可从 [archive/workflow](https://github.com/hwj123hwj/easyagent/tree/archive/workflow/desktop) 查看，退役前的精确快照为 [e4b4088](https://github.com/hwj123hwj/easyagent/tree/e4b4088/desktop)。Electron 的自动更新、固定证书重签名及 safeStorage 数据不适用于原生客户端；本次退役不会删除旧用户数据、签名钥匙串或覆盖已安装应用。
+历史源码与文档可从 [archive/workflow](https://github.com/nightgopher/easyagent/tree/archive/workflow/desktop) 查看，退役前的精确快照为 [e4b4088](https://github.com/nightgopher/easyagent/tree/e4b4088/desktop)。Electron 的自动更新、固定证书重签名及 safeStorage 数据不适用于原生客户端；本次退役不会删除旧用户数据、签名钥匙串或覆盖已安装应用。

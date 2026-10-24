@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/profile"
+	"github.com/nightgopher/easyagent/internal/profile"
 )
 
 // ── JSON Response Types ───────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/skillmarket"
+	"github.com/nightgopher/easyagent/sdk/skillmarket"
 )
 
 // newMarketFixture starts a fake store serving one installable skill and

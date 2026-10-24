@@ -11,7 +11,7 @@ EasyAgent reads and edits code, runs tools with explicit approval, and keeps res
 Requires Go (see [go.mod](go.mod) for the exact version).
 
 ```bash
-git clone https://github.com/hwj123hwj/easyagent.git
+git clone https://github.com/nightgopher/easyagent.git
 cd easyagent
 make build
 cp .env.example .env    # then fill in your provider, model and API key
@@ -37,14 +37,14 @@ All configuration uses the `EA_*` prefix — see the [configuration reference](d
 
 ## Install a release
 
-- **macOS (Apple Silicon)** — download [`easyagent-native-darwin-arm64.dmg`](https://github.com/hwj123hwj/easyagent/releases/latest) from the latest release.
+- **macOS (Apple Silicon)** — download [`easyagent-native-darwin-arm64.dmg`](https://github.com/nightgopher/easyagent/releases/latest) from the latest release.
 - **Linux desktop** — `easyagent-native-linux-<arch>.deb`, or the self-updating `tar.gz` + install script.
 - **Servers (Debian/Ubuntu)** — `easyagent-server_<version>-1_<arch>.deb` registers a systemd service on 127.0.0.1:8080 and generates a random `EA_SERVER_API_KEY` on first install.
-- **Android (8.0+)** — [easyagent-android.apk](https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-android.apk) or the [ZIP mirror](https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-android.zip).
+- **Android (8.0+)** — [easyagent-android.apk](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.apk) or the [ZIP mirror](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.zip).
 
 ## Security
 
-Report vulnerabilities privately via GitHub's **Report a vulnerability** button on the [Security tab](https://github.com/hwj123hwj/easyagent/security) — see [SECURITY.md](SECURITY.md). Please do not open public issues for security problems.
+Report vulnerabilities privately via GitHub's **Report a vulnerability** button on the [Security tab](https://github.com/nightgopher/easyagent/security) — see [SECURITY.md](SECURITY.md). Please do not open public issues for security problems.
 
 ## Contributing
 

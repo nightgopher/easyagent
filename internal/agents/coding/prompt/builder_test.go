@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	platformprompt "github.com/hwj123hwj/easyagent/sdk/prompt"
-	"github.com/hwj123hwj/easyagent/sdk/skill"
-	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	platformprompt "github.com/nightgopher/easyagent/sdk/prompt"
+	"github.com/nightgopher/easyagent/sdk/skill"
+	basetools "github.com/nightgopher/easyagent/sdk/tools"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	wtpkg "github.com/hwj123hwj/easyagent/internal/worktree"
+	wtpkg "github.com/nightgopher/easyagent/internal/worktree"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
 

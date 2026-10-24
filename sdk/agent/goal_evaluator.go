@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/providers"
 )
 
 // GoalEvalResult is the structured output from the goal completion evaluator.

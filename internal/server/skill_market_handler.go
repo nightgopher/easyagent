@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/skillmarket"
+	"github.com/nightgopher/easyagent/sdk/skillmarket"
 )
 
 // ── Skill marketplace REST endpoints ────────────────────────────────────────

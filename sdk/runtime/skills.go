@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/hwj123hwj/easyagent/sdk/skill"
-	"github.com/hwj123hwj/easyagent/sdk/util"
+	"github.com/nightgopher/easyagent/sdk/skill"
+	"github.com/nightgopher/easyagent/sdk/util"
 	"path/filepath"
 )
 

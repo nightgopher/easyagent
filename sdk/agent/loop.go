@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/models"
-	"github.com/hwj123hwj/easyagent/sdk/compaction"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/models"
+	"github.com/nightgopher/easyagent/sdk/compaction"
 )
 
 // consumeStreamFunc 定义如何消费 LLM 事件流。

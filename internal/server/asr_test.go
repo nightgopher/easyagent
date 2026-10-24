@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 func TestASRGatewayEndpoint(t *testing.T) {

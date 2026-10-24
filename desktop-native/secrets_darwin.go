@@ -18,7 +18,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/hwj123hwj/easyagent/desktop-native/internal/credentialstore"
+	"github.com/nightgopher/easyagent/desktop-native/internal/credentialstore"
 )
 
 type systemSecrets struct {

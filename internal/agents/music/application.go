@@ -3,14 +3,14 @@ package music
 import (
 	"path/filepath"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	musicprompt "github.com/hwj123hwj/easyagent/internal/agents/music/prompt"
-	musictools "github.com/hwj123hwj/easyagent/internal/agents/music/tools"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/internal/music"
-	"github.com/hwj123hwj/easyagent/internal/music/pref"
-	"github.com/hwj123hwj/easyagent/internal/profile"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	musicprompt "github.com/nightgopher/easyagent/internal/agents/music/prompt"
+	musictools "github.com/nightgopher/easyagent/internal/agents/music/tools"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/music"
+	"github.com/nightgopher/easyagent/internal/music/pref"
+	"github.com/nightgopher/easyagent/internal/profile"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 )
 
 // MusicApplication implements runtime.Application for the music-agent.

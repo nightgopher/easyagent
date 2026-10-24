@@ -1,7 +1,7 @@
 package kbtools
 
 import (
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // ListOptions controls how the kb-agent toolset is assembled.

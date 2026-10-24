@@ -21,9 +21,9 @@ EasyAgent 的 Android 原生客户端（Kotlin + Jetpack Compose，无 WebView�
 
 ## 安装正式 APK
 
-下载 [正式 APK](https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-android.apk)（Android 8.0 / API 26 及以上）。如果手机浏览器直接下载 APK 反复中断，可改用 [ZIP 备用包](https://github.com/hwj123hwj/easyagent/releases/latest/download/easyagent-android.zip)（从 v0.19.2 起提供），解压后打开其中的 `easyagent-android.apk` 安装；ZIP 内的 APK 与同一 Release 的独立 APK 完全一致。
+下载 [正式 APK](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.apk)（Android 8.0 / API 26 及以上）。如果手机浏览器直接下载 APK 反复中断，可改用 [ZIP 备用包](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.zip)（从 v0.19.2 起提供），解压后打开其中的 `easyagent-android.apk` 安装；ZIP 内的 APK 与同一 Release 的独立 APK 完全一致。
 
-在 Android 上打开 APK 并允许本次来源安装，或使用 `adb install -r easyagent-android.apk`。两种下载格式均可对照同一 [Release](https://github.com/hwj123hwj/easyagent/releases/latest) 的 `checksums.txt` 验证 SHA-256。
+在 Android 上打开 APK 并允许本次来源安装，或使用 `adb install -r easyagent-android.apk`。两种下载格式均可对照同一 [Release](https://github.com/nightgopher/easyagent/releases/latest) 的 `checksums.txt` 验证 SHA-256。
 
 从 v0.19.0 起 APK 使用固定发布证书，后续正式 APK 可以覆盖更新并保留应用数据；此前自行构建的 Debug APK 签名不同，不能直接覆盖，迁移前需自行保留连接信息，再卸载旧 Debug 应用。
 

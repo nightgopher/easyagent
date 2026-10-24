@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // 流式 LLM 响应的总时长可以远超常规 HTTP 请求，而 http.Client.Timeout 会把

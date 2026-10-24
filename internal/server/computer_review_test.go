@@ -2,10 +2,10 @@ package server
 
 import (
 	"bytes"
-	"github.com/hwj123hwj/easyagent/internal/agents/coding"
-	"github.com/hwj123hwj/easyagent/internal/computer"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/internal/agents/coding"
+	"github.com/nightgopher/easyagent/internal/computer"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/stretchr/testify/require"
 	"net/http/httptest"
 	"strings"

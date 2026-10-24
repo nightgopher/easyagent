@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/skill"
+	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 func mkDirAllForTest(t *testing.T, dir string) error {

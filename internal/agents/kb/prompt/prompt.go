@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/internal/profile"
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/internal/profile"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // Options configures the kb-agent system prompt.

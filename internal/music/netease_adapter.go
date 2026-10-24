@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hwj123hwj/easyagent/internal/music/netease"
+	"github.com/nightgopher/easyagent/internal/music/netease"
 )
 
 // ────────────────────────────────────────────────────────────────────────────

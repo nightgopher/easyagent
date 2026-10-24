@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/hwj123hwj/easyagent/internal/agents/coding/commands"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/agents/coding/commands"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // The child runs the real TUI and Feishu handler; only Feishu HTTP is redirected

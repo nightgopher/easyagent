@@ -3,10 +3,10 @@ package runtime
 import (
 	"context"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/operations"
-	"github.com/hwj123hwj/easyagent/sdk/prompt"
-	"github.com/hwj123hwj/easyagent/sdk/skill"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/operations"
+	"github.com/nightgopher/easyagent/sdk/prompt"
+	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 // Application is the interface that an agent application must implement.
