@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/hwj123hwj/easyagent/sdk/agent"
@@ -186,9 +187,12 @@ func (s *Server) getSessionInfo(w http.ResponseWriter, r *http.Request) {
 
 	// Get workspace from config
 	workspace := sess.Config().Workspace
+	// Clients expand "~/" in file links with this host's home, not their own machine's.
+	home, _ := os.UserHomeDir()
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
+		"home":                    home,
 		"access_mode":             sess.AccessMode(),
 		"context_usage":           usage,
 		"id":                      sess.SessionID(),

@@ -593,6 +593,7 @@ func (a *preview) loadSession(s *session) {
 		}
 		m := object(v)
 		s.Workspace = str(m["workspace"])
+		s.Home = str(m["home"])
 		s.Project = filepath.Base(s.Workspace)
 		s.Model = str(m["model"])
 		s.Usage = object(m["context_usage"])
