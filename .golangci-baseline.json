@@ -200,14 +200,6 @@
     {
       "linter": "gosec",
       "file": "internal/feishu/oauth.go",
-      "message": "G101: Potential hardcoded credentials",
-      "source_sha256": "57e64055706ee5a57c8d933cf5cb4c87b618164b792b3f785d630b0b5674ca3d",
-      "line_at_baseline": 26,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/feishu/oauth.go",
       "message": "G204: Subprocess launched with variable",
       "source_sha256": "26223354d1b441e1d1a9d228441b689f5dda0ab0b7a1c32af298d3db1389900a",
       "line_at_baseline": 332,
