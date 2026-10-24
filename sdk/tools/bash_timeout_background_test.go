@@ -5,6 +5,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -33,7 +34,8 @@ func TestForegroundTimeoutMovesToBackgroundTask(t *testing.T) {
 	output := NewBashOutputTool(tasks, 0)
 	kill := NewBashKillTool(tasks)
 
-	command := "echo running; for i in 1 2 3 4 5; do sleep 1; echo tick $i; done"
+	// 第一个 tick 明确晚于 1 秒超时：若与超时同刻，它可能先随前台结果返回，bash_output 就看不到。
+	command := "echo running; sleep 2; for i in 1 2 3 4 5; do echo tick $i; sleep 1; done"
 	raw, err := bash.Validate(json.RawMessage(`{"command": "` + command + `", "timeout": 1}`))
 	require.NoError(t, err)
 	result, err := bash.Execute(context.Background(), raw, nil)
@@ -43,10 +45,17 @@ func TestForegroundTimeoutMovesToBackgroundTask(t *testing.T) {
 	assert.Contains(t, result.Content, "running") // 输出连续：超时前已产生的内容不丢
 
 	// bash_output 只返回新输出，不重复已展示的 "running"（状态行的 running 除外）。
-	time.Sleep(1500 * time.Millisecond)
-	poll := executeBash(t, output, `{"task_id":"bg-1"}`)
-	assert.Contains(t, poll.Content, "tick 1")
-	assert.NotContains(t, poll.Content, "running\ntick")
+	// 轮询等待第一个 tick，而不是固定睡眠后只读一次，避免负载高时时序抖动。
+	var polled string
+	for deadline := time.Now().Add(6 * time.Second); time.Now().Before(deadline); {
+		time.Sleep(300 * time.Millisecond)
+		polled += executeBash(t, output, `{"task_id":"bg-1"}`).Content
+		if strings.Contains(polled, "tick 1") {
+			break
+		}
+	}
+	assert.Contains(t, polled, "tick 1")
+	assert.NotContains(t, polled, "running\ntick")
 
 	// bash_kill 可停止移交后的任务。
 	stopped := executeBash(t, kill, `{"task_id":"bg-1"}`)
