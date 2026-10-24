@@ -3,7 +3,7 @@
 set -Eeuo pipefail
 umask 077
 DEPLOY_ROOT=${EA_DEPLOY_ROOT:-"$HOME/.local/share/easyagent-deploy"}
-API_URL=${EA_DEPLOY_API:-https://api.github.com/repos/hwj123hwj/easyagent}
+API_URL=${EA_DEPLOY_API:-https://api.github.com/repos/nightgopher/easyagent}
 DEPLOY_REF=${EA_DEPLOY_REF:-refs/heads/main}
 BIN_PATH=${EA_DEPLOY_BIN:-"$HOME/.easyagent/bin/easyagent"}
 SERVICE=${EA_DEPLOY_SERVICE:-easyagent-core.service}
