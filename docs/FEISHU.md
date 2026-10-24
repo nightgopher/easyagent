@@ -40,6 +40,8 @@ EA_SERVER_API_KEY=your-agent-server-key
 
 将这些值放入专用文件后，用 `EA_ENV_FILE=/absolute/path/feishu.env ./bin/easyagent-bridge` 启动。也可通过交互入口 `/feishu setup` 配置凭据。飞书应用侧需启用机器人能力、相应消息权限及长连接事件订阅，并发布可用版本；配置信息以实际应用控制台为准。
 
+预注册内置应用的浏览器授权流程（当前无入口调用）需要额外设置 `FEISHU_BUILTIN_APP_SECRET`；原随源码发布的密钥已移除并轮换，常规使用自建应用凭据或扫码注册即可。
+
 ### 终端扫码配置
 
 在 TUI 输入 `/feishu setup` 后，程序暂时让出终端，先选择授权方式：

@@ -89,6 +89,7 @@ Bash 并非文件路径沙箱；启用它就授予相应系统命令能力。启
 | `SILICONFLOW_API_KEY`、`SILICONFLOW_EMBEDDING_MODEL`、`SILICONFLOW_BASE_URL` | 可选知识库向量搜索 |
 | `ASR_API_KEY`、`ASR_MODEL`、`ASR_BASE_URL` | 语音识别；未设置 ASR Key 时可回退到 SiliconFlow Key |
 | `EA_FEISHU_ENV_FILE`、`FEISHU_OWNER_STATE_FILE` | 托管飞书配置与配对状态，见 [飞书](FEISHU.md) |
+| `FEISHU_BUILTIN_APP_SECRET` | 预注册内置应用的浏览器授权流程所需密钥；原随源码发布的值已移除并轮换，只能通过环境变量提供 |
 
 不要将运行 `.env`、访问令牌或配对状态提交到 Git。部署更新保留这些独立文件。
 
