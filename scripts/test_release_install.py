@@ -27,6 +27,7 @@ class InstallTest(unittest.TestCase):
         self.wrapper('curl', '''import json,os,pathlib,sys
 root=pathlib.Path(os.environ['EA_TEST_ROOT']);args=sys.argv[1:]
 url=next(a for a in args if a.startswith('https://'))
+if any(t and t in url for t in os.environ.get('EA_TEST_BLOCK','').split(',')):sys.exit(7)
 if url.endswith('/latest'): print(json.dumps({'tag_name':'v1.2.3'},indent=None if os.environ.get('EA_TEST_COMPACT_JSON') else 2));sys.exit(0)
 source=root/'assets'/url.rsplit('/',1)[-1]
 if not source.exists():sys.exit(22)
@@ -101,6 +102,27 @@ pathlib.Path(args[args.index('-o')+1]).write_bytes(source.read_bytes())
         self.checksums()
         result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('pi-agent v1.2.3', (self.install / 'easyagent').read_text())
+
+    def test_mirror_is_used_when_github_is_unreachable(self):
+        self.env.pop('EA_VERSION') # Discovery must also fall back.
+        self.env['EA_TEST_BLOCK'] = 'github.com'
+        result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
+        self.assertTrue((self.install / 'easyagent-bridge').exists())
+
+    def test_single_asset_falls_back_to_mirror_and_is_still_verified(self):
+        self.env['EA_TEST_BLOCK'] = 'github.com/fixture/repo/releases/download/v1.2.3/easyagent-linux-amd64'
+        result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
+
+    def test_mirror_can_be_disabled(self):
+        self.env['EA_TEST_BLOCK'] = 'github.com'
+        self.env['EA_MIRROR_REPO'] = ''
+        self.assert_unchanged(self.run_install())
+
+    def test_unreachable_everywhere_keeps_previous_install(self):
+        self.env['EA_TEST_BLOCK'] = 'github.com,gitee.com'
+        self.assert_unchanged(self.run_install())
 
     def test_partial_install_error_rolls_back_all_components(self):
         old = {'easyagent': 'previous core', 'easyagent-bridge': 'previous bridge',

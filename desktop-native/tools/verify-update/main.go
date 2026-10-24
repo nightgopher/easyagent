@@ -36,7 +36,7 @@ func verify(config, dir, version, platform string) error {
 		return err
 	}
 	name := "easyagent-" + version + "-" + platform + ".tar.gz"
-	if m.Version != version || m.URL != "https://github.com/hwj123hwj/easyagent/releases/download/v"+version+"/"+name {
+	if m.Version != version || m.URL != "https://github.com/nightgopher/easyagent/releases/download/v"+version+"/"+name {
 		return fmt.Errorf("update manifest version or URL mismatch")
 	}
 	b, err = os.ReadFile(filepath.Join(dir, name))

@@ -4,13 +4,14 @@
 
 ## [Unreleased]
 
-### Added
-- `read` 支持读取 PDF 文字：新增 `pages` 参数（如 `3`、`1-5`，单次最多 50 页），未指定时读取前 10 页并提示续读范围；输出超过字符上限时在页边界截断并给出续读页码，无文字层的扫描件会提示需要 OCR，加密或损坏的 PDF 返回错误并建议用 `pdftotext` 转换。
+## [v0.27.0] - 2026-10-24
 
 ### Added
-- `read` 工具支持 PDF 文本提取：`pages` 参数选择页码或范围（默认前 10 页，单次至多 50 页），纯 Go 实现不依赖系统工具；扫描页与加密/损坏文件有明确说明（#247）。
+- 更新增加 Gitee 镜像（`weijian-huang/easyagent`）作回退，面向访问 GitHub 不稳定的大陆网络：Android 应用内更新与 `scripts/install.sh` 先走 GitHub，连接失败、HTTP 错误或下载中断时改走 Gitee；Android 的 APK 下载地址在两个来源之间互为备用。无论来源，安装包仍按 `release.json` / `checksums.txt` 校验 SHA-256，Android 还要核对与已安装应用一致的签名；元数据无效或校验不一致时直接拒绝，不会换源重试。`install.sh` 可用 `EA_MIRROR_REPO` 指定镜像仓库，设为空则关闭镜像。镜像目前由维护者手动发布，自动同步尚未接入，镜像版本落后时客户端按镜像上的最新版本判断。
+- `read` 支持读取 PDF 文字：新增 `pages` 参数（如 `3`、`1-5`，单次最多 50 页），未指定时读取前 10 页并提示续读范围，纯 Go 实现不依赖系统工具。输出超过字符上限时在页边界截断并给出续读页码，无文字层的扫描页会提示需要 OCR，加密或损坏的 PDF 返回错误并建议用 `pdftotext` 转换（#247）。
 
 ### Changed
+- 发布仓库迁至 `nightgopher/easyagent`：桌面自动更新、Android 应用内更新、`scripts/install.sh` 和迷你主机部署脚本改为读取新仓库。原 `hwj123hwj/easyagent` 仓库已无法访问，v0.26.1 及更早版本仍指向旧地址，无法自动更新到本版本，需要从新仓库的 Release 手动下载安装一次，之后的更新恢复自动。
 - `bash` 前台命令到达 `timeout` 仍未结束时不再被终止，自动移交会话的后台任务表并返回任务 ID，输出连续、后续可用 `bash_output` / `bash_kill` 处理（#243）；`sleep` 开头的命令与用户主动取消仍按原行为立即终止。
 
 ### Security
