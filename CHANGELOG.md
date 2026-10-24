@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- `bash` 前台命令到达 `timeout` 仍未结束时不再被终止，自动移交会话的后台任务表并返回任务 ID，输出连续、后续可用 `bash_output` / `bash_kill` 处理（#243）；`sleep` 开头的命令与用户主动取消仍按原行为立即终止。
+
 ### Security
 - 移除源码中硬编码的飞书预注册内置应用 App Secret，改为从 `FEISHU_BUILTIN_APP_SECRET` 环境变量读取；曾在公开仓库出现的旧密钥视为已泄露，需在飞书开放平台轮换。
 
