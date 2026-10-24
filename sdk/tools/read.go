@@ -131,6 +131,7 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		t.readTracker.Record(cleanPath, data, modTime)
 	}
 
+	// PDF 按 %PDF- 魔数分流：按页提取文本，含损坏文件与扫描页的明确说明。
 	if mediaType := http.DetectContentType(data); mediaType == "application/pdf" {
 		return t.readPDF(params.Path, data, params.Pages), nil
 	}
