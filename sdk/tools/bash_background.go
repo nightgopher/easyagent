@@ -270,6 +270,13 @@ func (t *backgroundTask) status() string {
 	return t.statusLocked()
 }
 
+// finishState returns the final exit code and run error; call after done closes.
+func (t *backgroundTask) finishState() (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.exitCode, t.runErr
+}
+
 func (t *backgroundTask) statusLocked() string {
 	switch {
 	case t.finished.IsZero():
