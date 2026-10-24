@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // AppendMicroCompaction stores only changed tool contents on the active branch.

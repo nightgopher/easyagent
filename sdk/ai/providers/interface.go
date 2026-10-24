@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 type Provider interface {

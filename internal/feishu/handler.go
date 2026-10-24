@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/worktree"
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/worktree"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
 

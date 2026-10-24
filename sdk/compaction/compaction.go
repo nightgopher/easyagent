@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // Settings 控制上下文压缩行为。

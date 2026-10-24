@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hwj123hwj/easyagent/internal/scheduler"
+	"github.com/nightgopher/easyagent/internal/scheduler"
 )
 
 type loopPromptMsg struct {

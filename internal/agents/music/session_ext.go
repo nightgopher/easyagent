@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 )
 
 // MusicSessionExt implements runtime.SessionExt for the music-agent.

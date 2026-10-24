@@ -4,13 +4,13 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	kbprompt "github.com/hwj123hwj/easyagent/internal/agents/kb/prompt"
-	kbtools "github.com/hwj123hwj/easyagent/internal/agents/kb/tools"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/internal/kbvector"
-	"github.com/hwj123hwj/easyagent/internal/profile"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	kbprompt "github.com/nightgopher/easyagent/internal/agents/kb/prompt"
+	kbtools "github.com/nightgopher/easyagent/internal/agents/kb/tools"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/kbvector"
+	"github.com/nightgopher/easyagent/internal/profile"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 )
 
 // KBApplication implements runtime.Application for the knowledge-base agent.

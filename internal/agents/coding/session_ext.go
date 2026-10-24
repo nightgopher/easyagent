@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/hwj123hwj/easyagent/internal/agents/coding/profile"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/internal/agents/coding/profile"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	basetools "github.com/nightgopher/easyagent/sdk/tools"
 )
 
 // CodingSessionExt implements runtime.SessionExt for the coding-agent.

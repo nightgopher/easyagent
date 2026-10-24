@@ -4,10 +4,10 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/skillmarket"
-	"github.com/hwj123hwj/easyagent/sdk/tools"
-	"github.com/hwj123hwj/easyagent/sdk/util"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/skillmarket"
+	"github.com/nightgopher/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/sdk/util"
 )
 
 // skillMarketState holds the shared marketplace client plus the revision

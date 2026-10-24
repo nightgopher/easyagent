@@ -19,7 +19,7 @@ func TestSDKDoesNotImportInternal(t *testing.T) {
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		// 只匹配本模块的 internal/，标准库自己的 crypto/internal 等不算
-		if strings.HasPrefix(line, "github.com/hwj123hwj/easyagent/internal/") {
+		if strings.HasPrefix(line, "github.com/nightgopher/easyagent/internal/") {
 			t.Errorf("sdk 包不得依赖 internal/，发现: %s", line)
 		}
 	}

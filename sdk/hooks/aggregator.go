@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // Aggregator merges results from multiple hook executions into a single outcome.

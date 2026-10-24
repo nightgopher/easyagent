@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/operations"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/operations"
 )
 
 type ReadTool struct {

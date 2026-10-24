@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/feishu"
+	"github.com/nightgopher/easyagent/internal/feishu"
 )
 
 // A single host-local registration. Polling never writes credentials: the

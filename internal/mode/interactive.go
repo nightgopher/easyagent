@@ -1,10 +1,10 @@
 package mode
 
 import (
-	codingcli "github.com/hwj123hwj/easyagent/internal/agents/coding/cli"
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	codingcli "github.com/nightgopher/easyagent/internal/agents/coding/cli"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // InteractiveMode is the interactive CLI entrypoint.

@@ -8,8 +8,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

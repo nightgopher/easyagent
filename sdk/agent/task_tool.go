@@ -15,9 +15,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/models"
-	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/models"
+	"github.com/nightgopher/easyagent/sdk/ai/providers"
 )
 
 // TaskToolName is the name of the subagent tool.

@@ -1,6 +1,6 @@
 package app
 
-import "github.com/hwj123hwj/easyagent/sdk/ai"
+import "github.com/nightgopher/easyagent/sdk/ai"
 
 // ResolveModel exposes application catalog metadata without coupling the SDK
 // runtime to the internal model registry.

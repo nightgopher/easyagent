@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/internal/app"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

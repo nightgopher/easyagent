@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 type Session struct {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/providers"
 )
 
 // echoProvider 演示实现 providers.Provider 的最小样子：不调网络，直接回固定文本。

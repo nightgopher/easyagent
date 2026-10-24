@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/sdk/skillmarket"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/sdk/skillmarket"
 )
 
 // marketJob is one background install tracked by marketJobRegistry.

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 )
 
 // A request flight pins its identity across receipt I/O and runtime preparation.

@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/mcp"
+	"github.com/nightgopher/easyagent/sdk/mcp"
 )
 
 func (s *Server) registerMCPRoutes(mux *http.ServeMux) {

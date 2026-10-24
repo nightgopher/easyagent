@@ -1,4 +1,4 @@
-module github.com/hwj123hwj/easyagent/desktop-native
+module github.com/nightgopher/easyagent/desktop-native
 
 go 1.27.3
 

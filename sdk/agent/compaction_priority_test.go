@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/compaction"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/compaction"
 	"github.com/stretchr/testify/require"
 )
 

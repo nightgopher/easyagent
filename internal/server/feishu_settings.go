@@ -16,7 +16,7 @@ import (
 
 	"github.com/joho/godotenv"
 
-	"github.com/hwj123hwj/easyagent/internal/feishu"
+	"github.com/nightgopher/easyagent/internal/feishu"
 )
 
 // The operator explicitly opts in with a fixed environment file used by the

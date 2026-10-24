@@ -12,13 +12,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/internal/scheduler"
-	"github.com/hwj123hwj/easyagent/internal/web"
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/internal/scheduler"
+	"github.com/nightgopher/easyagent/internal/web"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // Version is the server build version. Set by main.go via SetVersion().

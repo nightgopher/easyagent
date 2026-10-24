@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai/providers"
 )
 
 // LLMSummarizer 返回一个使用 LLM 生成摘要的 SummarizeFunc。
