@@ -16,7 +16,7 @@
   },
   "updates": {
     "publicKey": "pxQjBGbExbXH4XixmVwcNNdNPFPHtzz5SoawM85L9JA=",
-    "github": "hwj123hwj/easyagent",
+    "github": "nightgopher/easyagent",
     "tagPrefix": "v",
     "deltas": 0,
     "changelog": "../CHANGELOG.md"

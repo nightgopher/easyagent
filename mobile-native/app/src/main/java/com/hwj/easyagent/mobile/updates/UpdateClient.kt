@@ -63,8 +63,8 @@ class UpdateClient internal constructor(
             }.build(),
         listOf(
             UpdateSource(
-                "https://api.github.com/repos/hwj123hwj/easyagent/releases/latest".toHttpUrl(),
-                "https://github.com/hwj123hwj/easyagent/releases/download/".toHttpUrl(), checksumInApi = true),
+                "https://api.github.com/repos/nightgopher/easyagent/releases/latest".toHttpUrl(),
+                "https://github.com/nightgopher/easyagent/releases/download/".toHttpUrl(), checksumInApi = true),
             UpdateSource(
                 "https://gitee.com/api/v5/repos/weijian-huang/easyagent/releases/latest".toHttpUrl(),
                 "https://gitee.com/weijian-huang/easyagent/releases/download/".toHttpUrl(), checksumInApi = false),

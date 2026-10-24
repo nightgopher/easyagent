@@ -3,7 +3,7 @@
 # EasyAgent 一键安装脚本
 #
 # 用法:
-#   curl -fsSL https://raw.githubusercontent.com/hwj123hwj/easyagent/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nightgopher/easyagent/main/scripts/install.sh | bash
 #
 # 脚本会自动完成:
 #   1. 检测系统 → 下载并校验指定 Release（默认最新正式版）
@@ -15,7 +15,7 @@
 set -euo pipefail
 umask 077
 
-REPO="hwj123hwj/easyagent"
+REPO="nightgopher/easyagent"
 LEGACY_ROOT="${PI_GO_HOME:-$HOME/.pi-go}"
 INSTALL_ROOT="${EA_HOME:-$HOME/.easyagent}"
 if [ -n "${PI_GO_HOME:-}" ] && [ "${PI_GO_HOME}" != "$HOME/.pi-go" ] && [ -z "${EA_HOME:-}" ]; then
