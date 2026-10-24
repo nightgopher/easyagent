@@ -92,7 +92,7 @@ func TestReadPDFExtractsRequestedPages(t *testing.T) {
 }
 
 func TestReadPDFDefaultsToFirstPagesWithContinuation(t *testing.T) {
-	texts := make([]string, 12)
+	texts := make([]string, 25)
 	for i := range texts {
 		texts[i] = fmt.Sprintf("page marker %02d", i+1)
 	}
@@ -101,23 +101,24 @@ func TestReadPDFDefaultsToFirstPagesWithContinuation(t *testing.T) {
 
 	content, isErr := executeReadResult(t, tool, fmt.Sprintf(`{"path": %q}`, pdf))
 	require.False(t, isErr, content)
-	assert.Contains(t, content, "showing pages 1-10")
+	assert.Contains(t, content, "25 pages, showing pages 1-10")
 	assert.Contains(t, content, "page marker 10")
 	assert.NotContains(t, content, "page marker 11")
-	assert.Contains(t, content, "2 more pages (use pages=11")
+	assert.Contains(t, content, "15 more pages (use pages=11-20")
 
-	content, isErr = executeReadResult(t, tool, fmt.Sprintf(`{"path": %q, "pages": "11-12"}`, pdf))
+	content, isErr = executeReadResult(t, tool, fmt.Sprintf(`{"path": %q, "pages": "21-25"}`, pdf))
 	require.False(t, isErr, content)
-	assert.Contains(t, content, "page marker 12")
+	assert.Contains(t, content, "page marker 25")
 }
 
 func TestReadPDFRejectsInvalidPageSpecs(t *testing.T) {
 	pdf := writePDF(t, buildPDF([]string{"only page"}))
 	tool := NewReadTool()
 
-	for _, spec := range []string{`"pages": "0"`, `"pages": "5-1"`, `"pages": "abc"`, `"pages": "1-51"`} {
-		_, isErr := executeReadResult(t, tool, fmt.Sprintf(`{"path": %q, %s}`, pdf, spec))
-		assert.True(t, isErr, spec)
+	for _, spec := range []string{`"pages": "0"`, `"pages": "5-1"`, `"pages": "abc"`, `"pages": "1-51"`, `"pages": "3,1"`} {
+		content, isErr := executeReadResult(t, tool, fmt.Sprintf(`{"path": %q, %s}`, pdf, spec))
+		require.True(t, isErr, spec)
+		assert.Contains(t, content, "pages", spec)
 	}
 
 	content, isErr := executeReadResult(t, tool, fmt.Sprintf(`{"path": %q, "pages": "9"}`, pdf))
@@ -131,12 +132,14 @@ func TestReadPDFNotesScannedPages(t *testing.T) {
 
 	content, isErr := executeReadResult(t, tool, fmt.Sprintf(`{"path": %q}`, pdf))
 	require.False(t, isErr, content)
-	assert.Contains(t, content, "page 1: no extractable text")
+	assert.Contains(t, content, "--- Page 1 ---")
+	assert.Contains(t, content, "no extractable text")
 	assert.Contains(t, content, "has text layer")
 
 	scannedOnly := writePDF(t, buildPDF([]string{"", ""}))
 	content, isErr = executeReadResult(t, tool, fmt.Sprintf(`{"path": %q}`, scannedOnly))
 	require.False(t, isErr, content)
+	assert.Contains(t, content, "No text layer found")
 	assert.Contains(t, content, "scanned or image-only")
 }
 
