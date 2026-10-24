@@ -1,10 +1,10 @@
 package tools
 
 import (
-	"github.com/hwj123hwj/easyagent/internal/computer"
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/operations"
-	basetools "github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/internal/computer"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/operations"
+	basetools "github.com/nightgopher/easyagent/sdk/tools"
 )
 
 // ListOptions controls how the coding-agent toolset is assembled.

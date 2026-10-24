@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/session"
-	"github.com/hwj123hwj/easyagent/sdk/sessionmgr"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/session"
+	"github.com/nightgopher/easyagent/sdk/sessionmgr"
 )
 
 // ForkOptions selects one fork point. Nil selectors copy the whole branch;

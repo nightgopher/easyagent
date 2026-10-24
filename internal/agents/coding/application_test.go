@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 	"github.com/stretchr/testify/require"
 )
 

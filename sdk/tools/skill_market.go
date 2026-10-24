@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/skillmarket"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/skillmarket"
 )
 
 // SkillMarketTool lets the agent search the official skill store, inspect

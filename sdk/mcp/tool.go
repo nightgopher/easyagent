@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

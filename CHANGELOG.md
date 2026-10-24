@@ -4,10 +4,13 @@
 
 ## [Unreleased]
 
+## [v0.28.0] - 2026-10-24
+
 ### Added
 - 桌面工作区面板新增「技能」标签（也可用 `/skills`）：显示本项目 `.agents/skills`、`.claude/skills` 里的技能，标出覆盖了哪个个人同名技能，并汇总本会话还加载了多少个人技能。新增「刷新技能」：在项目里新增或修改技能后不必新建会话（`POST /sessions/{id}/skills/refresh`，任务运行中返回 409，等任务结束再刷新）。
 
 ### Changed
+- **Go 模块路径迁移**：Go 模块从 `github.com/hwj123hwj/easyagent` 迁至 `github.com/nightgopher/easyagent`（含 desktop-native 子模块，模块声明与全部 import 已同步）。外部消费者升级到 v0.28.0 时需将 require 与 import 改至新路径；v0.27.0 及更早版本仍可经 Go 模块代理在旧路径获取（代理已缓存，不影响既有构建）。仓库迁移（Release 下载、更新源、安装脚本）已于 v0.27.0 完成，本次仅变更 Go 模块路径，运行时行为无任何变化。
 - 设置 → 技能由「已安装 / 当前会话已加载 / 市场」三个标签改为「我的技能 / 市场」两个；「当前会话已加载」标签移除，改由工作区面板的「技能」标签显示。
 
 ### Fixed

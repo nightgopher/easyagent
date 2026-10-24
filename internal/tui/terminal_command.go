@@ -6,7 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // tea.Exec releases raw mode, input capture and the renderer together. Running

@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // ReadTool reads a file from the knowledge base repository.

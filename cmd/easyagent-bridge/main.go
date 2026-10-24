@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/feishu"
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/internal/feishu"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/joho/godotenv"
 )
 

@@ -3,7 +3,7 @@ package agent
 import (
 	"sync"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 type MessageQueue struct {

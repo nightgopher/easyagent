@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/hwj123hwj/easyagent/internal/app"
-	"github.com/hwj123hwj/easyagent/internal/server"
-	"github.com/hwj123hwj/easyagent/sdk/config"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/internal/server"
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // ServeMode handles the HTTP server mode.

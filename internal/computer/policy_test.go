@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/stretchr/testify/require"
 )
 

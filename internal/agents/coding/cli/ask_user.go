@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/internal/ui"
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/internal/ui"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/tools"
 )
 
 // promptAskUser renders the ask_user_question panel on the terminal and reads

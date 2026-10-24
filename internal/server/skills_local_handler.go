@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/skill"
+	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 type localSkillJSON struct {

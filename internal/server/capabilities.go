@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/skill"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 // pathWithin reports whether target is root itself or lies below it.

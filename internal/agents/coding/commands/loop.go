@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/internal/scheduler"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/scheduler"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // RegisterLoopCommands registers /loop and /crontab slash commands.

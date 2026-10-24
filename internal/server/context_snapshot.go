@@ -6,9 +6,9 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 )
 
 func (s *Server) getContextSnapshot(w http.ResponseWriter, r *http.Request) {

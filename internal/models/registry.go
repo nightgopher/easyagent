@@ -11,8 +11,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hwj123hwj/easyagent/sdk/ai"
-	"github.com/hwj123hwj/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 // ModelDef defines a single model available for use.

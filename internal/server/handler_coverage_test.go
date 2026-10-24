@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/hwj123hwj/easyagent/internal/scheduler"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/internal/scheduler"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
 // Run starts the Bubble Tea TUI program.

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // DisplayEvent is a structured representation of an agent event,

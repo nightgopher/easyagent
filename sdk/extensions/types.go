@@ -3,7 +3,7 @@ package extensions
 import (
 	"context"
 
-	"github.com/hwj123hwj/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 // CommandDef defines a slash command contributed by an extension.

@@ -12,10 +12,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/hwj123hwj/easyagent/sdk/agent"
-	"github.com/hwj123hwj/easyagent/sdk/runtime"
-	"github.com/hwj123hwj/easyagent/sdk/slashcmd"
-	"github.com/hwj123hwj/easyagent/sdk/tools"
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
+	"github.com/nightgopher/easyagent/sdk/tools"
 )
 
 // TuiModel is the root Bubble Tea model for easyagent's interactive TUI.
