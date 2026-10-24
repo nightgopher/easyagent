@@ -250,6 +250,17 @@ func (a *App) Config() config.Config {
 	return a.cfg
 }
 
+// GlobalSkillDirs lists the project-independent directories sessions load skills from, in
+// precedence order.
+func (a *App) GlobalSkillDirs() []string {
+	cfg := a.Config()
+	marketDir := ""
+	if cfg.SkillMarketEnabled {
+		marketDir = cfg.SkillMarketSkillDir
+	}
+	return runtime.GlobalSkillDirs(a.skillDirs, marketDir)
+}
+
 // ExtRegistry returns the extension registry.
 func (a *App) ExtRegistry() *extensions.Registry {
 	return a.extRegistry
