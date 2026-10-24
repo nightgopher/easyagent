@@ -11,10 +11,15 @@ func PersonalSkillDirs() []string {
 	return []string{filepath.Join(util.HomeDir(), ".agents", "skills"), filepath.Join(util.HomeDir(), ".claude", "skills")}
 }
 
+// ProjectSkillDirs are the skill roots inside a project, in precedence order.
+func ProjectSkillDirs(workspace string) []string {
+	return []string{filepath.Join(workspace, ".agents", "skills"), filepath.Join(workspace, ".claude", "skills")}
+}
+
 // DefaultSkillDirs includes the shared personal source used by the gateway.
 // Project definitions take precedence over personal definitions with the same name.
 func DefaultSkillDirs(workspace string) []string {
-	return append([]string{filepath.Join(workspace, ".agents", "skills"), filepath.Join(workspace, ".claude", "skills")}, PersonalSkillDirs()...)
+	return append(ProjectSkillDirs(workspace), PersonalSkillDirs()...)
 }
 
 // GlobalSkillDirs are the project-independent skill directories a session loads from: the

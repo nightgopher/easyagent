@@ -682,7 +682,7 @@ func (a *preview) liveModals(c *ui.Context) {
 
 type nativeCommand struct{ Name, Description string }
 
-var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
+var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/skills", "本项目技能"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
 
 func (a *preview) commandMatches(text string) []nativeCommand {
 	if !strings.HasPrefix(text, "/") {
@@ -730,6 +730,8 @@ func (a *preview) executeLiveCommand(text string) bool {
 		a.openResource("context")
 	case "/tools":
 		a.openResource("tools")
+	case "/skills":
+		a.openResource("skills")
 	case "/model":
 		if args != "" {
 			a.switchLiveModel(args)
