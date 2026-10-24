@@ -41,7 +41,7 @@ var settingsPages = []settingsPage{
 	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
 	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
 	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
-	{"capabilities", "技能", "code", "管理已安装技能、查看会话加载状态或从市场安装新技能。", "新会话生效", 1},
+	{"capabilities", "技能", "code", "管理主机上的全局技能，或从市场安装新技能。", "新会话生效", 1},
 	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 }
@@ -116,8 +116,7 @@ type settingsState struct {
 	SkillQuery, SkillFilter, SkillCategory, SkillDetail                      string
 	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace string
 	ProjectTrustByWorkspace                                                  map[string]bool
-	CapabilityOpen                                                           bool
-	CapabilityTab                                                            string
+	CapabilityTab, LocalSkillQuery                                           string
 	CapturingShortcutID                                                      string
 	ShortcutConflict                                                         string
 	Confirm                                                                  *nativeConfirmation
@@ -151,7 +150,7 @@ func (a *preview) openSettings(tab string) {
 		if strings.Contains(search, "市场") || strings.Contains(search, "market") || strings.Contains(search, "安装") {
 			a.Settings.CapabilityTab = "market"
 		} else if a.Settings.CapabilityTab == "" {
-			a.Settings.CapabilityTab = "installed"
+			a.Settings.CapabilityTab = "mine"
 		}
 	}
 	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
