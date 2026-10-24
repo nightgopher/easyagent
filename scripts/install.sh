@@ -85,10 +85,22 @@ fi
 download_release() (
     set -euo pipefail
     tag=${EA_VERSION:-}
+    # GitHub is tried first; the Gitee mirror helps where GitHub is unreachable (EA_MIRROR_REPO= disables it).
+    mirror_repo=${EA_MIRROR_REPO-weijian-huang/easyagent}
+    latest_urls=("https://api.github.com/repos/${REPO}/releases/latest")
+    release_roots=("https://github.com/${REPO}/releases/download")
+    if [ -n "$mirror_repo" ]; then
+        latest_urls+=("https://gitee.com/api/v5/repos/${mirror_repo}/releases/latest")
+        release_roots+=("https://gitee.com/${mirror_repo}/releases/download")
+    fi
     if [ -z "$tag" ]; then
         info "Fetching latest stable release..."
-        tag=$(curl -fsSL --connect-timeout 10 --max-time 60 "https://api.github.com/repos/${REPO}/releases/latest" \
-            | sed -nE 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/p')
+        for url in "${latest_urls[@]}"; do
+            tag=$(curl -fsSL --connect-timeout 10 --max-time 60 "$url" \
+                | sed -nE 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/p') || tag=""
+            [ -z "$tag" ] || break
+            info "Cannot read the latest release from $url"
+        done
     fi
     [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.[1-9][0-9]*)?$ ]] \
         || fail "Invalid release version: $tag"
@@ -110,9 +122,20 @@ download_release() (
         exit "$status"
     }
     trap rollback EXIT
-    base="https://github.com/${REPO}/releases/download/$tag"
-    curl -fsSL --connect-timeout 10 --max-time 60 "$base/checksums.txt" -o "$stage/checksums.txt" \
-        || fail "Cannot retrieve release checksums; installation unchanged"
+    # The first source that serves checksums.txt is used for every asset, the others only fill in when a download fails.
+    sources=()
+    for root in "${release_roots[@]}"; do
+        if [ "${#sources[@]}" -eq 0 ]; then
+            rm -f "$stage/checksums.txt"
+            if curl -fsSL --connect-timeout 10 --max-time 60 "$root/$tag/checksums.txt" -o "$stage/checksums.txt"; then
+                sources=("$root/$tag")
+            fi
+        fi
+    done
+    [ "${#sources[@]}" -gt 0 ] || fail "Cannot retrieve release checksums; installation unchanged"
+    for root in "${release_roots[@]}"; do
+        [ "$root/$tag" = "${sources[0]}" ] || sources+=("$root/$tag")
+    done
     checksum_for() {
         awk -v name="$1" '$2 == name || $2 == "*" name {value=$1; count++} END {if (count == 1) print value; else exit 1}' "$stage/checksums.txt"
     }
@@ -120,8 +143,14 @@ download_release() (
         asset=$1
         digest=$(checksum_for "$asset") || fail "Missing or duplicate checksum: $asset"
         [[ "$digest" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Invalid SHA-256: $asset"
-        curl -fSL --connect-timeout 10 --max-time 300 "$base/$asset" -o "$stage/$asset" \
-            || fail "Download failed: $asset; installation unchanged"
+        downloaded=false
+        for candidate in "${sources[@]}"; do
+            if curl -fSL --connect-timeout 10 --max-time 300 "$candidate/$asset" -o "$stage/$asset"; then
+                downloaded=true
+                break
+            fi
+        done
+        [ "$downloaded" = true ] || fail "Download failed: $asset; installation unchanged"
         if command -v sha256sum >/dev/null 2>&1; then
             actual=$(sha256sum "$stage/$asset" | awk '{print $1}')
         else
