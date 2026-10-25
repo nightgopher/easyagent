@@ -157,7 +157,7 @@ private fun FilePreview(client: AgentClient, session: ChatSession, path: String,
         LazyColumn {
             if (loading) item { CircularProgressIndicator() }
             if (error.isNotBlank()) item { Text(error) }
-            image?.let { bitmap -> item { Image(bitmap.asImageBitmap(), path, Modifier.fillMaxWidth().aspectRatio(bitmap.width.toFloat() / bitmap.height)) } }
+            image?.let { bitmap -> item { Image(bitmap.asImageBitmap(), path, Modifier.fillMaxWidth()) } }
             if (text.isNotEmpty()) item { MarkdownView(text) }
             if (pages > 0) item { Row {
                 TextButton(enabled = page > 0, onClick = { page-- }) { Text("上一页") }
