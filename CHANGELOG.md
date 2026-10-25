@@ -24,7 +24,7 @@
 ### Development
 - 新增 REST 路由守护测试：从源码读出所有注册在 REST mux 上的路由，逐个确认经顶层 `Handler()` 转发；以后新增路由漏转发会直接测失败。
 
-## [v0.30.0] - 2026-10-25
+## [v0.29.0] - 2026-10-24
 
 ### Changed
 - **Go 模块路径迁移**：Go 模块从 `github.com/hwj123hwj/easyagent` 迁至 `github.com/nightgopher/easyagent`（含 desktop-native 子模块，模块声明与全部 import 已同步）。外部消费者升级到 v0.28.0 时需将 require 与 import 改至新路径；v0.27.0 及更早版本仍可经 Go 模块代理在旧路径获取（代理已缓存，不影响既有构建）。仓库迁移（Release 下载、更新源、安装脚本）已于 v0.27.0 完成，本次仅变更 Go 模块路径，运行时行为无任何变化。
