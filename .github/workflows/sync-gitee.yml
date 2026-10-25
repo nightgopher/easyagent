@@ -1,0 +1,60 @@
+name: Sync Gitee mirror
+# Publishes the update-related assets of a GitHub Release to the Gitee mirror used as a fallback in mainland China.
+# A release published with GITHUB_TOKEN does not fire `release` events, so this follows the Release workflow instead.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to mirror, e.g. v0.30.0 (default: the latest release)'
+        required: false
+permissions:
+  contents: read
+concurrency:
+  group: sync-gitee
+  cancel-in-progress: false
+jobs:
+  mirror:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Skip when no Gitee token is configured
+        id: gate
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::notice::GITEE_TOKEN is not set; skipping the Gitee mirror"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v7
+        if: steps.gate.outputs.run == 'true'
+      - name: Resolve the release tag
+        if: steps.gate.outputs.run == 'true'
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)}"
+          [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo "::error::Not a stable release tag: $tag"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Download the assets to mirror
+        if: steps.gate.outputs.run == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          patterns=()
+          while read -r name; do patterns+=(-p "$name"); done < <(python3 scripts/gitee_mirror.py --list-assets)
+          gh release download "$TAG" --dir assets "${patterns[@]}"
+          gh release view "$TAG" --json body --jq .body > notes.md
+      - name: Mirror to Gitee
+        if: steps.gate.outputs.run == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: python3 scripts/gitee_mirror.py --tag "$TAG" --assets-dir assets --notes-file notes.md

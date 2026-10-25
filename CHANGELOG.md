@@ -6,6 +6,7 @@
 
 ### Added
 - 桌面工作区面板新增「技能」标签（也可用 `/skills`）：显示本项目 `.agents/skills`、`.claude/skills` 里的技能，标出覆盖了哪个个人同名技能，并汇总本会话还加载了多少个人技能。新增「刷新技能」：在项目里新增或修改技能后不必新建会话（`POST /sessions/{id}/skills/refresh`，任务运行中返回 409，等任务结束再刷新）。
+- 发布后自动把更新用的资产同步到 Gitee 镜像：新增 `Sync Gitee mirror` 工作流和 `scripts/gitee_mirror.py`，在 `Release` 成功后把 `release.json`、`checksums.txt`、Android APK、macOS DMG 和 Linux / macOS 核心与桥接程序镜像到 `weijian-huang/easyagent`。同步前按 `checksums.txt` 校验，已存在的镜像资产不会被替换，上传后匿名下载复核，只保留最近 3 个版本；需要仓库 Secret `GITEE_TOKEN`，未设置时自动跳过，不影响 GitHub 发布。
 
 ### Changed
 - 设置 → 技能由「已安装 / 当前会话已加载 / 市场」三个标签改为「我的技能 / 市场」两个；「当前会话已加载」标签移除，改由工作区面板的「技能」标签显示。
