@@ -87,6 +87,17 @@ jobs:
         run: |
           python3 scripts/check-native-keychain.py
           bash scripts/build-native.sh darwin-arm64 native-dist "$TAG"
+      - name: Notarize the macOS DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG="native-dist/easyagent-native-darwin-arm64.dmg"
+          xcrun notarytool store-credentials "easyagent-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          xcrun notarytool submit "$DMG" --keychain-profile "easyagent-notary" --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
       - uses: actions/upload-artifact@v7
         with:
           name: release-native
