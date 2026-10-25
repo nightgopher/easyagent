@@ -250,3 +250,36 @@ func TestOpeningTheSkillsPageLoadsTheHostSkills(t *testing.T) {
 		t.Fatalf("the page should open on 我的技能, got %q", a.Settings.CapabilityTab)
 	}
 }
+
+func TestMySkillsSaysWhenMarketRecordsCouldNotBeRead(t *testing.T) {
+	a := fixtureLocalSkillsPreview(t)
+	tt := ui.NewTester(a.View, 1240, 1400)
+	if tt.HasText("无法读取市场安装记录") {
+		t.Fatal("no warning expected when the records were read")
+	}
+	object(a.Live.Data[localSkillsKey])["installed_error"] = "permission denied"
+	tt.Frame()
+	if !tt.HasText("无法读取市场安装记录，下面的技能无法区分是否由市场安装，也暂时不能在这里卸载：permission denied") {
+		t.Fatalf("a failed read of the install records must be visible: %v", tt.Texts())
+	}
+}
+
+func TestReconnectDropsHostScopedSkillData(t *testing.T) {
+	a := hostCredentialPreview(t, &memorySecrets{})
+	a.Live.Config.ActiveHost = "remote"
+	a.syncSettingsConfig()
+	for _, key := range []string{"market", "installed", "sections", "skill-detail", localSkillsKey, "capabilities"} {
+		a.Live.Data[key] = map[string]any{"from": "previous host"}
+		a.Live.ResourceErrors[key] = "previous host failed"
+	}
+	a.connectLive()
+	waitNative(t, a, func() bool { return !a.Live.Connecting })
+	for _, key := range []string{"market", "installed", "sections", "skill-detail", localSkillsKey, "capabilities"} {
+		if _, kept := a.Live.Data[key]; kept {
+			t.Errorf("%s survived a host reconnect and would show the previous host's data", key)
+		}
+		if a.Live.ResourceErrors[key] != "" {
+			t.Errorf("%s kept the previous host's error", key)
+		}
+	}
+}

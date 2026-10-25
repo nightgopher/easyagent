@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -335,6 +337,10 @@ func (s *Server) kbRead(w http.ResponseWriter, r *http.Request) {
 
 	data, err := os.ReadFile(safePath) //nolint:gosec // securePath confines the resolved path to the KB repo
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			writeError(w, http.StatusNotFound, "file not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read file: %v", err))
 		return
 	}

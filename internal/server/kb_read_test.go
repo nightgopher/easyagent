@@ -56,6 +56,13 @@ func TestKBReadStaysInsideTheKnowledgeBase(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, kbRead(handler, "").Code)
 }
 
+func TestKBReadMissingFileIsNotFound(t *testing.T) {
+	handler, repo, _ := newKBTestServer(t)
+	for _, path := range []string{"issues/gone.md", "nowhere/at/all.md", filepath.Join(repo, "issues", "gone.md")} {
+		assert.Equal(t, http.StatusNotFound, kbRead(handler, path).Code, path)
+	}
+}
+
 func kbGet(t *testing.T, handler http.Handler, target string, out any) {
 	t.Helper()
 	w := httptest.NewRecorder()

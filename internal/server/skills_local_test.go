@@ -18,6 +18,8 @@ type localSkillsResponse struct {
 	Skills   []localSkillJSON        `json:"skills"`
 	Roots    []localSkillRootJSON    `json:"roots"`
 	Problems []localSkillProblemJSON `json:"problems"`
+	// InstalledError is set when the market's install records could not be read.
+	InstalledError string `json:"installed_error"`
 }
 
 func writeTestSkill(t *testing.T, root, dir, name, description string) string {
@@ -83,6 +85,7 @@ func TestListLocalSkills_ShowsEverySkillWhoeverInstalledIt(t *testing.T) {
 	require.Len(t, out.Roots, 2)
 	assert.Equal(t, agents, out.Roots[0].Path)
 	assert.Empty(t, out.Problems)
+	assert.Empty(t, out.InstalledError)
 }
 
 func TestListLocalSkills_MarksTheShadowedDuplicate(t *testing.T) {
@@ -143,4 +146,17 @@ func TestListLocalSkills_EmptyIsAnEmptyListNotNull(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Body.String(), `"skills":[]`)
 	assert.Contains(t, w.Body.String(), `"problems":[]`)
+}
+
+func TestListLocalSkills_SaysWhenTheMarketRecordsCannotBeRead(t *testing.T) {
+	home := t.TempDir()
+	// A file where the market's skills directory should be makes listing its installs fail.
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".agents"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".agents", "skills"), []byte("not a directory"), 0o644))
+	writeTestSkill(t, filepath.Join(home, ".claude", "skills"), "other-tool", "other-tool", "Still listed")
+
+	out := getLocalSkills(t, newSkillsServer(t, home, nil))
+
+	require.Len(t, out.Skills, 1, "the listing itself must survive")
+	assert.NotEmpty(t, out.InstalledError, "otherwise the missing 市场安装 badge looks like a fact")
 }
