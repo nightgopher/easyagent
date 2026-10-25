@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v0.30.0] - 2026-10-25
+
 ### Added
 - 桌面工作区面板新增「技能」标签（也可用 `/skills`）：显示本项目 `.agents/skills`、`.claude/skills` 里的技能，标出覆盖了哪个个人同名技能，并汇总本会话还加载了多少个人技能。新增「刷新技能」：在项目里新增或修改技能后不必新建会话（`POST /sessions/{id}/skills/refresh`，任务运行中返回 409，等任务结束再刷新）。
 - 发布后自动把更新用的资产同步到 Gitee 镜像：新增 `Sync Gitee mirror` 工作流和 `scripts/gitee_mirror.py`，在 `Release` 成功后把 `release.json`、`checksums.txt`、Android APK、macOS DMG 和 Linux / macOS 核心与桥接程序镜像到 `weijian-huang/easyagent`。同步前按 `checksums.txt` 校验，已存在的镜像资产不会被替换，上传后匿名下载复核，只保留最近 3 个版本；需要仓库 Secret `GITEE_TOKEN`，未设置时自动跳过，不影响 GitHub 发布。
@@ -19,7 +21,10 @@
 - `GET /skills/local` 读不到市场安装记录时不再静默丢掉「市场安装」标记：响应带 `installed_error`，「我的技能」页顶部显示原因。
 - `GET /kb/read` 读取不存在的文件改为返回 404（原先是 500）。
 
-## [v0.29.0] - 2026-10-24
+### Development
+- 新增 REST 路由守护测试：从源码读出所有注册在 REST mux 上的路由，逐个确认经顶层 `Handler()` 转发；以后新增路由漏转发会直接测失败。
+
+## [v0.30.0] - 2026-10-25
 
 ### Changed
 - **Go 模块路径迁移**：Go 模块从 `github.com/hwj123hwj/easyagent` 迁至 `github.com/nightgopher/easyagent`（含 desktop-native 子模块，模块声明与全部 import 已同步）。外部消费者升级到 v0.28.0 时需将 require 与 import 改至新路径；v0.27.0 及更早版本仍可经 Go 模块代理在旧路径获取（代理已缓存，不影响既有构建）。仓库迁移（Release 下载、更新源、安装脚本）已于 v0.27.0 完成，本次仅变更 Go 模块路径，运行时行为无任何变化。
