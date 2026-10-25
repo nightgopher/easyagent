@@ -134,7 +134,7 @@ func voicePrompt(messages []openaiMessage, tools []openaiTool) string {
 	if len(tools) > 0 {
 		b.WriteString("\n除上述对话外，你还可以调用以下工具：\n")
 		for _, t := range tools {
-			b.WriteString(fmt.Sprintf("- %s：%s\n", t.Function.Name, t.Function.Description))
+			fmt.Fprintf(&b, "- %s：%s\n", t.Function.Name, t.Function.Description)
 		}
 		b.WriteString("需要调用工具时，不要用自然语言回答，只输出一行 JSON：{\"name\":\"工具名\",\"arguments\":{参数}}\n不需要工具时正常口语回答。\n")
 	}
