@@ -84,7 +84,7 @@ func lastUserText(messages []openaiMessage) (string, bool) {
 func voicePrompt(messages []openaiMessage) string {
 	last, _ := lastUserText(messages)
 	var b strings.Builder
-	b.WriteString("你是中文语音助手，回答务必简短口语化，一般不超过三句话。除非用户明确要求操作文件或系统，否则不要调用任何工具。\n")
+	b.WriteString("你是小智语音助手，回答务必简短口语化，一般不超过三句话，回答里不要出现代码、命令、链接或路径，用日常口语描述。可以大胆使用工具来完成用户的请求（读文件、查状态、执行任务都可以），调用了工具之后必须再用一两句话把结果口头汇报出来。\n")
 	if len(messages) > 1 {
 		b.WriteString("\n对话历史：\n")
 		for _, m := range messages {
@@ -139,10 +139,15 @@ func (s *Server) openaiChatCompletions(w http.ResponseWriter, r *http.Request) {
 		runHTTPError(w, err)
 		return
 	}
+	// 语音兜底：Agent 若只调了工具没生成口头回答（或等待审批），给一句可朗读的话，避免设备收不到音频
+	text := strings.TrimSpace(assistant.Text)
+	if text == "" {
+		text = "这个我得动手查一下，先不告诉你结果哈"
+	}
 	stop := "stop"
 	writeOpenAIJSON(w, openaiChatResponse{
 		ID: "chatcmpl-" + run.ID, Object: "chat.completion", Created: time.Now().Unix(), Model: req.Model,
-		Choices: []openaiChatChoice{{Index: 0, Message: &openaiChatText{Role: "assistant", Content: assistant.Text}, FinishReason: &stop}},
+		Choices: []openaiChatChoice{{Index: 0, Message: &openaiChatText{Role: "assistant", Content: text}, FinishReason: &stop}},
 	})
 }
 
@@ -181,6 +186,12 @@ func (s *Server) openaiChatStream(w http.ResponseWriter, r *http.Request, run *s
 	observer := &wsConn{outgoing: make(chan []byte, 512), done: make(chan struct{})}
 	defer observer.close()
 	defer s.unsubscribeRun(observer, run.SessionID)
+	emitted := false
+	fallbackIfSilent := func() {
+		if !emitted {
+			chunk(&openaiChatText{Content: "这个我得动手查一下，先不告诉你结果哈"}, false)
+		}
+	}
 	snapshot, err := s.runSnapshot(run.SessionID, 0, "", observer)
 	if err != nil {
 		writeSSE(w, "error", err.Error())
@@ -193,11 +204,16 @@ func (s *Server) openaiChatStream(w http.ResponseWriter, r *http.Request, run *s
 			writeSSE(w, "error", err.Error())
 			return
 		}
-		chunk(&openaiChatText{Role: "assistant", Content: assistant.Text}, true)
+		text := strings.TrimSpace(assistant.Text)
+		if text == "" {
+			text = "这个我得动手查一下，先不告诉你结果哈"
+		}
+		chunk(&openaiChatText{Role: "assistant", Content: text}, true)
 		return
 	}
 	emit := func(event agent.AgentStreamEvent) {
 		if event.Type == agent.StreamEventTextDelta && event.TextDelta != "" {
+			emitted = true
 			chunk(&openaiChatText{Content: event.TextDelta}, false)
 		}
 	}
@@ -207,6 +223,7 @@ func (s *Server) openaiChatStream(w http.ResponseWriter, r *http.Request, run *s
 		}
 	}
 	if snapshot.Run != nil && !runActive(snapshot.Run) {
+		fallbackIfSilent()
 		flush(nil, true)
 		return
 	}
@@ -228,11 +245,13 @@ func (s *Server) openaiChatStream(w http.ResponseWriter, r *http.Request, run *s
 			if event.Type == "event" {
 				emit(event.Event)
 				if event.Event.Type == agent.StreamEventDone {
+					fallbackIfSilent()
 					chunk(nil, true)
 					return
 				}
 			}
 			if event.Type == "status" && event.State != "running" && event.State != "waiting_confirmation" {
+				fallbackIfSilent()
 				flush(nil, true)
 				return
 			}
