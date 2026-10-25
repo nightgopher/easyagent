@@ -14,7 +14,7 @@ func (a *preview) bindWorkbench() {
 		return
 	}
 	if w.Scope != "" {
-		for _, key := range []string{"review", "run-files", "context", "profile", "kb", "kb-read", "kb-stats", "kb-health", "kb-tags", "kb-categories"} {
+		for _, key := range []string{"inbox", "review", "run-files", "context", "profile", "kb", "kb-read", "kb-stats", "kb-health", "kb-tags", "kb-categories"} {
 			l.Versions[key]++
 			delete(l.Data, key)
 			delete(l.ResourceErrors, key)
