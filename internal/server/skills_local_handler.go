@@ -52,8 +52,13 @@ func skillRootOrigin(root string) string {
 // installed, so hand-written ones and ones from other tools would otherwise never show up.
 func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
 	managed := map[string]bool{}
+	installedError := ""
 	if client := s.marketClient(); client != nil {
-		if installed, err := client.ListInstalled(); err == nil {
+		if installed, err := client.ListInstalled(); err != nil {
+			// Without the market's records no skill can be told apart as market-installed, so say so
+			// instead of quietly dropping the badge and the uninstall button.
+			installedError = err.Error()
+		} else {
 			for _, item := range installed {
 				managed[filepath.Clean(item.Dir)] = true
 			}
@@ -91,5 +96,9 @@ func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 	sort.SliceStable(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
-	writeJSON(w, map[string]any{"skills": skills, "roots": roots, "problems": problems})
+	out := map[string]any{"skills": skills, "roots": roots, "problems": problems}
+	if installedError != "" {
+		out["installed_error"] = installedError
+	}
+	writeJSON(w, out)
 }

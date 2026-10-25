@@ -61,6 +61,9 @@ func (a *preview) liveLocalSkills(c *ui.Context) {
 		a.action(c, "重试").AlignSelf(ui.Start).OnClick(a.loadLocalSkills)
 		return
 	}
+	if reason := str(data["installed_error"]); reason != "" {
+		ui.Text(c, "无法读取市场安装记录，下面的技能无法区分是否由市场安装，也暂时不能在这里卸载："+reason).FontSize(12).LineHeight(1.5).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
+	}
 	roots := list(data["roots"])
 	if len(roots) > 0 {
 		paths := make([]string, 0, len(roots))

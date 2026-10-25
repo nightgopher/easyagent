@@ -360,8 +360,9 @@ func (a *preview) connectLive() {
 	l.NewWorkspace = false
 	a.NewMenu = false
 	a.Settings.SkillDetail = ""
-	for _, key := range []string{"market", "installed", "sections", "skill-detail"} {
+	for _, key := range []string{"market", "installed", "sections", "skill-detail", localSkillsKey, "capabilities"} {
 		delete(l.Data, key)
+		delete(l.ResourceErrors, key)
 	}
 	l.Loading = map[string]bool{}
 	epoch := l.epoch
