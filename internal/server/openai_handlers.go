@@ -79,6 +79,31 @@ func lastUserText(messages []openaiMessage) (string, bool) {
 	return "", false
 }
 
+// voicePrompt 把调用方发来的对话历史展平成单轮提示词，配合一次性会话使用：
+// 会话不复用，历史不落地，打断或并发时互不串台；同时约束语音回答的形态。
+func voicePrompt(messages []openaiMessage) string {
+	last, _ := lastUserText(messages)
+	var b strings.Builder
+	b.WriteString("你是中文语音助手，回答务必简短口语化，一般不超过三句话。除非用户明确要求操作文件或系统，否则不要调用任何工具。\n")
+	if len(messages) > 1 {
+		b.WriteString("\n对话历史：\n")
+		for _, m := range messages {
+			text := m.text()
+			if text == "" {
+				continue
+			}
+			switch m.Role {
+			case "user":
+				b.WriteString("用户：" + text + "\n")
+			case "assistant":
+				b.WriteString("助手：" + text + "\n")
+			}
+		}
+	}
+	b.WriteString("\n当前用户消息：" + last)
+	return b.String()
+}
+
 func (s *Server) registerOpenAIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/chat/completions", s.openaiChatCompletions)
 }
@@ -89,16 +114,18 @@ func (s *Server) openaiChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	prompt, ok := lastUserText(req.Messages)
-	if !ok {
+	if _, ok := lastUserText(req.Messages); !ok {
 		writeError(w, 400, "messages 中没有用户消息")
 		return
 	}
-	sessionID := "openai"
+	// 语音等一次性调用方：每个请求用全新会话，历史由调用方在 messages 里带过来
+	// （见 voicePrompt），避免跨轮累积导致上下文污染与打断时的串台。
+	sessionID := "openai-anon"
 	if req.User != "" {
 		sessionID = "openai-" + req.User
 	}
-	run, _, err := s.startRun(sessionID, prompt, "")
+	sessionID = fmt.Sprintf("%s-%d", sessionID, time.Now().UnixNano())
+	run, _, err := s.startRun(sessionID, voicePrompt(req.Messages), "")
 	if err != nil {
 		runHTTPError(w, err)
 		return
