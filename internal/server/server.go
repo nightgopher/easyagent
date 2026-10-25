@@ -243,6 +243,9 @@ func (s *Server) Handler() http.Handler {
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
 
+	// OpenAI 兼容接口（如 xiaozhi-server 语音后端）
+	s.registerOpenAIRoutes(restMux)
+
 	var restHandler = s.admissionMiddleware(restMux)
 	restHandler = s.authMiddleware(restHandler)
 	restHandler = corsMiddleware(s)(restHandler)
@@ -283,6 +286,7 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/profile", restHandler)
 	topMux.Handle("/settings/", restHandler)
 	topMux.Handle("/asr/", restHandler)
+	topMux.Handle("/v1/", restHandler)
 
 	// Register web UI routes (serves embedded static files at /)
 	web.RegisterRoutes(topMux)
