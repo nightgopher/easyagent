@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [v0.30.1] - 2026-10-25
+
+### Changed
+- macOS 版本改用 Apple **Developer ID Application** 证书签名（Team 35WYZL83HW），替代此前仓库自签的固定证书；外部用户首次打开应用时，系统将正确显示已认证的开发者身份。签名与公证人（notarization）接入进行中。本地构建与 CI 签名密钥同步更换。
+
 ## [v0.30.0] - 2026-10-25
 
 ### Added
