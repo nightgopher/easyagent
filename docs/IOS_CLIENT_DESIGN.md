@@ -34,6 +34,7 @@ Swift + SwiftUI，最低 iOS 17。
 
 - 与组织偏好一致（各端原生：Go / Kotlin / Swift），不引入跨端运行时。
 - 与 Android 的 Kotlin/Compose 不共享代码：客户端逻辑薄（主要是 API 编排与 UI），共享层（KMP）省下的代码量抵不上双端构建与调试成本。服务端 API 已由 Android 客户端验证，Swift 侧按同一契约实现即可。
+- 已定稿（2026-10-25）：两端技术栈天然对称，iOS 按此映射实现——OkHttp ↔ URLSession、Kotlin 协程 ↔ Swift Concurrency（async/await + actor）、kotlinx-serialization ↔ Codable、Compose 声明式 UI ↔ SwiftUI 声明式 UI。目录边界同样对称：Android 的 `backend/`（API 编排，约 1400 行）对应 iOS 的 `Backend/`，与 `Chat/`、`Sessions/` 等 UI 目录分离，M1 骨架即按此建立。
 - iPad 与 iPhone 同一 target，自适应布局：iPhone 单栏对话，iPad 会话列表 + 对话双栏（NavigationSplitView），外接键盘支持 ⌘N 新会话等快捷键。
 
 ## 与服务端的契约
