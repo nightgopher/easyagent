@@ -197,7 +197,7 @@ class Gitee:
                 self.sleep(2 ** attempt)
 
 
-def sync(gitee, assets_dir, tag, notes, keep, verify_download=True, log=print):
+def sync(gitee, assets_dir, tag, notes, keep, verify_download=True, log=lambda *a, **k: print(*a, **k, flush=True)):
     if not TAG_RE.fullmatch(tag) or "-" in tag:
         raise MirrorError("only stable release tags are mirrored")
     sums = verify_local(assets_dir, tag)
@@ -215,11 +215,12 @@ def sync(gitee, assets_dir, tag, notes, keep, verify_download=True, log=print):
     for name, item in existing.items():
         if name in ASSETS and item.get("size") is not None and int(item["size"]) != (Path(assets_dir) / name).stat().st_size:
             raise MirrorError(f"{name} already exists on the mirror with a different size; assets are never replaced")
-    for name in ASSETS:
-        if name in existing:
-            continue
+    pending = [name for name in ASSETS if name not in existing]
+    for index, name in enumerate(pending, start=1):
+        size = (Path(assets_dir) / name).stat().st_size
+        log(f"uploading {name} ({size} bytes, {index}/{len(pending)})")
         gitee.upload(release["id"], Path(assets_dir) / name)
-        log(f"uploaded {name} ({(Path(assets_dir) / name).stat().st_size} bytes)")
+        log(f"uploaded {name} ({size} bytes)")
     if verify_download:
         for name in ASSETS:
             expected = sha256_file(Path(assets_dir) / name)
