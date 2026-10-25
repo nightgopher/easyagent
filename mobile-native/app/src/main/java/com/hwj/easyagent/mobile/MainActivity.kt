@@ -1,6 +1,8 @@
 package com.hwj.easyagent.mobile
 
 import android.content.Intent
+import com.hwj.easyagent.mobile.ui.ShareReview
+import com.hwj.easyagent.mobile.media.loadShares
 import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.os.Bundle
@@ -54,7 +56,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        handleOpen(intent)
+        if (savedInstanceState == null) handleOpen(intent)
         setContent {
             EasyAgentTheme {
                 Root(application as EasyAgentApp, ::installUpdate)
@@ -80,6 +82,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleOpen(intent: Intent?) {
+        if (intent?.action in listOf(Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE)) {
+            (application as EasyAgentApp).acceptShare(requireNotNull(intent))
+            return
+        }
         val host = intent?.getStringExtra(Notifier.EXTRA_HOST) ?: return
         val session = intent.getStringExtra(Notifier.EXTRA_SESSION) ?: return
         (application as EasyAgentApp).pendingOpen.value = OpenRequest(host, session)
@@ -95,6 +101,10 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
     var editingId by rememberSaveable { mutableStateOf<String?>(null) }
     var managing by rememberSaveable { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val shareError by app.shareError.collectAsStateWithLifecycle()
+    LaunchedEffect(shareError) { shareError?.let { error = it; app.shareError.value = null } }
+    val shares by app.shares.collectAsStateWithLifecycle()
+    var dismissedShares by rememberSaveable { mutableStateOf(emptyList<String>()) }
     val pendingOpen by app.pendingOpen.collectAsStateWithLifecycle()
 
     fun select(id: String) {
@@ -149,6 +159,11 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                 AppVisibility.openChat = if (chatId.isEmpty()) null else "${client.config.id}/$chatId"
                 onDispose { AppVisibility.openChat = null }
             }
+            val capture = shares.firstOrNull { it.id !in dismissedShares }
+            if (capture != null) ShareReview(capture, client,
+                onDone = { dismissedShares = dismissedShares + capture.id; app.shares.value = loadShares(app) },
+                onOpen = { chatId = it },
+            )
             if (chatId.isNotEmpty()) {
                 ChatScreen(client = client, sessionId = chatId, onBack = { chatId = "" })
             } else {
@@ -159,6 +174,8 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                     onSelectHost = ::select,
                     onManageHosts = { managing = true },
                     onUpdates = app.updater::open,
+                    onShares = { dismissedShares = emptyList() },
+                    pendingShares = shares.size,
                 )
             }
         }

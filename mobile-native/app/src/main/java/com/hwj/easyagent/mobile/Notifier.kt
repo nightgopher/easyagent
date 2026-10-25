@@ -52,8 +52,12 @@ class Notifier(private val context: Context) {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(alert.description.ifBlank { alert.toolName }))
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .addAction(0, "批准", actionIntent(host, alert, approved = true))
-                .addAction(0, "拒绝", actionIntent(host, alert, approved = false))
+                .apply {
+                    if (alert.toolName != "ask_user_question") {
+                        addAction(0, "批准", actionIntent(host, alert, approved = true))
+                        addAction(0, "拒绝", actionIntent(host, alert, approved = false))
+                    }
+                }
             is Alert.RunEnded -> NotificationCompat.Builder(context, CHANNEL_RUNS)
                 .setContentTitle(
                     when (alert.state) {

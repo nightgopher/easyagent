@@ -31,6 +31,7 @@ private data class StoredHost(val id: String, val name: String, val url: String)
 
 /** 运行主机地址与令牌。令牌用 Android Keystore 内的 AES 密钥加密后再落盘，对应桌面端的钥匙串。 */
 class SettingsStore internal constructor(private val prefs: SharedPreferences, private val cipher: TokenCipher) {
+    internal val draftPreferences get() = prefs
     constructor(context: Context) : this(context.getSharedPreferences("easyagent-host", Context.MODE_PRIVATE), KeystoreTokenCipher())
 
     fun load(): HostSettings {
@@ -64,7 +65,9 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
         val state = load()
         val hosts = records().filter { it.id != id }
         val selected = state.activeId?.takeIf { it != id } ?: hosts.firstOrNull()?.id
-        commit(prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(KEY_ACTIVE, selected).remove(tokenKey(id)))
+        val editor = prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(KEY_ACTIVE, selected).remove(tokenKey(id))
+        prefs.all.keys.filter { it.startsWith("$id:") }.forEach(editor::remove)
+        commit(editor)
     }
 
     private fun records(): List<StoredHost> {
