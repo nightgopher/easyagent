@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v0.30.0] - 2026-10-25
+
 ### Added
 - 桌面工作区面板新增「技能」标签（也可用 `/skills`）：显示本项目 `.agents/skills`、`.claude/skills` 里的技能，标出覆盖了哪个个人同名技能，并汇总本会话还加载了多少个人技能。新增「刷新技能」：在项目里新增或修改技能后不必新建会话（`POST /sessions/{id}/skills/refresh`，任务运行中返回 409，等任务结束再刷新）。
 - 发布后自动把更新用的资产同步到 Gitee 镜像：新增 `Sync Gitee mirror` 工作流和 `scripts/gitee_mirror.py`，在 `Release` 成功后把 `release.json`、`checksums.txt`、Android APK、macOS DMG 和 Linux / macOS 核心与桥接程序镜像到 `weijian-huang/easyagent`。同步前按 `checksums.txt` 校验，已存在的镜像资产不会被替换，上传后匿名下载复核，只保留最近 3 个版本；需要仓库 Secret `GITEE_TOKEN`，未设置时自动跳过，不影响 GitHub 发布。
@@ -18,6 +20,9 @@
 - 桌面客户端切换或重连主机后，「我的技能」和工作区「技能」标签不再先显示上一台主机的数据（重连时清掉 `local-skills`、`capabilities` 缓存及其错误）。
 - `GET /skills/local` 读不到市场安装记录时不再静默丢掉「市场安装」标记：响应带 `installed_error`，「我的技能」页顶部显示原因。
 - `GET /kb/read` 读取不存在的文件改为返回 404（原先是 500）。
+
+### Development
+- 新增 REST 路由守护测试：从源码读出所有注册在 REST mux 上的路由，逐个确认经顶层 `Handler()` 转发；以后新增路由漏转发会直接测失败。
 
 ## [v0.29.0] - 2026-10-24
 
