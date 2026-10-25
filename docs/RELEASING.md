@@ -73,6 +73,16 @@ EA_VERSION=v0.1.0 bash scripts/install.sh
 
 SHA-256 用于检测下载损坏，信任根仍是 GitHub HTTPS 和发布权限。新版 Release 同时受 GitHub 不可变发布保护；下载完整资产后可运行 `sha256sum --check checksums.txt` 核验，macOS 可用 `shasum -a 256 -c checksums.txt`。
 
+## Gitee 镜像
+
+访问 GitHub 不稳定的大陆网络依赖 Gitee 镜像 `weijian-huang/easyagent` 更新和安装：Android 应用内更新和 `scripts/install.sh` 先走 GitHub，传输失败时改走镜像。`Release` 成功后，`Sync Gitee mirror` 工作流（`.github/workflows/sync-gitee.yml`）调用 `scripts/gitee_mirror.py` 同步最新正式版，也可在 Actions 手动运行并指定 `tag`。
+
+- **同步范围**：只含回退用到的 12 项：`release.json`、`checksums.txt`、`easyagent-android.apk`、`easyagent-native-darwin-arm64.dmg`，以及 linux / darwin、amd64 / arm64 的 `easyagent-*` 与 `easyagent-bridge-*`。名称以 `python3 scripts/gitee_mirror.py --list-assets` 为准；桌面自动更新目前只读 GitHub，不在镜像范围。
+- **安全约束**：同步前逐项按 `checksums.txt` 校验；镜像上已有同名资产时不替换，大小不同则直接失败；上传后匿名下载回读并比对 SHA-256，通过后才清理旧版本。预发布版本不同步。
+- **容量**：Gitee 单个附件不超过 100MB、整个仓库附件不超过 1GB，脚本默认只保留最近 3 个稳定版（`--keep` 调整，`0` 关闭清理）。发行版说明不能为空。
+- **令牌**：需要仓库 Actions Secret `GITEE_TOKEN`（Gitee 私人令牌，需有该仓库的写权限）。未设置时工作流跳过并在日志里提示，不会让发布失败。令牌只在环境变量里使用，不会写入日志。
+- **失败处理**：同步失败不影响已发布的 GitHub Release；修复原因后手动重跑即可，已上传的资产会被跳过。
+
 ## Android 签名与发布
 
 完整 Release 仍总是包含 APK，但 `release.json` 额外记录 `"sources": {"android": <发布提交中 mobile-native/ 的 git tree>}`，发布前由 `publish-release.py` 按同一提交重新计算核对。正式构建在 `mobile-native/` 无未提交修改时把同一 tree 写入 `BuildConfig.SOURCE_TREE`。应用内更新发现最新版本的 tree 与已安装应用相同（本次没有改动 Android 源码）时不提示升级；开发构建的 tree 为空，旧版本清单没有该字段，均按版本号正常比较。APK 只依赖 `mobile-native/` 和版本号，因此不按其他目录判断；桌面客户端内嵌 Go 核心，几乎每个版本都有变化，不做同类跳过。
