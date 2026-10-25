@@ -49,6 +49,17 @@ jobs:
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
       - run: git diff --check
 
+  ios:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Test the iOS backend package
+        if: ${{ hashFiles('mobile-ios/Package.swift') != '' }}
+        working-directory: mobile-ios
+        run: swift test
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15
