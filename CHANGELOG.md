@@ -147,7 +147,7 @@
 - Android 移除或关闭主机连接后忽略迟到的网络回调，关闭过程可等待在途请求退出。
 
 ### Development
-- Android 新增真实 Activity 的 Compose UI 验收、Android 12/14/15 模拟器 CI 和发布门禁，覆盖多主机、加密凭据、流式输出、审批、排队、停止、重连、横屏和深色模式；发布补充清单见 [Android 发布验收](https://github.com/hwj123hwj/easyagent/blob/v0.22.1/docs/QA_ANDROID.md)。
+- Android 新增真实 Activity 的 Compose UI 验收、Android 12/14/15 模拟器 CI 和发布门禁，覆盖多主机、加密凭据、流式输出、审批、排队、停止、重连、横屏和深色模式；发布补充清单见 [Android 发布验收](https://github.com/nightgopher/easyagent/blob/v0.22.1/docs/QA_ANDROID.md)。
 - 新增可重复执行的 Linux deb/systemd 验收与 CI，实际检查服务启动、模型重试、前台/后台 bash、PTY、桥接 TLS/WebSocket 及加固评分。
 
 ### Removed
@@ -155,7 +155,7 @@
 - SDK 删除未接入 provider 的旧 `StreamWithRetry`、`RetryConfig`、`DefaultRetryConfig`、`RetryableStreamFunc` 和字符串判断 `IsRetryableError`；外部调用方需移除旧包装，直接调用 provider，通过 `EA_MODEL_MAX_RETRIES` 配置重试次数。实际重试由 provider 完成，HTTP 错误使用 `HTTPStatusError`。
 
 ### Security
-- 新增 [安全模型与部署加固](https://github.com/hwj123hwj/easyagent/blob/v0.22.1/docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
+- 新增 [安全模型与部署加固](https://github.com/nightgopher/easyagent/blob/v0.22.1/docs/SECURITY_MODEL.md)：说明哪些检查是安全边界（令牌、路径策略、审批）、哪些不是（bash 危险命令识别），给出 systemd / 容器隔离和 Caddy / Nginx HTTPS 反向代理配置。
 - 监听非回环地址时启动日志警告明文 HTTP 传输。
 - bash 危险命令识别新增管道交给 shell 执行（如 `base64 -d | sh`）和 `eval`。
 - 服务端 deb 包的 systemd 单元进一步收紧：清空 capability、独立 `/dev`，禁止修改内核日志、时钟和主机名。
