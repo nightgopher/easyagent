@@ -103,10 +103,15 @@ ios/
 - M3：外部 TestFlight → App Store 提审；多语言（中文优先）。
 - M4：可选迭代——APNs 推送、Siri/快捷指令、小组件。
 
-## 开放问题（需维护者拍板）
+## 已决策（2026-10-25）
+
+1. 分发：**TestFlight 内测先行**，验证后再考虑 App Store 公开。
+2. 项目目录名：**`mobile-ios/`**（与 `mobile-native` 对称）。
+
+## 开放问题
 
 1. 分发范围：先 TestFlight 内测，还是直接冲 App Store 公开上架？（App Store 审核对 AI 客户端有额外审核项，建议先 TestFlight。）
 2. 是否需要 iPad 专属能力进首版（外接键盘必做，Apple Pencil 无场景）。
 3. 主机明文 HTTP 的白名单交互形态（添加主机时的警示文案与确认方式）。
-4. 远程可达性：v1 推荐 Tailscale/自备反代；是否在 v2 同时做托管中继（TURN 式，免自建网络）作为订阅点。
+4. 远程可达性（已定向）：v1 内置 Tailscale 指引（免费、端到端加密，流量不过第三方）；**托管中继留作 v2 订阅功能候选**——主机主动连出、免安装免自建网络，是大众用户与付费点的自然形态，与 Tailscale 路线并存而非二选一。
 4. 项目目录名：`ios/`（与 `mobile-native` 并列）还是 `mobile-ios/`。
