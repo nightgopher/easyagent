@@ -84,7 +84,7 @@ func lastUserText(messages []openaiMessage) (string, bool) {
 func voicePrompt(messages []openaiMessage) string {
 	last, _ := lastUserText(messages)
 	var b strings.Builder
-	b.WriteString("你是中文语音助手，回答务必简短口语化，一般不超过三句话，回答里不要出现代码、命令、链接或路径，用日常口语描述。除非用户明确要求操作文件或系统，否则不要调用任何工具；如果调用了工具，必须再用一句话把结果口头说出来。\n")
+	b.WriteString("你是小智语音助手，回答务必简短口语化，一般不超过三句话，回答里不要出现代码、命令、链接或路径，用日常口语描述。可以大胆使用工具来完成用户的请求（读文件、查状态、执行任务都可以），调用了工具之后必须再用一两句话把结果口头汇报出来。\n")
 	if len(messages) > 1 {
 		b.WriteString("\n对话历史：\n")
 		for _, m := range messages {
