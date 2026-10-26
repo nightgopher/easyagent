@@ -45,6 +45,23 @@ public struct WSServerMessage: Decodable, Sendable {
     public var events: AnyDecodable?
     public var prompt: String?
 
+    public init(type: String, sessionID: String? = nil, runID: String? = nil,
+                requestID: String? = nil, seq: UInt64? = nil, state: String? = nil,
+                duplicate: Bool? = nil, code: String? = nil,
+                event: AnyDecodable? = nil, events: AnyDecodable? = nil, prompt: String? = nil) {
+        self.type = type
+        self.sessionID = sessionID
+        self.runID = runID
+        self.requestID = requestID
+        self.seq = seq
+        self.state = state
+        self.duplicate = duplicate
+        self.code = code
+        self.event = event
+        self.events = events
+        self.prompt = prompt
+    }
+
     enum CodingKeys: String, CodingKey {
         case type, seq, state, duplicate, code, event, events, prompt
         case sessionID = "session_id"
