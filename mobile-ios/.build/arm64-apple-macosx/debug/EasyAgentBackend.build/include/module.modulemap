@@ -1,0 +1,3 @@
+module EasyAgentBackend {
+    header "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/include/EasyAgentBackend-Swift.h"
+}
