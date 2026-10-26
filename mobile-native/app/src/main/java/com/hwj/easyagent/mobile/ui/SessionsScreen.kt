@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
@@ -72,6 +73,8 @@ fun SessionsScreen(
     onSelectHost: (String) -> Unit,
     onManageHosts: () -> Unit,
     onUpdates: () -> Unit,
+    keepAlive: Boolean,
+    onToggleKeepAlive: (Boolean) -> Unit,
 ) {
     val hosts by connections.state.collectAsStateWithLifecycle()
     val sessions by client.sessions.collectAsStateWithLifecycle()
@@ -139,6 +142,13 @@ fun SessionsScreen(
                         DropdownMenuItem(
                             text = { Text(if (showArchived) "隐藏已归档" else "显示已归档（${archived.size}）") },
                             onClick = { showArchived = !showArchived; menuOpen = false },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("后台保持连接") },
+                            trailingIcon = if (keepAlive) {
+                                { Icon(Icons.Filled.Check, contentDescription = "已开启") }
+                            } else null,
+                            onClick = { onToggleKeepAlive(!keepAlive); menuOpen = false },
                         )
                         DropdownMenuItem(text = { Text("管理运行主机") }, onClick = { menuOpen = false; onManageHosts() })
                         DropdownMenuItem(text = { Text("检查更新") }, onClick = { menuOpen = false; onUpdates() })

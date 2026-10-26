@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.ui.ChatScreen
 import com.hwj.easyagent.mobile.ui.ConnectionScreen
@@ -72,6 +73,7 @@ class MainActivity : ComponentActivity() {
         AppVisibility.foreground = true
         (application as EasyAgentApp).connections.resume()
         updater.foreground()
+        syncKeepAlive(this)
     }
 
     override fun onStop() {
@@ -88,6 +90,7 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
+    val context = LocalContext.current
     val connections = app.connections
     val current by connections.client.collectAsStateWithLifecycle()
     val state by connections.state.collectAsStateWithLifecycle()
@@ -149,6 +152,7 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                 AppVisibility.openChat = if (chatId.isEmpty()) null else "${client.config.id}/$chatId"
                 onDispose { AppVisibility.openChat = null }
             }
+            var keepAlive by remember { mutableStateOf(app.settings.keepAlive) }
             if (chatId.isNotEmpty()) {
                 ChatScreen(client = client, sessionId = chatId, onBack = { chatId = "" })
             } else {
@@ -159,6 +163,12 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                     onSelectHost = ::select,
                     onManageHosts = { managing = true },
                     onUpdates = app.updater::open,
+                    keepAlive = keepAlive,
+                    onToggleKeepAlive = { enabled ->
+                        keepAlive = enabled
+                        app.settings.keepAlive = enabled
+                        syncKeepAlive(context)
+                    },
                 )
             }
         }

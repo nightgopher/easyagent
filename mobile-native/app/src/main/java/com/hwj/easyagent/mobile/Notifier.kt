@@ -46,14 +46,23 @@ class Notifier(private val context: Context) {
         if (AppVisibility.foreground && AppVisibility.openChat == "$host/${alert.sessionId}") return
         val title = client.titleOf(alert.sessionId)
         val builder = when (alert) {
-            is Alert.Approval -> NotificationCompat.Builder(context, CHANNEL_APPROVALS)
-                .setContentTitle("待审批 · $title")
-                .setContentText(alert.description.ifBlank { alert.toolName })
-                .setStyle(NotificationCompat.BigTextStyle().bigText(alert.description.ifBlank { alert.toolName }))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setCategory(NotificationCompat.CATEGORY_REMINDER)
-                .addAction(0, "批准", actionIntent(host, alert, approved = true))
-                .addAction(0, "拒绝", actionIntent(host, alert, approved = false))
+            is Alert.Approval -> {
+                // 问答类确认无法在通知里作答（须提交 answers）：只给「跳过」，点通知本体去回答。
+                val question = alert.toolName == "ask_user_question"
+                NotificationCompat.Builder(context, CHANNEL_APPROVALS)
+                    .setContentTitle(if (question) "待回答 · $title" else "待审批 · $title")
+                    .setContentText(alert.description.ifBlank { alert.toolName })
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(alert.description.ifBlank { alert.toolName }))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                    .apply {
+                        if (question) addAction(0, "跳过", actionIntent(host, alert, approved = false))
+                        else {
+                            addAction(0, "批准", actionIntent(host, alert, approved = true))
+                            addAction(0, "拒绝", actionIntent(host, alert, approved = false))
+                        }
+                    }
+            }
             is Alert.RunEnded -> NotificationCompat.Builder(context, CHANNEL_RUNS)
                 .setContentTitle(
                     when (alert.state) {

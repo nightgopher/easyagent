@@ -39,13 +39,17 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -82,9 +86,9 @@ import com.hwj.easyagent.mobile.backend.ChatMessage
 import com.hwj.easyagent.mobile.backend.Confirmation
 import com.hwj.easyagent.mobile.backend.HistoryImage
 import com.hwj.easyagent.mobile.backend.LinkStatus
-import com.hwj.easyagent.mobile.backend.MessageQueue
 import com.hwj.easyagent.mobile.backend.obj
 import com.hwj.easyagent.mobile.backend.pretty
+import com.hwj.easyagent.mobile.backend.questionsFromArgs
 import com.hwj.easyagent.mobile.backend.str
 import kotlinx.serialization.json.JsonElement
 
@@ -105,6 +109,10 @@ private sealed interface Entry {
 
     data object Queue : Entry {
         override val key = "queue"
+    }
+
+    data object Continue : Entry {
+        override val key = "continue"
     }
 }
 
@@ -133,6 +141,21 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     }
     var loopDialog by remember { mutableStateOf(false) }
     if (loopDialog) LoopDialog(client, sessionId) { loopDialog = false }
+    var sessionMenu by remember { mutableStateOf(false) }
+    var modelDialog by remember { mutableStateOf(false) }
+    var compactConfirm by remember { mutableStateOf(false) }
+    if (modelDialog) ModelPickerDialog(client, session) { modelDialog = false }
+    if (compactConfirm) {
+        AlertDialog(
+            onDismissRequest = { compactConfirm = false },
+            title = { Text("压缩上下文") },
+            text = { Text("把历史对话归纳为摘要后继续。任务运行中无法压缩，主机可能需要一些时间完成总结。") },
+            confirmButton = {
+                Button(onClick = { client.compact(session); compactConfirm = false }) { Text("开始压缩") }
+            },
+            dismissButton = { TextButton(onClick = { compactConfirm = false }) { Text("取消") } },
+        )
+    }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
 
     LaunchedEffect(error) {
@@ -143,6 +166,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     }
 
     // revision 驱动列表结构与会话状态，消息字段自身可观察；倒序让列表自然贴底。
+    val busy = session.running || session.pending
     val entries = remember(rev, sessionId) {
         buildList<Entry> {
             toolRuns(session.messages).forEach { run ->
@@ -150,10 +174,13 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
             }
             session.confirmations.forEach { add(Entry.Approval(it)) }
             if (session.queue.items.isNotEmpty()) add(Entry.Queue)
+            val run = session.run
+            if (!busy && run?.state == "failed" && run.canContinue) add(Entry.Continue)
         }.asReversed()
     }
-    val busy = session.running || session.pending
-    val subtitle = session.statusText() + " · " + when (link) {
+    val usagePercent = session.contextUsage?.percent?.takeIf { it >= 0 }
+    val subtitle = session.statusText() +
+        (usagePercent?.let { " · 上下文 $it%" } ?: "") + " · " + when (link) {
         LinkStatus.CONNECTED -> "已连接"
         LinkStatus.CONNECTING -> "连接中"
         LinkStatus.DISCONNECTED -> "已断开，正在重连"
@@ -183,6 +210,36 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             Icon(Icons.Filled.Stop, contentDescription = "停止当前任务", tint = MaterialTheme.colorScheme.error)
                         }
                     }
+                    Box {
+                        IconButton(onClick = { sessionMenu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "会话操作") }
+                        DropdownMenu(expanded = sessionMenu, onDismissRequest = { sessionMenu = false }) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        "权限：" + when (session.accessMode) {
+                                            "full" -> "完全（自动执行）"
+                                            "ask" -> "每次询问"
+                                            else -> "未知，点按设为完全"
+                                        },
+                                    )
+                                },
+                                onClick = {
+                                    sessionMenu = false
+                                    client.setAccessMode(session, if (session.accessMode == "full") "ask" else "full")
+                                },
+                                enabled = !busy,
+                            )
+                            DropdownMenuItem(
+                                text = { Text("切换模型" + if (session.model.isNotEmpty()) "（${session.model}）" else "") },
+                                onClick = { sessionMenu = false; modelDialog = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("压缩上下文") },
+                                onClick = { sessionMenu = false; compactConfirm = true },
+                                enabled = !busy,
+                            )
+                        }
+                    }
                 },
             )
         },
@@ -206,10 +263,11 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             images = { MessageImages(client, sessionId, it) },
                         )
                         is Entry.Tools -> ToolGroup(entry.messages) { client.touch() }
-                        is Entry.Approval -> ApprovalCard(entry.confirmation) { approved ->
-                            client.confirm(session, entry.confirmation.id, approved)
+                        is Entry.Approval -> ApprovalCard(entry.confirmation) { approved, answers ->
+                            client.confirm(session, entry.confirmation.id, approved, answers)
                         }
-                        Entry.Queue -> QueueBanner(session.queue)
+                        Entry.Queue -> QueueCard(client, session, session.queue)
+                        Entry.Continue -> ContinueRow { client.continueRun(session) }
                     }
                 }
             }
@@ -431,15 +489,14 @@ private fun ToolGroup(messages: List<ChatMessage>, onToggle: () -> Unit) {
 }
 
 /**
- * Asks before a tool runs. The request reads as one line; arguments fold away,
- * and only shell commands, which can do anything, are drawn as a warning.
+ * 审批与问答共用一张卡：ask_user 的确认渲染成回答表单（跳过=拒绝），
+ * 普通工具读取一行摘要，参数折叠，只有可执行任意命令的 bash 用警示色。
  */
 @Composable
-private fun ApprovalCard(c: Confirmation, onDecide: (Boolean) -> Unit) {
-    var showArgs by rememberSaveable(c.id) { mutableStateOf(false) }
-    val risky = c.toolName == "bash"
+private fun ApprovalCard(c: Confirmation, onDecide: (Boolean, JsonElement?) -> Unit) {
+    val questions = remember(c.id) { if (c.isQuestion) questionsFromArgs(c.args) else null }
+    val risky = !c.isQuestion && c.toolName == "bash"
     val accent = if (risky) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    val summary = c.description.ifEmpty { argumentSummary(c.args) }
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         border = BorderStroke(1.dp, if (risky) accent else MaterialTheme.colorScheme.outlineVariant),
@@ -447,36 +504,50 @@ private fun ApprovalCard(c: Confirmation, onDecide: (Boolean) -> Unit) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(Icons.Outlined.Shield, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
-                Text("需要审批", style = MaterialTheme.typography.labelLarge, color = accent)
+                Text(if (questions != null) "需要回答" else "需要审批", style = MaterialTheme.typography.labelLarge, color = accent)
                 Text(
                     c.toolName.ifEmpty { "工具调用" },
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (summary.isNotEmpty()) Text(summary, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
-            if (showArgs) c.args?.let { CodeBlock(truncate(pretty(it), 1500), modifier = Modifier.fillMaxWidth()) }
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (c.args != null) {
-                    TextButton(onClick = { showArgs = !showArgs }) { Text(if (showArgs) "收起参数" else "查看参数") }
+            if (questions != null) {
+                QuestionForm(
+                    questions,
+                    onConfirm = { answers -> onDecide(true, answers) },
+                    onSkip = { onDecide(false, null) },
+                )
+            } else {
+                val summary = c.description.ifEmpty { argumentSummary(c.args) }
+                if (summary.isNotEmpty()) Text(summary, style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                var showArgs by rememberSaveable(c.id) { mutableStateOf(false) }
+                if (showArgs) c.args?.let { CodeBlock(truncate(pretty(it), 1500), modifier = Modifier.fillMaxWidth()) }
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (c.args != null) {
+                        TextButton(onClick = { showArgs = !showArgs }) { Text(if (showArgs) "收起参数" else "查看参数") }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    OutlinedButton(onClick = { onDecide(false, null) }) { Text("拒绝") }
+                    Button(onClick = { onDecide(true, null) }) { Text("批准") }
                 }
-                Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = { onDecide(false) }) { Text("拒绝") }
-                Button(onClick = { onDecide(true) }) { Text("批准") }
             }
         }
     }
 }
 
+/** 失败任务的继续入口：服务端已保存工具结果，可从断点让模型接着干（POST /run/continue）。 */
 @Composable
-private fun QueueBanner(queue: MessageQueue) {
-    Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-        Text(
-            "排队中 ${queue.items.size} 条消息" + if (queue.paused) " · 队列已暂停" else "",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        )
+private fun ContinueRow(onContinue: () -> Unit) {
+    Surface(shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+            Text("任务失败，已保存的执行结果可以继续", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Button(onClick = onContinue) { Text("继续执行") }
+        }
     }
 }
 

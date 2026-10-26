@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -31,7 +33,6 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -65,6 +66,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import coil.compose.AsyncImage
 import com.hwj.easyagent.mobile.backend.AgentClient
 import com.hwj.easyagent.mobile.backend.ApiException
 import com.hwj.easyagent.mobile.backend.ChatSession
@@ -135,6 +137,7 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
                     client.error.value = "没有识别到语音内容"
                 } else {
                     session.draft = if (session.draft.isBlank()) text else session.draft.trimEnd() + " " + text
+                    client.saveDraft(session, session.draft)
                     client.touch()
                 }
                 failedRecording = null
@@ -235,7 +238,7 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
                         }
                         TextField(
                             value = session.draft,
-                            onValueChange = { session.draft = it; client.touch() },
+                            onValueChange = { session.draft = it; client.saveDraft(session, it); client.touch() },
                             modifier = Modifier.weight(1f),
                             placeholder = { Text(if (transcribing) "正在转写语音…" else if (queued) "排队发送下一条…" else "发消息…", maxLines = 1) },
                             maxLines = 6,
@@ -323,42 +326,43 @@ private fun AttachmentChip(name: String, preview: ByteArray?, onRemove: () -> Un
     }
 }
 
-/** Thumbnails of the images in a user message; tapping one shows it full size. */
+/**
+ * Thumbnails of the images in a user message, loaded through the shared image
+ * loader (host-authenticated, memory + disk cached, downsampled); tapping one
+ * opens the full-screen zoomable viewer.
+ */
 @Composable
 fun MessageImages(client: AgentClient, sessionId: String, images: List<HistoryImage>) {
-    var shown by remember { mutableStateOf<ImageBitmap?>(null) }
+    val loader = (LocalContext.current.applicationContext as com.hwj.easyagent.mobile.EasyAgentApp).imageLoader
+    var shown by remember { mutableStateOf<Any?>(null) }
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
         images.forEach { image ->
-            var bitmap by remember(image) { mutableStateOf<ImageBitmap?>(null) }
-            var failed by remember(image) { mutableStateOf(false) }
-            LaunchedEffect(image) {
-                failed = false
-                bitmap = runCatching {
-                    val bytes = client.image(sessionId, image)
-                    withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
-                }.getOrNull()
-                failed = bitmap == null
+            val model: Any? = remember(image) {
+                when {
+                    image.dataUrl.isNotEmpty() -> runCatching {
+                        Base64.decode(image.dataUrl.substringAfter(','), Base64.DEFAULT)
+                    }.getOrNull()
+                    image.attachmentId.isNotEmpty() -> client.attachmentUrl(sessionId, image)
+                    else -> null
+                }
             }
             Surface(shape = RoundedCornerShape(10.dp), color = MaterialTheme.colorScheme.surfaceVariant, modifier = Modifier.size(96.dp)) {
-                val current = bitmap
-                when {
-                    current != null -> Image(
-                        current,
+                if (model == null) {
+                    Box(contentAlignment = Alignment.Center) { Text("图片无效", style = MaterialTheme.typography.labelSmall) }
+                } else {
+                    AsyncImage(
+                        model = model,
+                        imageLoader = loader,
                         contentDescription = "附件图片",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { shown = current },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { shown = model },
                     )
-                    failed -> Box(contentAlignment = Alignment.Center) { Text("图片加载失败", style = MaterialTheme.typography.labelSmall) }
-                    else -> Box(contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) }
                 }
             }
         }
     }
-    shown?.let { bitmap ->
-        AlertDialog(
-            onDismissRequest = { shown = null },
-            confirmButton = { TextButton(onClick = { shown = null }) { Text("关闭") } },
-            text = { Image(bitmap, contentDescription = "原图", contentScale = ContentScale.Fit, modifier = Modifier.fillMaxWidth()) },
-        )
-    }
+    shown?.let { ImageViewer(it) { shown = null } }
 }
