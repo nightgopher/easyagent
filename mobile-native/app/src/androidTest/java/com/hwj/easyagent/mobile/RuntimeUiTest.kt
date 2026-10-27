@@ -83,7 +83,7 @@ class RuntimeUiTest {
             instrumentation.runOnMainSync {
                 projected = app.connections.client.value?.activeChat?.messages?.joinToString(" | ") { it.text }.orEmpty()
             }
-            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).printToString()}", error)
+            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).fetchSemanticsNodes().indices.joinToString("\n") { ui.onAllNodes(isRoot())[it].printToString(maxDepth = 20) }}", error)
         }
     }
     private fun fill(label: String, value: String) {
@@ -189,7 +189,9 @@ class RuntimeUiTest {
         ui.onNodeWithContentDescription("返回").performClick()
         ui.waitUntil(10000) { ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         ui.onNodeWithText("新会话", useUnmergedTree = true).performClick()
-        // 小屏弹窗会裁剪合并后的按钮语义；先定位原始文本并滚动，再验证模型选择。
+        // 小屏弹窗先滚动，再查找被裁剪的模型节点；不能等待屏外节点先出现。
+        waitText("使用默认模型")
+        ui.onNode(hasScrollAction() and hasAnyAncestor(isDialog())).performTouchInput { swipeUp() }
         waitText("fixture-model", useUnmergedTree = true)
         ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
         ui.onNodeWithText("创建", substring = false).performClick()
