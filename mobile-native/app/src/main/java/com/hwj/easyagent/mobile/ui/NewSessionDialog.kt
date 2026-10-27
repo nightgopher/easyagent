@@ -18,10 +18,12 @@ fun NewSessionDialog(client: AgentClient, onDismiss: () -> Unit, onOpen: (String
     var model by rememberSaveable { mutableStateOf("") }
     var models by remember { mutableStateOf<List<String>>(emptyList()) }
     var error by remember { mutableStateOf("") }
+    var loadingModels by remember { mutableStateOf(true) }
     var creating by remember { mutableStateOf(false) }
     LaunchedEffect(client) {
         try { models = (client.api.get("/models").obj()["models"] as? JsonArray).orEmpty().map { it.obj().getString("id") }.distinct() }
         catch (e: ApiException) { error = e.message.orEmpty() }
+        finally { loadingModels = false }
     }
     // Failure lives in the shared error flow; permit a retry without losing choices.
     val failure by client.error.collectAsState()
@@ -35,6 +37,7 @@ fun NewSessionDialog(client: AgentClient, onDismiss: () -> Unit, onOpen: (String
             }
             Text("模型：${model.ifBlank { "主机默认" }}")
             TextButton(onClick = { model = "" }) { Text("使用默认模型") }
+            if (loadingModels) Text("正在加载模型…")
             models.forEach { id -> TextButton(onClick = { model = id }) { Text(id) } }
             if (error.isNotBlank()) Text("模型列表不可用，将使用主机默认：$error")
         }
