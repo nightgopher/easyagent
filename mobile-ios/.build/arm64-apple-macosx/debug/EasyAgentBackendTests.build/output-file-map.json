@@ -1,0 +1,19 @@
+{
+  "": {
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/primary.swiftdeps"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/BackendTests.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.dia"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/ChatSocketTests.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.dia"
+  }
+}

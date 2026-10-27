@@ -1,0 +1,19 @@
+{
+  "": {
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/primary.swiftdeps"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/ChatSocket.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.dia"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/Wire.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.dia"
+  }
+}

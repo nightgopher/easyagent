@@ -1,0 +1,33 @@
+{
+  "": {
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/primary.swiftdeps"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/AppModel.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.dia"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/ChatProjection.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.dia"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/KeychainStore.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.dia"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/Views.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.dia"
+  }
+}

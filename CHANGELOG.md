@@ -4,6 +4,16 @@
 
 ## [Unreleased]
 
+## [v0.30.3] - 2026-10-25
+
+### Fixed
+- macOS 安装包补上 Apple 公证（notarization）：v0.30.2 的 DMG 因公证步骤遗漏仍是未公证状态（Developer ID 签名正常），其他用户首次打开仍被 Gatekeeper 拦截。本版本起公证随发版自动完成，新用户双击即可安装；应用本体与 v0.30.2 相同。
+
+## [v0.30.2] - 2026-10-25
+
+### Changed
+- macOS 安装包补上 Apple 公证（notarization）：v0.30.1 及更早的 DMG 只有 Developer ID 签名，其他用户首次打开会被 Gatekeeper 拦截并提示"无法验证"；本版本起公证随发版自动完成，新用户双击即可安装。应用本体与 v0.30.1 相同，仅为签名链路修复版本。
+
 ## [v0.30.1] - 2026-10-25
 
 ### Changed
