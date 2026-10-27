@@ -505,9 +505,9 @@ func (a *preview) applyLiveModel() {
 func (a *preview) liveConnectionSettings(c *ui.Context) {
 	l := a.Live
 	s := &a.Settings
-	a.note(c, "会话、文件、工具和 MCP 均属于所选主机。更换地址或令牌时另存新连接，保留原连接的数据。")
+	a.note(c, "管理本机与远程连接。会话、文件和工具保存在各自主机上。")
 	for index, h := range l.Config.Hosts {
-		ui.Row(c.Key(h.ID)).Gap(10).Padding(12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() {
+		ui.Row(c.Key(h.ID)).Gap(10).AlignItems(ui.Center).Padding(16, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 				a.text(c, h.Name).Bold()
 				value := h.URL

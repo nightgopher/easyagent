@@ -50,7 +50,7 @@ func (a *preview) liveLocalSkills(c *ui.Context) {
 		icon(c, "search")
 		ui.TextInput(c, &s.LocalSkillQuery).Label("搜索我的技能").Placeholder("搜索技能名称或描述…").Grow(1).MinWidth(0).FontSize(13).Padding(8, 12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(6)
 	})
-	a.note(c, "主机上全局技能目录里的全部技能，不论是手写的、其他工具装的还是从市场安装的。项目目录里的技能在工作区面板的「技能」里看。文件变更后，新建会话或在那里点「刷新技能」即可生效。")
+	a.note(c, "开关控制当前主机的技能加载，新会话生效；已有会话可在工作区刷新技能。")
 
 	if len(skills) == 0 && l.Loading[localSkillsKey] {
 		a.note(c, "正在加载技能…")
@@ -70,7 +70,12 @@ func (a *preview) liveLocalSkills(c *ui.Context) {
 		for _, raw := range roots {
 			paths = append(paths, str(object(raw)["path"]))
 		}
-		ui.Text(c, "目录："+strings.Join(paths, "  ·  ")).Font("monospace").FontSize(11).TextColor(c.Theme().TextMuted).Selectable()
+		nativeDisclosure(c, "skill-directories", "技能目录与加载说明", func() {
+			for _, path := range paths {
+				ui.Text(c, path).Font("monospace").FontSize(11).TextColor(c.Theme().TextMuted).Selectable()
+			}
+			a.note(c, "文件变更后，新建会话或在工作区刷新技能即可生效。")
+		})
 	}
 
 	query := strings.ToLower(strings.TrimSpace(s.LocalSkillQuery))
@@ -84,7 +89,7 @@ func (a *preview) liveLocalSkills(c *ui.Context) {
 		a.localSkillRow(c, skill)
 	}
 	if len(skills) == 0 {
-		a.note(c, "主机上还没有技能。可以把含 SKILL.md 的文件夹放进上面的目录，或前往「市场」安装。")
+		a.note(c, "主机上还没有技能。可以把含 SKILL.md 的文件夹放进技能目录，或前往「市场」安装。")
 		a.action(c, "去技能市场安装").AlignSelf(ui.Start).OnClick(a.openSkillMarket)
 	} else if shown == 0 {
 		a.note(c, "没有匹配的技能。")
@@ -106,23 +111,60 @@ func (a *preview) localSkillRow(c *ui.Context, skill map[string]any) {
 	name, path, dirName := str(skill["name"]), str(skill["path"]), str(skill["dir_name"])
 	shadowed := str(skill["shadowed_by"])
 	managed := boolean(skill["managed"])
-	ui.Column(c.Key(path)).Label("技能："+name).Padding(12, 0).Gap(6).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
+	row := ui.Column(c.Key(l.Config.ActiveHost+"\x00"+path)).Label("技能："+name).Padding(12, 0).Gap(6).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
+	expanded := ui.Local(row, "details", func() bool { return false })
+	row.Children(func() {
 		ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
-			title := ui.Text(c, name).FontSize(13.5).FontWeight(600).SingleLine()
+			ui.ButtonBase(c).Label("技能详情："+path).Grow(1).MinWidth(0).Gap(8).Padding(6, 0).Justify(ui.Start).Expanded(*expanded).OnClick(func() { *expanded = !*expanded }).Children(func() {
+				glyph := "chevron-right"
+				if *expanded {
+					glyph = "chevron-down"
+				}
+				icon(c, glyph)
+				title := ui.Text(c, name).FontSize(13.5).FontWeight(600).Grow(1).MinWidth(0).SingleLine()
+				if shadowed != "" {
+					title.TextColor(c.Theme().TextMuted)
+				}
+			})
 			if shadowed != "" {
-				title.TextColor(c.Theme().TextMuted)
+				skillBadge(c, "已被覆盖", false)
 			}
-			skillBadge(c, skillOriginLabel(str(skill["origin"])), false)
 			if managed {
 				skillBadge(c, "市场安装", true)
 			}
 			if !boolean(skill["model_invocation"]) {
 				skillBadge(c, "仅显式调用", false)
 			}
-			ui.Spacer(c)
-			if a.current().RemoteID != "" && shadowed == "" {
-				a.action(c, "使用").OnClick(func() { a.current().Draft += "\n使用技能 " + name + " "; a.closeSettings() })
+			if shadowed != "" {
+				return
 			}
+			enabled, supported := skill["enabled"].(bool)
+			state := "已关闭"
+			if enabled {
+				state = "已开启"
+			}
+			if !supported {
+				state = "需更新核心"
+			}
+			ui.Text(c, state).FontSize(11).TextColor(c.Theme().TextMuted)
+			ui.Switch(c, &enabled).Label("启用技能：" + path).Disabled(!supported || shadowed != "" || l.Loading["skill-toggle"]).OnChange(func() {
+				a.operation("skill-toggle", "PUT", "/skills/local", map[string]any{"path": path, "enabled": enabled}, func(value any) {
+					l.Data[localSkillsKey] = value
+					l.Notice = "技能开关已保存，新会话生效；已有会话请在工作区刷新技能。"
+				})
+			})
+		})
+		if d := str(skill["description"]); d != "" {
+			description := ui.Text(c, d).FontSize(12).LineHeight(1.55).TextColor(c.Theme().TextMuted)
+			if !*expanded {
+				description.MaxLines(1).Tooltip(d)
+			}
+		}
+		if !*expanded {
+			return
+		}
+		ui.Text(c, skillOriginLabel(str(skill["origin"]))).FontSize(11).TextColor(c.Theme().TextMuted)
+		ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
 			if l.activeHostLocal() {
 				a.action(c, "打开文件夹").OnClick(func() { a.showInFileManager(path) })
 			}
@@ -134,9 +176,6 @@ func (a *preview) localSkillRow(c *ui.Context, skill map[string]any) {
 				flatButton(c, "delete", "卸载").FontSize(12.5).Padding(6, 8).TextColor(c.Theme().TextMuted).OnClick(func() { m.ConfirmName = dirName })
 			}
 		})
-		if d := str(skill["description"]); d != "" {
-			ui.Text(c, d).FontSize(12).LineHeight(1.55).TextColor(c.Theme().TextMuted).MaxLines(2).Tooltip(d)
-		}
 		if shadowed != "" {
 			ui.Text(c, "同名技能已被更靠前的目录覆盖，这个不会被加载："+shadowed).FontSize(11.5).TextColor(c.Theme().TextMuted)
 		}

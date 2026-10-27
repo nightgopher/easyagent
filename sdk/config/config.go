@@ -609,6 +609,7 @@ func (c *Config) LoadFromYAML(path string) error {
 // boot-time env and yaml sources so saved runtime changes survive restarts.
 
 type runtimeOverrides struct {
+	DisabledSkills         []string `json:"disabled_skills,omitempty"`
 	EnableComputerUse      *bool    `json:"enable_computer_use,omitempty"`
 	ComputerApprovalPolicy *string  `json:"computer_approval_policy,omitempty"`
 	ApprovedApps           []string `json:"approved_apps,omitempty"`
@@ -732,7 +733,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider"} {
+	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {
@@ -778,4 +779,50 @@ func UpdateComputerRuntimeSettings(dataDir string, enabled *bool, policy *string
 // SaveRuntimeOverrideComputerUse persists the computer-use toggle only.
 func SaveRuntimeOverrideComputerUse(dataDir string, enabled bool) error {
 	return UpdateComputerRuntimeSettings(dataDir, &enabled, nil, false)
+}
+
+// DisabledSkillPaths reads EasyAgent-only loading preferences without modifying shared skill files.
+func DisabledSkillPaths(dataDir string) (map[string]bool, error) {
+	root, err := os.OpenRoot(dataDir)
+	if os.IsNotExist(err) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	// Keep preference reads confined to the configured data directory, including symlinks.
+	data, err := root.ReadFile("settings.json")
+	if os.IsNotExist(err) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var o runtimeOverrides
+	if err := json.Unmarshal(data, &o); err != nil {
+		return nil, err
+	}
+	disabled := map[string]bool{}
+	for _, path := range o.DisabledSkills {
+		disabled[filepath.Clean(path)] = true
+	}
+	return disabled, nil
+}
+
+// SetSkillEnabled persists a preference by file path, so equally named skills in other roots remain independent.
+func SetSkillEnabled(dataDir, path string, enabled bool) error {
+	path = filepath.Clean(path)
+	return mutateRuntimeOverrides(dataDir, func(o *runtimeOverrides) {
+		paths := make([]string, 0, len(o.DisabledSkills)+1)
+		for _, existing := range o.DisabledSkills {
+			if filepath.Clean(existing) != path {
+				paths = append(paths, existing)
+			}
+		}
+		if !enabled {
+			paths = append(paths, path)
+		}
+		o.DisabledSkills = paths
+	})
 }

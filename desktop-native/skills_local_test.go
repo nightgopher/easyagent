@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,7 @@ import (
 func localSkill(name, description, root, origin string, managed bool) map[string]any {
 	return map[string]any{
 		"name": name, "description": description, "dir_name": name, "root": root, "origin": origin,
-		"path": root + "/" + name + "/SKILL.md", "managed": managed, "model_invocation": true,
+		"path": root + "/" + name + "/SKILL.md", "managed": managed, "model_invocation": true, "enabled": true,
 	}
 }
 
@@ -69,14 +70,16 @@ func TestMySkillsListsEverySkillAndOnlyOffersUninstallForMarketInstalls(t *testi
 					t.Fatalf("%d: missing %q in %v", width, want, tt.Texts())
 				}
 			}
-			if !tt.HasText("同名技能已被更靠前的目录覆盖，这个不会被加载：/home/q/.agents/skills/hand-written/SKILL.md") {
+			if !tt.HasText("已被覆盖") {
 				t.Fatal("a skill shadowed by an earlier directory must say so")
 			}
-			if !tt.HasText("卸载") {
-				t.Fatal("a market-installed skill must offer uninstall")
+			if tt.HasText("卸载") || hasExactText(tt, "/home/q/.agents/skills/from-market/SKILL.md") {
+				t.Fatal("details must stay collapsed in the overview")
 			}
 			if dir := os.Getenv("EASYAGENT_PREVIEW_SNAPSHOTS"); dir != "" {
 				saveSnapshot(t, tt, filepath.Join(dir, fmt.Sprintf("my-skills-%d.png", width)))
+				preview := ui.NewTester(a.View, width, 960)
+				saveSnapshot(t, preview, filepath.Join(dir, fmt.Sprintf("my-skills-preview-%d.png", width)))
 			}
 			for _, rowName := range []string{"技能：from-market", "技能：hand-written", "技能：other-tool"} {
 				row, ok := tt.Find(rowName)
@@ -100,6 +103,7 @@ func TestMySkillsNeverOffersUninstallForSkillsTheMarketDidNotInstall(t *testing.
 	}
 	object(skills[0])["managed"] = true
 	tt.Frame()
+	click(t, tt, "技能详情："+str(object(skills[0])["path"]))
 	if !tt.HasText("卸载") || !hasExactText(tt, "市场安装") {
 		t.Fatal("the market-installed skill lost its uninstall button")
 	}
@@ -169,6 +173,7 @@ func TestMySkillsUninstallConfirmsThenReloadsBothLists(t *testing.T) {
 	waitNative(t, a, func() bool { return len(list(object(a.Live.Data[localSkillsKey])["skills"])) == 1 })
 	tt := ui.NewTester(a.View, 1240, 1000)
 
+	click(t, tt, "技能详情：/h/.agents/skills/from-market/SKILL.md")
 	click(t, tt, "卸载")
 	if deletes.Load() != 0 || a.marketState().ConfirmName != "from-market" {
 		t.Fatal("uninstall skipped its confirmation")
@@ -210,6 +215,7 @@ func TestMySkillsOpenFolderShowsTheSkillsFolderLocally(t *testing.T) {
 	t.Cleanup(func() { openLocalDirectory = func(p string) error { return mygo.Shell.OpenPath(p) } })
 	tt := ui.NewTester(a.View, 1240, 1000)
 
+	click(t, tt, "技能详情："+filepath.ToSlash(file))
 	click(t, tt, "打开文件夹")
 	select {
 	case got := <-opened:
@@ -281,5 +287,56 @@ func TestReconnectDropsHostScopedSkillData(t *testing.T) {
 		if a.Live.ResourceErrors[key] != "" {
 			t.Errorf("%s kept the previous host's error", key)
 		}
+	}
+}
+
+func TestSkillSwitchPersistsHostPreferenceWithoutChangingDraft(t *testing.T) {
+	for _, fail := range []bool{false, true} {
+		t.Run(fmt.Sprint(fail), func(t *testing.T) {
+			a := fixtureLocalSkillsPreview(t)
+			a.current().Draft = "保留草稿"
+			data := object(a.Live.Data[localSkillsKey])
+			path := str(object(list(data["skills"])[0])["path"])
+			requests := make(chan bool, 1)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body struct {
+					Path    string `json:"path"`
+					Enabled *bool  `json:"enabled"`
+				}
+				err := json.NewDecoder(r.Body).Decode(&body)
+				requests <- err == nil && r.Method == "PUT" && r.URL.Path == "/skills/local" && body.Path == path && body.Enabled != nil && !*body.Enabled
+				if fail {
+					http.Error(w, "save failed", 500)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]any{"skills": []any{map[string]any{"name": "from-market", "path": path, "enabled": false, "model_invocation": true}}})
+			}))
+			defer srv.Close()
+			a.Live.Client, _ = newBackendClient(srv.URL, "")
+			tt := ui.NewTester(a.View, 1240, 1000)
+			if tt.HasText("使用") {
+				t.Fatal("settings must not offer the composer action")
+			}
+			click(t, tt, "启用技能："+path)
+			select {
+			case ok := <-requests:
+				if !ok {
+					t.Fatal("invalid toggle request")
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatal("no toggle request")
+			}
+			waitNative(t, a, func() bool { return !a.Live.Loading["skill-toggle"] })
+			got := boolean(object(list(object(a.Live.Data[localSkillsKey])["skills"])[0])["enabled"])
+			if got != fail {
+				t.Fatalf("enabled=%v, failure=%v", got, fail)
+			}
+			if a.current().Draft != "保留草稿" || !a.Settings.Open {
+				t.Fatal("toggle changed conversation or closed settings")
+			}
+			if fail && a.Live.ResourceErrors["skill-toggle"] == "" {
+				t.Fatal("save failure must be visible")
+			}
+		})
 	}
 }
