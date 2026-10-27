@@ -87,19 +87,23 @@ func (a *preview) selectControl(c *ui.Context, label string, value *string, choi
 		icon(c, "chevron-down")
 	})
 	sel.Popup(func(panel ui.Element) {
-		panel.Padding(4).Gap(2).Radius(6).MinWidth(180).MaxWidth(480).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border).Margin(4, 0, 0, 0)
-		for _, choice := range choices {
-			option := sel.Item(choice).Label(a.tr(choice)).Justify(ui.Start).Padding(7, 8).Gap(8).Radius(4).FontSize(12).TextColor(c.Theme().Text)
-			if option.Highlighted() {
-				option.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
-			}
-			option.Children(func() {
-				a.text(c, choice).Grow(1).MinWidth(0).SingleLine()
-				if choice == *value {
-					icon(c, "check")
+		panel.Padding(4).Gap(2).Radius(6).MinWidth(max(180, sel.Trigger.Bounds().W)).MaxWidth(480).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border).Margin(4, 0, 0, 0)
+		// SelectBase reveals keyboard highlights once; keep wheel scrolling independent.
+		_, height := c.Size()
+		ui.Scroll(c).Label(a.tr(label) + "选项列表").MaxHeight(min(260, height-24)).Shrink(0).Gap(2).Children(func() {
+			for _, choice := range choices {
+				option := sel.Item(choice).Label(a.tr(choice)).Justify(ui.Start).Padding(7, 8).Gap(8).Radius(4).FontSize(12).TextColor(c.Theme().Text)
+				if option.Highlighted() {
+					option.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
 				}
-			})
-		}
+				option.Children(func() {
+					a.text(c, choice).Grow(1).MinWidth(0).SingleLine()
+					if choice == *value {
+						icon(c, "check")
+					}
+				})
+			}
+		})
 	})
 	return sel.Trigger
 }

@@ -159,7 +159,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 				if s.DefaultModelChoice == "" {
 					s.DefaultModelChoice = choices[0]
 				}
-				a.dropdown(c, "", &s.DefaultModelChoice, choices)
+				a.selectControl(c.Key("host-default-model"), "选择主机默认模型", &s.DefaultModelChoice, choices).Width(280).MaxWidth(320).Grow(1).Shrink(1).MinWidth(0).Height(32).Disabled(busy)
 			} else {
 				a.input(c, "", &s.DefaultModelChoice, "填写模型 ID", false).Label("主机默认模型")
 			}
