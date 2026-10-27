@@ -57,21 +57,76 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 	for _, raw := range list(m["issues"]) {
 		a.note(c, str(object(raw)["message"]))
 	}
+	toolbar := ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(12, 0, 0, 0)
+	formOpen := ui.Local(toolbar, "editor-open", func() bool { return false })
+	formReveal := ui.Local(toolbar, "editor-reveal", func() bool { return false })
+	toolbar.Children(func() {
+		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
+		a.note(c, fmt.Sprintf("%d 个", len(list(m["servers"]))))
+		ui.Spacer(c)
+		a.primary(c, "添加服务").OnClick(func() { *formOpen, *formReveal = true, true })
+	})
+	if len(list(m["servers"])) == 0 {
+		a.note(c, "还没有 MCP 服务，点击添加服务连接本机工具或远程服务。")
+	}
 	for _, raw := range list(m["servers"]) {
 		server := object(raw)
 		name, scope := str(server["name"]), str(server["scope"])
 		params := query(map[string]string{"workspace": s.Workspace, "scope": scope})
 		path := "/mcp/servers/" + pathSegment(name)
-		ui.Column(c.Key(scope+name)).Padding(12).Gap(10).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() {
-			ui.Row(c).Gap(8).Children(func() {
-				ui.Text(c, name).Bold().Grow(1)
-				a.note(c, scope+" · "+str(server["transport"])+" · "+str(server["state"])+" · "+formatCount(server["tool_count"])+" 个工具")
+		row := ui.Column(c.Key(l.Config.ActiveHost+"\x00"+workspace+"\x00"+scope+"\x00"+name)).Padding(12, 0).Gap(10).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
+		expanded := ui.Local(row, "details", func() bool { return false })
+		toolsOpen := ui.Local(row, "tools", func() bool { return false })
+		toolFilter := ui.Local(row, "tool-filter", func() string { return "" })
+		row.Children(func() {
+			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+				chevron := "chevron-right"
+				if *expanded {
+					chevron = "chevron-down"
+				}
+				ui.ButtonBase(c).Label("服务详情："+name).Grow(1).MinWidth(0).Gap(8).Padding(6, 0).Justify(ui.Start).OnClick(func() { *expanded = !*expanded }).Children(func() {
+					icon(c, chevron)
+					ui.Text(c, name).FontSize(13).FontWeight(500).Grow(1).MinWidth(0).SingleLine()
+				})
+				scopeLabel := "个人"
+				if scope == "project" {
+					scopeLabel = "项目"
+				}
+				a.note(c, scopeLabel+" · "+str(server["transport"]))
+				state := str(server["state"])
+				color := c.Theme().TextMuted
+				switch state {
+				case "connected", "ready":
+					state, color = "已连接", c.Theme().Accent
+				case "connecting":
+					state = "连接中"
+				case "error", "failed":
+					state, color = "连接失败", c.Theme().Danger
+				case "disconnected":
+					state = "未连接"
+				case "needs_auth":
+					state = "需要授权"
+				case "disabled":
+					state = "已停用"
+				}
+				if !boolean(server["enabled"]) {
+					state, color = "已停用", c.Theme().TextMuted
+				}
+				if state == "" {
+					state = "未连接"
+				}
+				ui.Text(c, state).FontSize(12).TextColor(color)
+				a.note(c, formatCount(server["tool_count"])+" 个工具")
 			})
 			if err := str(server["error"]); err != "" {
 				ui.Text(c, err).FontSize(12).TextColor(c.Theme().Danger)
 			}
+			if !*expanded {
+				return
+			}
 			ui.Row(c).Gap(6).Wrap().Children(func() {
 				a.action(c, "修改配置").OnClick(func() {
+					*formOpen, *formReveal = true, true
 					s.MCPName = name
 					s.Scope = "个人"
 					if scope == "project" {
@@ -102,16 +157,38 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 					l.Confirm = &nativeConfirmation{"删除 MCP 服务？", name + " · " + scope + " · " + s.Workspace, func() { a.operation("mcp-action", "DELETE", path+params, nil, apply) }}
 				})
 			})
-			for _, toolRaw := range list(server["tools"]) {
-				tool := object(toolRaw)
-				enabled := boolean(tool["enabled"])
-				ui.Row(c).Gap(8).Children(func() {
-					ui.Column(c).Grow(1).MinWidth(0).Children(func() { ui.Text(c, str(tool["name"])).FontSize(12); a.note(c, str(tool["description"])) })
-					if ui.Checkbox(c.Key(str(tool["name"])), &enabled, "启用工具："+str(tool["name"])).Disabled(l.Loading["mcp-tool"]).Changed() {
-						a.operation("mcp-tool", "POST", path+"/tools/"+pathSegment(str(tool["name"]))+params, map[string]any{"enabled": enabled}, apply)
-					}
-				})
+			toolToggle := "查看工具"
+			if *toolsOpen {
+				toolToggle = "收起工具"
 			}
+			a.action(c, toolToggle+" · "+formatCount(server["tool_count"])).Label("工具列表：" + name).AlignSelf(ui.Start).OnClick(func() { *toolsOpen = !*toolsOpen })
+			if !*toolsOpen {
+				return
+			}
+			if len(list(server["tools"])) == 0 {
+				a.note(c, "暂无工具，连接服务后可刷新工具列表。")
+			}
+			ui.TextInput(c, toolFilter).Label("搜索工具："+name).Placeholder("搜索工具名称或说明").FontSize(12).Padding(8).Background(c.Theme().Surface).Border(1, c.Theme().Border)
+			ui.Scroll(c).Label("服务工具：" + name).MaxHeight(280).Shrink(0).Gap(10).Children(func() {
+				matches := 0
+				for _, toolRaw := range list(server["tools"]) {
+					tool := object(toolRaw)
+					if query := strings.ToLower(strings.TrimSpace(*toolFilter)); query != "" && !strings.Contains(strings.ToLower(str(tool["name"])+" "+str(tool["description"])), query) {
+						continue
+					}
+					matches++
+					enabled := boolean(tool["enabled"])
+					ui.Row(c).Gap(8).Children(func() {
+						ui.Column(c).Grow(1).MinWidth(0).Children(func() { ui.Text(c, str(tool["name"])).FontSize(12); a.note(c, str(tool["description"])) })
+						if ui.Checkbox(c.Key(str(tool["name"])), &enabled, "启用").Label("启用工具：" + str(tool["name"])).Disabled(l.Loading["mcp-tool"]).Changed() {
+							a.operation("mcp-tool", "POST", path+"/tools/"+pathSegment(str(tool["name"]))+params, map[string]any{"enabled": enabled}, apply)
+						}
+					})
+				}
+				if matches == 0 && strings.TrimSpace(*toolFilter) != "" {
+					a.note(c, "没有匹配的工具，试试其他名称或关键词。")
+				}
+			})
 		})
 	}
 	if l.LoginURL != "" {
@@ -119,64 +196,77 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 		a.action(c, "打开授权页面").OnClick(func() { go mygo.Shell.OpenExternal(l.LoginURL) })
 		a.action(c, "取消授权").OnClick(a.cancelMCPLogin)
 	}
-	a.heading(c, "添加或修改 MCP 服务"+a.dirtySuffix())
-	a.dropdown(c, "配置范围", &s.Scope, []string{"个人", "项目"})
-	a.input(c, "服务名称", &s.MCPName, "例如 filesystem", false)
-	ui.Row(c).Children(func() {
-		a.note(c, "工具连接配置")
-		ui.Spacer(c)
-		label := "高级 JSON"
-		if s.Advanced {
-			label = "返回表单"
-		}
-		a.action(c, label).OnClick(s.toggleAdvanced)
-	})
-	if s.Advanced {
-		a.multiline(c, "标准 MCP 配置", &s.JSON, 8, 16)
-	} else {
-		a.dropdown(c, "连接方式", &s.Transport, []string{"stdio", "http"})
-		if s.Transport == "stdio" {
-			a.input(c, "启动命令", &s.Command, "npx", false)
-			a.multiline(c, "命令参数 · 每行一个", &s.Args, 2, 5)
-		} else {
-			a.input(c, "服务 URL", &s.URL, "https://example.com/mcp", false)
-		}
-		a.multiline(c, "环境变量 / 请求头 · KEY=VALUE", &s.Variables, 2, 5)
-		a.input(c, "超时（毫秒）", &s.Timeout, "30000", false)
-		ui.Checkbox(c, &s.Trust, "信任此服务")
+	if !*formOpen && !a.settingsFormDirty() {
+		return
 	}
-	a.note(c, "保存后会实际连接受信任的服务；项目配置需先信任项目。修改时省略的凭据会保留。")
-	ui.Row(c).Gap(8).Children(func() {
-		a.primary(c, "保存配置").Disabled(l.Loading["mcp-save"] || strings.TrimSpace(s.MCPName) == "").OnClick(func() {
-			var config map[string]any
-			var err error
+	formPanel := ui.Column(c).Gap(12).Padding(16).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8)
+	if *formReveal {
+		formPanel.ScrollIntoView()
+		*formReveal = false
+	}
+	formPanel.Children(func() {
+		a.heading(c, "添加或修改 MCP 服务"+a.dirtySuffix())
+		a.dropdown(c, "配置范围", &s.Scope, []string{"个人", "项目"})
+		a.input(c, "服务名称", &s.MCPName, "例如 filesystem", false)
+		ui.Row(c).Children(func() {
+			a.note(c, "工具连接配置")
+			ui.Spacer(c)
+			label := "高级 JSON"
 			if s.Advanced {
-				err = json.Unmarshal([]byte(s.JSON), &config)
-				if config == nil && err == nil {
-					err = errors.New("配置必须是 JSON 对象")
-				}
-			} else {
-				config, err = s.mcpConfig()
+				label = "返回表单"
 			}
-			if err != nil {
-				l.Error = err.Error()
-				return
-			}
-			scope := "user"
-			if s.Scope == "项目" {
-				scope = "project"
-			}
-			path := "/mcp/servers/" + pathSegment(strings.TrimSpace(s.MCPName)) + query(map[string]string{"workspace": s.Workspace, "scope": scope})
-			a.operation("mcp-save", "PUT", path, config, func(v any) {
-				apply(v)
-				s.mcpForm = mcpForm{Workspace: s.Workspace}
-				a.Live.SavedMCPForm = s.mcpForm
-				l.Notice = "MCP 配置已保存。"
-			})
+			a.action(c, label).OnClick(s.toggleAdvanced)
 		})
-		if a.settingsFormDirty() {
-			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
+		if s.Advanced {
+			a.multiline(c, "标准 MCP 配置", &s.JSON, 8, 16)
+		} else {
+			a.dropdown(c, "连接方式", &s.Transport, []string{"stdio", "http"})
+			if s.Transport == "stdio" {
+				a.input(c, "启动命令", &s.Command, "npx", false)
+				a.multiline(c, "命令参数 · 每行一个", &s.Args, 2, 5)
+			} else {
+				a.input(c, "服务 URL", &s.URL, "https://example.com/mcp", false)
+			}
+			a.multiline(c, "环境变量 / 请求头 · KEY=VALUE", &s.Variables, 2, 5)
+			a.input(c, "超时（毫秒）", &s.Timeout, "30000", false)
+			ui.Checkbox(c, &s.Trust, "信任此服务")
 		}
+		a.note(c, "保存后会实际连接受信任的服务；项目配置需先信任项目。修改时省略的凭据会保留。")
+		ui.Row(c).Gap(8).Children(func() {
+			a.primary(c, "保存配置").Disabled(l.Loading["mcp-save"] || strings.TrimSpace(s.MCPName) == "").OnClick(func() {
+				var config map[string]any
+				var err error
+				if s.Advanced {
+					err = json.Unmarshal([]byte(s.JSON), &config)
+					if config == nil && err == nil {
+						err = errors.New("配置必须是 JSON 对象")
+					}
+				} else {
+					config, err = s.mcpConfig()
+				}
+				if err != nil {
+					l.Error = err.Error()
+					return
+				}
+				scope := "user"
+				if s.Scope == "项目" {
+					scope = "project"
+				}
+				path := "/mcp/servers/" + pathSegment(strings.TrimSpace(s.MCPName)) + query(map[string]string{"workspace": s.Workspace, "scope": scope})
+				a.operation("mcp-save", "PUT", path, config, func(v any) {
+					apply(v)
+					s.mcpForm = mcpForm{Workspace: s.Workspace}
+					a.Live.SavedMCPForm = s.mcpForm
+					*formOpen = false
+					l.Notice = "MCP 配置已保存。"
+				})
+			})
+			if a.settingsFormDirty() {
+				a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
+			} else {
+				a.action(c, "收起配置").OnClick(func() { *formOpen = false })
+			}
+		})
 	})
 }
 func (a *preview) startMCPLogin(name, scope, workspace string) {
