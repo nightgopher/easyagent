@@ -37,6 +37,10 @@ class ChatMessage(val uid: Long) {
 class PendingAttachment(val attachment: UploadedAttachment, val preview: ByteArray?)
 
 class ChatSession(val id: String) {
+    var workspace = ""
+    var references by mutableStateOf<List<JsonObject>>(emptyList())
+    var sentReferences: List<JsonObject> = emptyList()
+    var accessMode by mutableStateOf("")
     val messages = ArrayList<ChatMessage>()
     var run: RunInfo? = null
     var seq = 0L
@@ -78,7 +82,7 @@ class ChatSession(val id: String) {
                 "assistant" -> {
                     if (m.thinking != "") add { tool = "思考过程"; text = m.thinking; kind = "thought" }
                     val body = displayText(m.content)
-                    if (body != "") add { text = body; entryId = m.entryId }
+                    if (body != "") add { text = body; entryId = m.entryId; if (m.stopReason in setOf("aborted", "error", "length")) status = "未完成" }
                     for (call in m.toolCalls) {
                         val arguments = toolArguments(call.args)
                         tools[call.id] = add {

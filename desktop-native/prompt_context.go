@@ -10,6 +10,7 @@ import (
 )
 
 type fileReference struct {
+	Scope     string `json:"scope,omitempty"`
 	Path      string `json:"path"`
 	Workspace string `json:"workspace"`
 	Host      string `json:"-"`
@@ -34,7 +35,7 @@ func (a *preview) addFileReference(s *session, value fileReference) {
 		return
 	}
 	for _, item := range s.FileReferences {
-		if item.Path == value.Path && item.Workspace == value.Workspace {
+		if item.Path == value.Path && item.Workspace == value.Workspace && item.Scope == value.Scope {
 			return
 		}
 	}
@@ -118,7 +119,11 @@ func (a *preview) inputReferences(c *ui.Context, s *session) {
 		ui.Row(c.Key(fmt.Sprintf("reference/%d", i))).Gap(6).MinWidth(0).Children(func() {
 			icon(c, "file")
 			ui.Text(c, portableBase(item.Path)).FontSize(11).MinWidth(0).SingleLine().Tooltip(item.Path)
-			a.note(c, "工作区引用")
+			if item.Scope == "knowledge" {
+				a.note(c, "知识库引用")
+			} else {
+				a.note(c, "工作区引用")
+			}
 			iconButton(c, "x", "移除引用："+item.Path).Disabled(s.Sending || a.Live.Loading["queue-add/"+s.RemoteID]).Size(22, 22).OnClick(func() { s.FileReferences = append(s.FileReferences[:i], s.FileReferences[i+1:]...) })
 		})
 	}
@@ -134,7 +139,7 @@ func promptInputMap(s *session, attachments []map[string]any) map[string]any {
 	inputs["attachments"] = ids
 	files := []map[string]string{}
 	for _, ref := range s.FileReferences {
-		files = append(files, map[string]string{"path": ref.Path, "workspace": ref.Workspace})
+		files = append(files, map[string]string{"path": ref.Path, "workspace": ref.Workspace, "scope": ref.Scope})
 	}
 	inputs["files"] = files
 	return inputs

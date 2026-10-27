@@ -97,3 +97,18 @@ func TestLocalImageCapabilityOverridesGateway(t *testing.T) {
 	require.Nil(t, app.ResolveModel(ai.Model{ID: "missing", Provider: "openai"}).SupportsImages)
 	require.Nil(t, app.ResolveModel(ai.Model{ID: "coding", Provider: "anthropic"}).SupportsImages)
 }
+
+func TestCaptureToolUsesCodingFilters(t *testing.T) {
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	app := CodingApplication{Cfg: cfg}
+	opts := runtime.ToolBuildOptions{Workspace: t.TempDir(), SessionID: "capture-session", AllowedTools: []string{"capture_note"}}
+	tools := app.BuildTools(opts)
+	require.Len(t, tools, 1)
+	require.Equal(t, "capture_note", tools[0].Name())
+	result, err := tools[0].Execute(context.Background(), json.RawMessage(`{"text":"remember this idea"}`), nil)
+	require.NoError(t, err)
+	require.Contains(t, result.Content, "capture-session")
+	opts.BlockedTools = []string{"capture_note"}
+	require.Empty(t, app.BuildTools(opts))
+}

@@ -1,0 +1,52 @@
+name: EasyAgent
+options:
+  bundleIdPrefix: com.hwj.easyagent
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  EasyAgent:
+    path: .
+
+targets:
+  EasyAgent:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: EasyAgent
+        products:
+          - EasyAgentBackend
+          - EasyAgentUI
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: EasyAgent
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # 连接用户自己的主机：局域网明文 HTTP（内网/Tailscale 地址），
+        # 不做全局 ATS 豁免；公网主机走 HTTPS 不受影响。
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: >
+          EasyAgent 需要访问你添加的主机（例如同一网络或 Tailscale 中的
+          Mac / 迷你主机）来传输对话与执行结果。
+        ITSAppUsesNonExemptEncryption: false
+
+schemes:
+  EasyAgent:
+    build:
+      targets:
+        EasyAgent: all
+    run:
+      config: Debug

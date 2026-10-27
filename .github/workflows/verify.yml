@@ -59,6 +59,15 @@ jobs:
         if: ${{ hashFiles('mobile-ios/Package.swift') != '' }}
         working-directory: mobile-ios
         run: swift test
+      - name: Build the iOS app
+        if: ${{ hashFiles('mobile-ios/project.yml') != '' }}
+        working-directory: mobile-ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -project EasyAgent.xcodeproj -scheme EasyAgent \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY='' build | xcbeautify --quiet
 
   lint:
     runs-on: ubuntu-latest

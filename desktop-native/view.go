@@ -584,6 +584,7 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				if a.Live != nil {
 					a.messageImages(key, m)
 					messageActions(key, reveal, func() {
+						iconButton(key, "plus", "选择此消息整理").OnClick(func() { a.collectMaterial(m.Text, "session:"+s.RemoteID+"/entry:"+m.EntryID) })
 						iconButton(key, "copy", "复制用户消息").OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制消息") })
 						iconButton(key, "git-branch", "编辑并创建分支").Disabled(!s.canForkMessage(m)).Tooltip("历史消息可随时分叉；当前轮次请等待完成").OnClick(func() { a.forkUserMessage(i) })
 					})
@@ -615,6 +616,10 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				// The latest reply keeps its actions visible: copying or forking the
 				// answer just given is the common case.
 				messageActions(key, reveal || i == latestReply(s), func() {
+					if a.Live != nil {
+						iconButton(key, "plus", fmt.Sprintf("选择回复 %d 整理", i)).OnClick(func() { a.collectMaterial(m.Text, "session:"+s.RemoteID+"/entry:"+m.EntryID) })
+						iconButton(key, "file", fmt.Sprintf("保存回复 %d 为成果", i)).OnClick(func() { a.prepareArtifact(s, m) })
+					}
 					iconButton(key, "copy", fmt.Sprintf("复制回复 %d", i)).OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制回复") })
 					iconButton(key, "git-branch", fmt.Sprintf("从回复 %d 创建分支", i)).Tooltip("从此回复创建分支（包含完整工具结果）；当前轮次请等待完成").Disabled(a.Live != nil && !s.canForkMessage(m)).OnClick(func() { a.fork(i) })
 				})

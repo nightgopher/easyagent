@@ -77,7 +77,9 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
         val state = load()
         val hosts = records().filter { it.id != id }
         val selected = state.activeId?.takeIf { it != id } ?: hosts.firstOrNull()?.id
-        commit(prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(KEY_ACTIVE, selected).remove(tokenKey(id)))
+        val editor = prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(KEY_ACTIVE, selected).remove(tokenKey(id))
+        prefs.all.keys.filter { it.startsWith("$id:") || it.startsWith("draft:$id:") }.forEach(editor::remove)
+        commit(editor)
     }
 
     /** 后台保活前台服务开关；默认开启，关闭后 App 退后台会被系统回收、收不到审批通知。 */

@@ -8,6 +8,8 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -90,7 +92,9 @@ import com.hwj.easyagent.mobile.backend.obj
 import com.hwj.easyagent.mobile.backend.pretty
 import com.hwj.easyagent.mobile.backend.questionsFromArgs
 import com.hwj.easyagent.mobile.backend.str
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.*
+import com.hwj.easyagent.mobile.backend.getString
+import com.hwj.easyagent.mobile.backend.processTurns
 
 private sealed interface Entry {
     val key: String
@@ -99,8 +103,8 @@ private sealed interface Entry {
         override val key = "m${message.uid}"
     }
 
-    class Tools(val messages: List<ChatMessage>) : Entry {
-        override val key = "g${messages.first().uid}"
+    class Process(val messages: List<ChatMessage>, val expanded: Boolean) : Entry {
+        override val key = "p${messages.first().uid}"
     }
 
     class Approval(val confirmation: Confirmation) : Entry {
@@ -139,6 +143,8 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+    var resources by rememberSaveable { mutableStateOf(false) }
+    if (resources) ResourceDialog(client, session) { resources = false }
     var loopDialog by remember { mutableStateOf(false) }
     if (loopDialog) LoopDialog(client, sessionId) { loopDialog = false }
     var sessionMenu by remember { mutableStateOf(false) }
@@ -169,13 +175,15 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     val busy = session.running || session.pending
     val entries = remember(rev, sessionId) {
         buildList<Entry> {
-            toolRuns(session.messages).forEach { run ->
-                add(if (run.size > 1) Entry.Tools(run) else Entry.Message(run.first()))
+            processTurns(session.messages, session.running || session.pending, session.run?.state in setOf("cancelled", "interrupted", "failed")).forEach { turn ->
+                turn.user?.let { add(Entry.Message(it)) }
+                if (turn.process.isNotEmpty()) add(Entry.Process(turn.process, turn.open))
+                turn.answer?.let { add(Entry.Message(it)) }
             }
             session.confirmations.forEach { add(Entry.Approval(it)) }
             if (session.queue.items.isNotEmpty()) add(Entry.Queue)
             val run = session.run
-            if (!busy && run?.state == "failed" && run.canContinue) add(Entry.Continue)
+            if (!busy && run?.canContinue == true) add(Entry.Continue)
         }.asReversed()
     }
     val usagePercent = session.contextUsage?.percent?.takeIf { it >= 0 }
@@ -204,6 +212,9 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
+                    TextButton(enabled = !busy && session.accessMode.isNotEmpty(), onClick = {
+                        client.setAccessMode(session, if (session.accessMode == "full") "ask" else "full")
+                    }) { Text(when (session.accessMode) { "full" -> "全权限"; "ask" -> "需审批"; else -> "权限未知" }) }
                     IconButton(onClick = { loopDialog = true }) { Icon(Icons.Filled.Autorenew, contentDescription = "循环任务") }
                     if (busy) {
                         IconButton(onClick = { client.cancelRun(session) }) {
@@ -243,7 +254,20 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 },
             )
         },
-        bottomBar = { MediaComposer(client, session, link, queued = busy) },
+        bottomBar = { Column {
+            Row {
+                TextButton(onClick = { resources = true }) { Text("文件与知识") }
+                if (session.references.isNotEmpty()) TextButton(onClick = { session.references = emptyList(); client.touch() }) { Text("清除 ${session.references.size} 个引用") }
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                session.references.forEach { reference ->
+                    TextButton(onClick = { session.references = session.references - reference; client.touch() }) {
+                        Text("× " + reference.getString("path").substringAfterLast('/'), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            MediaComposer(client, session, link, queued = busy)
+        } },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -262,7 +286,21 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             onToggle = { client.touch() },
                             images = { MessageImages(client, sessionId, it) },
                         )
-                        is Entry.Tools -> ToolGroup(entry.messages) { client.touch() }
+                        is Entry.Process -> {
+                            var expanded by rememberSaveable(entry.key, entry.expanded) { mutableStateOf(entry.expanded) }
+                            Column {
+                                TextButton(onClick = { expanded = !expanded }) {
+                                    Text((if (expanded) "收起" else "展开") + "执行过程 · ${entry.messages.size} 项")
+                                }
+                                if (expanded) toolRuns(entry.messages).forEach { group ->
+                                    if (group.size > 1) ToolGroup(group) { client.touch() }
+                                    else {
+                                        val message = group.first()
+                                        MessageRow(message, session.running && message === session.messages.lastOrNull(), { client.touch() }) { MessageImages(client, sessionId, it) }
+                                    }
+                                }
+                            }
+                        }
                         is Entry.Approval -> ApprovalCard(entry.confirmation) { approved, answers ->
                             client.confirm(session, entry.confirmation.id, approved, answers)
                         }
@@ -545,7 +583,7 @@ private fun ContinueRow(onContinue: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Icon(Icons.Filled.ErrorOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-            Text("任务失败，已保存的执行结果可以继续", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text("任务未完成，已保存的执行结果可以继续", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Button(onClick = onContinue) { Text("继续执行") }
         }
     }

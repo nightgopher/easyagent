@@ -181,6 +181,7 @@ data class ToolCall(
 
 @Serializable
 data class StoredMessage(
+    @SerialName("stop_reason") val stopReason: String = "",
     @SerialName("content_hash") val contentHash: String = "",
     @SerialName("duration_ms") val durationMs: Double = 0.0,
     val role: String = "",

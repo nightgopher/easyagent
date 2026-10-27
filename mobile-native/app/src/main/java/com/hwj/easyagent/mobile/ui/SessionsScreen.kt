@@ -75,8 +75,12 @@ fun SessionsScreen(
     onUpdates: () -> Unit,
     keepAlive: Boolean,
     onToggleKeepAlive: (Boolean) -> Unit,
+    onShares: () -> Unit = {},
+    pendingShares: Int = 0,
 ) {
     val hosts by connections.state.collectAsStateWithLifecycle()
+    val taskStates by client.taskStates.collectAsStateWithLifecycle()
+    val unread by client.unread.collectAsStateWithLifecycle()
     val sessions by client.sessions.collectAsStateWithLifecycle()
     val loading by client.sessionsLoading.collectAsStateWithLifecycle()
     val link by client.link.collectAsStateWithLifecycle()
@@ -87,6 +91,10 @@ fun SessionsScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var hostMenuOpen by remember { mutableStateOf(false) }
     val host = hosts.hosts.firstOrNull { it.id == client.config.id } ?: client.config
+    var creating by rememberSaveable { mutableStateOf(false) }
+    if (creating) NewSessionDialog(client, { creating = false }, onOpen)
+    var inbox by rememberSaveable { mutableStateOf(false) }
+    if (inbox) InboxDialog(client, { inbox = false }, onOpen)
     var renaming by remember { mutableStateOf<SessionSummary?>(null) }
     var deleting by remember { mutableStateOf<SessionSummary?>(null) }
 
@@ -100,7 +108,15 @@ fun SessionsScreen(
     val matching = filterSessions(sessions, query)
     val active = matching.filter { !it.archived }
     val archived = matching.filter { it.archived }
-    val groups = groupSessions(active)
+    val attention = active.filter { it.pendingConfirmations > 0 || taskStates[it.id] in setOf("failed", "interrupted", "cancelled") }
+    val running = active.filter { it !in attention && (it.running || taskStates[it.id] in setOf("running", "waiting_confirmation")) }
+    val completed = active.filter { it !in attention && it !in running && it.id in unread }
+    val groups = buildList {
+        if (attention.isNotEmpty()) add(com.hwj.easyagent.mobile.backend.SessionGroup("需要处理", attention))
+        if (running.isNotEmpty()) add(com.hwj.easyagent.mobile.backend.SessionGroup("进行中", running))
+        if (completed.isNotEmpty()) add(com.hwj.easyagent.mobile.backend.SessionGroup("新结果 · 未读", completed))
+        addAll(groupSessions(active.filter { it !in attention && it !in running && it !in completed }))
+    }
 
     Scaffold(
         topBar = {
@@ -139,6 +155,8 @@ fun SessionsScreen(
                     IconButton(onClick = { client.refreshSessions() }) { Icon(Icons.Filled.Refresh, contentDescription = "刷新会话") }
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(text = { Text("收件箱") }, onClick = { menuOpen = false; inbox = true })
+                        if (pendingShares > 0) DropdownMenuItem(text = { Text("待处理分享（$pendingShares）") }, onClick = { menuOpen = false; onShares() })
                         DropdownMenuItem(
                             text = { Text(if (showArchived) "隐藏已归档" else "显示已归档（${archived.size}）") },
                             onClick = { showArchived = !showArchived; menuOpen = false },
@@ -158,7 +176,7 @@ fun SessionsScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { client.createSession(onOpen) },
+                onClick = { creating = true },
                 icon = { Icon(Icons.Filled.Add, contentDescription = null) },
                 text = { Text("新会话") },
             )

@@ -307,3 +307,12 @@ GET /health
 `compactions` 按时间顺序包含 `id`、毫秒 `timestamp`、完整 `summary` 和可选 `info`。新记录的 `info` 包含 `trigger`（`manual` / `automatic`）、可选 `instructions`、`messages_before/after` 与 `tokens_before/after`（仅消息估算）。历史记录可能没有 `info`。微压缩将旧工具输出的清理结果持久化为当前分支上的独立记录，后续请求及重启恢复会沿用；原始工具输出保持不变，聊天历史仍可查看。其数量和估算变化通过 `micro_compacted` 事件传递，不作为全量摘要记录。
 
 运行中或有其他会话修改操作时返回 `409`，避免展示不一致的快照。响应禁止缓存。`POST /sessions/{id}/compact` 接收 `{ "custom_instructions": "保留接口约定与未完成测试" }`，空要求使用默认摘要策略。压缩生成或持久化失败不替换原上下文；成功后重连和重启保留摘要及近期完整消息。
+
+### 收件箱与成果
+
+- `GET /inbox`：返回当前服务主机上显式保存的记录（按时间倒序）。收件箱与会话历史分开存放于 `EA_DATA_DIR/inbox`。
+- `POST /inbox`：`{"id":"32位小写十六进制随机值","text":"想法或链接","source":"desktop"}`。文本 1–65536 字节，来源最多 2048 字节。同一 ID 和内容重试返回原记录；同一 ID 不同内容返回 409。成功后才可清空客户端草稿。接口沿用服务认证。
+- `POST /sessions/{id}/artifacts`：`{"path":"notes/方案.md","content":"# 方案"}`。在会话工作区新建 Markdown，正文最多 1 MiB；路径必须为相对路径，限制符号链接越界。同名文件返回 409，不覆盖。后续编辑复用 workspace 文件接口。
+- `inputs.files` 可增加 `"scope":"knowledge"`，路径按服务配置的知识库根目录解析，仅支持 Markdown。`workspace` 仍需与当前会话一致。省略 scope 时保持原有工作区引用行为；未知 scope 拒绝。引用内容发送时读取，标记为不可信上下文；不改变 Agent 的文件写入范围。
+
+Coding Agent 的 `capture_note` 工具可将用户明确要求保存的文本或链接写入同一收件箱，仍经过工具白名单/黑名单过滤。手机、飞书及语音使用此 Agent 时可以请求保存；成功回执表示记录已经持久化，不依赖语音会话历史。

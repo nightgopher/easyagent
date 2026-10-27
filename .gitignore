@@ -39,3 +39,6 @@ __pycache__/
 # Retired Electron/Capacitor local outputs (source lives in Git history).
 /desktop/
 mobile-ios/.build/
+
+# xcodegen 在本地/CI 生成，不入库
+mobile-ios/EasyAgent.xcodeproj

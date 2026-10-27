@@ -195,7 +195,7 @@ class AgentClientTest {
             session.running = true
             client.sendPrompt(session, "还没发出去的话")
             withTimeout(5_000) { while (session.sending) delay(10) }
-            assertFalse(drafts.map.containsKey("${client.config.id}/s1"))
+            assertFalse(drafts.map.containsKey("${client.storageIdentity}/s1"))
         }
     }
 }

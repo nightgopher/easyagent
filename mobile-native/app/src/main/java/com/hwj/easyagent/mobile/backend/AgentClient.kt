@@ -34,6 +34,9 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     val api = ApiClient(config.url, requireNotNull(config.token))
     val link = MutableStateFlow(LinkStatus.CONNECTING)
     val sessions = MutableStateFlow<List<SessionSummary>>(emptyList())
+    val taskStates = MutableStateFlow<Map<String, String>>(emptyMap())
+    val unread = MutableStateFlow<Set<String>>(emptySet())
+    private var reconcileOnRefresh = true
     val sessionsLoading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
     val activeId = MutableStateFlow<String?>(null)
@@ -51,8 +54,37 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
 
     val activeChat: ChatSession? get() = activeId.value?.let { chats[it] }
 
+    private val credentialScope = java.security.MessageDigest.getInstance("SHA-256")
+        .digest((config.url + "\n" + config.token.orEmpty()).toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+    val storageIdentity: String get() = config.id + ":" + credentialScope
     fun chat(id: String): ChatSession = chats.getOrPut(id) {
-        ChatSession(id).also { it.draft = drafts.load(config.id, id) }
+        ChatSession(id).also { session ->
+            drafts.load(storageIdentity, id).takeIf { it.isNotBlank() }?.let { saved ->
+                runCatching {
+                    val data = wireJson.parseToJsonElement(saved).obj()
+                    session.draft = data.getString("text")
+                    session.references = (data["references"] as? JsonArray).orEmpty().map { it.obj() }
+                    session.sentReferences = (data["sentReferences"] as? JsonArray).orEmpty().map { it.obj() }
+                    session.pendingRequest = data.getString("request")
+                    session.sentDraft = data.getString("sent")
+                    session.attachments = wireJson.decodeFromJsonElement(ListSerializer(UploadedAttachment.serializer()), data["attachments"] ?: JsonArray(emptyList())).map { PendingAttachment(it, null) }
+                    session.sentAttachments = (data["sentAttachments"] as? JsonArray).orEmpty().map { it.str() }.toSet()
+                }
+            }
+        }
+    }
+    private fun saveDrafts() {
+        chats.values.forEach { s ->
+            val data = buildJsonObject {
+                put("references", JsonArray(s.references)); put("sentReferences", JsonArray(s.sentReferences))
+                put("text", s.draft); put("request", s.pendingRequest); put("sent", s.sentDraft)
+                put("attachments", wireJson.encodeToJsonElement(ListSerializer(UploadedAttachment.serializer()), s.attachments.map { it.attachment }))
+                put("sentAttachments", JsonArray(s.sentAttachments.map { JsonPrimitive(it) }))
+            }.toString()
+            if (s.draft.isEmpty() && s.pendingRequest.isEmpty() && s.sentDraft.isEmpty() && s.attachments.isEmpty() && s.sentAttachments.isEmpty() && s.references.isEmpty() && s.sentReferences.isEmpty()) {
+                drafts.clear(storageIdentity, s.id)
+            } else if (drafts.load(storageIdentity, s.id) != data) drafts.save(storageIdentity, s.id, data)
+        }
     }
 
     fun start() {
@@ -70,7 +102,9 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     /** 回到前台：立即重连并刷新会话列表。 */
     fun resume() {
         if (closed) return
+        reconcileOnRefresh = true
         refreshSessions()
+        chats.values.toList().forEach(::reload)
         if (link.value == LinkStatus.DISCONNECTED) {
             reconnectJob?.cancel()
             backoffMs = 1_000L
@@ -92,6 +126,7 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     internal suspend fun awaitShutdown() { scope.coroutineContext.job.join() }
 
     fun touch() {
+        saveDrafts()
         revision.value++
     }
 
@@ -104,7 +139,7 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
                 link.value = LinkStatus.CONNECTED
                 backoffMs = 1_000L
                 error.value = null
-                activeChat?.let(::subscribe)
+                chats.values.forEach(::subscribe)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) = post {
@@ -172,6 +207,14 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         }
         val wasRunning = s.running
         s.reduce(e)
+        s.run?.let { run ->
+            taskStates.value = taskStates.value + (s.id to run.state)
+            if (run.state in setOf("completed", "failed", "interrupted", "cancelled")) {
+                val viewing = com.hwj.easyagent.mobile.AppVisibility.foreground && com.hwj.easyagent.mobile.AppVisibility.openChat == "${config.id}/${s.id}"
+                if (viewing) { drafts.save(storageIdentity, "read:" + s.id, run.id); unread.value = unread.value - s.id }
+                else if (drafts.load(storageIdentity, "read:" + s.id) != run.id) unread.value = unread.value + s.id
+            }
+        }
         onAlert?.let { notify -> alertsFor(before, s).forEach { notify(this, it) } }
         if (e.type == "status" && !s.running) refreshSessions()
         if (wasRunning && !s.running) loadSessionInfo(s)
@@ -185,6 +228,10 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     fun open(id: String) {
         activeId.value = id
         val s = chat(id)
+        scope.launch {
+            try { val info = api.get(ApiClient.sessionPath(id) + "/info").obj(); s.accessMode = info.getString("access_mode"); s.workspace = info.getString("workspace"); touch() }
+            catch (e: ApiException) { error.value = e.message }
+        }
         touch()
         reload(s)
         loadSessionInfo(s)
@@ -216,10 +263,11 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         }
         val inputs = buildJsonObject {
             put("attachments", JsonArray(s.attachments.map { JsonPrimitive(it.attachment.id) }))
-            put("files", JsonArray(emptyList()))
+            put("files", JsonArray(s.references))
         }
         val attachments = s.attachments.map { it.attachment.id }.toSet()
-        if (s.pendingRequest == "" || s.sentDraft != text || s.sentAttachments != attachments) s.pendingRequest = requestId()
+        if (s.pendingRequest == "" || s.sentDraft != text || s.sentAttachments != attachments || s.sentReferences != s.references) s.pendingRequest = requestId()
+        s.sentReferences = s.references
         s.sentAttachments = attachments
         s.sentDraft = text
         val request = s.pendingRequest
@@ -279,21 +327,6 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         call(ApiClient.sessionPath(s.id) + "/run/cancel", buildJsonObject { put("run_id", s.runId) }) { reload(s) }
     }
 
-    /** Continues a failed run from its saved tool results; the host issues a new run. */
-    fun continueRun(s: ChatSession) {
-        val runId = s.runId
-        if (runId.isEmpty()) return
-        scope.launch {
-            try {
-                api.post(ApiClient.sessionPath(s.id) + "/run/continue", buildJsonObject { put("run_id", runId) })
-                reload(s)
-            } catch (e: ApiException) {
-                error.value = e.message
-            }
-            touch()
-        }
-    }
-
     fun confirm(s: ChatSession, confirmationId: String, approved: Boolean, answers: JsonElement? = null) {
         val body = buildJsonObject {
             put("run_id", s.runId)
@@ -345,6 +378,10 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
             try {
                 val raw = api.get("/sessions")
                 val list = wireJson.decodeFromJsonElement(ListSerializer(SessionSummary.serializer()), raw)
+                val finished = sessions.value.filter { it.running && list.none { next -> next.id == it.id && next.running } }.map { it.id }
+                val reconcile = if (reconcileOnRefresh) list.filter { !it.archived }.sortedByDescending { it.lastActive }.take(12).map { it.id } else emptyList()
+                reconcileOnRefresh = false
+                (finished + reconcile).distinct().forEach { reload(chat(it)) }
                 sessions.value = list.filter { it.id.isNotEmpty() }.sortedByDescending { it.pinned }
             } catch (e: ApiException) {
                 error.value = e.message
@@ -354,14 +391,17 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         }
     }
 
-    fun createSession(onCreated: (String) -> Unit) {
+    fun createSession(cwd: String = "", model: String = "", onCreated: (String) -> Unit) {
         scope.launch {
             try {
-                val raw = api.post("/sessions", buildJsonObject {})
+                val raw = api.post("/sessions", buildJsonObject { put("cwd", cwd); put("model", model) })
                 val id = raw.obj().getString("id")
                 if (id.isEmpty()) throw ApiException("服务未返回会话 ID")
-                // 手机端新建的会话默认完全权限：任务离开电脑也能跑完，ask_user 提问仍会弹出。
-                runCatching { api.post(ApiClient.sessionPath(id) + "/permissions", buildJsonObject { put("mode", "full") }) }
+                // Only newly created mobile sessions opt into full mode.
+                try {
+                    val mode = api.post(ApiClient.sessionPath(id) + "/permissions", buildJsonObject { put("mode", "full") })
+                    chat(id).accessMode = mode.obj().getString("access_mode")
+                } catch (e: ApiException) { error.value = "会话已创建，但全权限设置失败：" + e.message }
                 refreshSessions()
                 onCreated(id)
             } catch (e: ApiException) {
@@ -370,12 +410,16 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         }
     }
 
+    fun continueRun(s: ChatSession) {
+        call(ApiClient.sessionPath(s.id) + "/run/continue", buildJsonObject { put("run_id", s.runId); put("request_id", requestId()) }) { reload(s) }
+    }
+
     fun deleteSession(id: String) {
         scope.launch {
             try {
                 api.delete(ApiClient.sessionPath(id))
                 chats.remove(id)
-                drafts.clear(config.id, id)
+                drafts.clear(storageIdentity, id)
                 if (activeId.value == id) activeId.value = null
                 refreshSessions()
             } catch (e: ApiException) {
@@ -453,7 +497,8 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
 
     /** Persists the composer draft for this host+session; called on every edit. */
     fun saveDraft(s: ChatSession, text: String) {
-        if (text.isEmpty()) drafts.clear(config.id, s.id) else drafts.save(config.id, s.id, text)
+        s.draft = text
+        saveDrafts()
     }
 
     /** Authenticated URL for a message image, loaded by the shared image loader. */
@@ -481,6 +526,8 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     private fun acknowledgeDraft(s: ChatSession) {
         if (s.draft == s.sentDraft) s.draft = ""
         s.attachments = s.attachments.filterNot { it.attachment.id in s.sentAttachments }
+        s.references = s.references.filterNot { it in s.sentReferences }
+        s.sentReferences = emptyList()
         s.sentAttachments = emptySet()
         saveDraft(s, s.draft)
     }

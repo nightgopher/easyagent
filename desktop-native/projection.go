@@ -176,7 +176,11 @@ func (s *session) history(records []storedMessage) {
 				s.Messages = append(s.Messages, &message{Tool: "思考过程", Text: m.Thinking, Kind: "thought"})
 			}
 			if text := displayText(m.Content); text != "" {
-				s.Messages = append(s.Messages, &message{Text: text, EntryID: m.EntryID})
+				status := ""
+				if m.StopReason == "error" || m.StopReason == "aborted" || m.StopReason == "length" {
+					status = "未完成"
+				}
+				s.Messages = append(s.Messages, &message{Text: text, EntryID: m.EntryID, Status: status})
 			}
 			for _, call := range m.ToolCalls {
 				args := toolArguments(call.Args)
