@@ -74,9 +74,9 @@ class RuntimeUiTest {
     }
 
     private fun host(name: String) = RuntimeFixture(name).also { hosts += it }
-    private fun waitText(text: String) {
+    private fun waitText(text: String, useUnmergedTree: Boolean = false) {
         try {
-            ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true, useUnmergedTree = useUnmergedTree).fetchSemanticsNodes().isNotEmpty() }
         } catch (error: ComposeTimeoutException) {
             screenshot("failure")
             var projected = ""
@@ -189,8 +189,9 @@ class RuntimeUiTest {
         ui.onNodeWithContentDescription("返回").performClick()
         ui.waitUntil(10000) { ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         ui.onNodeWithText("新会话", useUnmergedTree = true).performClick()
-        waitText("fixture-model")
-        ui.onNodeWithText("fixture-model").performClick()
+        // 小屏弹窗会裁剪合并后的按钮语义；先定位原始文本并滚动，再验证模型选择。
+        waitText("fixture-model", useUnmergedTree = true)
+        ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
         ui.onNodeWithText("创建", substring = false).performClick()
         waitText("全权限")
         assertEquals("full", host.accessMode)
