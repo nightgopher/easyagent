@@ -1,0 +1,12 @@
+{
+  "": {
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/primary.swiftdeps"
+  },
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentUITests/ProjectionTests.swift": {
+    "dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.d",
+    "object": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swift.o",
+    "swiftmodule": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swiftdeps",
+    "diagnostics": "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.dia"
+  }
+}

@@ -1,0 +1,156 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "EasyAgentBackend-arm64-apple-macosx-debug.module": ["<EasyAgentBackend-arm64-apple-macosx-debug.module>"]
+  "EasyAgentBackendTests-arm64-apple-macosx-debug.module": ["<EasyAgentBackendTests-arm64-apple-macosx-debug.module>"]
+  "EasyAgentPackageTests-arm64-apple-macosx-debug.module": ["<EasyAgentPackageTests-arm64-apple-macosx-debug.module>"]
+  "EasyAgentPackageTests-arm64-apple-macosx-debug.test": ["<EasyAgentPackageTests-arm64-apple-macosx-debug.test>"]
+  "EasyAgentUI-arm64-apple-macosx-debug.module": ["<EasyAgentUI-arm64-apple-macosx-debug.module>"]
+  "EasyAgentUITests-arm64-apple-macosx-debug.module": ["<EasyAgentUITests-arm64-apple-macosx-debug.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<EasyAgentBackend-arm64-apple-macosx-debug.module>","<EasyAgentUI-arm64-apple-macosx-debug.module>"]
+  "test": ["<EasyAgentBackend-arm64-apple-macosx-debug.module>","<EasyAgentBackendTests-arm64-apple-macosx-debug.module>","<EasyAgentPackageTests-arm64-apple-macosx-debug.test>","<EasyAgentUI-arm64-apple-macosx-debug.module>","<EasyAgentUITests-arm64-apple-macosx-debug.module>"]
+default: "main"
+nodes:
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentUITests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/ChatSocket.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/Wire.swift"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/sources"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/sources"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/BackendTests.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/ChatSocketTests.swift"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/sources"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/sources"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.derived/runner.swift"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/sources"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/sources"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.derived/runner.swift":
+    tool: test-entry-point-tool
+    inputs: []
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.derived/runner.swift"]
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/runner.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swift.o"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.product/Objects.LinkFileList"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/AppModel.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/ChatProjection.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/KeychainStore.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/Views.swift"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/sources"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/sources"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentUITests/ProjectionTests.swift"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/sources"]
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/sources"
+
+  "/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt"
+
+  "<EasyAgentBackend-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule"]
+    outputs: ["<EasyAgentBackend-arm64-apple-macosx-debug.module>"]
+
+  "<EasyAgentBackendTests-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackendTests.swiftmodule"]
+    outputs: ["<EasyAgentBackendTests-arm64-apple-macosx-debug.module>"]
+
+  "<EasyAgentPackageTests-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/runner.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentPackageTests.swiftmodule"]
+    outputs: ["<EasyAgentPackageTests-arm64-apple-macosx-debug.module>"]
+
+  "<EasyAgentPackageTests-arm64-apple-macosx-debug.test>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.xctest/Contents/MacOS/EasyAgentPackageTests"]
+    outputs: ["<EasyAgentPackageTests-arm64-apple-macosx-debug.test>"]
+
+  "<EasyAgentUI-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUI.swiftmodule"]
+    outputs: ["<EasyAgentUI-arm64-apple-macosx-debug.module>"]
+
+  "<EasyAgentUITests-arm64-apple-macosx-debug.module>":
+    tool: phony
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUITests.swiftmodule"]
+    outputs: ["<EasyAgentUITests-arm64-apple-macosx-debug.module>"]
+
+  "C.EasyAgentBackend-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/ChatSocket.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/Wire.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/sources"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule"]
+    description: "Compiling Swift Module 'EasyAgentBackend' (2 sources)"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-module-name","EasyAgentBackend","-emit-dependencies","-emit-module","-emit-module-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule","-output-file-map","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/sources","-I","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/include/EasyAgentBackend-Swift.h","-swift-version","5","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","mobile_ios"]
+
+  "C.EasyAgentBackendTests-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/BackendTests.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/ChatSocketTests.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/sources"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackendTests.swiftmodule"]
+    description: "Compiling Swift Module 'EasyAgentBackendTests' (2 sources)"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-module-name","EasyAgentBackendTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackendTests.swiftmodule","-output-file-map","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/sources","-I","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-swift-version","5","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","mobile_ios"]
+
+  "C.EasyAgentPackageTests-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.derived/runner.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUITests.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackendTests.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/sources"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/runner.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentPackageTests.swiftmodule"]
+    description: "Compiling Swift Module 'EasyAgentPackageTests' (1 sources)"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-module-name","EasyAgentPackageTests","-emit-dependencies","-emit-module","-emit-module-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentPackageTests.swiftmodule","-output-file-map","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/sources","-I","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/include/EasyAgentPackageTests-Swift.h","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","mobile_ios"]
+
+  "C.EasyAgentPackageTests-arm64-apple-macosx-debug.test":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/ChatSocket.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackend.build/Wire.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/BackendTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentBackendTests.build/ChatSocketTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.build/runner.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.product/Objects.LinkFileList"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.xctest/Contents/MacOS/EasyAgentPackageTests"]
+    description: "Linking ./.build/arm64-apple-macosx/debug/EasyAgentPackageTests.xctest/Contents/MacOS/EasyAgentPackageTests"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-L","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug","-o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.xctest/Contents/MacOS/EasyAgentPackageTests","-module-name","EasyAgentPackageTests","-Xlinker","-no_warn_duplicate_libraries","-Xlinker","-bundle","-Xlinker","-rpath","-Xlinker","@loader_path/../../../","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentPackageTests.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx14.0","-Xlinker","-add_ast_path","-Xlinker","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackendTests.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentPackageTests.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUI.swiftmodule","-Xlinker","-add_ast_path","-Xlinker","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUITests.swiftmodule","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g"]
+
+  "C.EasyAgentUI-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/AppModel.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/ChatProjection.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/KeychainStore.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/Views.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/sources"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/AppModel.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/ChatProjection.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/KeychainStore.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/Views.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUI.swiftmodule"]
+    description: "Compiling Swift Module 'EasyAgentUI' (4 sources)"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-module-name","EasyAgentUI","-emit-dependencies","-emit-module","-emit-module-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUI.swiftmodule","-output-file-map","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/sources","-I","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUI.build/include/EasyAgentUI-Swift.h","-swift-version","5","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","mobile_ios"]
+
+  "C.EasyAgentUITests-arm64-apple-macosx-debug.module":
+    tool: shell
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentUITests/ProjectionTests.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/swift-version--358F717B0AE4D10A.txt","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUI.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentBackend.swiftmodule","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/sources"]
+    outputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/ProjectionTests.swift.o","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUITests.swiftmodule"]
+    description: "Compiling Swift Module 'EasyAgentUITests' (1 sources)"
+    args: ["/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/bin/swiftc","-module-name","EasyAgentUITests","-emit-dependencies","-emit-module","-emit-module-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules/EasyAgentUITests.swiftmodule","-output-file-map","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/output-file-map.json","-parse-as-library","-incremental","-c","@/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/EasyAgentUITests.build/sources","-I","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/Modules","-target","arm64-apple-macosx14.0","-incremental","-enable-batch-mode","-serialize-diagnostics","-index-store-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/index/store","-Onone","-enable-testing","-Xfrontend","-enable-cross-import-overlays","-j8","-DSWIFT_PACKAGE","-DDEBUG","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/.build/arm64-apple-macosx/debug/ModuleCache","-parseable-output","-parse-as-library","-swift-version","5","-I","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-L","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/macosx/testing","-plugin-path","/Users/weijian/Library/Developer/Toolchains/swift-6.3.3-RELEASE.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-g","-Xcc","-isysroot","-Xcc","/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk","-Xcc","-fPIC","-Xcc","-g","-package-name","mobile_ios"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentBackend/","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Sources/EasyAgentUI/","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentBackendTests/","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Tests/EasyAgentUITests/","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Package.swift","/Users/weijian/Desktop/hwj/easyagent/mobile-ios/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
