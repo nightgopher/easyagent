@@ -8,6 +8,8 @@ import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -86,7 +88,9 @@ import com.hwj.easyagent.mobile.backend.MessageQueue
 import com.hwj.easyagent.mobile.backend.obj
 import com.hwj.easyagent.mobile.backend.pretty
 import com.hwj.easyagent.mobile.backend.str
-import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.*
+import com.hwj.easyagent.mobile.backend.getString
+import com.hwj.easyagent.mobile.backend.processTurns
 
 private sealed interface Entry {
     val key: String
@@ -95,8 +99,8 @@ private sealed interface Entry {
         override val key = "m${message.uid}"
     }
 
-    class Tools(val messages: List<ChatMessage>) : Entry {
-        override val key = "g${messages.first().uid}"
+    class Process(val messages: List<ChatMessage>, val expanded: Boolean) : Entry {
+        override val key = "p${messages.first().uid}"
     }
 
     class Approval(val confirmation: Confirmation) : Entry {
@@ -131,6 +135,8 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
+    var resources by rememberSaveable { mutableStateOf(false) }
+    if (resources) ResourceDialog(client, session) { resources = false }
     var loopDialog by remember { mutableStateOf(false) }
     if (loopDialog) LoopDialog(client, sessionId) { loopDialog = false }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
@@ -145,8 +151,10 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     // revision 驱动列表结构与会话状态，消息字段自身可观察；倒序让列表自然贴底。
     val entries = remember(rev, sessionId) {
         buildList<Entry> {
-            toolRuns(session.messages).forEach { run ->
-                add(if (run.size > 1) Entry.Tools(run) else Entry.Message(run.first()))
+            processTurns(session.messages, session.running || session.pending, session.run?.state in setOf("cancelled", "interrupted", "failed")).forEach { turn ->
+                turn.user?.let { add(Entry.Message(it)) }
+                if (turn.process.isNotEmpty()) add(Entry.Process(turn.process, turn.open))
+                turn.answer?.let { add(Entry.Message(it)) }
             }
             session.confirmations.forEach { add(Entry.Approval(it)) }
             if (session.queue.items.isNotEmpty()) add(Entry.Queue)
@@ -177,6 +185,9 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                     IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                 },
                 actions = {
+                    TextButton(enabled = !busy && session.accessMode.isNotEmpty(), onClick = {
+                        client.setAccess(session, if (session.accessMode == "full") "ask" else "full")
+                    }) { Text(when (session.accessMode) { "full" -> "全权限"; "ask" -> "需审批"; else -> "权限未知" }) }
                     IconButton(onClick = { loopDialog = true }) { Icon(Icons.Filled.Autorenew, contentDescription = "循环任务") }
                     if (busy) {
                         IconButton(onClick = { client.cancelRun(session) }) {
@@ -186,7 +197,21 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 },
             )
         },
-        bottomBar = { MediaComposer(client, session, link, queued = busy) },
+        bottomBar = { Column {
+            Row {
+                TextButton(onClick = { resources = true }) { Text("文件与知识") }
+                if (session.references.isNotEmpty()) TextButton(onClick = { session.references = emptyList(); client.touch() }) { Text("清除 ${session.references.size} 个引用") }
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                session.references.forEach { reference ->
+                    TextButton(onClick = { session.references = session.references - reference; client.touch() }) {
+                        Text("× " + reference.getString("path").substringAfterLast('/'), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+            if (session.run?.canContinue == true && !busy) TextButton(onClick = { client.continueRun(session) }) { Text("继续中断的任务") }
+            MediaComposer(client, session, link, queued = busy)
+        } },
         snackbarHost = { SnackbarHost(snackbar) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { padding ->
@@ -205,11 +230,39 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             onToggle = { client.touch() },
                             images = { MessageImages(client, sessionId, it) },
                         )
-                        is Entry.Tools -> ToolGroup(entry.messages) { client.touch() }
-                        is Entry.Approval -> ApprovalCard(entry.confirmation) { approved ->
-                            client.confirm(session, entry.confirmation.id, approved)
+                        is Entry.Process -> {
+                            var expanded by rememberSaveable(entry.key, entry.expanded) { mutableStateOf(entry.expanded) }
+                            Column {
+                                TextButton(onClick = { expanded = !expanded }) {
+                                    Text((if (expanded) "收起" else "展开") + "执行过程 · ${entry.messages.size} 项")
+                                }
+                                if (expanded) toolRuns(entry.messages).forEach { group ->
+                                    if (group.size > 1) ToolGroup(group) { client.touch() }
+                                    else {
+                                        val message = group.first()
+                                        MessageRow(message, session.running && message === session.messages.lastOrNull(), { client.touch() }) { MessageImages(client, sessionId, it) }
+                                    }
+                                }
+                            }
                         }
-                        Entry.Queue -> QueueBanner(session.queue)
+                        is Entry.Approval -> ApprovalCard(entry.confirmation) { approved, answers ->
+                            client.confirm(session, entry.confirmation.id, approved, answers)
+                        }
+                        Entry.Queue -> Column {
+                            QueueBanner(session.queue)
+                            TextButton(onClick = { client.changeQueue(session, if (session.queue.paused) "resume" else "pause") }) { Text(if (session.queue.paused) "恢复队列" else "暂停队列") }
+                            session.queue.items.forEach { item ->
+                                var editing by rememberSaveable(item.id) { mutableStateOf(false) }
+                                var queuedText by rememberSaveable(item.id, item.prompt) { mutableStateOf(item.prompt) }
+                                if (editing) OutlinedTextField(queuedText, { queuedText = it }, label = { Text("排队消息") })
+                                else Text(item.prompt, maxLines = 3)
+                                Row {
+                                    TextButton(onClick = { if (editing && queuedText.isNotBlank()) client.changeQueue(session, "edit", item.id, queuedText); editing = !editing }) { Text(if (editing) "保存" else "编辑") }
+                                    TextButton(onClick = { client.changeQueue(session, "remove", item.id) }) { Text("移除") }
+                                    TextButton(enabled = !busy, onClick = { client.changeQueue(session, "send_now", item.id) }) { Text("立即发送") }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -435,7 +488,11 @@ private fun ToolGroup(messages: List<ChatMessage>, onToggle: () -> Unit) {
  * and only shell commands, which can do anything, are drawn as a warning.
  */
 @Composable
-private fun ApprovalCard(c: Confirmation, onDecide: (Boolean) -> Unit) {
+private fun ApprovalCard(c: Confirmation, onDecide: (Boolean, JsonArray?) -> Unit) {
+    if (c.toolName == "ask_user_question") {
+        QuestionCard(c, onDecide)
+        return
+    }
     var showArgs by rememberSaveable(c.id) { mutableStateOf(false) }
     val risky = c.toolName == "bash"
     val accent = if (risky) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
@@ -461,8 +518,8 @@ private fun ApprovalCard(c: Confirmation, onDecide: (Boolean) -> Unit) {
                     TextButton(onClick = { showArgs = !showArgs }) { Text(if (showArgs) "收起参数" else "查看参数") }
                 }
                 Spacer(Modifier.weight(1f))
-                OutlinedButton(onClick = { onDecide(false) }) { Text("拒绝") }
-                Button(onClick = { onDecide(true) }) { Text("批准") }
+                OutlinedButton(onClick = { onDecide(false, null) }) { Text("拒绝") }
+                Button(onClick = { onDecide(true, null) }) { Text("批准") }
             }
         }
     }
@@ -558,3 +615,43 @@ private fun truncate(text: String, limit: Int = 6000): String =
 private object NotificationPrompt {
     var asked = false
 }
+
+@Composable
+private fun QuestionCard(c: Confirmation, onDecide: (Boolean, JsonArray?) -> Unit) {
+    val questions = (c.args?.obj()?.get("questions") as? JsonArray).orEmpty()
+    var responses by rememberSaveable(c.id) { mutableStateOf(List(questions.size) { "" }) }
+    var selected by rememberSaveable(c.id) { mutableStateOf(List(questions.size) { "[]" }) }
+    Card { Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("需要你回答", style = MaterialTheme.typography.titleMedium)
+        questions.forEachIndexed { index, element ->
+            val q = element.obj()
+            val multi = q["multiSelect"]?.str() == "true"
+            val choices = (wireJsonForQuestions(selected[index]) as? JsonArray).orEmpty().map { it.str() }
+            Text(q.getString("question"))
+            (q["options"] as? JsonArray).orEmpty().forEach { option ->
+                val label = option.obj().getString("label")
+                OutlinedButton(onClick = {
+                    val next = if (label in choices) choices - label else if (multi) choices + label else listOf(label)
+                    selected = selected.toMutableList().also { it[index] = JsonArray(next.map(::JsonPrimitive)).toString() }
+                    if (!multi) responses = responses.toMutableList().also { it[index] = "" }
+                }) { Column {
+                    Text((if (label in choices) "✓ " else "") + label)
+                    option.obj().getString("description").takeIf { it.isNotEmpty() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                } }
+            }
+            OutlinedTextField(value = responses[index], onValueChange = { text ->
+                responses = responses.toMutableList().also { it[index] = text }
+                if (!multi && text.isNotBlank()) selected = selected.toMutableList().also { it[index] = "[]" }
+            }, label = { Text("其他回答") }, modifier = Modifier.fillMaxWidth())
+        }
+        Row {
+            TextButton(onClick = { onDecide(false, null) }) { Text("跳过") }
+            Button(enabled = questions.isNotEmpty() && questions.indices.all { responses[it].isNotBlank() || selected[it] != "[]" }, onClick = {
+                onDecide(true, JsonArray(questions.indices.map { index -> buildJsonObject {
+                    put("selected", wireJsonForQuestions(selected[index])); put("text", responses[index].trim())
+                } }))
+            }) { Text("提交回答") }
+        }
+    } }
+}
+private fun wireJsonForQuestions(text: String) = com.hwj.easyagent.mobile.backend.wireJson.parseToJsonElement(text)

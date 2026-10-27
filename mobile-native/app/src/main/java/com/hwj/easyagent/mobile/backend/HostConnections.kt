@@ -59,7 +59,7 @@ class HostConnections(
         for (host in next.hosts) {
             // 解密失败的配置仍可编辑/删除，但绝不降级为无令牌请求。
             if (host.token != null && !clients.containsKey(host.id)) {
-                clients[host.id] = AgentClient(host).also {
+                clients[host.id] = AgentClient(host, settings.draftPreferences).also {
                     it.onAlert = onAlert
                     it.start()
                 }

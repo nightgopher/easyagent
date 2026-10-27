@@ -52,6 +52,8 @@ class RuntimeUiTest {
             app.updater.setAutomatic(false) // Runtime fixtures must never contact GitHub.
             app.connections.state.value.hosts.map { it.id }.forEach(app.connections::remove)
         }
+        java.io.File(instrumentation.targetContext.filesDir, "shares").deleteRecursively()
+        app.shares.value = emptyList()
         // The app asks for notifications when a message is first sent; grant it up
         // front so the system dialog never covers the Compose hierarchy.
         if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -72,16 +74,16 @@ class RuntimeUiTest {
     }
 
     private fun host(name: String) = RuntimeFixture(name).also { hosts += it }
-    private fun waitText(text: String) {
+    private fun waitText(text: String, useUnmergedTree: Boolean = false) {
         try {
-            ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+            ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true, useUnmergedTree = useUnmergedTree).fetchSemanticsNodes().isNotEmpty() }
         } catch (error: ComposeTimeoutException) {
             screenshot("failure")
             var projected = ""
             instrumentation.runOnMainSync {
                 projected = app.connections.client.value?.activeChat?.messages?.joinToString(" | ") { it.text }.orEmpty()
             }
-            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).fetchSemanticsNodes().joinToString { it.config.toString() }}", error)
+            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).fetchSemanticsNodes().indices.joinToString("\n") { ui.onAllNodes(isRoot())[it].printToString(maxDepth = 20) }}", error)
         }
     }
     private fun fill(label: String, value: String) {
@@ -177,6 +179,110 @@ class RuntimeUiTest {
         openChat(first)
         ui.onNode(hasSetTextAction()).assertTextEquals("A 的未发送草稿")
         screenshot("independent-drafts")
+    }
+
+    @Test fun newSessionRequestsFullModeAndExistingSessionDoesNot() {
+        val host = host("权限主机")
+        connect(host); openChat(host)
+        waitText("需审批")
+        assertFalse(host.calls.any { it.path?.endsWith("/permissions") == true })
+        ui.onNodeWithContentDescription("返回").performClick()
+        ui.waitUntil(10000) { ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        ui.onNodeWithText("新会话", useUnmergedTree = true).performClick()
+        // 模型异步加载后，小屏弹窗仍需将所选项滚动到可点击区域。
+        waitText("fixture-model", useUnmergedTree = true)
+        ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
+        ui.onNodeWithText("创建", substring = false).performClick()
+        waitText("全权限")
+        assertEquals("full", host.accessMode)
+        val created = host.calls.first { it.path == "/sessions" && it.method == "POST" }
+        assertEquals("fixture-model", JSONObject(created.body.clone().readUtf8()).getString("model"))
+        screenshot("new-session-full-mode")
+    }
+
+    @Test fun sharedTextRequiresReviewAndBecomesRecoverableDraft() {
+        val host = host("分享主机")
+        connect(host)
+        activity.close()
+        activity = ActivityScenario.launch(android.content.Intent(instrumentation.targetContext, MainActivity::class.java)
+            .setAction(android.content.Intent.ACTION_SEND).setType("text/plain")
+            .putExtra(android.content.Intent.EXTRA_TEXT, "https://example.com/ 待整理的材料"))
+        waitText("接收分享")
+        assertTrue(host.prompts.isEmpty())
+        screenshot("share-review")
+        ui.onNodeWithText("带入新会话").performClick()
+        waitText("已保存的历史")
+        ui.onNode(hasSetTextAction()).assertTextEquals("https://example.com/ 待整理的材料")
+        assertTrue(host.prompts.isEmpty())
+        val config = app.connections.client.value!!.config
+        instrumentation.runOnMainSync {
+            val restored = com.hwj.easyagent.mobile.backend.AgentClient(config, instrumentation.targetContext.getSharedPreferences("easyagent-host", 0))
+            assertEquals("https://example.com/ 待整理的材料", restored.chat("qa-session").draft)
+            restored.shutdown()
+        }
+        screenshot("share-draft")
+    }
+
+    @Test fun resourcesPreviewPdfImagesAndAttachKnowledge() {
+        val host = host("成果主机")
+        connect(host); openChat(host)
+        ui.onNodeWithText("文件与知识").performClick()
+        waitText("note.md")
+        ui.onNodeWithText("note.md").performClick()
+        waitText("测试成果")
+        ui.onNodeWithText("引用到当前会话").performClick()
+        ui.onNodeWithText("report.pdf").performClick()
+        waitText("1/1")
+        ui.waitUntil(10000) { ui.onAllNodesWithContentDescription("/qa/report.pdf").fetchSemanticsNodes().isNotEmpty() }
+        screenshot("pdf-preview")
+        ui.onAllNodesWithText("关闭").onLast().performClick()
+        ui.onNodeWithText("image.png").performClick()
+        ui.waitUntil(10000) { ui.onAllNodesWithContentDescription("/qa/image.png").fetchSemanticsNodes().isNotEmpty() }
+        screenshot("image-preview")
+        ui.onAllNodesWithText("关闭").onLast().performClick()
+        ui.onNodeWithText("知识", substring = false).performClick()
+        waitText("测试知识")
+        ui.onNodeWithText("测试知识").performClick()
+        waitText("可引用的知识正文")
+        ui.onNodeWithText("引用到当前会话").performClick()
+        ui.onNodeWithText("关闭").performClick()
+        prompt("使用这些引用")
+        val sent = host.prompts.poll(10, TimeUnit.SECONDS)!!
+        val refs = sent.getJSONObject("inputs").getJSONArray("files")
+        assertEquals(2, refs.length())
+        assertEquals("workspace", refs.getJSONObject(0).getString("scope"))
+        assertEquals("knowledge", refs.getJSONObject(1).getString("scope"))
+        assertEquals("/qa", refs.getJSONObject(1).getString("workspace"))
+    }
+
+    @Test fun sharedFilesAreCopiedBeforeUriGrantExpires() = kotlinx.coroutines.runBlocking {
+        val context = instrumentation.targetContext
+        val first = java.io.File(context.cacheDir, "camera/share-a/same.txt").apply { parentFile!!.mkdirs(); writeText("first") }
+        val second = java.io.File(context.cacheDir, "camera/share-b/same.txt").apply { parentFile!!.mkdirs(); writeText("second") }
+        val uris = arrayListOf(first, second).map { androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", it) }
+        val intent = android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).setType("text/plain")
+            .putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, ArrayList(uris))
+        val capture = com.hwj.easyagent.mobile.media.receiveShare(context, intent)
+        first.delete(); second.delete()
+        val restored = com.hwj.easyagent.mobile.media.loadShares(context).single { it.id == capture.id }
+        assertEquals(2, restored.files.size)
+        assertNotEquals(restored.files[0].storage, restored.files[1].storage)
+        assertEquals(listOf("first", "second"), restored.files.map { java.io.File(context.filesDir, "shares/${capture.id}/${it.storage}").readText() })
+        com.hwj.easyagent.mobile.media.removeShare(context, capture)
+    }
+
+    @Test fun structuredQuestionSubmitsActualAnswers() {
+        val host = host("问答主机")
+        connect(host); openChat(host)
+        prompt("请先问我")
+        host.accept(host.prompts.poll(10, TimeUnit.SECONDS)!!)
+        host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"question-1","tool_name":"ask_user_question","args":{"questions":[{"question":"选择框架","options":[{"label":"Compose"},{"label":"Views"}]}]}}"""))
+        waitText("选择框架")
+        ui.onNodeWithText("Compose", substring = false).performScrollTo().performClick()
+        ui.onNodeWithText("提交回答").performScrollTo().performClick()
+        ui.waitUntil(10000) { host.calls.any { it.path?.endsWith("/run/confirm") == true } }
+        val body = JSONObject(host.calls.first { it.path?.endsWith("/run/confirm") == true }.body.clone().readUtf8())
+        assertEquals("Compose", body.getJSONArray("answers").getJSONObject(0).getJSONArray("selected").getString(0))
     }
 
     @Test fun streamingApprovalQueueStopAndReconnect() {
@@ -426,6 +532,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     val socketCount = AtomicInteger()
     @Volatile var socket: WebSocket? = null
     private val sequence = AtomicInteger()
+    @Volatile var accessMode = "ask"
     @Volatile private var running = false
     private var runPrompt = ""
     private var requestId = ""
@@ -458,6 +565,39 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                             }
                         }
                     })
+                    path == "/workspace/list-dir" -> json("""[{"name":"note.md","path":"/qa/note.md","isDir":false},{"name":"report.pdf","path":"/qa/report.pdf","isDir":false},{"name":"image.png","path":"/qa/image.png","isDir":false}]""")
+                    path == "/kb/entries" -> json("""{"entries":[{"path":"notes/kb.md","title":"测试知识"}]}""")
+                    path == "/kb/read" -> json("""{"content":"可引用的知识正文"}""")
+                    path == "/workspace/file-data" -> {
+                        val file = request.requestUrl!!.queryParameter("path").orEmpty()
+                        val output = java.io.ByteArrayOutputStream()
+                        val mime = when {
+                            file.endsWith(".pdf") -> {
+                                val doc = android.graphics.pdf.PdfDocument()
+                                try {
+                                    val page = doc.startPage(android.graphics.pdf.PdfDocument.PageInfo.Builder(300, 400, 1).create())
+                                    page.canvas.drawText("PDF fixture", 20f, 40f, android.graphics.Paint().apply { textSize = 20f })
+                                    doc.finishPage(page); doc.writeTo(output)
+                                } finally { doc.close() }
+                                "application/pdf"
+                            }
+                            file.endsWith(".png") -> {
+                                val bitmap = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
+                                bitmap.eraseColor(Color.BLUE); bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); bitmap.recycle()
+                                "image/png"
+                            }
+                            else -> { output.write("# 测试成果".toByteArray()); "text/plain" }
+                        }
+                        json(JSONObject().put("mimeType", mime).put("data", java.util.Base64.getEncoder().encodeToString(output.toByteArray())).toString())
+                    }
+                    path.endsWith("/info") -> json("""{"access_mode":"$accessMode","workspace":"/qa"}""")
+                    path.endsWith("/permissions") -> {
+                        accessMode = JSONObject(request.body.clone().readUtf8()).getString("mode")
+                        json("""{"access_mode":"$accessMode"}""")
+                    }
+                    path == "/models" -> json("""{"models":[{"id":"fixture-model"}]}""")
+                    path == "/sessions" && request.method == "POST" -> json("""{"id":"qa-session"}""")
+                    path == "/inbox" && request.method == "POST" -> json(request.body.clone().readUtf8())
                     path == "/sessions" && request.method == "GET" -> json(JSONArray().put(sessionSummary()).toString())
                     path.endsWith("/run/confirm") -> {
                         emit("confirmed", "confirmation_id" to JSONObject(request.body.clone().readUtf8()).getString("confirmation_id"))

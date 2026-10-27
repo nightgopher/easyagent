@@ -29,10 +29,13 @@ enum class LinkStatus { CONNECTING, CONNECTED, DISCONNECTED }
  * 一台运行主机的连接：维护 WebSocket 订阅、重连与各会话的投影状态。
  * 所有状态只在主线程修改；UI 通过 [revision] 感知变化后直接读取。
  */
-class AgentClient(val config: HostConfig) {
+class AgentClient(val config: HostConfig, private val drafts: android.content.SharedPreferences? = null) {
     val api = ApiClient(config.url, requireNotNull(config.token))
     val link = MutableStateFlow(LinkStatus.CONNECTING)
     val sessions = MutableStateFlow<List<SessionSummary>>(emptyList())
+    val taskStates = MutableStateFlow<Map<String, String>>(emptyMap())
+    val unread = MutableStateFlow<Set<String>>(emptySet())
+    private var reconcileOnRefresh = true
     val sessionsLoading = MutableStateFlow(false)
     val error = MutableStateFlow<String?>(null)
     val activeId = MutableStateFlow<String?>(null)
@@ -50,7 +53,39 @@ class AgentClient(val config: HostConfig) {
 
     val activeChat: ChatSession? get() = activeId.value?.let { chats[it] }
 
-    fun chat(id: String): ChatSession = chats.getOrPut(id) { ChatSession(id) }
+    private val credentialScope = java.security.MessageDigest.getInstance("SHA-256")
+        .digest((config.url + "\n" + config.token.orEmpty()).toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
+    val storageIdentity: String get() = config.id + ":" + credentialScope
+    private fun draftKey(id: String) = storageIdentity + ":" + id
+    fun chat(id: String): ChatSession = chats.getOrPut(id) {
+        ChatSession(id).also { session ->
+            drafts?.getString(draftKey(id), null)?.let { saved ->
+                runCatching {
+                    val data = wireJson.parseToJsonElement(saved).obj()
+                    session.draft = data.getString("text")
+                    session.references = (data["references"] as? JsonArray).orEmpty().map { it.obj() }
+                    session.sentReferences = (data["sentReferences"] as? JsonArray).orEmpty().map { it.obj() }
+                    session.pendingRequest = data.getString("request")
+                    session.sentDraft = data.getString("sent")
+                    session.attachments = wireJson.decodeFromJsonElement(ListSerializer(UploadedAttachment.serializer()), data["attachments"] ?: JsonArray(emptyList())).map { PendingAttachment(it, null) }
+                    session.sentAttachments = (data["sentAttachments"] as? JsonArray).orEmpty().map { it.str() }.toSet()
+                }
+            }
+        }
+    }
+    private fun saveDrafts() {
+        val editor = drafts?.edit() ?: return
+        chats.values.forEach { s ->
+            val data = buildJsonObject {
+                put("references", JsonArray(s.references)); put("sentReferences", JsonArray(s.sentReferences))
+                put("text", s.draft); put("request", s.pendingRequest); put("sent", s.sentDraft)
+                put("attachments", wireJson.encodeToJsonElement(ListSerializer(UploadedAttachment.serializer()), s.attachments.map { it.attachment }))
+                put("sentAttachments", JsonArray(s.sentAttachments.map { JsonPrimitive(it) }))
+            }.toString()
+            if (drafts.getString(draftKey(s.id), null) != data) editor.putString(draftKey(s.id), data)
+        }
+        editor.apply()
+    }
 
     fun start() {
         connect()
@@ -67,7 +102,9 @@ class AgentClient(val config: HostConfig) {
     /** 回到前台：立即重连并刷新会话列表。 */
     fun resume() {
         if (closed) return
+        reconcileOnRefresh = true
         refreshSessions()
+        chats.values.toList().forEach(::reload)
         if (link.value == LinkStatus.DISCONNECTED) {
             reconnectJob?.cancel()
             backoffMs = 1_000L
@@ -89,6 +126,7 @@ class AgentClient(val config: HostConfig) {
     internal suspend fun awaitShutdown() { scope.coroutineContext.job.join() }
 
     fun touch() {
+        saveDrafts()
         revision.value++
     }
 
@@ -101,7 +139,7 @@ class AgentClient(val config: HostConfig) {
                 link.value = LinkStatus.CONNECTED
                 backoffMs = 1_000L
                 error.value = null
-                activeChat?.let(::subscribe)
+                chats.values.forEach(::subscribe)
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) = post {
@@ -168,6 +206,15 @@ class AgentClient(val config: HostConfig) {
             error.value = e.message
         }
         s.reduce(e)
+        s.run?.let { run ->
+            taskStates.value = taskStates.value + (s.id to run.state)
+            if (run.state in setOf("completed", "failed", "interrupted", "cancelled")) {
+                val key = draftKey(s.id) + ":read"
+                val viewing = com.hwj.easyagent.mobile.AppVisibility.foreground && com.hwj.easyagent.mobile.AppVisibility.openChat == "${config.id}/${s.id}"
+                if (viewing) { drafts?.edit()?.putString(key, run.id)?.apply(); unread.value = unread.value - s.id }
+                else if (drafts?.getString(key, null) != run.id) unread.value = unread.value + s.id
+            }
+        }
         onAlert?.let { notify -> alertsFor(before, s).forEach { notify(this, it) } }
         if (e.type == "status" && !s.running) refreshSessions()
         touch()
@@ -180,6 +227,10 @@ class AgentClient(val config: HostConfig) {
     fun open(id: String) {
         activeId.value = id
         val s = chat(id)
+        scope.launch {
+            try { val info = api.get(ApiClient.sessionPath(id) + "/info").obj(); s.accessMode = info.getString("access_mode"); s.workspace = info.getString("workspace"); touch() }
+            catch (e: ApiException) { error.value = e.message }
+        }
         touch()
         reload(s)
     }
@@ -210,10 +261,11 @@ class AgentClient(val config: HostConfig) {
         }
         val inputs = buildJsonObject {
             put("attachments", JsonArray(s.attachments.map { JsonPrimitive(it.attachment.id) }))
-            put("files", JsonArray(emptyList()))
+            put("files", JsonArray(s.references))
         }
         val attachments = s.attachments.map { it.attachment.id }.toSet()
-        if (s.pendingRequest == "" || s.sentDraft != text || s.sentAttachments != attachments) s.pendingRequest = requestId()
+        if (s.pendingRequest == "" || s.sentDraft != text || s.sentAttachments != attachments || s.sentReferences != s.references) s.pendingRequest = requestId()
+        s.sentReferences = s.references
         s.sentAttachments = attachments
         s.sentDraft = text
         val request = s.pendingRequest
@@ -273,11 +325,12 @@ class AgentClient(val config: HostConfig) {
         call(ApiClient.sessionPath(s.id) + "/run/cancel", buildJsonObject { put("run_id", s.runId) }) { reload(s) }
     }
 
-    fun confirm(s: ChatSession, confirmationId: String, approved: Boolean) {
+    fun confirm(s: ChatSession, confirmationId: String, approved: Boolean, answers: JsonArray? = null) {
         val body = buildJsonObject {
             put("run_id", s.runId)
             put("confirmation_id", confirmationId)
             put("approved", approved)
+            answers?.let { put("answers", it) }
         }
         call(ApiClient.sessionPath(s.id) + "/run/confirm", body) { reload(s) }
     }
@@ -319,6 +372,10 @@ class AgentClient(val config: HostConfig) {
             try {
                 val raw = api.get("/sessions")
                 val list = wireJson.decodeFromJsonElement(ListSerializer(SessionSummary.serializer()), raw)
+                val finished = sessions.value.filter { it.running && list.none { next -> next.id == it.id && next.running } }.map { it.id }
+                val reconcile = if (reconcileOnRefresh) list.filter { !it.archived }.sortedByDescending { it.lastActive }.take(12).map { it.id } else emptyList()
+                reconcileOnRefresh = false
+                (finished + reconcile).distinct().forEach { reload(chat(it)) }
                 sessions.value = list.filter { it.id.isNotEmpty() }.sortedByDescending { it.pinned }
             } catch (e: ApiException) {
                 error.value = e.message
@@ -328,12 +385,17 @@ class AgentClient(val config: HostConfig) {
         }
     }
 
-    fun createSession(onCreated: (String) -> Unit) {
+    fun createSession(cwd: String = "", model: String = "", onCreated: (String) -> Unit) {
         scope.launch {
             try {
-                val raw = api.post("/sessions", buildJsonObject {})
+                val raw = api.post("/sessions", buildJsonObject { put("cwd", cwd); put("model", model) })
                 val id = raw.obj().getString("id")
                 if (id.isEmpty()) throw ApiException("服务未返回会话 ID")
+                // Only newly created mobile sessions opt into full mode.
+                try {
+                    val mode = api.post(ApiClient.sessionPath(id) + "/permissions", buildJsonObject { put("mode", "full") })
+                    chat(id).accessMode = mode.obj().getString("access_mode")
+                } catch (e: ApiException) { error.value = "会话已创建，但全权限设置失败：" + e.message }
                 refreshSessions()
                 onCreated(id)
             } catch (e: ApiException) {
@@ -342,11 +404,22 @@ class AgentClient(val config: HostConfig) {
         }
     }
 
+    fun setAccess(s: ChatSession, mode: String) {
+        call(ApiClient.sessionPath(s.id) + "/permissions", buildJsonObject { put("mode", mode) }) { open(s.id) }
+    }
+    fun changeQueue(s: ChatSession, action: String, id: String = "", prompt: String = "") {
+        call(ApiClient.sessionPath(s.id) + "/queue", buildJsonObject { put("action", action); put("id", id); put("prompt", prompt) }) { reload(s) }
+    }
+    fun continueRun(s: ChatSession) {
+        call(ApiClient.sessionPath(s.id) + "/run/continue", buildJsonObject { put("run_id", s.runId); put("request_id", requestId()) }) { reload(s) }
+    }
+
     fun deleteSession(id: String) {
         scope.launch {
             try {
                 api.delete(ApiClient.sessionPath(id))
                 chats.remove(id)
+                drafts?.edit()?.remove(draftKey(id))?.apply()
                 if (activeId.value == id) activeId.value = null
                 refreshSessions()
             } catch (e: ApiException) {
@@ -379,6 +452,8 @@ class AgentClient(val config: HostConfig) {
     private fun acknowledgeDraft(s: ChatSession) {
         if (s.draft == s.sentDraft) s.draft = ""
         s.attachments = s.attachments.filterNot { it.attachment.id in s.sentAttachments }
+        s.references = s.references.filterNot { it in s.sentReferences }
+        s.sentReferences = emptyList()
         s.sentAttachments = emptySet()
     }
 

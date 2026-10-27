@@ -43,7 +43,13 @@ class HostConnectionsTest {
                             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(code, reason) }
                         })
                     } else {
-                        MockResponse().setBody("""[{"id":"shared","title":"$id session"}]""")
+                        val body = when {
+                            request.path == "/sessions" -> """[{"id":"shared","title":"$id session"}]"""
+                            request.path?.endsWith("/run") == true -> """{"type":"snapshot","session_id":"shared","messages":[]}"""
+                            request.path?.endsWith("/info") == true -> """{"access_mode":"ask","workspace":"/fixture"}"""
+                            else -> "{}"
+                        }
+                        MockResponse().setBody(body)
                     }
                 }
             }
@@ -72,7 +78,8 @@ class HostConnectionsTest {
                 eventually {
                     listOf("a", "b").all { id ->
                         connections.clientFor(id)?.let { it.link.value == LinkStatus.CONNECTED && it.sessions.value.isNotEmpty() } == true
-                    } && a.socket != null && b.socket != null
+                    } && a.socket != null && b.socket != null &&
+                        listOf(a, b).all { host -> synchronized(host.authorizations) { host.authorizations.any { it.first.endsWith("/run") } } }
                 }
                 block(a, b, settings, prefs, connections)
             }
