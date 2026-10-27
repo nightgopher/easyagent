@@ -189,9 +189,7 @@ class RuntimeUiTest {
         ui.onNodeWithContentDescription("返回").performClick()
         ui.waitUntil(10000) { ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         ui.onNodeWithText("新会话", useUnmergedTree = true).performClick()
-        // 小屏弹窗先滚动，再查找被裁剪的模型节点；不能等待屏外节点先出现。
-        waitText("使用默认模型")
-        ui.onNode(hasScrollAction() and hasAnyAncestor(isDialog())).performTouchInput { swipeUp() }
+        // 模型异步加载后，小屏弹窗仍需将所选项滚动到可点击区域。
         waitText("fixture-model", useUnmergedTree = true)
         ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
         ui.onNodeWithText("创建", substring = false).performClick()
