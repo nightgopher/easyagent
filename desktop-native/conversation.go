@@ -143,6 +143,27 @@ func (a *preview) conversationMessages(c *ui.Context, s *session) {
 		ui.Text(c, "正在提交消息…").TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
 	}
 	for i := 0; i < len(s.Messages); {
+		if a.Live != nil && !s.Messages[i].User {
+			p := conversationProcess(s, i)
+			// Existing consecutive tool groups already have the desired compact display.
+			// Use the turn container when reasoning or intermediate prose needs grouping.
+			needsProcess := false
+			limit := p.End
+			if p.Answer >= 0 {
+				limit = p.Answer
+			}
+			for j := i; j < limit; j++ {
+				if s.Messages[j].Kind == "thought" || (s.Messages[j].Kind == "" && s.Messages[j].Tool == "") {
+					needsProcess = true
+				}
+			}
+			if needsProcess {
+				a.processMessages(c, s, p, selected)
+				i = p.End
+				continue
+			}
+		}
+
 		if a.Live != nil && s.Messages[i].Kind == "tool" {
 			end := i + 1
 			for end < len(s.Messages) && s.Messages[end].Kind == "tool" {
@@ -373,6 +394,13 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			if path := toolFilePath(m); path != "" {
 				flatButton(c, "file", path).AlignSelf(ui.Start).FontSize(11).MinWidth(0).Label("工具文件：" + path).OnClick(func() { a.openResource("files"); a.openNativeFile(path) })
 			}
+			a.action(c, "加入整理材料").AlignSelf(ui.Start).OnClick(func() {
+				text := m.Result
+				if text == "" {
+					text = m.Text
+				}
+				a.collectMaterial(text, "session:"+a.current().RemoteID+"/tool:"+m.CallID)
+			})
 			if m.Kind == "thought" || m.Kind == "compaction" {
 				a.renderSessionMarkdown(c, &m.Markdown, m.Text, a.current(), "", false)
 				return
@@ -444,6 +472,8 @@ func (a *preview) nativeThought(c *ui.Context, s *session, i int, m *message) {
 	isGenerating := s.Running && i == len(s.Messages)-1
 	if isGenerating && !m.ExpansionTouched {
 		m.Expanded = true
+	} else if !isGenerating && !m.ExpansionTouched {
+		m.Expanded = false
 	}
 
 	ui.Column(c).Gap(6).MinWidth(0).Children(func() {

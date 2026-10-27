@@ -108,6 +108,7 @@ func (a *preview) liveChrome(c *ui.Context) {
 		}
 	})
 }
+
 // sidebarBucketThreshold is the number of unpinned sessions in a project from
 // which they are grouped under date headings.
 const sidebarBucketThreshold = 8
@@ -518,6 +519,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 						a.refreshModels()
 					})
 					a.liveModelPicker(c, model)
+					iconButton(c, "file", "先记下来").Disabled(strings.TrimSpace(s.Draft) == "" || s.Sending || len(s.Attachments) > 0 || len(s.FileReferences) > 0 || l.Loading["capture-save"]).OnClick(func() { a.saveDraftToInbox(s) })
 					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
 					ui.Spacer(c)
 					if l.Voice != nil {

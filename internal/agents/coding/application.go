@@ -6,6 +6,7 @@ import (
 	codingprofile "github.com/nightgopher/easyagent/internal/agents/coding/profile"
 	codingprompt "github.com/nightgopher/easyagent/internal/agents/coding/prompt"
 	codingtools "github.com/nightgopher/easyagent/internal/agents/coding/tools"
+	"github.com/nightgopher/easyagent/internal/capture"
 	modelsreg "github.com/nightgopher/easyagent/internal/models"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai"
@@ -80,6 +81,8 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 		backgroundTasks = ext.BackgroundTasks()
 	}
 
+	extensions := append([]agent.Tool{}, opts.ExtensionTools...)
+	extensions = append(extensions, capture.Tool{Store: capture.New(a.Cfg.DataDir), Source: "session:" + opts.SessionID})
 	return codingtools.BuildList(codingtools.ListOptions{
 		Workspace:              opts.Workspace,
 		AllowOutsideWorkspace:  a.Cfg.AllowOutsideWorkspace,
@@ -95,7 +98,7 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 		ComputerApprovalPolicy: a.Cfg.ComputerApprovalPolicy,
 		ComputerApprovedApps:   a.Cfg.ApprovedApps,
 		FileOps:                opts.FileOps,
-		ExtensionTools:         opts.ExtensionTools,
+		ExtensionTools:         extensions,
 		AllowedTools:           opts.AllowedTools,
 		BlockedTools:           opts.BlockedTools,
 		FileMutationQueue:      mutationQueue,

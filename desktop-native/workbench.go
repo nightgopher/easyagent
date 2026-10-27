@@ -37,6 +37,7 @@ type nativeFile struct {
 	Image                                      *ui.Bitmap
 }
 type nativeWorkbench struct {
+	Capture                                                                          captureWorkbench
 	KBCloud                                                                          kbTagCloud
 	KBPaneWidth                                                                      float32
 	KBActiveTag                                                                      string
@@ -97,6 +98,8 @@ func (a *preview) refreshWorkbench() {
 		return
 	}
 	switch w.Tab {
+	case "inbox":
+		a.resource("inbox", "/inbox")
 	case "files":
 		a.bindFileScope()
 		w.Directories = map[string]*nativeDirectory{}
@@ -144,7 +147,7 @@ func (a *preview) refreshWorkbench() {
 }
 
 var workbenchTabs = []struct{ id, label, icon string }{
-	{"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"skills", "技能", "code"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
+	{"inbox", "收件箱", "file"}, {"artifact", "成果草稿", "file"}, {"review", "审查", "git-branch"}, {"files", "文件", "folder"}, {"plan", "计划", "file"}, {"tasks", "任务", "check"}, {"background", "后台", "terminal"}, {"kb", "知识库", "book"}, {"profile", "记忆", "user"}, {"skills", "技能", "code"}, {"context", "上下文", "activity"}, {"tools", "工具", "wrench"},
 }
 
 func (a *preview) liveWorkbench(c *ui.Context) {
@@ -185,6 +188,10 @@ func (a *preview) liveWorkbench(c *ui.Context) {
 				iconButton(c, "x", "关闭工作台").OnClick(func() { a.Workbench = false })
 			})
 			switch w.Tab {
+			case "inbox":
+				a.inboxWorkbench(c)
+			case "artifact":
+				a.artifactWorkbench(c)
 			case "files":
 				a.filesWorkbench(c)
 			case "review":
