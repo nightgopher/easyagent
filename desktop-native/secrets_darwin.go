@@ -162,20 +162,35 @@ func (s systemSecrets) helperPaths() ([]string, error) {
 			paths = append(paths, filepath.Join(dir, entry.Name()))
 		}
 	}
+	verified := paths[:0]
 	for _, path := range paths {
-		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
-			return nil, errors.New("缓存凭据程序的文件权限或类型无效")
+		if err := verifyCachedCredentialHelper(path, requirement); err != nil {
+			if path == current {
+				return nil, err
+			}
+			// Old signing identities cannot authenticate this app. Retain their
+			// files and owner entries, but never execute them or let them block
+			// saving replacement credentials with the current trusted helper.
+			continue
 		}
-		if err := credentialstore.Verify(path, 0, requirement); err != nil {
-			return nil, err
-		}
-		_, actual, err := credentialstore.Identity(path)
-		if err != nil || filepath.Base(path) != "credentials-"+actual {
-			return nil, errors.New("缓存凭据程序的代码哈希不匹配")
-		}
+		verified = append(verified, path)
 	}
-	return paths, nil
+	return verified, nil
+}
+
+func verifyCachedCredentialHelper(path, requirement string) error {
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		return errors.New("缓存凭据程序的文件权限或类型无效")
+	}
+	if err := credentialstore.Verify(path, 0, requirement); err != nil {
+		return err
+	}
+	_, actual, err := credentialstore.Identity(path)
+	if err != nil || filepath.Base(path) != "credentials-"+actual {
+		return errors.New("缓存凭据程序的代码哈希不匹配")
+	}
+	return nil
 }
 
 func (s systemSecrets) request(helper, operation, account, value string) (credentialstore.Response, error) {

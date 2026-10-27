@@ -85,9 +85,12 @@ def main():
             raise RuntimeError('The two upgrade builds must have different code hashes')
         if len({signature(helper), signature(next_helper), signature(third_helper)}) != 3:
             raise RuntimeError('The helper migration fixture must have different code hashes')
+        other_helper = folder / "other-helper"
+        shutil.copy2(helper, other_helper)
         second_identity = certificate(folder, 'second-identity')
         with signing.signing_keychain(second_identity):
             sign(other_signer, second_identity)
+            sign(other_helper, second_identity, 'easyagent-credentials')
         rejected = run([str(helper)], input='{"Operation":"get","Account":"model"}', capture_output=True, text=True)
         response = json.loads(rejected.stdout)
         if not response.get('Error') or response.get('Value'):
@@ -137,6 +140,13 @@ def main():
                                                      (second, next_helper, 'host/concurrent-b')]))
             run([str(second), '-test.run=^TestNativeKeychainUpgradeProbe$', '-test.v', '-test.timeout=30s'],
                 env={**env, 'EASYAGENT_KEYCHAIN_PROBE_ACTION': 'parallel-result'}, timeout=40)
+            for binary, action, current_helper in [
+                    (other_signer, 'certificate-change', other_helper),
+                    (other_signer, 'certificate-change-relaunch', other_helper),
+                    (first, 'certificate-change-old', helper)]:
+                run([str(binary), '-test.run=^TestNativeKeychainUpgradeProbe$', '-test.v', '-test.timeout=30s'],
+                    env={**env, 'EASYAGENT_KEYCHAIN_PROBE_ACTION': action,
+                         'EASYAGENT_KEYCHAIN_PROBE_HELPER': str(current_helper)}, timeout=40)
         finally:
             if keychain.exists():
                 run(['security', 'delete-keychain', str(keychain)])

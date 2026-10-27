@@ -6,6 +6,8 @@ import (
 	"github.com/egoist/mygo/ui"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -243,5 +245,61 @@ func TestModelDiscoveryDropsResultsAfterLeavingSettings(t *testing.T) {
 	waitNative(t, a, func() bool { return !a.Live.Loading["model-check"] })
 	if a.Live.Data["model-check"] != nil {
 		t.Fatal("late model discovery repopulated closed settings")
+	}
+}
+
+func TestDefaultModelMenuScrollAndKeyboard(t *testing.T) {
+	for _, width := range []int{900, 1240} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			a := alignmentPreview(t)
+			a.Settings.Open, a.Settings.Tab = true, "models"
+			a.Live.Models = []string{"coding"}
+			for i := range 137 {
+				a.Live.Models = append(a.Live.Models, fmt.Sprintf("catalog-model-%03d", i))
+			}
+			a.Live.Data["models"] = map[string]any{"current": map[string]any{"id": "coding"}}
+			tt := ui.NewTester(a.View, width, 640)
+			trigger, ok := tt.Find("选择主机默认模型")
+			if !ok || trigger.W < 180 || trigger.H != 32 {
+				t.Fatalf("default model trigger too small or mis-sized: %+v", trigger)
+			}
+			save, _ := tt.Find(SettingCopySaveDefaultModel)
+			if d := (trigger.Y + trigger.H/2) - (save.Y + save.H/2); d < -1 || d > 1 {
+				t.Fatalf("trigger and save not aligned: %+v %+v", trigger, save)
+			}
+			click(t, tt, "选择主机默认模型")
+			viewport, ok := tt.Find("选择主机默认模型选项列表")
+			if !ok || viewport.H > 261 || viewport.Y < 0 || viewport.Y+viewport.H > 640 {
+				t.Fatalf("unbounded model menu: %+v", viewport)
+			}
+			if dir := os.Getenv("EASYAGENT_PREVIEW_SNAPSHOTS"); dir != "" {
+				saveSnapshot(t, tt, filepath.Join(dir, fmt.Sprintf("default-model-menu-%d.png", width)))
+			}
+			tt.Move(viewport.X+viewport.W/2, viewport.Y+viewport.H/2)
+			tt.Scroll(viewport.X+viewport.W/2, viewport.Y+viewport.H/2, 0, 100000)
+			for range 5 {
+				tt.Frame()
+			}
+			last, ok := tt.Find("catalog-model-136")
+			if !ok || last.Y < viewport.Y || last.Y+last.H > viewport.Y+viewport.H+1 {
+				t.Fatalf("wheel cannot reach last model: %+v in %+v", last, viewport)
+			}
+			tt.Key(0, ui.KeyHome)
+			tt.Key(0, ui.KeyDown)
+			tt.Frame()
+			first, _ := tt.Find("catalog-model-000")
+			if first.Y < viewport.Y || first.Y+first.H > viewport.Y+viewport.H+1 {
+				t.Fatalf("keyboard did not reveal first model: %+v", first)
+			}
+			tt.Key(0, ui.KeyEnd)
+			tt.Frame()
+			tt.Key(0, ui.KeyEnter)
+			if a.Settings.DefaultModelChoice != "catalog-model-136" || a.Live.Loading["model-default"] || str(object(object(a.Live.Data["models"])["current"])["id"]) != "coding" {
+				t.Fatal("selection did not update the draft independently of saving")
+			}
+			if _, ok := tt.Find("选择主机默认模型选项列表"); ok {
+				t.Fatal("selection did not close menu")
+			}
+		})
 	}
 }
