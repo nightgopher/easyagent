@@ -132,6 +132,7 @@ func newConnectedPreview(dir string) *preview {
 	a.Live = l
 	a.loadFileState()
 	a.loadDraftInputs()
+	a.loadCaptureDraft()
 	a.Sessions = []*session{{ID: 1, Title: "新会话", UpdatedAt: time.Now().UTC().Format(time.RFC3339), Model: l.Config.Model.Model, Workspace: l.workspace(), Project: filepath.Base(l.workspace())}}
 	a.Active = 1
 	a.restoreDraftInputs(a.current())
@@ -225,6 +226,7 @@ func (a *preview) liveTick() bool {
 	if time.Since(l.LastSave) > 750*time.Millisecond {
 		a.saveFileState()
 		a.saveDraftInputs()
+		a.saveCaptureDraft()
 		for _, s := range a.Sessions {
 			l.Drafts[l.Config.ActiveHost+"/"+s.RemoteID] = s.Draft
 		}
@@ -906,6 +908,10 @@ drained:
 	_ = l.Store.save("workspace-files.json", version, a.fileStateSnapshot())
 	version = l.Store.reserve("draft-inputs.json")
 	_ = l.Store.save("draft-inputs.json", version, a.captureDraftInputs())
+	version = l.Store.reserve("capture-draft.json")
+	if !l.Workbench.Capture.ReadError {
+		_ = l.Store.save("capture-draft.json", version, a.captureDraftSnapshot())
+	}
 }
 
 func (a *preview) livePermission() string {

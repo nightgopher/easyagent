@@ -164,6 +164,15 @@ func (a *preview) kbWorkbench(c *ui.Context) {
 				})
 			}
 		})
+		ui.Row(c).Padding(8, 14).Wrap().Gap(6).Children(func() {
+			a.action(c, "引用这篇知识").OnClick(func() { a.referenceKnowledge(w.KBPath, "") })
+			a.action(c, "结合当前项目检查").OnClick(func() {
+				a.referenceKnowledge(w.KBPath, "请结合引用的知识检查当前项目，先报告发现与依据。")
+			})
+			a.action(c, "起草更新内容").OnClick(func() {
+				a.referenceKnowledge(w.KBPath, "请结合本次对话结果，为引用的知识起草更新内容，先提供差异建议，不直接覆盖原文。")
+			})
+		})
 		if a.resourceFeedback(c, "kb-read") {
 			return
 		}
@@ -403,4 +412,17 @@ func (a *preview) kbHealthEntries(c *ui.Context, entries []any) {
 			ui.Text(c, label).SingleLine().FontSize(12)
 		})
 	})
+}
+
+func (a *preview) referenceKnowledge(path, prompt string) {
+	s := a.current()
+	if s.Sending || s.Archived || a.Live.Loading["queue-add/"+s.RemoteID] {
+		a.Live.Error = "请等待提交完成或切换到可编辑会话"
+		return
+	}
+	a.addFileReference(s, fileReference{Path: path, Workspace: s.Workspace, Host: a.Live.Config.ActiveHost, Scope: "knowledge"})
+	if prompt != "" {
+		appendDraft(s, prompt)
+	}
+	a.ReturnToComposer = true
 }
