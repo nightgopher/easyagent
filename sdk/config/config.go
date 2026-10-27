@@ -783,7 +783,16 @@ func SaveRuntimeOverrideComputerUse(dataDir string, enabled bool) error {
 
 // DisabledSkillPaths reads EasyAgent-only loading preferences without modifying shared skill files.
 func DisabledSkillPaths(dataDir string) (map[string]bool, error) {
-	data, err := os.ReadFile(filepath.Join(dataDir, "settings.json"))
+	root, err := os.OpenRoot(dataDir)
+	if os.IsNotExist(err) {
+		return map[string]bool{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = root.Close() }()
+	// Keep preference reads confined to the configured data directory, including symlinks.
+	data, err := root.ReadFile("settings.json")
 	if os.IsNotExist(err) {
 		return map[string]bool{}, nil
 	}

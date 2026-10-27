@@ -32,3 +32,12 @@ func TestSkillPreferencesPreserveOtherSettingsAndRejectCorruption(t *testing.T) 
 	require.NoError(t, err)
 	require.Equal(t, "{broken", string(data))
 }
+
+func TestSkillPreferencesRejectSymlinkOutsideDataDirectory(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "settings.json")
+	require.NoError(t, os.WriteFile(outside, []byte(`{"disabled_skills":["/private/SKILL.md"]}`), 0600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(dir, "settings.json")))
+	_, err := DisabledSkillPaths(dir)
+	require.Error(t, err)
+}
