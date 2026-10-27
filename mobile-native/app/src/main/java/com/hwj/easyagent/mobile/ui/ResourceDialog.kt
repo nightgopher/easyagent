@@ -41,15 +41,17 @@ fun ResourceDialog(client: AgentClient, session: ChatSession, onDismiss: () -> U
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(tab, path, search) {
-        loading = true; error = ""; entries = emptyList()
-        try {
-            entries = when (tab) {
-                "知识" -> { kotlinx.coroutines.delay(250); (client.api.get("/kb/entries?q=${query(search)}").obj()["entries"] as? JsonArray).orEmpty() }
-                "变更" -> (client.api.get(ApiClient.sessionPath(session.id) + "/diff").obj()["files"] as? JsonArray).orEmpty()
-                else -> (client.api.get("/workspace/list-dir?session_id=${query(session.id)}&path=${query(path)}") as? JsonArray).orEmpty()
-            }
-        } catch (e: ApiException) { error = e.message.orEmpty() }
-        finally { loading = false }
+        withContext(Dispatchers.Main.immediate) {
+            loading = true; error = ""; entries = emptyList()
+            try {
+                entries = when (tab) {
+                    "知识" -> { kotlinx.coroutines.delay(250); (client.api.get("/kb/entries?q=${query(search)}").obj()["entries"] as? JsonArray).orEmpty() }
+                    "变更" -> (client.api.get(ApiClient.sessionPath(session.id) + "/diff").obj()["files"] as? JsonArray).orEmpty()
+                    else -> (client.api.get("/workspace/list-dir?session_id=${query(session.id)}&path=${query(path)}") as? JsonArray).orEmpty()
+                }
+            } catch (e: ApiException) { error = e.message.orEmpty() }
+            finally { loading = false }
+        }
     }
     patch?.let { diff -> AlertDialog(onDismissRequest = { patch = null }, title = { Text("文件差异") }, text = {
         LazyColumn { item { CodeBlock(diff.take(20000)) }; if (diff.length > 20000) item { Text("仅显示前 20000 字符") } }
@@ -64,7 +66,7 @@ fun ResourceDialog(client: AgentClient, session: ChatSession, onDismiss: () -> U
     }, confirmButton = { Button(enabled = !saving && !session.running, onClick = {
         val answer = processTurns(session.messages, false, session.run?.state in setOf("cancelled", "interrupted", "failed")).lastOrNull()?.answer?.text
         if (answer == null) error = "当前没有已完成的回答可保存"
-        else { saving = true; scope.launch {
+        else { saving = true; scope.launch(Dispatchers.Main.immediate) {
             try {
                 client.api.post(ApiClient.sessionPath(session.id) + "/artifacts", buildJsonObject { put("path", savePath); put("content", answer) })
                 saveAnswer = false; selected = savePath; tab = "文件"
@@ -109,49 +111,55 @@ private fun FilePreview(client: AgentClient, session: ChatSession, path: String,
     var bytes by remember { mutableStateOf<ByteArray?>(null) }
     var mime by remember { mutableStateOf("") }
     LaunchedEffect(path) {
-        try {
-            if (knowledge) text = client.api.get("/kb/read?path=${query(path)}").obj().getString("content")
-            else {
-                val data = client.api.get("/workspace/file-data?session_id=${query(session.id)}&path=${query(path)}").obj()
-                mime = data.getString("mimeType")
-                bytes = withContext(Dispatchers.Default) { Base64.getDecoder().decode(data.getString("data")) }
-                if (!mime.startsWith("image/") && mime != "application/pdf") {
-                    if (mime.startsWith("text/") || path.endsWith(".md") || path.endsWith(".json")) text = bytes!!.decodeToString()
-                    else error = "此格式暂不支持预览，可以引用给助手处理。"
+        withContext(Dispatchers.Main.immediate) {
+            try {
+                if (knowledge) text = client.api.get("/kb/read?path=${query(path)}").obj().getString("content")
+                else {
+                    val data = client.api.get("/workspace/file-data?session_id=${query(session.id)}&path=${query(path)}").obj()
+                    mime = data.getString("mimeType")
+                    bytes = withContext(Dispatchers.Default) { Base64.getDecoder().decode(data.getString("data")) }
+                    if (!mime.startsWith("image/") && mime != "application/pdf") {
+                        if (mime.startsWith("text/") || path.endsWith(".md") || path.endsWith(".json")) text = bytes!!.decodeToString()
+                        else error = "此格式暂不支持预览，可以引用给助手处理。"
+                    }
                 }
-            }
-        } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; error = e.message.orEmpty() }
-        finally { loading = false }
+            } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; error = e.message.orEmpty() }
+            finally { loading = false }
+        }
     }
     LaunchedEffect(bytes, page) {
-        val data = bytes ?: return@LaunchedEffect
-        try {
-            image = withContext(Dispatchers.IO) {
-                if (mime == "application/pdf") {
-                    val temp = File.createTempFile("preview-", ".pdf", context.cacheDir)
-                    try {
-                        temp.writeBytes(data)
-                        PdfRenderer(ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
-                            pages = renderer.pageCount
-                            renderer.openPage(page).use { pdf ->
-                                val width = minOf(1200, pdf.width)
-                                Bitmap.createBitmap(width, (pdf.height.toLong() * width / pdf.width).toInt().coerceIn(1, 2400), Bitmap.Config.ARGB_8888).also {
-                                    it.eraseColor(android.graphics.Color.WHITE)
-                                    pdf.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        withContext(Dispatchers.Main.immediate) {
+            val data = bytes ?: return@withContext
+            try {
+                var renderedPages = 0
+                image = withContext(Dispatchers.IO) {
+                    if (mime == "application/pdf") {
+                        val temp = File.createTempFile("preview-", ".pdf", context.cacheDir)
+                        try {
+                            temp.writeBytes(data)
+                            PdfRenderer(ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)).use { renderer ->
+                                renderedPages = renderer.pageCount
+                                renderer.openPage(page).use { pdf ->
+                                    val width = minOf(1200, pdf.width)
+                                    Bitmap.createBitmap(width, (pdf.height.toLong() * width / pdf.width).toInt().coerceIn(1, 2400), Bitmap.Config.ARGB_8888).also {
+                                        it.eraseColor(android.graphics.Color.WHITE)
+                                        pdf.render(it, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                                    }
                                 }
                             }
-                        }
-                    } finally { temp.delete() }
-                } else if (mime.startsWith("image/")) {
-                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(data, 0, data.size, options)
-                    options.inSampleSize = 1
-                    while (maxOf(options.outWidth, options.outHeight) / options.inSampleSize > 1600) options.inSampleSize *= 2
-                    options.inJustDecodeBounds = false
-                    BitmapFactory.decodeByteArray(data, 0, data.size, options)
-                } else null
-            }
-        } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; error = "无法预览：${e.message}" }
+                        } finally { temp.delete() }
+                    } else if (mime.startsWith("image/")) {
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(data, 0, data.size, options)
+                        options.inSampleSize = 1
+                        while (maxOf(options.outWidth, options.outHeight) / options.inSampleSize > 1600) options.inSampleSize *= 2
+                        options.inJustDecodeBounds = false
+                        BitmapFactory.decodeByteArray(data, 0, data.size, options)
+                    } else null
+                }
+                pages = renderedPages
+            } catch (e: Exception) { if (e is kotlinx.coroutines.CancellationException) throw e; error = "无法预览：${e.message}" }
+        }
     }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(path.substringAfterLast('/')) }, text = {
         LazyColumn {
