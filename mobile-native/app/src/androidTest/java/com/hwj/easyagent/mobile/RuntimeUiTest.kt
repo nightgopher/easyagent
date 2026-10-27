@@ -1,5 +1,11 @@
 package com.hwj.easyagent.mobile
 
+import android.view.accessibility.AccessibilityNodeInfo
+import android.view.MotionEvent
+import android.view.InputDevice
+import android.graphics.Rect
+import android.os.SystemClock
+import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.pm.ActivityInfo
@@ -66,6 +72,7 @@ class RuntimeUiTest {
     }
 
     @After fun close() {
+        instrumentation.uiAutomation.executeShellCommand("cmd statusbar collapse").close()
         instrumentation.uiAutomation.executeShellCommand("cmd uimode night no").close()
         instrumentation.targetContext.getSystemService(NotificationManager::class.java).cancelAll()
         activity.close()
@@ -515,7 +522,31 @@ class RuntimeUiTest {
             assertEquals(approved, JSONObject(request.body.clone().readUtf8()).getBoolean("approved"))
         }
         host.emit("status", "state" to "completed", "streaming" to false)
-        waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }.contentIntent.send()
+        val resultNotification = waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }
+        val notificationTitle = resultNotification.extras.getCharSequence(Notification.EXTRA_TITLE).toString()
+        // A background PendingIntent.send is blocked on API 34+. Exercise the actual user tap.
+        instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        instrumentation.uiAutomation.executeShellCommand("cmd statusbar expand-notifications").close()
+        ui.waitUntil(10_000) {
+            fun findTitle(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+                if (node == null || node.text?.toString() == notificationTitle) return node
+                return (0 until node.childCount).firstNotNullOfOrNull { findTitle(node.getChild(it)) }
+            }
+            val node = instrumentation.uiAutomation.windows.firstNotNullOfOrNull { findTitle(it.root) }
+            if (node == null) false else {
+                val bounds = Rect().also(node::getBoundsInScreen)
+                val now = SystemClock.uptimeMillis()
+                val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+                val up = MotionEvent.obtain(now, now + 50, MotionEvent.ACTION_UP, bounds.exactCenterX(), bounds.exactCenterY(), 0)
+                down.source = InputDevice.SOURCE_TOUCHSCREEN
+                up.source = InputDevice.SOURCE_TOUCHSCREEN
+                try {
+                    instrumentation.uiAutomation.injectInputEvent(down, true) && instrumentation.uiAutomation.injectInputEvent(up, true)
+                } finally { down.recycle(); up.recycle() }
+            }
+        }
         // Let the notification bring the activity forward; do not race its RESTARTED transition.
         ui.waitUntil(10_000) {
             var resumed = false
