@@ -126,7 +126,8 @@ GET /ws
 | `POST` | `/sessions/{id}/attachments` | 上传工作区附件，body 为 `{"name":"...","data":"<base64>"}`（1 字节–4MiB），图片校验尺寸上限 32M 像素 |
 | `GET` | `/sessions/{id}/capabilities` | 会话实际加载的技能与工具清单（含来源、`scope`=`project`/`personal`、项目技能的 `origin` 与所覆盖个人技能的 `overrides`、调用方式） |
 | `POST` | `/sessions/{id}/skills/refresh` | 重新扫描技能目录，使会话启动后新增或修改的技能从下一轮起生效；任务运行中返回 `409` |
-| `GET` | `/skills/local` | 主机全局技能目录里的全部技能（手写的、其他工具装的、市场安装的），含来源目录、是否市场安装、被同名技能覆盖的提示和加载警告；目录与会话加载时一致 |
+| `GET` | `/skills/local` | 主机全局技能目录里的全部技能（手写的、其他工具装的、市场安装的），含来源目录、是否市场安装、启用状态（enabled）、被同名技能覆盖的提示和加载警告；目录与会话加载时一致 |
+| `PUT` | `/skills/local` | 设置全局技能开关，JSON 为 `{"path":"绝对 SKILL.md 路径","enabled":false}`；返回更新后的全局技能列表。状态持久化到当前主机，仅影响 EasyAgent，不修改共享技能文件。新会话生效，已有会话需刷新技能；关闭优先技能不会自动加载被覆盖的同名技能 |
 | `PATCH` | `/sessions/{id}` | 更新会话偏好：`title`（1–160 字符）、`pinned`、`archived` |
 | `POST` | `/sessions/{id}/run/cancel` | body 为 `{"run_id":"..."}` |
 | `POST` | `/sessions/{id}/run/confirm` | body 为 `{"run_id":"...","confirmation_id":"...","approved":true}`；提问须同时提交 `answers`，见下文 |

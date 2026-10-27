@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 
@@ -610,7 +611,12 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	// Load context files
 	contextFiles := prompt.LoadProjectContextFiles(cwd, "")
 
-	// Load skills
+	// Load skills. Apply host preferences after precedence resolution: disabling a winner
+	// must not silently activate an older duplicate from another shared directory.
+	disabledSkills, err := config.DisabledSkillPaths(cfg.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("read skill preferences: %w", err)
+	}
 	var skills []skill.Skill
 	if len(skillDirs) == 0 {
 		skillDirs = DefaultSkillDirs(cwd)
@@ -620,7 +626,11 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	}
 	if len(skillDirs) > 0 {
 		result := skill.LoadFromDirs(skillDirs...)
-		skills = result.Skills
+		for _, loaded := range result.Skills {
+			if !disabledSkills[filepath.Clean(loaded.FilePath)] {
+				skills = append(skills, loaded)
+			}
+		}
 		for _, diag := range result.Diagnostics {
 			slog.Warn("skill diagnostic", "code", diag.Code, "message", diag.Message, "path", diag.Path)
 		}

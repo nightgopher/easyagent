@@ -1,15 +1,18 @@
 package server
 
 import (
+	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 type localSkillJSON struct {
+	Enabled     bool   `json:"enabled"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Path        string `json:"path"`
@@ -51,6 +54,11 @@ func skillRootOrigin(root string) string {
 // directories, whoever put it there. The market's own "installed" list only knows skills it
 // installed, so hand-written ones and ones from other tools would otherwise never show up.
 func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
+	disabled, err := config.DisabledSkillPaths(s.app.Config().DataDir)
+	if err != nil {
+		writeError(w, 500, "读取技能开关失败："+err.Error())
+		return
+	}
 	managed := map[string]bool{}
 	installedError := ""
 	if client := s.marketClient(); client != nil {
@@ -79,6 +87,7 @@ func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
 		for _, sk := range result.Skills {
 			entry := localSkillJSON{
 				Name:            sk.Name,
+				Enabled:         !disabled[filepath.Clean(sk.FilePath)],
 				Description:     sk.Description,
 				Path:            sk.FilePath,
 				DirName:         filepath.Base(sk.BaseDir),
@@ -101,4 +110,34 @@ func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
 		out["installed_error"] = installedError
 	}
 	writeJSON(w, out)
+}
+
+// setLocalSkillEnabled changes only the host loading preference, never the shared skill file.
+func (s *Server) setLocalSkillEnabled(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Path    string `json:"path"`
+		Enabled *bool  `json:"enabled"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8192)).Decode(&body); err != nil || body.Enabled == nil || body.Path == "" {
+		writeError(w, 400, "path 和 enabled 必须填写")
+		return
+	}
+	found := false
+	for _, root := range s.app.GlobalSkillDirs() {
+		for _, loaded := range skill.LoadFromDirs(root).Skills {
+			if filepath.Clean(loaded.FilePath) == filepath.Clean(body.Path) {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		writeError(w, 404, "未找到当前主机的全局技能")
+		return
+	}
+	if err := config.SetSkillEnabled(s.app.Config().DataDir, body.Path, *body.Enabled); err != nil {
+		writeError(w, 500, "保存技能开关失败："+err.Error())
+		return
+	}
+	s.listLocalSkills(w, r)
 }

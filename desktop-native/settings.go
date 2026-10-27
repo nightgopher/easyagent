@@ -109,7 +109,7 @@ func (a *preview) selectControl(c *ui.Context, label string, value *string, choi
 }
 
 func (a *preview) preferenceRow(c *ui.Context, label, detail string, control func()) {
-	ui.Row(c).Gap(20).Padding(12, 16).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
+	ui.Row(c).Gap(20).AlignItems(ui.Center).Padding(12, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() { a.text(c, label).FontSize(13).FontWeight(500); a.note(c, detail) })
 		control()
 	})
@@ -172,7 +172,7 @@ func (a *preview) settingsView(c *ui.Context) {
 		})
 		ui.Scroll(c.Key(s.Tab)).Grow(1).MinWidth(0).Padding(24, 32, 40, 32).Children(func() {
 			ui.Column(c).FillWidth().MaxWidth(780).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
-				ui.Column(c).Gap(6).Margin(0, 0, 6, 0).Children(func() {
+				ui.Column(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 						a.text(c, page.Label).Bind(&s.Heading).Focusable().Role(ui.RoleHeading).FontSize(22).FontWeight(600)
 						if page.Effect != "" {
@@ -206,7 +206,7 @@ func (a *preview) settingsView(c *ui.Context) {
 					} else if page.ID == "general" || page.ID == "appearance" {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else {
-						a.note(c, "设置属于当前运行主机；表单修改需保存后生效，未保存的修改在切换分区或关闭时会被丢弃。")
+						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
 				if a.Live != nil {

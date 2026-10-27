@@ -220,6 +220,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /sessions/{id}/capabilities", s.getCapabilities)
 	restMux.HandleFunc("POST /sessions/{id}/skills/refresh", s.refreshSessionSkills)
 	restMux.HandleFunc("GET /skills/local", s.listLocalSkills)
+	restMux.HandleFunc("PUT /skills/local", s.setLocalSkillEnabled)
 	restMux.HandleFunc("GET /sessions/{id}/file", s.getSessionFile)
 	restMux.HandleFunc("PUT /sessions/{id}/file", s.writeFile)
 	restMux.HandleFunc("GET /workspace/list-dir", s.listDir)

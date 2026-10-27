@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -159,4 +160,33 @@ func TestListLocalSkills_SaysWhenTheMarketRecordsCannotBeRead(t *testing.T) {
 
 	require.Len(t, out.Skills, 1, "the listing itself must survive")
 	assert.NotEmpty(t, out.InstalledError, "otherwise the missing 市场安装 badge looks like a fact")
+}
+
+func TestLocalSkillTogglePersistsWithoutChangingSharedFiles(t *testing.T) {
+	home := t.TempDir()
+	root := filepath.Join(home, ".agents", "skills")
+	dir := writeTestSkill(t, root, "solo", "solo", "Shared skill")
+	path := filepath.Join(dir, "SKILL.md")
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	srv := newSkillsServer(t, home, nil)
+	require.True(t, getLocalSkills(t, srv).Skills[0].Enabled)
+	for _, enabled := range []bool{false, true} {
+		body, _ := json.Marshal(map[string]any{"path": path, "enabled": enabled})
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, localReq(http.MethodPut, "/skills/local", bytes.NewReader(body)))
+		require.Equal(t, 200, w.Code, w.Body.String())
+		require.Equal(t, enabled, getLocalSkills(t, srv).Skills[0].Enabled)
+		disabled, err := config.DisabledSkillPaths(srv.app.Config().DataDir)
+		require.NoError(t, err)
+		require.Equal(t, !enabled, disabled[path])
+		after, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, before, after)
+	}
+	for _, body := range []string{`{"path":"missing","enabled":false}`, `{"path":"missing"}`} {
+		w := httptest.NewRecorder()
+		srv.Handler().ServeHTTP(w, localReq(http.MethodPut, "/skills/local", bytes.NewBufferString(body)))
+		require.GreaterOrEqual(t, w.Code, 400)
+	}
 }
