@@ -17,6 +17,8 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso.closeSoftKeyboard
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import com.hwj.easyagent.mobile.backend.SettingsStore
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
@@ -515,6 +517,13 @@ class RuntimeUiTest {
         host.emit("status", "state" to "completed", "streaming" to false)
         waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }.contentIntent.send()
         // Let the notification bring the activity forward; do not race its RESTARTED transition.
+        ui.waitUntil(10_000) {
+            var resumed = false
+            instrumentation.runOnMainSync {
+                resumed = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).any { it is MainActivity }
+            }
+            resumed && ui.onAllNodes(isRoot()).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
         waitText("已保存的历史")
         assertEquals(Lifecycle.State.RESUMED, activity.state)
         ui.onNodeWithContentDescription("返回").assertExists()
