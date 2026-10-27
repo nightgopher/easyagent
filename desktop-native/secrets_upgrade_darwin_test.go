@@ -146,6 +146,18 @@ func TestNativeKeychainUpgradeProbe(t *testing.T) {
 		if response, err := store.request(store.helper, "get", "model", ""); err == nil || response.Value != "" {
 			t.Fatal("direct helper invocation bypassed parent authentication")
 		}
+	case "certificate-change":
+		if value, err := store.Get("model"); err == nil || value != "" || !strings.Contains(err.Error(), "重新填写") {
+			t.Fatal("foreign owner must require repair, not read a stale credential")
+		}
+		check(store.Set("model", "synthetic-new-certificate"))
+		read("model", "synthetic-new-certificate")
+	case "certificate-change-relaunch":
+		read("model", "synthetic-new-certificate")
+	case "certificate-change-old":
+		if value, err := store.Get("model"); err == nil || value != "" {
+			t.Fatal("old signer fell back to a stale credential after replacement")
+		}
 	case "network":
 		testSavedHostAuthentication(t, store)
 	case "locked":
