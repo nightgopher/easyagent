@@ -86,7 +86,7 @@ type taskParams struct {
 
 func (t *TaskTool) Name() string { return TaskToolName }
 func (t *TaskTool) Description() string {
-	return "Delegate a self-contained task to a subagent with its own fresh context. Only the subagent's final answer comes back, so use it for broad searches or investigations whose intermediate reads would otherwise fill this conversation. The subagent cannot see this conversation: put every detail it needs into prompt. Set readonly to limit it to read and search tools; several readonly tasks run in parallel."
+	return "Delegate a self-contained task to a subagent with its own fresh context. Only the subagent's final answer comes back, so use it for broad searches or investigations whose intermediate reads would otherwise fill this conversation. The subagent cannot see this conversation: put every detail it needs into prompt. Set readonly to limit it to read and search tools; several readonly tasks run in parallel, while tasks without readonly run one at a time (serially)."
 }
 func (t *TaskTool) Parameters() map[string]any {
 	return map[string]any{
@@ -94,7 +94,7 @@ func (t *TaskTool) Parameters() map[string]any {
 		"properties": map[string]any{
 			"description": map[string]any{"type": "string", "description": "A short (3-6 word) label for the task."},
 			"prompt":      map[string]any{"type": "string", "description": "Complete instructions for the subagent, including goal, relevant paths and what to report back."},
-			"readonly":    map[string]any{"type": "boolean", "description": "Give the subagent only read-only tools (read, grep, find, ls). Readonly tasks can run in parallel."},
+			"readonly":    map[string]any{"type": "boolean", "description": "Give the subagent only read-only tools (read, grep, find, ls, web_fetch, web_search). Readonly tasks can run in parallel; without readonly the subagent runs serially."},
 			"model":       map[string]any{"type": "string", "description": "Optional model ID; defaults to the parent model."},
 			"provider":    map[string]any{"type": "string", "description": "Optional registered provider; defaults to the parent provider. Requires model."},
 			"max_turns":   map[string]any{"type": "integer", "minimum": 1, "description": "Maximum model turns; defaults to the configured subagent limit (50 by default)."},

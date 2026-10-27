@@ -161,6 +161,10 @@ func (t *WebSearchTool) Execute(ctx context.Context, raw json.RawMessage, _ func
 	return agent.ToolResult{Content: b.String()}, nil
 }
 
+// IsConcurrencySafe 允许 web_search 进入并行批次和 readonly 子代理工具集：
+// 结构体字段与搜索引擎实现（baseURL + http.Client）构造后只读，无共享可变状态。
+func (t *WebSearchTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
+
 // ─── SearXNG Engine ────────────────────────────────────────────────────────
 
 type searxngEngine struct {

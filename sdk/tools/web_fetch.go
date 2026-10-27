@@ -168,6 +168,10 @@ func (t *WebFetchTool) Execute(ctx context.Context, raw json.RawMessage, onUpdat
 	return agent.ToolResult{Content: markdown}, nil
 }
 
+// IsConcurrencySafe 允许 web_fetch 进入并行批次和 readonly 子代理工具集：
+// 结构体字段构造后只读，http.Client 并发安全，Execute 无共享可变状态。
+func (t *WebFetchTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
+
 // convertToMarkdown 把 HTML 转为 markdown。抽成独立函数便于测试（绕过网络）。
 func convertToMarkdown(html string) (string, error) {
 	converter := md.NewConverter("", true, nil)

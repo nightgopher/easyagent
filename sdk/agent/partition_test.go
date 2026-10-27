@@ -3,7 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/stretchr/testify/assert"
@@ -103,4 +106,51 @@ func TestPartitionToolCalls_ToolWithModeSequentialOverridesSafe(t *testing.T) {
 	batches := partitionToolCalls(context.Background(), ag, calls)
 	require.Len(t, batches, 1)
 	assert.False(t, batches[0].safe, "ToolWithMode.Sequential should override ConcurrencySafeChecker")
+}
+
+// trackingSafeTool 记录同时执行的调用数，用于验证并行批次的并发上限。
+type trackingSafeTool struct {
+	echoTool
+	mu      sync.Mutex
+	current int
+	max     int
+}
+
+func (t *trackingSafeTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
+
+func (t *trackingSafeTool) Execute(_ context.Context, _ json.RawMessage, _ func(PartialResult)) (ToolResult, error) {
+	t.mu.Lock()
+	t.current++
+	if t.current > t.max {
+		t.max = t.current
+	}
+	t.mu.Unlock()
+	time.Sleep(80 * time.Millisecond)
+	t.mu.Lock()
+	t.current--
+	t.mu.Unlock()
+	return ToolResult{Content: "ok"}, nil
+}
+
+func TestExecuteToolCallsParallelCapsConcurrency(t *testing.T) {
+	tool := &trackingSafeTool{}
+	ag := &Agent{tools: map[string]Tool{"safe": tool}}
+	var calls []ai.ToolCall
+	for i := 0; i < maxParallelToolCalls*2; i++ {
+		calls = append(calls, ai.ToolCall{ID: fmt.Sprintf("c%d", i), Name: "safe", Args: `{}`})
+	}
+
+	results, err := executeToolCallsParallel(context.Background(), ag, calls)
+	require.NoError(t, err)
+	require.Len(t, results, maxParallelToolCalls*2)
+	for _, m := range results {
+		tr, ok := m.(ai.ToolResultMessage)
+		require.True(t, ok)
+		require.False(t, tr.IsError, "tool result error: %s", tr.Content)
+	}
+
+	tool.mu.Lock()
+	defer tool.mu.Unlock()
+	assert.GreaterOrEqual(t, tool.max, 2, "并行批次应真正并发执行")
+	assert.LessOrEqual(t, tool.max, maxParallelToolCalls, "并行批次并发数不应超过上限")
 }
