@@ -14,7 +14,10 @@ import org.junit.Test
 class DraftRecoveryTest {
     @Test fun `restart preserves draft attachments references and retry identity with host isolation`() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
-        val prefs = MemoryPreferences()
+        val prefs = SettingsStore(MemoryPreferences(), object : TokenCipher {
+            override fun encrypt(plain: String) = plain
+            override fun decrypt(stored: String): String? = stored
+        })
         val host = HostConfig("http://localhost:1", "secret", "host-a")
         val first = AgentClient(host, prefs)
         val restored = AgentClient(host, prefs)

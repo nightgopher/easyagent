@@ -3,12 +3,15 @@ package com.hwj.easyagent.mobile.backend
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.time.Instant
 
 // 与 desktop-native/projection.go 中的结构一一对应，字段名以服务端 JSON 为准。
@@ -66,7 +69,95 @@ data class Confirmation(
     @SerialName("tool_name") val toolName: String = "",
     val description: String = "",
     val args: JsonElement? = null,
+) {
+    /** ask_user_question 的确认需要回答表单而不是批准/拒绝。 */
+    val isQuestion: Boolean get() = toolName == "ask_user_question"
+}
+
+@Serializable
+data class UserOption(
+    val label: String = "",
+    val description: String = "",
+    val preview: String = "",
 )
+
+@Serializable
+data class UserQuestion(
+    val question: String = "",
+    val header: String = "",
+    val options: List<UserOption> = emptyList(),
+    @SerialName("multiSelect") val multiSelect: Boolean = false,
+)
+
+/** GET /sessions/{id}/info 的子集：权限模式、当前模型与上下文占用。 */
+@Serializable
+data class SessionInfo(
+    @SerialName("access_mode") val accessMode: String = "",
+    val provider: String = "",
+    val model: String = "",
+    @SerialName("context_usage") val contextUsage: ContextUsage? = null,
+)
+
+@Serializable
+data class ContextUsage(
+    @SerialName("estimated_tokens") val estimatedTokens: Long = 0,
+    @SerialName("context_window") val contextWindow: Long = 0,
+    @SerialName("window_known") val windowKnown: Boolean = false,
+    val model: String = "",
+    val messages: Int = 0,
+) {
+    /** 已知窗口时返回占用百分比，未知窗口返回 -1。 */
+    val percent: Int
+        get() = if (windowKnown && contextWindow > 0) (estimatedTokens * 100 / contextWindow).toInt() else -1
+}
+
+@Serializable
+data class ModelInfo(
+    val id: String = "",
+    val provider: String = "",
+    val name: String = "",
+    @SerialName("context_window") val contextWindow: Long = 0,
+)
+
+@Serializable
+data class ModelsResponse(
+    val models: List<ModelInfo> = emptyList(),
+    val current: ModelInfo? = null,
+    @SerialName("discovery_error") val discoveryError: String = "",
+)
+
+/** ask_user_question 的参数存在 confirmation.args.questions；解析失败返回 null，由 UI 退回普通审批卡。 */
+fun questionsFromArgs(args: JsonElement?): List<UserQuestion>? {
+    val raw = args.obj()["questions"] ?: return null
+    return runCatching {
+        wireJson.decodeFromJsonElement(ListSerializer(UserQuestion.serializer()), raw)
+    }.getOrNull()?.takeIf { it.isNotEmpty() }
+}
+
+/** 一条问题的回答：selected 是选项 label，text 是"其他"自填内容。 */
+fun answerJson(selected: List<String>, text: String): JsonObject = buildJsonObject {
+    put("selected", JsonArray(selected.map { JsonPrimitive(it) }))
+    if (text.isNotBlank()) put("text", text)
+}
+
+/** 一次问答的全部回答，按问题顺序。 */
+fun answersJson(answers: List<JsonObject>): JsonArray = JsonArray(answers)
+
+/** 单选问题是否已答：恰好一个选项，或只填了自填内容；多选至少一项（自填内容算一项）。 */
+fun questionAnswered(question: UserQuestion, selected: Set<String>, text: String): Boolean =
+    if (question.multiSelect) selected.isNotEmpty() || text.isNotBlank()
+    else (selected.size == 1) != text.isNotBlank()
+
+/** 组装 POST /run/confirm 的 answers 数组（按问题顺序）；有任何一题未答返回 null。 */
+fun buildAnswers(questions: List<UserQuestion>, selections: List<Set<String>>, texts: List<String>): JsonArray? {
+    if (questions.size != selections.size || selections.size != texts.size) return null
+    val answers = ArrayList<JsonObject>(questions.size)
+    for (i in questions.indices) {
+        if (!questionAnswered(questions[i], selections[i], texts[i])) return null
+        answers += answerJson(selections[i].toList(), texts[i])
+    }
+    return JsonArray(answers)
+}
 
 @Serializable
 data class QueueItem(

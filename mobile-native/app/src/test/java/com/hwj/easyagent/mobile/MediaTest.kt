@@ -132,7 +132,7 @@ class MediaTest {
     }
 
     @Test
-    fun `history images are kept on user messages and downloaded once`() = withClient { server, client ->
+    fun `history images are kept on user messages with authenticated raw urls`() = withClient { server, client ->
         val s = ChatSession("s1")
         s.reduce(
             wireJson.decodeFromString(
@@ -142,10 +142,10 @@ class MediaTest {
         )
         val image = s.messages.single().images.single()
         assertEquals("img1", image.attachmentId)
-        server.enqueue(MockResponse().setBody("PNGDATA"))
-        assertEquals("PNGDATA", String(client.image("s1", image)))
-        assertEquals("PNGDATA", String(client.image("s1", image)))
-        assertEquals(1, server.requestCount)
-        assertEquals("/sessions/s1/attachments/img1/raw", server.takeRequest().path)
+        // 缩略图与大图都交给共享图片加载器按这个鉴权 URL 拉取（见 EasyAgentApp.imageLoader）。
+        assertEquals(
+            server.url("/").toString().trimEnd('/') + "/sessions/s1/attachments/img1/raw",
+            client.attachmentUrl("s1", image),
+        )
     }
 }

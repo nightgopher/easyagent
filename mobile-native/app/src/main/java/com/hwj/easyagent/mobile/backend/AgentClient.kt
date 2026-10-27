@@ -12,6 +12,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -29,7 +30,7 @@ enum class LinkStatus { CONNECTING, CONNECTED, DISCONNECTED }
  * 一台运行主机的连接：维护 WebSocket 订阅、重连与各会话的投影状态。
  * 所有状态只在主线程修改；UI 通过 [revision] 感知变化后直接读取。
  */
-class AgentClient(val config: HostConfig, private val drafts: android.content.SharedPreferences? = null) {
+class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDrafts) {
     val api = ApiClient(config.url, requireNotNull(config.token))
     val link = MutableStateFlow(LinkStatus.CONNECTING)
     val sessions = MutableStateFlow<List<SessionSummary>>(emptyList())
@@ -56,10 +57,9 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
     private val credentialScope = java.security.MessageDigest.getInstance("SHA-256")
         .digest((config.url + "\n" + config.token.orEmpty()).toByteArray()).joinToString("") { "%02x".format(it) }.take(24)
     val storageIdentity: String get() = config.id + ":" + credentialScope
-    private fun draftKey(id: String) = storageIdentity + ":" + id
     fun chat(id: String): ChatSession = chats.getOrPut(id) {
         ChatSession(id).also { session ->
-            drafts?.getString(draftKey(id), null)?.let { saved ->
+            drafts.load(storageIdentity, id).takeIf { it.isNotBlank() }?.let { saved ->
                 runCatching {
                     val data = wireJson.parseToJsonElement(saved).obj()
                     session.draft = data.getString("text")
@@ -74,7 +74,6 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
         }
     }
     private fun saveDrafts() {
-        val editor = drafts?.edit() ?: return
         chats.values.forEach { s ->
             val data = buildJsonObject {
                 put("references", JsonArray(s.references)); put("sentReferences", JsonArray(s.sentReferences))
@@ -82,9 +81,10 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
                 put("attachments", wireJson.encodeToJsonElement(ListSerializer(UploadedAttachment.serializer()), s.attachments.map { it.attachment }))
                 put("sentAttachments", JsonArray(s.sentAttachments.map { JsonPrimitive(it) }))
             }.toString()
-            if (drafts.getString(draftKey(s.id), null) != data) editor.putString(draftKey(s.id), data)
+            if (s.draft.isEmpty() && s.pendingRequest.isEmpty() && s.sentDraft.isEmpty() && s.attachments.isEmpty() && s.sentAttachments.isEmpty() && s.references.isEmpty() && s.sentReferences.isEmpty()) {
+                drafts.clear(storageIdentity, s.id)
+            } else if (drafts.load(storageIdentity, s.id) != data) drafts.save(storageIdentity, s.id, data)
         }
-        editor.apply()
     }
 
     fun start() {
@@ -205,18 +205,19 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
             s.sending = false
             error.value = e.message
         }
+        val wasRunning = s.running
         s.reduce(e)
         s.run?.let { run ->
             taskStates.value = taskStates.value + (s.id to run.state)
             if (run.state in setOf("completed", "failed", "interrupted", "cancelled")) {
-                val key = draftKey(s.id) + ":read"
                 val viewing = com.hwj.easyagent.mobile.AppVisibility.foreground && com.hwj.easyagent.mobile.AppVisibility.openChat == "${config.id}/${s.id}"
-                if (viewing) { drafts?.edit()?.putString(key, run.id)?.apply(); unread.value = unread.value - s.id }
-                else if (drafts?.getString(key, null) != run.id) unread.value = unread.value + s.id
+                if (viewing) { drafts.save(storageIdentity, "read:" + s.id, run.id); unread.value = unread.value - s.id }
+                else if (drafts.load(storageIdentity, "read:" + s.id) != run.id) unread.value = unread.value + s.id
             }
         }
         onAlert?.let { notify -> alertsFor(before, s).forEach { notify(this, it) } }
         if (e.type == "status" && !s.running) refreshSessions()
+        if (wasRunning && !s.running) loadSessionInfo(s)
         touch()
     }
 
@@ -233,6 +234,7 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
         }
         touch()
         reload(s)
+        loadSessionInfo(s)
     }
 
     private fun reload(s: ChatSession) {
@@ -325,12 +327,12 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
         call(ApiClient.sessionPath(s.id) + "/run/cancel", buildJsonObject { put("run_id", s.runId) }) { reload(s) }
     }
 
-    fun confirm(s: ChatSession, confirmationId: String, approved: Boolean, answers: JsonArray? = null) {
+    fun confirm(s: ChatSession, confirmationId: String, approved: Boolean, answers: JsonElement? = null) {
         val body = buildJsonObject {
             put("run_id", s.runId)
             put("confirmation_id", confirmationId)
             put("approved", approved)
-            answers?.let { put("answers", it) }
+            if (answers != null) put("answers", answers)
         }
         call(ApiClient.sessionPath(s.id) + "/run/confirm", body) { reload(s) }
     }
@@ -364,6 +366,10 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
     suspend fun stopLoop(sessionId: String) {
         api.delete(ApiClient.sessionPath(sessionId) + "/loop")
     }
+
+    /** Models available on the host (GET /models), with the session-agnostic current entry. */
+    suspend fun models(): ModelsResponse =
+        wireJson.decodeFromJsonElement(ModelsResponse.serializer(), api.get("/models"))
 
     fun refreshSessions() {
         if (sessionsLoading.value) return
@@ -404,12 +410,6 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
         }
     }
 
-    fun setAccess(s: ChatSession, mode: String) {
-        call(ApiClient.sessionPath(s.id) + "/permissions", buildJsonObject { put("mode", mode) }) { open(s.id) }
-    }
-    fun changeQueue(s: ChatSession, action: String, id: String = "", prompt: String = "") {
-        call(ApiClient.sessionPath(s.id) + "/queue", buildJsonObject { put("action", action); put("id", id); put("prompt", prompt) }) { reload(s) }
-    }
     fun continueRun(s: ChatSession) {
         call(ApiClient.sessionPath(s.id) + "/run/continue", buildJsonObject { put("run_id", s.runId); put("request_id", requestId()) }) { reload(s) }
     }
@@ -419,7 +419,7 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
             try {
                 api.delete(ApiClient.sessionPath(id))
                 chats.remove(id)
-                drafts?.edit()?.remove(draftKey(id))?.apply()
+                drafts.clear(storageIdentity, id)
                 if (activeId.value == id) activeId.value = null
                 refreshSessions()
             } catch (e: ApiException) {
@@ -431,6 +431,80 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
     fun patchSession(id: String, patch: JsonObject) {
         call(ApiClient.sessionPath(id), patch, method = "PATCH") { refreshSessions() }
     }
+
+    /** Switches the session's approval mode ("ask" or "full"); the host refuses while a run is active. */
+    fun setAccessMode(s: ChatSession, mode: String) {
+        call(ApiClient.sessionPath(s.id) + "/permissions", buildJsonObject { put("mode", mode) }) {
+            s.accessMode = mode
+        }
+    }
+
+    /** Switches the session's model; info is reloaded afterwards. */
+    fun switchModel(s: ChatSession, model: ModelInfo) {
+        call(ApiClient.sessionPath(s.id) + "/model", buildJsonObject {
+            put("model", model.id)
+            put("provider", model.provider)
+        }) { loadSessionInfo(s) }
+    }
+
+    /** Compacts the conversation context; the host summarizes history, which can take a while. */
+    fun compact(s: ChatSession) {
+        scope.launch {
+            try {
+                api.post(ApiClient.sessionPath(s.id) + "/compact")
+                loadSessionInfo(s)
+            } catch (e: ApiException) {
+                error.value = e.message
+            }
+        }
+    }
+
+    /** Refreshes access mode, model and context usage from GET /sessions/{id}/info. */
+    fun loadSessionInfo(s: ChatSession) {
+        scope.launch {
+            try {
+                val raw = api.get(ApiClient.sessionPath(s.id) + "/info")
+                val info = wireJson.decodeFromJsonElement(SessionInfo.serializer(), raw)
+                s.accessMode = info.accessMode
+                s.model = info.model
+                info.contextUsage?.let { s.contextUsage = it }
+            } catch (e: ApiException) {
+                // 信息刷新失败不打扰用户：权限与用量维持上次值。
+            }
+            touch()
+        }
+    }
+
+    /** Queue mutation (edit/remove/pause/resume/send_now) through POST /queue. */
+    fun queueOp(s: ChatSession, action: String, id: String = "", prompt: String = "") {
+        scope.launch {
+            try {
+                val body = buildJsonObject {
+                    put("action", action)
+                    if (id.isNotEmpty()) put("id", id)
+                    if (prompt.isNotEmpty()) put("prompt", prompt)
+                }
+                val raw = api.post(ApiClient.sessionPath(s.id) + "/queue", body)
+                runCatching { wireJson.decodeFromJsonElement(MessageQueue.serializer(), raw) }.getOrNull()?.let {
+                    if (it.revision >= s.queue.revision) s.queue = it
+                }
+            } catch (e: ApiException) {
+                error.value = e.message
+            }
+            touch()
+        }
+    }
+
+    /** Persists the composer draft for this host+session; called on every edit. */
+    fun saveDraft(s: ChatSession, text: String) {
+        s.draft = text
+        saveDrafts()
+    }
+
+    /** Authenticated URL for a message image, loaded by the shared image loader. */
+    fun attachmentUrl(sessionId: String, image: HistoryImage): String =
+        config.url + ApiClient.sessionPath(image.sessionId.ifEmpty { sessionId }) + "/attachments/" +
+            java.net.URLEncoder.encode(image.attachmentId, "UTF-8") + "/raw"
 
     private fun call(path: String, body: JsonObject, method: String = "POST", done: () -> Unit) {
         scope.launch {
@@ -453,8 +527,10 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
         if (s.draft == s.sentDraft) s.draft = ""
         s.attachments = s.attachments.filterNot { it.attachment.id in s.sentAttachments }
         s.references = s.references.filterNot { it in s.sentReferences }
+        s.sentDraft = ""
         s.sentReferences = emptyList()
         s.sentAttachments = emptySet()
+        saveDraft(s, s.draft)
     }
 
     /** Uploads one attachment for the session's next prompt (server limit 4 MiB). */
@@ -493,23 +569,6 @@ class AgentClient(val config: HostConfig, private val drafts: android.content.Sh
     suspend fun transcribe(wav: ByteArray): String {
         val raw = api.postFile("/asr/transcribe", "file", "voice.wav", "audio/wav", wav)
         return raw.obj().getString("text").trim()
-    }
-
-    private val images = object : LinkedHashMap<String, ByteArray>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 24
-    }
-
-    /** Bytes of an image in a message, cached for the most recent 24 images. */
-    suspend fun image(sessionId: String, image: HistoryImage): ByteArray {
-        if (image.dataUrl.isNotEmpty()) {
-            val encoded = image.dataUrl.substringAfter(',', "")
-            return Base64.getDecoder().decode(encoded)
-        }
-        val key = image.sessionId.ifEmpty { sessionId } + "/" + image.attachmentId
-        images[key]?.let { return it }
-        val path = ApiClient.sessionPath(image.sessionId.ifEmpty { sessionId }) + "/attachments/" +
-            java.net.URLEncoder.encode(image.attachmentId, "UTF-8") + "/raw"
-        return api.download(path).also { images[key] = it }
     }
 
     companion object {

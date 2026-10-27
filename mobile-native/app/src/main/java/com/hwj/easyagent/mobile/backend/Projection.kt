@@ -40,7 +40,6 @@ class ChatSession(val id: String) {
     var workspace = ""
     var references by mutableStateOf<List<JsonObject>>(emptyList())
     var sentReferences: List<JsonObject> = emptyList()
-    var accessMode by mutableStateOf("")
     val messages = ArrayList<ChatMessage>()
     var run: RunInfo? = null
     var seq = 0L
@@ -54,6 +53,12 @@ class ChatSession(val id: String) {
     var sentAttachments: Set<String> = emptySet()
     var draft by mutableStateOf("")
     var usage: JsonObject? = null
+    /** 会话权限模式（"ask" 每次询问 / "full" 自动批准，ask_user 提问除外），来自 /info。 */
+    var accessMode by mutableStateOf("")
+    /** 当前模型 ID，来自 /info；切换模型后刷新。 */
+    var model by mutableStateOf("")
+    /** 上下文占用（GET /info 的 context_usage）。 */
+    var contextUsage by mutableStateOf<ContextUsage?>(null)
     /** Attachments uploaded for the next prompt, with a local thumbnail when it is an image. */
     var attachments by mutableStateOf<List<PendingAttachment>>(emptyList())
     var uploading by mutableIntStateOf(0)

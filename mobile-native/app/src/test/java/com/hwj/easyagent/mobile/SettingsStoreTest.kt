@@ -104,6 +104,25 @@ class SettingsStoreTest {
         prefs.failCommit = false
         assertEquals("secret", SettingsStore(prefs, TestTokenCipher).load().hosts.single().token)
     }
+
+    @Test
+    fun `drafts are stored per host and session and keep-alive defaults on`() {
+        val prefs = MemoryPreferences()
+        val store = SettingsStore(prefs, TestTokenCipher)
+        assertTrue(store.keepAlive)
+        store.keepAlive = false
+        assertFalse(store.keepAlive)
+        assertEquals("", store.load("h1", "s1"))
+        store.save("h1", "s1", "未发送的输入")
+        assertEquals("未发送的输入", store.load("h1", "s1"))
+        assertEquals("", store.load("h1", "s2"))
+        assertEquals("", store.load("h2", "s1"))
+        store.save("h1", "s1", "")
+        assertEquals("", store.load("h1", "s1"))
+        store.save("h1", "s1", "再改一次")
+        store.clear("h1", "s1")
+        assertEquals("", store.load("h1", "s1"))
+    }
 }
 
 internal object TestTokenCipher : TokenCipher {

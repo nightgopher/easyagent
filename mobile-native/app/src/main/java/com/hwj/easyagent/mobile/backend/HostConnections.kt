@@ -2,6 +2,7 @@ package com.hwj.easyagent.mobile.backend
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /** 每台主机持有独立连接；切换只改变选择，不销毁其他主机的会话、草稿和重连任务。 */
 class HostConnections(
@@ -59,7 +60,7 @@ class HostConnections(
         for (host in next.hosts) {
             // 解密失败的配置仍可编辑/删除，但绝不降级为无令牌请求。
             if (host.token != null && !clients.containsKey(host.id)) {
-                clients[host.id] = AgentClient(host, settings.draftPreferences).also {
+                clients[host.id] = AgentClient(host, settings).also {
                     it.onAlert = onAlert
                     it.start()
                 }
@@ -68,4 +69,12 @@ class HostConnections(
         mutableState.value = next
         mutableClient.value = clients[next.activeId]
     }
+
+    /** Bearer token of the saved host matching [url]'s origin, for the shared image loader. */
+    fun tokenFor(url: String): String? {
+        val origin = originOf(url) ?: return null
+        return state.value.hosts.firstOrNull { originOf(it.url) == origin }?.token?.takeIf { it.isNotEmpty() }
+    }
+
+    private fun originOf(url: String): String? = url.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }
 }

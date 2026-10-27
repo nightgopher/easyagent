@@ -26,12 +26,24 @@ data class HostConfig(
 
 data class HostSettings(val hosts: List<HostConfig> = emptyList(), val activeId: String? = null)
 
+/** 输入框草稿按主机+会话落盘，进程被系统回收后恢复。 */
+interface DraftStore {
+    fun load(hostId: String, sessionId: String): String
+    fun save(hostId: String, sessionId: String, text: String)
+    fun clear(hostId: String, sessionId: String)
+}
+
+internal object NoDrafts : DraftStore {
+    override fun load(hostId: String, sessionId: String): String = ""
+    override fun save(hostId: String, sessionId: String, text: String) {}
+    override fun clear(hostId: String, sessionId: String) {}
+}
+
 @Serializable
 private data class StoredHost(val id: String, val name: String, val url: String)
 
 /** 运行主机地址与令牌。令牌用 Android Keystore 内的 AES 密钥加密后再落盘，对应桌面端的钥匙串。 */
-class SettingsStore internal constructor(private val prefs: SharedPreferences, private val cipher: TokenCipher) {
-    internal val draftPreferences get() = prefs
+class SettingsStore internal constructor(private val prefs: SharedPreferences, private val cipher: TokenCipher) : DraftStore {
     constructor(context: Context) : this(context.getSharedPreferences("easyagent-host", Context.MODE_PRIVATE), KeystoreTokenCipher())
 
     fun load(): HostSettings {
@@ -66,9 +78,27 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
         val hosts = records().filter { it.id != id }
         val selected = state.activeId?.takeIf { it != id } ?: hosts.firstOrNull()?.id
         val editor = prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(KEY_ACTIVE, selected).remove(tokenKey(id))
-        prefs.all.keys.filter { it.startsWith("$id:") }.forEach(editor::remove)
+        prefs.all.keys.filter { it.startsWith("$id:") || it.startsWith("draft:$id:") }.forEach(editor::remove)
         commit(editor)
     }
+
+    /** 后台保活前台服务开关；默认开启，关闭后 App 退后台会被系统回收、收不到审批通知。 */
+    var keepAlive: Boolean
+        get() = prefs.getBoolean(KEY_KEEP_ALIVE, true)
+        set(value) { prefs.edit().putBoolean(KEY_KEEP_ALIVE, value).apply() }
+
+    override fun load(hostId: String, sessionId: String): String = prefs.getString(draftKey(hostId, sessionId), null).orEmpty()
+
+    override fun save(hostId: String, sessionId: String, text: String) {
+        val key = draftKey(hostId, sessionId)
+        prefs.edit().putString(key, text).apply()
+    }
+
+    override fun clear(hostId: String, sessionId: String) {
+        prefs.edit().remove(draftKey(hostId, sessionId)).apply()
+    }
+
+    private fun draftKey(hostId: String, sessionId: String): String = "draft:$hostId:$sessionId"
 
     private fun records(): List<StoredHost> {
         prefs.getString(KEY_HOSTS, null)?.let {
@@ -95,6 +125,7 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
         const val KEY_ACTIVE = "active-host"
         const val KEY_URL = "url"
         const val KEY_TOKEN = "token"
+        const val KEY_KEEP_ALIVE = "keep-alive"
     }
 }
 
