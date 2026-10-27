@@ -46,8 +46,7 @@ jobs:
           disable-animations: true
           working-directory: mobile-native
           script: |
-            bash ../scripts/check-android-ui.sh
-            adb pull /data/local/tmp/easyagent-ui app/build/qa
+            result=0; bash ../scripts/check-android-ui.sh || result=$?; adb pull /data/local/tmp/easyagent-ui app/build/qa || true; exit "$result"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

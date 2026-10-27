@@ -83,7 +83,7 @@ class RuntimeUiTest {
             instrumentation.runOnMainSync {
                 projected = app.connections.client.value?.activeChat?.messages?.joinToString(" | ") { it.text }.orEmpty()
             }
-            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).fetchSemanticsNodes().joinToString { it.config.toString() }}", error)
+            throw AssertionError("Missing $text\nHTTP calls: ${hosts.flatMap { it.calls }.map { it.method + " " + it.path }}\nProjected messages: $projected\n${ui.onAllNodes(isRoot()).printToString()}", error)
         }
     }
     private fun fill(label: String, value: String) {
