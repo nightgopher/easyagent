@@ -40,7 +40,6 @@ class ChatSession(val id: String) {
     var workspace = ""
     var references by mutableStateOf<List<JsonObject>>(emptyList())
     var sentReferences: List<JsonObject> = emptyList()
-    var accessMode by mutableStateOf("")
     val messages = ArrayList<ChatMessage>()
     var run: RunInfo? = null
     var seq = 0L

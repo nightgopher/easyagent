@@ -527,6 +527,7 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         if (s.draft == s.sentDraft) s.draft = ""
         s.attachments = s.attachments.filterNot { it.attachment.id in s.sentAttachments }
         s.references = s.references.filterNot { it in s.sentReferences }
+        s.sentDraft = ""
         s.sentReferences = emptyList()
         s.sentAttachments = emptySet()
         saveDraft(s, s.draft)

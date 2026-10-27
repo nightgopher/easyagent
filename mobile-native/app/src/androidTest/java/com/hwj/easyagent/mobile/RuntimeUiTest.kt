@@ -215,7 +215,7 @@ class RuntimeUiTest {
         assertTrue(host.prompts.isEmpty())
         val config = app.connections.client.value!!.config
         instrumentation.runOnMainSync {
-            val restored = com.hwj.easyagent.mobile.backend.AgentClient(config, instrumentation.targetContext.getSharedPreferences("easyagent-host", 0))
+            val restored = com.hwj.easyagent.mobile.backend.AgentClient(config, app.settings)
             assertEquals("https://example.com/ 待整理的材料", restored.chat("qa-session").draft)
             restored.shutdown()
         }
