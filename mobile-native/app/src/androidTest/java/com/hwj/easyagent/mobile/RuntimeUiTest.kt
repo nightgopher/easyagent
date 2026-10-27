@@ -514,8 +514,9 @@ class RuntimeUiTest {
         }
         host.emit("status", "state" to "completed", "streaming" to false)
         waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }.contentIntent.send()
-        activity.moveToState(Lifecycle.State.RESUMED)
+        // Let the notification bring the activity forward; do not race its RESTARTED transition.
         waitText("已保存的历史")
+        assertEquals(Lifecycle.State.RESUMED, activity.state)
         ui.onNodeWithContentDescription("返回").assertExists()
         assertEquals("qa-session", app.connections.client.value?.activeId?.value)
         screenshot("notification-opened-chat")
