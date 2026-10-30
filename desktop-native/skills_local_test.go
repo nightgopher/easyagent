@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -70,8 +71,8 @@ func TestMySkillsListsEverySkillAndOnlyOffersUninstallForMarketInstalls(t *testi
 					t.Fatalf("%d: missing %q in %v", width, want, tt.Texts())
 				}
 			}
-			if !tt.HasText("已被覆盖") {
-				t.Fatal("a skill shadowed by an earlier directory must say so")
+			if !tt.HasText("另有 1 个副本") || tt.HasText("旧版本，被覆盖") {
+				t.Fatal("shadowed copies must be discoverable without duplicating the overview")
 			}
 			if tt.HasText("卸载") || hasExactText(tt, "/home/q/.agents/skills/from-market/SKILL.md") {
 				t.Fatal("details must stay collapsed in the overview")
@@ -88,6 +89,72 @@ func TestMySkillsListsEverySkillAndOnlyOffersUninstallForMarketInstalls(t *testi
 				}
 			}
 		})
+	}
+}
+
+func TestMySkillsGroupsCopiesAndKeepsTheirDetails(t *testing.T) {
+	a := fixtureLocalSkillsPreview(t)
+	skills := list(object(a.Live.Data[localSkillsKey])["skills"])
+	winner, shadowed := object(skills[1]), object(skills[2])
+	winner["enabled"] = false
+	groups := groupLocalSkills([]any{shadowed, winner})
+	if len(groups) != 1 || len(groups[0].Copies) != 1 || boolean(groups[0].Skill["enabled"]) {
+		t.Fatalf("a disabled winner must keep precedence regardless of input order: %+v", groups)
+	}
+	tt := ui.NewTester(a.View, 960, 1000)
+	click(t, tt, "技能详情："+str(winner["path"]))
+	click(t, tt, "已被覆盖的副本（1）")
+	click(t, tt, "技能详情："+str(shadowed["path"]))
+	if !tt.HasText(str(shadowed["path"])) || !tt.HasText("这个不会被加载") {
+		t.Fatal("shadowed copy details are inaccessible")
+	}
+	if _, ok := tt.Find("启用技能：" + str(shadowed["path"])); ok {
+		t.Fatal("a shadowed copy must not offer a misleading toggle")
+	}
+	a.Settings.LocalSkillQuery = "旧版本"
+	tt.Frame()
+	if !tt.HasText("hand-written") || tt.HasText("from-market") {
+		t.Fatal("search must include descriptions from grouped copies")
+	}
+	a.Settings.LocalSkillQuery = "Claude Code"
+	tt.Frame()
+	if !tt.HasText("other-tool") || tt.HasText("from-market") {
+		t.Fatal("search must match the source")
+	}
+}
+
+func TestMySkillsCompactRows(t *testing.T) {
+	for _, width := range []int{640, 960, 1240} {
+		for _, theme := range []string{"dark", "light"} {
+			t.Run(fmt.Sprintf("%d-%s", width, theme), func(t *testing.T) {
+				a := fixtureLocalSkillsPreview(t)
+				a.Settings.Preferences.Theme = theme
+				a.Live.Connected = true
+				skills := list(object(a.Live.Data[localSkillsKey])["skills"])
+				object(skills[0])["description"] = "Create and edit DingTalk AI Cards.\nUse for images, structural protocol errors, and named component contracts."
+				object(skills[1])["enabled"] = false
+				object(skills[4])["name"] = "a-very-long-skill-name-that-must-not-push-controls-outside-the-window"
+				tt := ui.NewTester(a.View, width, 820)
+				for _, i := range []int{0, 1, 3, 4} {
+					skill := object(skills[i])
+					row, ok := tt.Find("技能：" + str(skill["name"]))
+					if !ok || row.X < 0 || row.X+row.W > float32(width) || row.H > 120 {
+						t.Fatalf("skill row overflows or is too tall: %+v", row)
+					}
+					description, ok := tt.Find(strings.Join(strings.Fields(str(skill["description"])), " "))
+					if !ok || description.H > 20 || description.X+description.W > row.X+row.W {
+						t.Fatalf("description must remain a single line: %+v", description)
+					}
+					toggle, ok := tt.Find("启用技能：" + str(skill["path"]))
+					if !ok || toggle.X < row.X || toggle.X+toggle.W > row.X+row.W || toggle.Y+toggle.H > row.Y+row.H {
+						t.Fatalf("skill switch escaped its row: %+v / %+v", toggle, row)
+					}
+				}
+				if dir := os.Getenv("EASYAGENT_PREVIEW_SNAPSHOTS"); dir != "" {
+					saveSnapshot(t, tt, filepath.Join(dir, fmt.Sprintf("skills-refined-%d-%s.png", width, theme)))
+				}
+			})
+		}
 	}
 }
 

@@ -649,6 +649,7 @@ func (a *preview) liveApproval(c *ui.Context, s *session) {
 	})
 }
 func (a *preview) liveModals(c *ui.Context) {
+	a.mcpEditor(c)
 	a.marketLightbox(c)
 	a.imageLightbox(c)
 	l := a.Live

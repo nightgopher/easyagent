@@ -42,233 +42,204 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 			a.loadSettingsPage()
 		}
 	}
-	ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.input(c, "项目工作区", &s.Workspace, "当前主机上的绝对路径", false) })
-		a.action(c, "读取").OnClick(a.loadSettingsPage)
-	})
-	trusted := boolean(m["project_trusted"])
-	label := "信任此项目"
-	if trusted {
-		label = "撤销信任"
-	}
-	a.action(c, label).AlignSelf(ui.Start).OnClick(func() {
-		a.operation("mcp-trust", "PUT", "/mcp/project-trust", map[string]any{"workspace": s.Workspace, "trusted": !trusted}, apply)
+	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
+		a.note(c, fmt.Sprintf("%d 个", len(list(m["servers"]))))
+		ui.Spacer(c)
+		a.action(c, "刷新").Disabled(l.Loading["mcp"]).OnClick(a.loadSettingsPage)
+		label := "添加服务"
+		if a.settingsFormDirty() {
+			label = "继续编辑"
+		}
+		a.primary(c, label).OnClick(func() { a.beginMCPEditor(nil) })
 	})
 	for _, raw := range list(m["issues"]) {
 		a.note(c, str(object(raw)["message"]))
 	}
-	toolbar := ui.Row(c).Gap(8).AlignItems(ui.Center).Margin(12, 0, 0, 0)
-	formOpen := ui.Local(toolbar, "editor-open", func() bool { return false })
-	formReveal := ui.Local(toolbar, "editor-reveal", func() bool { return false })
-	toolbar.Children(func() {
-		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
-		a.note(c, fmt.Sprintf("%d 个", len(list(m["servers"]))))
-		ui.Spacer(c)
-		a.primary(c, "添加服务").OnClick(func() { *formOpen, *formReveal = true, true })
-	})
 	if len(list(m["servers"])) == 0 {
 		a.note(c, "还没有 MCP 服务，点击添加服务连接本机工具或远程服务。")
 	}
-	for _, raw := range list(m["servers"]) {
-		server := object(raw)
-		name, scope := str(server["name"]), str(server["scope"])
-		params := query(map[string]string{"workspace": s.Workspace, "scope": scope})
-		path := "/mcp/servers/" + pathSegment(name)
-		row := ui.Column(c.Key(l.Config.ActiveHost+"\x00"+workspace+"\x00"+scope+"\x00"+name)).Padding(12, 0).Gap(10).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
-		expanded := ui.Local(row, "details", func() bool { return false })
-		toolsOpen := ui.Local(row, "tools", func() bool { return false })
-		toolFilter := ui.Local(row, "tool-filter", func() string { return "" })
-		row.Children(func() {
-			ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-				chevron := "chevron-right"
-				if *expanded {
-					chevron = "chevron-down"
+	if len(list(m["servers"])) > 0 {
+		ui.Column(c).Label("MCP 服务列表").Gap(0).MinWidth(0).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() {
+			for index, raw := range list(m["servers"]) {
+				if index > 0 {
+					ui.Box(c).Height(1).Background(c.Theme().Border)
 				}
-				ui.ButtonBase(c).Label("服务详情："+name).Grow(1).MinWidth(0).Gap(8).Padding(6, 0).Justify(ui.Start).OnClick(func() { *expanded = !*expanded }).Children(func() {
-					icon(c, chevron)
-					ui.Text(c, name).FontSize(13).FontWeight(500).Grow(1).MinWidth(0).SingleLine()
-				})
-				scopeLabel := "个人"
-				if scope == "project" {
-					scopeLabel = "项目"
-				}
-				a.note(c, scopeLabel+" · "+str(server["transport"]))
-				state := str(server["state"])
-				color := c.Theme().TextMuted
-				switch state {
-				case "connected", "ready":
-					state, color = "已连接", c.Theme().Accent
-				case "connecting":
-					state = "连接中"
-				case "error", "failed":
-					state, color = "连接失败", c.Theme().Danger
-				case "disconnected":
-					state = "未连接"
-				case "needs_auth":
-					state = "需要授权"
-				case "disabled":
-					state = "已停用"
-				}
-				if !boolean(server["enabled"]) {
-					state, color = "已停用", c.Theme().TextMuted
-				}
-				if state == "" {
-					state = "未连接"
-				}
-				ui.Text(c, state).FontSize(12).TextColor(color)
-				a.note(c, formatCount(server["tool_count"])+" 个工具")
-			})
-			if err := str(server["error"]); err != "" {
-				ui.Text(c, err).FontSize(12).TextColor(c.Theme().Danger)
-			}
-			if !*expanded {
-				return
-			}
-			ui.Row(c).Gap(6).Wrap().Children(func() {
-				a.action(c, "修改配置").OnClick(func() {
-					*formOpen, *formReveal = true, true
-					s.MCPName = name
-					s.Scope = "个人"
-					if scope == "project" {
-						s.Scope = "项目"
-					}
-					s.Advanced = true
-					s.JSON = "{}"
-					s.MCPBase = nil
-					a.Live.SavedMCPForm = s.mcpForm
-					l.Notice = "填写需要修改的字段；省略的凭据会保留。"
-				})
-				for _, act := range []struct{ id, label string }{{"reconnect", "重新连接"}, {"refresh", "刷新工具"}, {"enable", "启用"}, {"disable", "停用"}, {"trust", "信任服务"}, {"untrust", "撤销信任"}, {"login", "授权登录"}, {"logout", "退出授权"}} {
-					if act.id == "enable" && boolean(server["enabled"]) || act.id == "disable" && !boolean(server["enabled"]) || act.id == "trust" && boolean(server["trusted"]) || act.id == "untrust" && !boolean(server["trusted"]) {
-						continue
-					}
-					if (act.id == "login" || act.id == "logout") && str(server["transport"]) == "stdio" {
-						continue
-					}
-					a.action(c, act.label).Disabled(l.Loading["mcp-action"] || l.Loading["mcp-login"]).OnClick(func() {
-						if act.id == "login" {
-							a.startMCPLogin(name, scope, workspace)
-							return
+				server := object(raw)
+				name, scope := str(server["name"]), str(server["scope"])
+				params := query(map[string]string{"workspace": s.Workspace, "scope": scope})
+				path := "/mcp/servers/" + pathSegment(name)
+				row := ui.Column(c.Key(l.Config.ActiveHost+"\x00"+workspace+"\x00"+scope+"\x00"+name)).Label("MCP 服务："+name).Padding(12, 14).Gap(10).MinWidth(0).Disabled(l.Loading["mcp"])
+				expanded := ui.Local(row, "details", func() bool { return false })
+				toolsOpen := ui.Local(row, "tools", func() bool { return false })
+				toolFilter := ui.Local(row, "tool-filter", func() string { return "" })
+				row.Children(func() {
+					ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+						scopeLabel := "个人"
+						if scope == "project" {
+							scopeLabel = "项目"
 						}
-						a.operation("mcp-action", "POST", path+"/"+act.id+params, map[string]any{}, apply)
+						ui.ButtonBase(c).Label("服务详情："+name).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(10).Padding(2, 0).Radius(4).Justify(ui.Start).Expanded(*expanded).OnClick(func() { *expanded = !*expanded }).Children(func() {
+							chevron := "chevron-right"
+							if *expanded {
+								chevron = "chevron-down"
+							}
+							ui.Icon(c, icons[chevron]).FontSize(12).TextColor(c.Theme().TextMuted).Shrink(0)
+							ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+								ui.Text(c, name).FontSize(13.5).FontWeight(600).SingleLine()
+								if description := str(server["description"]); description != "" {
+									ui.Text(c, description).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Tooltip(description)
+								}
+								ui.Text(c, scopeLabel+" · "+strings.ToUpper(str(server["transport"]))+" · "+formatCount(server["tool_count"])+" 个工具").FontSize(11).TextColor(c.Theme().TextMuted).SingleLine()
+							})
+						})
+						state := str(server["state"])
+						color := c.Theme().TextMuted
+						switch state {
+						case "connected", "ready":
+							state, color = "已连接", c.Theme().Accent
+						case "connecting":
+							state = "连接中"
+						case "error", "failed":
+							state, color = "连接失败", c.Theme().Danger
+						case "disconnected":
+							state = "未连接"
+						case "needs_auth":
+							state = "需要授权"
+						case "disabled":
+							state = "已停用"
+						}
+						if !boolean(server["enabled"]) {
+							state, color = "已停用", c.Theme().TextMuted
+						} else if !boolean(server["trusted"]) {
+							state, color = "待信任", c.Theme().TextMuted
+						}
+						if state == "" {
+							state = "未连接"
+						}
+						ui.Text(c, state).FontSize(11).TextColor(color).Shrink(0)
+						enabled := boolean(server["enabled"])
+						ui.Switch(c, &enabled).Label("启用 MCP 服务：" + name).Shrink(0).Disabled(l.Loading["mcp-action"]).OnChange(func() {
+							action := "disable"
+							if enabled {
+								action = "enable"
+							}
+							a.operation("mcp-action", "POST", path+"/"+action+params, map[string]any{}, apply)
+						})
 					})
-				}
-				a.action(c, "删除").Disabled(l.Loading["mcp-action"]).TextColor(c.Theme().Danger).OnClick(func() {
-					l.Confirm = &nativeConfirmation{"删除 MCP 服务？", name + " · " + scope + " · " + s.Workspace, func() { a.operation("mcp-action", "DELETE", path+params, nil, apply) }}
-				})
-			})
-			toolToggle := "查看工具"
-			if *toolsOpen {
-				toolToggle = "收起工具"
-			}
-			a.action(c, toolToggle+" · "+formatCount(server["tool_count"])).Label("工具列表：" + name).AlignSelf(ui.Start).OnClick(func() { *toolsOpen = !*toolsOpen })
-			if !*toolsOpen {
-				return
-			}
-			if len(list(server["tools"])) == 0 {
-				a.note(c, "暂无工具，连接服务后可刷新工具列表。")
-			}
-			ui.TextInput(c, toolFilter).Label("搜索工具："+name).Placeholder("搜索工具名称或说明").FontSize(12).Padding(8).Background(c.Theme().Surface).Border(1, c.Theme().Border)
-			ui.Scroll(c).Label("服务工具：" + name).MaxHeight(280).Shrink(0).Gap(10).Children(func() {
-				matches := 0
-				for _, toolRaw := range list(server["tools"]) {
-					tool := object(toolRaw)
-					if query := strings.ToLower(strings.TrimSpace(*toolFilter)); query != "" && !strings.Contains(strings.ToLower(str(tool["name"])+" "+str(tool["description"])), query) {
-						continue
+					if err := str(server["error"]); err != "" {
+						ui.Text(c, err).FontSize(12).TextColor(c.Theme().Danger)
 					}
-					matches++
-					enabled := boolean(tool["enabled"])
-					ui.Row(c).Gap(8).Children(func() {
-						ui.Column(c).Grow(1).MinWidth(0).Children(func() { ui.Text(c, str(tool["name"])).FontSize(12); a.note(c, str(tool["description"])) })
-						if ui.Checkbox(c.Key(str(tool["name"])), &enabled, "启用").Label("启用工具：" + str(tool["name"])).Disabled(l.Loading["mcp-tool"]).Changed() {
-							a.operation("mcp-tool", "POST", path+"/tools/"+pathSegment(str(tool["name"]))+params, map[string]any{"enabled": enabled}, apply)
+					if !*expanded {
+						return
+					}
+					ui.Row(c).Gap(8).Wrap().Children(func() {
+						a.action(c, "修改配置").OnClick(func() { a.beginMCPEditor(server) })
+						if boolean(server["trusted"]) {
+							a.action(c, "重新连接").Disabled(l.Loading["mcp-action"] || !boolean(server["enabled"])).OnClick(func() {
+								a.operation("mcp-action", "POST", path+"/reconnect"+params, map[string]any{}, apply)
+							})
+						} else {
+							a.primary(c, "信任服务").Disabled(l.Loading["mcp-action"]).OnClick(func() { a.operation("mcp-action", "POST", path+"/trust"+params, map[string]any{}, apply) })
+						}
+						if str(server["state"]) == "needs_auth" {
+							a.primary(c, "授权登录").Disabled(l.Loading["mcp-login"]).OnClick(func() { a.startMCPLogin(name, scope, workspace) })
 						}
 					})
-				}
-				if matches == 0 && strings.TrimSpace(*toolFilter) != "" {
-					a.note(c, "没有匹配的工具，试试其他名称或关键词。")
-				}
-			})
-		})
-	}
-	if l.LoginURL != "" {
-		a.note(c, "正在等待 MCP 授权回调…")
-		a.action(c, "打开授权页面").OnClick(func() { go mygo.Shell.OpenExternal(l.LoginURL) })
-		a.action(c, "取消授权").OnClick(a.cancelMCPLogin)
-	}
-	if !*formOpen && !a.settingsFormDirty() {
-		return
-	}
-	formPanel := ui.Column(c).Gap(12).Padding(16).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8)
-	if *formReveal {
-		formPanel.ScrollIntoView()
-		*formReveal = false
-	}
-	formPanel.Children(func() {
-		a.heading(c, "添加或修改 MCP 服务"+a.dirtySuffix())
-		a.dropdown(c, "配置范围", &s.Scope, []string{"个人", "项目"})
-		a.input(c, "服务名称", &s.MCPName, "例如 filesystem", false)
-		ui.Row(c).Children(func() {
-			a.note(c, "工具连接配置")
-			ui.Spacer(c)
-			label := "高级 JSON"
-			if s.Advanced {
-				label = "返回表单"
-			}
-			a.action(c, label).OnClick(s.toggleAdvanced)
-		})
-		if s.Advanced {
-			a.multiline(c, "标准 MCP 配置", &s.JSON, 8, 16)
-		} else {
-			a.dropdown(c, "连接方式", &s.Transport, []string{"stdio", "http"})
-			if s.Transport == "stdio" {
-				a.input(c, "启动命令", &s.Command, "npx", false)
-				a.multiline(c, "命令参数 · 每行一个", &s.Args, 2, 5)
-			} else {
-				a.input(c, "服务 URL", &s.URL, "https://example.com/mcp", false)
-			}
-			a.multiline(c, "环境变量 / 请求头 · KEY=VALUE", &s.Variables, 2, 5)
-			a.input(c, "超时（毫秒）", &s.Timeout, "30000", false)
-			ui.Checkbox(c, &s.Trust, "信任此服务")
-		}
-		a.note(c, "保存后会实际连接受信任的服务；项目配置需先信任项目。修改时省略的凭据会保留。")
-		ui.Row(c).Gap(8).Children(func() {
-			a.primary(c, "保存配置").Disabled(l.Loading["mcp-save"] || strings.TrimSpace(s.MCPName) == "").OnClick(func() {
-				var config map[string]any
-				var err error
-				if s.Advanced {
-					err = json.Unmarshal([]byte(s.JSON), &config)
-					if config == nil && err == nil {
-						err = errors.New("配置必须是 JSON 对象")
+					nativeDisclosure(c, "server-actions", "更多操作", func() {
+						ui.Row(c).Gap(8).Wrap().Children(func() {
+							if boolean(server["trusted"]) {
+								a.action(c, "撤销信任").Disabled(l.Loading["mcp-action"]).OnClick(func() { a.operation("mcp-action", "POST", path+"/untrust"+params, map[string]any{}, apply) })
+							}
+							if str(server["transport"]) != "stdio" {
+								if str(server["state"]) != "needs_auth" {
+									a.action(c, "授权登录").Disabled(l.Loading["mcp-login"]).OnClick(func() { a.startMCPLogin(name, scope, workspace) })
+								}
+								a.action(c, "退出授权").Disabled(l.Loading["mcp-action"]).OnClick(func() { a.operation("mcp-action", "POST", path+"/logout"+params, map[string]any{}, apply) })
+							}
+							a.action(c, "删除").Disabled(l.Loading["mcp-action"]).TextColor(c.Theme().Danger).OnClick(func() {
+								l.Confirm = &nativeConfirmation{"删除 MCP 服务？", name + " · " + scope + " · " + workspace, func() { a.operation("mcp-action", "DELETE", path+params, nil, apply) }}
+							})
+						})
+					})
+					toolToggle := "查看工具"
+					if *toolsOpen {
+						toolToggle = "收起工具"
 					}
-				} else {
-					config, err = s.mcpConfig()
-				}
-				if err != nil {
-					l.Error = err.Error()
-					return
-				}
-				scope := "user"
-				if s.Scope == "项目" {
-					scope = "project"
-				}
-				path := "/mcp/servers/" + pathSegment(strings.TrimSpace(s.MCPName)) + query(map[string]string{"workspace": s.Workspace, "scope": scope})
-				a.operation("mcp-save", "PUT", path, config, func(v any) {
-					apply(v)
-					s.mcpForm = mcpForm{Workspace: s.Workspace}
-					a.Live.SavedMCPForm = s.mcpForm
-					*formOpen = false
-					l.Notice = "MCP 配置已保存。"
+					a.action(c, toolToggle+" · "+formatCount(server["tool_count"])).Label("工具列表：" + name).AlignSelf(ui.Start).OnClick(func() { *toolsOpen = !*toolsOpen })
+					if !*toolsOpen {
+						return
+					}
+					if len(list(server["tools"])) == 0 {
+						a.note(c, "暂无工具，连接服务后可刷新工具列表。")
+					}
+					ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+						ui.TextInput(c, toolFilter).Label("搜索工具："+name).Placeholder("搜索工具名称或说明").Grow(1).MinWidth(0).FontSize(12).Padding(8).Background(c.Theme().Background).Border(1, c.Theme().Border)
+						a.action(c, "刷新工具").Disabled(l.Loading["mcp-action"]).OnClick(func() { a.operation("mcp-action", "POST", path+"/refresh"+params, map[string]any{}, apply) })
+					})
+					ui.Scroll(c).Label("服务工具：" + name).MaxHeight(280).Shrink(0).Gap(10).Children(func() {
+						matches := 0
+						for _, toolRaw := range list(server["tools"]) {
+							tool := object(toolRaw)
+							if query := strings.ToLower(strings.TrimSpace(*toolFilter)); query != "" && !strings.Contains(strings.ToLower(str(tool["name"])+" "+str(tool["description"])), query) {
+								continue
+							}
+							matches++
+							enabled := boolean(tool["enabled"])
+							ui.Row(c).Gap(8).Children(func() {
+								ui.Column(c).Grow(1).MinWidth(0).Children(func() { ui.Text(c, str(tool["name"])).FontSize(12); a.note(c, str(tool["description"])) })
+								if ui.Checkbox(c.Key(str(tool["name"])), &enabled, "启用").Label("启用工具：" + str(tool["name"])).Disabled(l.Loading["mcp-tool"]).Changed() {
+									a.operation("mcp-tool", "POST", path+"/tools/"+pathSegment(str(tool["name"]))+params, map[string]any{"enabled": enabled}, apply)
+								}
+							})
+						}
+						if matches == 0 && strings.TrimSpace(*toolFilter) != "" {
+							a.note(c, "没有匹配的工具，试试其他名称或关键词。")
+						}
+					})
+				})
+			}
+		})
+	}
+	nativeDisclosure(c, "mcp-project-settings", "项目配置", func() {
+		container := ui.Column(c.Key(workspace)).Gap(8)
+		draft := ui.Local(container, "workspace", func() string { return workspace })
+		container.Children(func() {
+			ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
+				ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.input(c, "项目工作区", draft, "当前主机上的绝对路径", false) })
+				a.action(c, "读取").Disabled(l.Loading["mcp"]).OnClick(func() {
+					next := strings.TrimSpace(*draft)
+					read := func() { a.resetMCPEditor(); s.Workspace = next; l.SavedMCPForm.Workspace = next; a.loadSettingsPage() }
+					if a.settingsFormDirty() {
+						a.requestConfirmation("放弃尚未保存的 MCP 配置？", "切换工作区会清除尚未保存的服务配置。", read)
+					} else {
+						read()
+					}
 				})
 			})
-			if a.settingsFormDirty() {
-				a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
-			} else {
-				a.action(c, "收起配置").OnClick(func() { *formOpen = false })
+			trusted := boolean(m["project_trusted"])
+			label := "信任此项目"
+			if trusted {
+				label = "撤销信任"
 			}
+			ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
+				a.note(c, "项目服务仅在信任此项目后启用。")
+				ui.Spacer(c)
+				a.action(c, label).Disabled(l.Loading["mcp-trust"] || l.Loading["mcp"] || workspace == "").OnClick(func() {
+					a.operation("mcp-trust", "PUT", "/mcp/project-trust", map[string]any{"workspace": workspace, "trusted": !trusted}, apply)
+				})
+			})
 		})
 	})
+	if l.LoginURL != "" {
+		a.note(c, "正在等待 MCP 授权回调…")
+		ui.Row(c).Gap(8).Children(func() {
+			a.action(c, "打开授权页面").OnClick(func() { go mygo.Shell.OpenExternal(l.LoginURL) })
+			a.action(c, "取消授权").OnClick(a.cancelMCPLogin)
+		})
+	}
 }
+
 func (a *preview) startMCPLogin(name, scope, workspace string) {
 	l := a.Live
 	if l.Loading["mcp-login"] {
@@ -669,9 +640,10 @@ func (a *preview) settingsFormDirty() bool {
 		return s.HostName != "" || s.HostURL != ""
 	case "mcp":
 		want, form := l.SavedMCPForm, s.mcpForm
-		return form.Workspace != want.Workspace || form.Scope != want.Scope || form.MCPName != want.MCPName || form.Transport != want.Transport ||
+		return form.Scope != want.Scope || form.MCPName != want.MCPName || form.Transport != want.Transport ||
 			form.Command != want.Command || form.Args != want.Args || form.Variables != want.Variables || form.URL != want.URL ||
-			form.Timeout != want.Timeout || form.JSON != want.JSON || form.Advanced != want.Advanced || form.Trust != want.Trust
+			form.Timeout != want.Timeout || form.JSON != want.JSON || form.Advanced != want.Advanced || form.Trust != want.Trust ||
+			form.Cwd != want.Cwd || form.Description != want.Description
 	case "feishu":
 		m := object(l.Data["feishu"])
 		if s.AppSecret != "" {
@@ -696,7 +668,10 @@ func (a *preview) discardSettingsForms() {
 	s.modelForm = l.SavedModelForm
 	s.APIKey = ""
 	s.mcpForm = l.SavedMCPForm
+	s.MCPEditorOpen = false
+	s.MCPEditError, s.MCPEditName, s.MCPImportName = "", "", ""
 	s.HostName, s.HostURL, s.HostToken = "", "", ""
+	s.RepairCredential = false
 	for _, h := range l.Config.Hosts {
 		if h.ID == s.EditHost && !h.Local {
 			s.HostName, s.HostURL = h.Name, h.URL

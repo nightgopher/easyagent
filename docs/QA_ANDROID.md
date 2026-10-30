@@ -2,6 +2,14 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.32.0 发布候选
+
+本轮修改原生桌面设置、连接修复与共享技能解析；`mobile-native/` 源码与 v0.31.0 相同。候选版本为 `0.32.0`，versionCode 为 `3200300`；最终 SHA、APK 签名与校验和以附注 tag 和 Release 的 `release.json` / `checksums.txt` 为准。
+
+- 本轮未在本地新增 Android 设备验收；实体网络切换、真实业务账号、正式 APK 跨版本覆盖安装与强退重启均标为未执行，不沿用历史版本的通过结论。
+- 发布流水线仍要求同一候选 SHA 的 API 31／34／35 界面矩阵、单测、lint 与构建全部通过；检查结果与截图见 [v0.32.0 Release 运行](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)。在流水线完成前，不将这些项目记录为已通过。
+- APK 继续使用固定发布证书，并随完整版本提供 APK 和 ZIP；Android 更新器按清单中的源码 tree 判断本轮是否需要提示升级。
+
 ## 自动检查
 
 ```sh
