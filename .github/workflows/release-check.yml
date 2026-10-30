@@ -76,3 +76,30 @@ jobs:
           MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: python3 ../scripts/macos-signing.py -- go run ./tools/build
         working-directory: desktop-native
+      - name: Verify the packaged core
+        env:
+          EASYAGENT_TEST_BUNDLE: ${{ github.workspace }}/desktop-native/build.noindex/darwin-arm64/EasyAgent.app
+        run: go test -count=1 -run '^TestPackagedCoreSmoke$' .
+        working-directory: desktop-native
+      - name: Notarize the main preview installer
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMGS=(desktop-native/build.noindex/darwin-arm64/*.dmg)
+          test "${#DMGS[@]}" -eq 1
+          DMG="${DMGS[0]}"
+          xcrun notarytool store-credentials "easyagent-preview-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
+          xcrun notarytool submit "$DMG" --keychain-profile "easyagent-preview-notary" --wait
+          xcrun stapler staple "$DMG"
+          xcrun stapler validate "$DMG"
+          git rev-parse HEAD > desktop-native/build.noindex/darwin-arm64/source-commit.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: signed-native-preview
+          path: |
+            desktop-native/build.noindex/darwin-arm64/*.dmg
+            desktop-native/build.noindex/darwin-arm64/source-commit.txt
+          if-no-files-found: error
+          retention-days: 7
