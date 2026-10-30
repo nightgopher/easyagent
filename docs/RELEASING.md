@@ -119,7 +119,7 @@ v0.17.1 及此前的公开原生包使用 ad hoc 代码签名；其身份绑定�
 
 `Release` 的原生构建需要 `MACOS_CERTIFICATE`（包含私钥的 PKCS#12 文件的 Base64）和 `MACOS_CERTIFICATE_PASSWORD` 两项 Actions Secret。证书必须匹配配置中的公开指纹；私钥不进入源码、日志或发布资产。`MYGO_UPDATER_PRIVATE_KEY` 仍用于 Ed25519 更新包校验，与 macOS 代码签名证书相互独立。CI 在临时钥匙串中导入证书，构建结束后恢复搜索列表并删除临时钥匙串；不修改系统证书信任。
 
-配置 Secret 后，可在 main 手动运行 `Release build check`，只验证真实签名证书和原生打包，不创建 tag 或 Release。PR 构建只使用一次性测试证书，不向 PR 提供正式签名私钥。
+配置 Secret 后，可在 main 手动运行 `Release build check`，生成使用正式证书签名并经过 Apple 公证的主线预览安装包，不创建 tag 或 Release。该任务还需要与正式发布相同的 `APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`，并验证包内核心的启动和退出。下载运行记录中的 `signed-native-preview` artifact（保留 7 天）即可本机安装；其中的 `source-commit.txt` 标明确定提交。预览包沿用仓库中的版本号，不作为自动更新发布。PR 构建只使用一次性测试证书，不向 PR 提供正式签名私钥。
 
 本机正式构建也可复用已有 `~/Library/Application Support/EasyAgent Signing/identity.json` 指定的私有钥匙串；证书必须匹配同一指纹，配置与密钥文件须仅当前用户可读。缺少证书时正式构建失败；不带 tag 的开发构建仍使用临时 ad hoc 签名。
 
