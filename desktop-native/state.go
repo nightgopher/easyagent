@@ -119,6 +119,10 @@ func (a *preview) current() *session {
 	return a.Sessions[0]
 }
 func (a *preview) selectSession(id int) {
+	if a.Live != nil {
+		a.Live.SessionSearch.History = nil
+		a.Live.SessionSearch.Target = nil
+	}
 	if a.Live != nil && a.Active != id {
 		a.Live.Workbench.close()
 	}
