@@ -143,6 +143,7 @@ func newConnectedPreview(dir string) *preview {
 	a.Settings.mcpForm = mcpForm{}
 	a.Settings.feishuForm = feishuForm{}
 	a.Settings.loadPreferences(filepath.Join(dir, "native-preview-preferences.json"))
+	a.loadWallpaper()
 	a.syncSettingsConfig()
 	return a
 }

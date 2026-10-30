@@ -36,7 +36,7 @@ const (
 // 新会话生效 or 需重启核心; empty pages are informational only.
 var settingsPages = []settingsPage{
 	{"general", "常规", "settings", "设置界面语言，查看版本与常用快捷键。", "", 0},
-	{"appearance", "外观", "sparkle", "选择适合你的界面配色。", "立即生效", 0},
+	{"appearance", "外观", "sparkle", "选择适合你的界面配色与背景壁纸。", "立即生效", 0},
 	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", "", 0},
 	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
 	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
@@ -47,11 +47,12 @@ var settingsPages = []settingsPage{
 }
 
 type localPreferences struct {
-	Language       string            `json:"language"`
-	Theme          string            `json:"theme"`
-	WorkbenchWidth float32           `json:"workbench_width,omitempty"`
-	TerminalHeight float32           `json:"terminal_height,omitempty"`
-	Shortcuts      map[string]string `json:"shortcuts,omitempty"`
+	Language       string               `json:"language"`
+	Theme          string               `json:"theme"`
+	Background     wallpaperPreferences `json:"background"`
+	WorkbenchWidth float32              `json:"workbench_width,omitempty"`
+	TerminalHeight float32              `json:"terminal_height,omitempty"`
+	Shortcuts      map[string]string    `json:"shortcuts,omitempty"`
 }
 type demoHost struct {
 	ID, Name, URL string
@@ -131,7 +132,7 @@ type settingsState struct {
 // real deployment; live pages read from the connected host instead.
 func newSettings() settingsState {
 	return settingsState{
-		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark"},
+		Tab: "general", HostFeishu: map[string]feishuDemoState{}, ProjectTrustByWorkspace: map[string]bool{}, Preferences: localPreferences{Language: "中文", Theme: "dark", Background: defaultWallpaperPreferences()},
 		Hosts:     []demoHost{{"local", localHostName(), "", true}, {"mini", "迷你主机", "http://192.168.5.16:8080", false}},
 		hostForm:  hostForm{EditHost: "迷你主机", HostName: "迷你主机", HostURL: "http://192.168.5.16:8080"},
 		modelForm: modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: "http://localhost:4001", Model: "coding"},
@@ -220,6 +221,9 @@ func settingsPageMatches(p settingsPage, search string) bool {
 	text := strings.ToLower(p.Label + p.Description + p.ID)
 	if p.ID == "capabilities" {
 		text += " 技能市场 市场 market 安装技能"
+	}
+	if p.ID == "appearance" {
+		text += " 背景 壁纸 图片 模糊 wallpaper background blur"
 	}
 	return strings.Contains(text, search)
 }
@@ -386,8 +390,9 @@ func (s *settingsState) loadPreferences(path string) {
 	if err != nil {
 		return
 	}
-	var prefs localPreferences
+	prefs := localPreferences{Background: defaultWallpaperPreferences()}
 	if json.Unmarshal(b, &prefs) == nil && (prefs.Theme == "dark" || prefs.Theme == "light" || prefs.Theme == "system") && (prefs.Language == "中文" || prefs.Language == "English") {
+		prefs.Background = normalizeWallpaper(prefs.Background)
 		s.Preferences = prefs
 		for id, keys := range prefs.Shortcuts {
 			for i := range nativeShortcuts {
@@ -446,6 +451,13 @@ func previewTheme(base *ui.Theme, prefs localPreferences) ui.Theme {
 		t.Accent = ui.Hex("#087f78")
 		t.AccentText = ui.Hex("#ffffff")
 		t.AccentHover = ui.Hex("#09685f")
+	}
+	if prefs.Background.Source != "" && prefs.Background.Strength > 0 {
+		if dark {
+			t.TextMuted = ui.Hex("#cdd7d3")
+		} else {
+			t.TextMuted = ui.Hex("#234237")
+		}
 	}
 	t.Selection = t.Accent.Alpha(.24)
 	t.Focus = t.Accent.Alpha(.4)
@@ -520,10 +532,16 @@ func (a *preview) resetPageDefaults(pageID string) {
 	case "appearance":
 		a.requestConfirmation(
 			"恢复外观默认设置？",
-			"将重置以下项：\n• 配色主题恢复为「青夜 (dark)」",
+			"将重置以下项：\n• 配色主题恢复为「青夜 (dark)」\n• 背景恢复为纯色并移除导入的图片",
 			func() {
+				oldTheme := s.Preferences.Theme
 				s.Preferences.Theme = "dark"
-				s.savePreferences()
+				if !a.setWallpaperPreferences(defaultWallpaperPreferences()) {
+					s.Preferences.Theme = oldTheme
+					return
+				}
+				a.Wallpaper.generation++
+				a.Wallpaper.Error = ""
 				s.message("外观设置已恢复默认。")
 			},
 		)
