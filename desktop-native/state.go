@@ -72,6 +72,7 @@ type preview struct {
 	Window                                                                         *mygo.Window
 	Live                                                                           *liveState
 	Settings                                                                       settingsState
+	Wallpaper                                                                      wallpaperState
 	Sessions                                                                       []*session
 	Active                                                                         int
 	NextID                                                                         int
@@ -199,10 +200,11 @@ func (a *preview) start(s *session, reply string) {
 	follow(s)
 }
 func (a *preview) tick() bool {
+	wallpaperChanged := a.wallpaperTick()
 	if a.Live != nil {
-		return a.liveTick()
+		return a.liveTick() || wallpaperChanged
 	}
-	changed := false
+	changed := wallpaperChanged
 	for _, s := range a.Sessions {
 		if !s.Running {
 			continue

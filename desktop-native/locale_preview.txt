@@ -1,5 +1,33 @@
 常规|General
 外观|Appearance
+选择适合你的界面配色与背景壁纸。|Choose your interface colors and wallpaper.
+背景壁纸|Wallpaper
+为工作区添加一张安静的背景。配色主题与壁纸可以独立选择。|Add a quiet background to your workspace. Choose colors and wallpaper independently.
+纯色|Solid color
+山间薄雾|Mountain mist
+暮色海面|Ocean dusk
+本地图片|Local image
+选择图片|Choose image
+更换图片|Replace image
+移除图片|Remove image
+选择背景图片|Choose wallpaper
+图片|Images
+正在读取图片…|Reading image…
+背景强度|Background strength
+背景模糊|Background blur
+调节背景强度|Adjust background strength
+调节背景模糊|Adjust background blur
+支持 PNG、JPEG、WebP，最大 20 MB / 2400 万像素。图片会复制到本机应用目录，移动原图不影响背景。|PNG, JPEG or WebP, up to 20 MB / 24 megapixels. A local copy keeps your wallpaper available if you move the original.
+强度越高，背景越明显。界面始终保留阅读遮罩，模糊只作用于图片。|Higher strength makes the image more visible. A tint keeps text readable; blur applies only to the image.
+无法读取背景图片，请重新选择。|Cannot read the wallpaper. Please choose the image again.
+请选择图片文件。|Please choose an image file.
+图片不能超过 20 MB。|The image must be no larger than 20 MB.
+无法读取背景图片，请选择不超过 20 MB 的图片。|Cannot read the image. Please choose an image up to 20 MB.
+图片无法解析，请选择 PNG、JPEG 或 WebP 图片。|Cannot decode this image. Please choose a PNG, JPEG or WebP image.
+图片分辨率过大，请选择不超过 2400 万像素的图片。|The image is too large. Please choose an image up to 24 megapixels.
+无法打开图片选择器，请重试。|Cannot open the image picker. Please try again.
+无法保存背景图片，请检查应用数据目录。|Cannot save the wallpaper. Please check access to the app data folder.
+背景设置保存失败，已保留原背景。|Could not save wallpaper settings. Your previous background is unchanged.
 模型连接|Model connections
 用量统计|Usage
 实验|Experiments

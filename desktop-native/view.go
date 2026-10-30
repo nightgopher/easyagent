@@ -88,35 +88,40 @@ func (a *preview) View(c *ui.Context) {
 	theme := previewTheme(c.Theme(), a.Settings.Preferences)
 	c.SetTheme(&theme)
 	a.dispatchNativeShortcuts(c)
-	ui.Column(c).Fill().Background(c.Theme().Background).TextColor(c.Theme().Text).FontSize(14).Children(func() {
-		a.chrome(c)
-		if a.Live != nil {
-			a.liveNotices(c)
-		}
-		if a.Settings.Open {
-			a.settingsView(c)
-			return
-		}
-		ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-			width, _ := c.Size()
-			if a.Sidebar && (!a.Workbench || width >= 1100) {
-				a.sidebar(c)
+	ui.Box(c).Fill().Background(c.Theme().Background).Children(func() {
+		a.wallpaperLayer(c)
+		// MyGo paints absolute siblings last, in declaration order. Keep both
+		// layers absolute so the image stays behind opaque content surfaces.
+		ui.Column(c).Absolute().Fill().TextColor(c.Theme().Text).FontSize(14).Children(func() {
+			a.chrome(c)
+			if a.Live != nil {
+				a.liveNotices(c)
 			}
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-				a.toolbar(c)
-				a.transcript(c)
-				a.composer(c)
-				if a.Live != nil {
-					a.liveTerminal(c)
+			if a.Settings.Open {
+				a.settingsView(c)
+				return
+			}
+			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+				width, _ := c.Size()
+				if a.Sidebar && (!a.Workbench || width >= 1100) {
+					a.sidebar(c)
+				}
+				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+					a.toolbar(c)
+					a.transcript(c)
+					a.composer(c)
+					if a.Live != nil {
+						a.liveTerminal(c)
+					}
+				})
+				if a.Workbench {
+					a.workbench(c)
 				}
 			})
-			if a.Workbench {
-				a.workbench(c)
+			if a.Live != nil {
+				a.musicBar(c)
 			}
 		})
-		if a.Live != nil {
-			a.musicBar(c)
-		}
 	})
 	if a.Live != nil {
 		a.liveModals(c)

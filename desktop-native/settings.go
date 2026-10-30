@@ -406,6 +406,7 @@ func (a *preview) appearanceSettings(c *ui.Context) {
 			c.Toast(a.tr("已保存"))
 		}
 	})
+	a.wallpaperSettings(c)
 }
 func (a *preview) modelSettings(c *ui.Context) {
 	s := &a.Settings
