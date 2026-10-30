@@ -125,6 +125,36 @@ func TestHostSavingSameCredentialKeepsIdentity(t *testing.T) {
 	}
 }
 
+func TestExplicitHostCredentialRepairKeepsIdentityAndDrafts(t *testing.T) {
+	for _, previous := range []string{"", "expired-token"} {
+		t.Run(previous, func(t *testing.T) {
+			store := &memorySecrets{values: map[string]string{"host/remote": previous}}
+			a := hostCredentialPreview(t, store)
+			a.Live.Config.ActiveHost = "remote"
+			a.syncSettingsConfig()
+			a.Live.Drafts["remote/session"] = "unsent draft"
+			a.repairLiveCredential()
+			if !a.Settings.RepairCredential {
+				t.Fatal("repair action did not distinguish repair from a new identity")
+			}
+			a.Settings.HostToken = "repaired-token"
+			saved, err := persistHostProfile(a.Live.Dir, store, a.Live.Config, a.Settings.hostForm)
+			if err != nil || saved.NewIdentity || len(saved.Config.Hosts) != 2 || saved.Config.Hosts[saved.Index].ID != "remote" || saved.Config.ActiveHost != "remote" {
+				t.Fatal("repair created a duplicate host identity", saved, err)
+			}
+			value, err := hostCredential(store, saved.Config.Hosts[saved.Index])
+			if err != nil || value != "repaired-token" || a.Live.Drafts["remote/session"] != "unsent draft" {
+				t.Fatal("repair lost the credential or the original draft", err)
+			}
+			a.Settings.HostURL = "http://127.0.0.1:2"
+			saved, err = persistHostProfile(a.Live.Dir, store, a.Live.Config, a.Settings.hostForm)
+			if err != nil || !saved.NewIdentity || saved.Config.Hosts[saved.Index].ID == "remote" {
+				t.Fatal("repair flag reused an identity on a different endpoint", err)
+			}
+		})
+	}
+}
+
 func TestHostAddressChangeRequiresExplicitCredential(t *testing.T) {
 	store := &memorySecrets{values: map[string]string{"host/remote": "synthetic-host-credential"}}
 	a := hostCredentialPreview(t, store)
@@ -493,7 +523,23 @@ func TestHostCredentialRepairReconnectsAndKeepsPreviousDraft(t *testing.T) {
 	a.Settings.HostToken = credential
 	a.saveLiveHost()
 	waitNative(t, a, func() bool { return a.Live.Connected && !a.Live.Loading["configuration"] })
-	if a.Live.CredentialRepair || a.Live.Error != "" || a.Live.Client.Token != credential || a.Live.Config.ActiveHost == "remote" || a.Live.Drafts["remote/"] != "draft before authentication repair" {
-		t.Fatal("credential repair lost isolation, drafts or connectivity")
+	if a.Live.CredentialRepair || a.Live.Error != "" || a.Live.Client.Token != credential || a.Live.Config.ActiveHost != "remote" || len(a.Live.Config.Hosts) != 2 || a.Live.Drafts["remote/"] != "draft before authentication repair" {
+		t.Fatal("credential repair lost the original host, drafts or connectivity")
+	}
+}
+
+func TestHostRepairRestoresReadableTokenOnPersistenceFailure(t *testing.T) {
+	store := &memorySecrets{values: map[string]string{"host/remote": "previous-token"}}
+	a := hostCredentialPreview(t, store)
+	a.Settings.RepairCredential, a.Settings.HostToken = true, "replacement-token"
+	if err := os.Mkdir(filepath.Join(a.Live.Dir, "connections.json"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := persistHostProfile(a.Live.Dir, store, a.Live.Config, a.Settings.hostForm); err == nil {
+		t.Fatal("configuration write failure was ignored")
+	}
+	value, err := store.Get("host/remote")
+	if err != nil || value != "previous-token" {
+		t.Fatal("failed repair erased a previously readable token", err)
 	}
 }

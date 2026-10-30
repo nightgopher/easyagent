@@ -102,7 +102,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" {
+	if tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -152,7 +152,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 		s.DefaultModelChoice = defaultModel
 	}
 	ui.Column(c).Gap(8).Children(func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(12).Wrap().AlignItems(ui.Center).Children(func() {
 			ui.Text(c, a.tr(SettingCopyDefaultModel)).FontSize(13).FontWeight(500)
 			if len(l.Models) > 0 {
 				choices := l.Models
@@ -247,7 +247,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 			a.note(c, "配置适用于此 Mac 的本地 Agent。密钥保存在 macOS 钥匙串；远程 Agent 的访问令牌在运行主机中配置。")
 		} else {
 			a.note(c, "读取 ~/.easyagent/config.yaml、~/.easyagent/.env 和当前环境中的模型与工具配置。修改后点击应用即可重新读取。")
-			a.action(c, "配置全局模型").OnClick(func() {
+			a.action(c, "配置全局模型").AlignSelf(ui.Start).OnClick(func() {
 				s.Mode = "在桌面客户端配置"
 				if s.Model == "" {
 					s.Model = str(object(object(l.Data["models"])["current"])["id"])
@@ -522,7 +522,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			}
 			a.action(c, label).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
 			if !h.Local {
-				a.action(c, "编辑").OnClick(func() { s.EditHost = h.ID; s.HostName = h.Name; s.HostURL = h.URL; s.HostToken = "" })
+				a.action(c, "编辑").OnClick(func() { s.hostForm = hostForm{EditHost: h.ID, HostName: h.Name, HostURL: h.URL} })
 				a.action(c, "移除").OnClick(func() {
 					l.Confirm = &nativeConfirmation{"移除主机连接？", h.Name + "；不会删除主机上的会话或文件。", func() { a.removeLiveHost(index) }}
 				})
@@ -538,7 +538,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 		if a.settingsFormDirty() {
 			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
 		}
-		a.action(c, "新增连接").OnClick(func() { s.EditHost = ""; s.HostName = ""; s.HostURL = ""; s.HostToken = "" })
+		a.action(c, "新增连接").OnClick(func() { s.hostForm = hostForm{} })
 	})
 	a.action(c, "重连当前主机").AlignSelf(ui.Start).Disabled(l.Connecting).OnClick(a.connectLive)
 }
@@ -616,6 +616,7 @@ func (a *preview) saveLiveHost() {
 			l.Config = saved.Config
 			s.EditHost = saved.Config.Hosts[saved.Index].ID
 			s.HostToken = ""
+			s.RepairCredential = false
 			a.syncSettingsConfig()
 			if !l.CredentialRepair {
 				l.Error = ""
@@ -770,25 +771,35 @@ func (a *preview) liveCapabilitySettings(c *ui.Context) {
 	if s.CapabilityTab == "" {
 		s.CapabilityTab = "mine"
 	}
-	ui.Row(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
-		tabs := []struct{ id, label string }{
-			{"mine", "我的技能"},
-			{"market", "市场"},
-		}
-		for _, t := range tabs {
-			selected := s.CapabilityTab == t.id
-			btn := a.action(c, t.label).OnClick(func() {
-				s.CapabilityTab = t.id
-				if t.id == "market" {
-					a.openSkillMarket()
-				} else {
-					a.loadLocalSkills()
-				}
-			})
-			if selected {
-				btn.TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.1))
+	ui.Row(c).Gap(10).Wrap().AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Gap(2).Padding(3).Radius(8).Background(c.Theme().Surface).Border(1, c.Theme().Border).Children(func() {
+			tabs := []struct{ id, label string }{
+				{"mine", "我的技能"},
+				{"market", "市场"},
 			}
-		}
+			for _, t := range tabs {
+				selected := s.CapabilityTab == t.id
+				btn := flatButton(c, "", a.tr(t.label)).Padding(7, 12).Selected(selected).OnClick(func() {
+					s.CapabilityTab = t.id
+					if t.id == "market" {
+						a.openSkillMarket()
+					} else {
+						a.loadLocalSkills()
+					}
+				})
+				if selected {
+					btn.TextColor(c.Theme().Text).Background(c.Theme().SurfaceHover)
+				}
+			}
+		})
+		ui.Spacer(c)
+		a.action(c, "刷新").Disabled(a.Live.Loading[localSkillsKey] || a.Live.Loading["market"]).OnClick(func() {
+			if s.CapabilityTab == "market" {
+				a.searchMarket()
+			} else {
+				a.refreshSkillLists()
+			}
+		})
 	})
 	if s.CapabilityTab == "market" {
 		a.liveMarketSettings(c)

@@ -60,7 +60,7 @@ def main():
         run(['go', 'build', '-trimpath', '-buildvcs=false', '-ldflags=-s -w -buildid=third-helper-fixture',
              '-o', str(third_helper), './tools/credentials'], cwd=ROOT / 'desktop-native')
         run(['go', 'test', '-c', '-o', str(first), '.'], cwd=ROOT / 'desktop-native')
-        run(['go', 'test', '-c', '-ldflags=-X=github.com/hwj123hwj/easyagent/desktop-native.nativeKeychainProbeBuild=second',
+        run(['go', 'test', '-c', '-ldflags=-X=github.com/nightgopher/easyagent/desktop-native.nativeKeychainProbeBuild=second',
              '-o', str(second), '.'], cwd=ROOT / 'desktop-native')
         shutil.copy2(second, other_id)
         shutil.copy2(second, other_signer)

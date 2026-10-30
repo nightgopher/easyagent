@@ -65,9 +65,11 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 			return result, readErr
 		}
 	}
-	// A different endpoint or credential keeps the old profile and its drafts.
-	// Re-entering the same credential does not create another connection ID.
-	result.NewIdentity = previous.URL != "" && (previous.URL != b.URL || (key != "" && (readErr != nil || key != oldToken)))
+	// An explicit repair replaces the unavailable/expired token on this endpoint
+	// without stranding its sessions and drafts behind a duplicate host profile.
+	// Ordinary edits to the endpoint or identity still create an isolated profile.
+	repairing := form.RepairCredential && previous.HasToken && previous.URL == b.URL && key != ""
+	result.NewIdentity = !repairing && previous.URL != "" && (previous.URL != b.URL || (key != "" && (readErr != nil || key != oldToken)))
 	host := previous
 	if result.Index < 0 || result.NewIdentity {
 		host = hostConfig{ID: requestID()}
@@ -76,9 +78,14 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 	}
 	host.Name, host.URL = strings.TrimSpace(form.HostName), b.URL
 	freshCredential := key != "" && host.ID != previous.ID
-	if freshCredential {
+	if freshCredential || repairing {
 		if err = verifiedHostCredential(store, host.ID, key); err != nil {
-			return result, errors.Join(err, store.Delete("host/"+host.ID))
+			if freshCredential {
+				err = errors.Join(err, store.Delete("host/"+host.ID))
+			} else if repairing && readErr == nil {
+				err = errors.Join(err, store.Set("host/"+host.ID, oldToken))
+			}
+			return result, err
 		}
 		host.HasToken = true
 	}
@@ -86,6 +93,8 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 	if err = atomicJSON(filepath.Join(dir, "connections.json"), result.Config); err != nil {
 		if freshCredential {
 			err = errors.Join(err, store.Delete("host/"+host.ID))
+		} else if repairing && readErr == nil {
+			err = errors.Join(err, store.Set("host/"+host.ID, oldToken))
 		}
 		return result, err
 	}
@@ -141,7 +150,7 @@ func (a *preview) repairLiveCredential() {
 	}
 	host := l.Config.Hosts[a.Settings.Host]
 	a.openSettings("connections")
-	a.Settings.hostForm = hostForm{EditHost: host.ID, HostName: host.Name, HostURL: host.URL}
+	a.Settings.hostForm = hostForm{EditHost: host.ID, HostName: host.Name, HostURL: host.URL, RepairCredential: true}
 	a.Settings.Heading.CancelFocus()
 	a.Settings.HostTokenField.Focus()
 }
