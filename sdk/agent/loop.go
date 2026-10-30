@@ -525,13 +525,21 @@ func isToolCallSafe(a *Agent, call ai.ToolCall) bool {
 	return false
 }
 
+// maxParallelToolCalls 限制单个并行批次的最大并发数。并行批次常包含 task
+// 子代理，不设上限时一次派发 N 个子代理就是 N 路同时打开的 LLM 流，容易触发
+// provider 限流；读取类工具批次也一并按此限流，代价可忽略。
+const maxParallelToolCalls = 4
+
 func executeToolCallsParallel(ctx context.Context, a *Agent, calls []ai.ToolCall) ([]ai.Message, error) {
 	results := make([]ai.Message, len(calls))
 	var wg sync.WaitGroup
+	sem := make(chan struct{}, maxParallelToolCalls)
 	for i, call := range calls {
 		wg.Add(1)
 		go func(idx int, call ai.ToolCall) {
 			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			defer func() {
 				if r := recover(); r != nil {
 					results[idx] = ai.ToolResultMessage{
