@@ -84,9 +84,11 @@ type modelForm struct {
 }
 type hostForm struct {
 	EditHost, HostName, HostURL, HostToken string
+	RepairCredential                       bool
 }
 type mcpForm struct {
 	Workspace, Scope, MCPName, Transport, Command, Args, Variables, URL, Timeout, JSON string
+	Description, Cwd                                                                   string
 	Advanced, Trust, ProjectTrust, MCPExtra                                            bool
 	MCPBase                                                                            map[string]any
 }
@@ -117,6 +119,8 @@ type settingsState struct {
 	ConfirmSkill, ConfirmServer, ConfirmScope, ConfirmHost, ConfirmWorkspace string
 	ProjectTrustByWorkspace                                                  map[string]bool
 	CapabilityTab, LocalSkillQuery                                           string
+	MCPEditorOpen                                                            bool
+	MCPEditName, MCPImportName, MCPEditError                                 string
 	CapturingShortcutID                                                      string
 	ShortcutConflict                                                         string
 	Confirm                                                                  *nativeConfirmation
@@ -258,72 +262,89 @@ func (s *settingsState) checkModel() {
 	s.message("演示检测已完成：显示示例模型目录，没有发出网络请求。")
 }
 func (s *settingsState) mcpConfig() (map[string]any, error) {
-	var config map[string]any
 	if s.Advanced {
-		if err := json.Unmarshal([]byte(s.JSON), &config); err != nil || config == nil {
-			return nil, errors.New("配置须为有效 JSON 对象")
+		entry, _, err := s.selectedMCPImport()
+		if err != nil {
+			return nil, err
 		}
-	} else {
-		config = map[string]any{}
-		for k, v := range s.MCPBase {
-			config[k] = v
+		return entry.Config, validateMCPImport(entry.Config, s.MCPEditName != "")
+	}
+	config, err := s.mcpFormConfig()
+	if err != nil {
+		return nil, err
+	}
+	return config, validateMCPForm(config, s.MCPEditName != "")
+}
+
+func (s *settingsState) mcpFormConfig() (map[string]any, error) {
+	config := map[string]any{}
+	for k, v := range s.MCPBase {
+		config[k] = v
+	}
+	for _, key := range []string{"command", "args", "url", "httpUrl", "timeout", "cwd", "description"} {
+		delete(config, key)
+		if value, exists := s.MCPBase[key]; exists && value == nil {
+			config[key] = nil
 		}
-		for _, key := range []string{"command", "args", "env", "url", "httpUrl", "headers", "timeout"} {
-			delete(config, key)
-		}
-		config["type"] = s.Transport
-		config["trust"] = s.Trust
-		if s.Transport == "stdio" {
-			if strings.TrimSpace(s.Command) == "" {
-				return nil, errors.New("请输入启动命令")
-			}
+	}
+	transport := s.Transport
+	if transport == "" {
+		transport = "http"
+	}
+	config["type"], config["trust"] = transport, s.Trust
+	if transport == "stdio" {
+		if strings.TrimSpace(s.Command) != "" {
 			config["command"] = strings.TrimSpace(s.Command)
-			var args []string
-			for _, line := range strings.Split(s.Args, "\n") {
-				if line != "" {
-					args = append(args, line)
-				}
-			}
-			config["args"] = args
-		} else {
-			if !validServiceURL(s.URL) {
-				return nil, errors.New("请输入有效 HTTP(S) 地址")
-			}
-			config["url"] = s.URL
 		}
-		vars := map[string]string{}
-		for _, line := range strings.Split(s.Variables, "\n") {
-			if strings.TrimSpace(line) == "" {
-				continue
-			}
-			k, v, ok := strings.Cut(line, "=")
-			if !ok || strings.TrimSpace(k) == "" {
-				return nil, errors.New("每行使用 KEY=VALUE 格式")
-			}
-			vars[strings.TrimSpace(k)] = v
+		if s.Args != "" {
+			config["args"] = strings.Split(s.Args, "\n")
+		} else if args := list(s.MCPBase["args"]); len(args) == 1 && args[0] == "" {
+			config["args"] = []string{""}
+		} else if s.MCPBase["args"] != nil {
+			config["args"] = []string{}
 		}
-		if len(vars) > 0 {
-			key := "env"
-			if s.Transport != "stdio" {
-				key = "headers"
-			}
-			config[key] = vars
+		if s.Cwd != "" {
+			config["cwd"] = s.Cwd
 		}
-		if s.Timeout != "" {
-			n, err := strconv.Atoi(s.Timeout)
-			if err != nil || n < 0 {
-				return nil, errors.New("超时须为非负整数毫秒")
-			}
-			config["timeout"] = n
+	} else if s.URL != "" {
+		if !validServiceURL(s.URL) {
+			return nil, errors.New("请输入有效 HTTP(S) 地址")
+		}
+		config["url"] = s.URL
+		if s.MCPEditName != "" || s.MCPBase["httpUrl"] != nil {
+			// Updating the URL also replaces the alternate spelling in saved configs.
+			config["httpUrl"] = nil
 		}
 	}
-	if command, ok := config["command"].(string); ok && strings.TrimSpace(command) != "" {
-		return config, nil
+	key := "env"
+	if transport != "stdio" {
+		key = "headers"
 	}
-	if raw, ok := config["url"].(string); ok && validServiceURL(raw) {
-		return config, nil
+	vars := map[string]string{}
+	for _, line := range strings.Split(s.Variables, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(k) == "" {
+			return nil, errors.New("每行使用 KEY=VALUE 格式")
+		}
+		vars[strings.TrimSpace(k)] = v
 	}
-	return nil, errors.New("配置需要有效的 command 或 HTTP(S) url")
+	if len(vars) > 0 || s.MCPBase[key] != nil {
+		config[key] = vars
+	}
+	if s.Timeout != "" {
+		n, err := strconv.Atoi(s.Timeout)
+		if err != nil || n < 0 {
+			return nil, errors.New("超时须为非负整数毫秒")
+		}
+		config["timeout"] = n
+	}
+	if s.Description != "" || s.MCPEditName != "" {
+		config["description"] = s.Description
+	}
+	return config, nil
 }
 func (s *settingsState) saveMCP() {
 	if strings.TrimSpace(s.MCPName) == "" {
@@ -469,6 +490,9 @@ func (a *preview) requestConfirmation(title, detail string, action func()) {
 }
 
 func (a *preview) canResetPageDefaults(pageID string) bool {
+	if a.Live != nil && pageID == "mcp" {
+		return false
+	}
 	switch pageID {
 	case "general", "appearance", "models", "experiments", "mcp", "feishu":
 		return true

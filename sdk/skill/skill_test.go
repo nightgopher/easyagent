@@ -51,6 +51,30 @@ Hidden content.
 	assert.Equal(t, "Hidden content.", body)
 }
 
+func TestLoadFromDirsYAMLDescriptions(t *testing.T) {
+	for _, tc := range []struct {
+		name, field, want string
+	}{
+		{"folded", ">\n  Create and edit cards.\n  Use for images and JSON.", "Create and edit cards. Use for images and JSON."},
+		{"literal", "|-\n  第一行说明\n  第二行说明", "第一行说明\n第二行说明"},
+		{"quoted", `"Search skills: names, descriptions, and sources."`, "Search skills: names, descriptions, and sources."},
+		{"single-quoted", `'Read ''quoted'' text.'`, "Read 'quoted' text."},
+		{"legacy", "Search skills: names and descriptions", "Search skills: names and descriptions"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			content := "---\nname: yaml-skill\ndescription: " + tc.field + "\ndisable-model-invocation: true\nmetadata:\n  name: nested-name\n  description: nested-description\n  tools:\n    - read\n---\n# Instructions\n\nKeep the body.\n"
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o600))
+			result := LoadFromDirs(dir)
+			require.Len(t, result.Skills, 1)
+			assert.Equal(t, "yaml-skill", result.Skills[0].Name)
+			assert.Equal(t, tc.want, result.Skills[0].Description)
+			assert.True(t, result.Skills[0].DisableModelInvocation)
+			assert.Equal(t, "# Instructions\n\nKeep the body.", result.Skills[0].Content)
+		})
+	}
+}
+
 // ─── 技能加载 ─────────────────────────────────────────────────────────────────
 
 func TestLoadFromDirs_SKILLMD(t *testing.T) {
@@ -189,9 +213,9 @@ func TestFormatForSystemPrompt(t *testing.T) {
 			BaseDir:     "/home/user/.skills/graphify",
 		},
 		{
-			Name:                  "internal",
-			Description:           "Internal tool",
-			FilePath:              "/home/user/.skills/internal/SKILL.md",
+			Name:                   "internal",
+			Description:            "Internal tool",
+			FilePath:               "/home/user/.skills/internal/SKILL.md",
 			DisableModelInvocation: true,
 		},
 	}

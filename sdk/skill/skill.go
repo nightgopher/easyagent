@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
@@ -215,6 +217,9 @@ func parseFrontmatter(content string) (map[string]string, string) {
 			endIdx = i
 			break
 		}
+		if strings.TrimLeft(lines[i], " \t") != lines[i] {
+			continue
+		}
 		// 解析 key: value
 		parts := strings.SplitN(lines[i], ":", 2)
 		if len(parts) == 2 {
@@ -226,6 +231,22 @@ func parseFrontmatter(content string) (map[string]string, string) {
 
 	if endIdx == -1 {
 		return nil, content
+	}
+
+	// Decode YAML scalars so quoted and multiline descriptions retain their text.
+	// Keep the legacy fields for old files containing unquoted colons or invalid YAML.
+	var document yaml.Node
+	if yaml.Unmarshal([]byte(strings.Join(lines[1:endIdx], "\n")), &document) == nil && len(document.Content) > 0 {
+		mapping := document.Content[0]
+		if mapping.Kind == yaml.MappingNode {
+			fm = make(map[string]string)
+			for i := 0; i+1 < len(mapping.Content); i += 2 {
+				key, value := mapping.Content[i], mapping.Content[i+1]
+				if key.Kind == yaml.ScalarNode && value.Kind == yaml.ScalarNode {
+					fm[key.Value] = strings.TrimSpace(value.Value)
+				}
+			}
+		}
 	}
 
 	body := strings.Join(lines[endIdx+1:], "\n")

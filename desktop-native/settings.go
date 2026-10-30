@@ -108,9 +108,9 @@ func (a *preview) selectControl(c *ui.Context, label string, value *string, choi
 	return sel.Trigger
 }
 
-func (a *preview) preferenceRow(c *ui.Context, label, detail string, control func()) {
-	ui.Row(c).Gap(20).AlignItems(ui.Center).Padding(12, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(3).Children(func() { a.text(c, label).FontSize(13).FontWeight(500); a.note(c, detail) })
+func (a *preview) preferenceRow(c *ui.Context, label, detail string, control func()) ui.Element {
+	return ui.Row(c).Label("设置项："+label).Gap(12).Wrap().AlignItems(ui.Center).Padding(14, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
+		ui.Column(c).Basis(220).Grow(1).MinWidth(0).Gap(3).Children(func() { a.text(c, label).FontSize(13).FontWeight(500); a.note(c, detail) })
 		control()
 	})
 }
@@ -186,7 +186,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 					})
 					a.note(c, page.Description)
-					if page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" {
+					if page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
 							kind := "laptop"
 							if !s.host().Local {
@@ -205,7 +205,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.text(c, "语言与外观保存在此设备；连接与能力设置仅为演示。").FontSize(11).TextColor(c.Theme().TextMuted)
 					} else if page.ID == "general" || page.ID == "appearance" {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
-					} else {
+					} else if page.ID != "capabilities" && page.ID != "mcp" {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -277,7 +277,7 @@ func (a *preview) settingsView(c *ui.Context) {
 // change the live page first and only mirror a fixture when a test needs it.
 func (a *preview) generalSettings(c *ui.Context) {
 	s := &a.Settings
-	ui.Column(c).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
+	ui.Column(c).Label("常规设置").Padding(0, 16).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(10).Children(func() {
 		a.preferenceRow(c, "界面语言", "选择应用的显示语言；默认中文。", func() {
 			if a.selectControl(c, "界面语言", &s.Preferences.Language, []string{"中文", "English"}).Width(180).Label(a.tr("语言选择")).Changed() {
 				saved := s.savePreferences()
@@ -298,7 +298,7 @@ func (a *preview) generalSettings(c *ui.Context) {
 		version := "EasyAgent " + nativeAppVersion()
 		a.preferenceRow(c, "桌面版本", version, func() {
 			a.action(c, "检查更新").Disabled(!a.UpdaterReady).OnClick(updater.CheckForUpdates)
-		})
+		}).BorderWidth(0)
 	})
 	if a.UpdaterReady {
 		checks := updater.AutomaticChecks()
@@ -334,7 +334,7 @@ func (a *preview) generalSettings(c *ui.Context) {
 						s.ShortcutConflict = ""
 					})
 				} else {
-					ui.ButtonBase(c).Label("改键：" + shortcut.Label).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border).OnClick(func() {
+					ui.ButtonBase(c).Label("改键："+shortcut.Label).Padding(3, 7).Radius(4).Background(c.Theme().SurfaceHover).Border(1, c.Theme().Border).OnClick(func() {
 						s.CapturingShortcutID = shortcut.ID
 						s.ShortcutConflict = ""
 					}).Children(func() {

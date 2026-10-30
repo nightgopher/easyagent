@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -152,63 +151,42 @@ func (a *preview) mcpSettings(c *ui.Context) {
 	}
 }
 func (s *settingsState) toggleAdvanced() {
-	if !s.Advanced {
-		config, err := s.mcpConfig()
-		if err != nil {
-			config = map[string]any{}
+	if s.Advanced {
+		if strings.TrimSpace(s.JSON) == "" {
+			s.Advanced, s.Error = false, ""
+			return
 		}
-		b, _ := json.MarshalIndent(config, "", "  ")
-		s.JSON = string(b)
-		s.Advanced = true
+		if err := s.importMCPToForm(); err != nil {
+			s.Error = err.Error()
+			return
+		}
 		s.Error = ""
 		return
 	}
-	var config map[string]any
-	if json.Unmarshal([]byte(s.JSON), &config) != nil || config == nil {
-		s.Error = "配置须为有效 JSON 对象"
+	if s.MCPEditName == "" && s.MCPName == "" && s.Command == "" && s.URL == "" && s.Args == "" && s.Variables == "" && s.MCPBase == nil {
+		s.JSON, s.Advanced, s.Error = "", true, ""
 		return
 	}
-	s.MCPBase = config
-	s.Command, _ = config["command"].(string)
-	s.URL, _ = config["url"].(string)
-	if s.URL == "" {
-		s.URL, _ = config["httpUrl"].(string)
+	config, err := s.mcpFormConfig()
+	if err != nil {
+		s.Error = err.Error()
+		return
 	}
-	s.Transport = "stdio"
-	if s.URL != "" {
-		s.Transport = "http"
-	}
-	s.Trust, _ = config["trust"].(bool)
-	s.Args = ""
-	if args, ok := config["args"].([]any); ok {
-		for _, value := range args {
-			str, ok := value.(string)
-			if !ok {
-				s.Error = "命令参数须为字符串数组"
-				return
-			}
-			if s.Args != "" {
-				s.Args += "\n"
-			}
-			s.Args += str
+	// Updating one selected service must not drop the rest of an imported file.
+	var root map[string]any
+	_ = json.Unmarshal([]byte(s.JSON), &root)
+	if servers, ok := root["mcpServers"].(map[string]any); ok && s.MCPImportName != "" && strings.TrimSpace(s.MCPName) != "" {
+		if _, exists := servers[s.MCPName]; exists && s.MCPName != s.MCPImportName {
+			s.Error = "JSON 中已有同名服务，请使用不同名称。"
+			return
 		}
+		delete(servers, s.MCPImportName)
+		servers[s.MCPName] = config
+		s.MCPImportName = s.MCPName
+		config = root
 	}
-	s.Variables = ""
-	key := "env"
-	if s.Transport != "stdio" {
-		key = "headers"
-	}
-	if pairs, ok := config[key].(map[string]any); ok {
-		for k, v := range pairs {
-			s.Variables += k + "=" + fmt.Sprint(v) + "\n"
-		}
-	}
-	s.Timeout = ""
-	if value, ok := config["timeout"].(float64); ok {
-		s.Timeout = fmt.Sprintf("%.0f", value)
-	}
-	s.Advanced = false
-	s.Error = ""
+	b, _ := json.MarshalIndent(config, "", "  ")
+	s.JSON, s.Advanced, s.Error = string(b), true, ""
 }
 func (a *preview) capabilitySettings(c *ui.Context) {
 	s := &a.Settings
