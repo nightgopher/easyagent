@@ -101,6 +101,9 @@ func (a *preview) View(c *ui.Context) {
 				a.settingsView(c)
 				return
 			}
+			if a.Live != nil && c.Shortcut(ui.Cmd|ui.Shift, ui.KeyF) {
+				a.Sidebar, a.Workbench, a.Live.SessionSearch.Focus = true, false, true
+			}
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 				width, _ := c.Size()
 				if a.Sidebar && (!a.Workbench || width >= 1100) {
@@ -316,6 +319,10 @@ func (a *preview) disconnectedHint(c *ui.Context) {
 }
 
 func (a *preview) transcript(c *ui.Context) {
+	if a.Live != nil && a.Live.SessionSearch.History != nil {
+		a.searchHistoryTranscript(c)
+		return
+	}
 	s := a.current()
 	if a.Live != nil {
 		a.conversationFind(c, s)
@@ -413,6 +420,9 @@ func (a *preview) tool(c *ui.Context, m *message) {
 	})
 }
 func (a *preview) composer(c *ui.Context) {
+	if a.Live != nil && a.Live.SessionSearch.History != nil {
+		return
+	}
 	if a.Live != nil {
 		a.liveComposer(c)
 		return

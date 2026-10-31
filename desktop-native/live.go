@@ -20,6 +20,7 @@ type liveResult struct {
 	discard func()
 }
 type liveState struct {
+	SessionSearch                                                          nativeSessionSearch
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
 	CollapsedBuckets                                                       map[string]bool
@@ -220,6 +221,7 @@ func (a *preview) liveTick() bool {
 			i = 256
 		}
 	}
+	changed = a.tickSessionSearch() || changed
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
@@ -359,6 +361,7 @@ func (a *preview) connectLive() {
 		go voice.Stop()
 	}
 	l.epoch++
+	a.resetSessionSearch()
 	l.Market = nativeMarketState{}
 	l.NewWorkspace = false
 	a.NewMenu = false
@@ -463,6 +466,9 @@ func (a *preview) receive(e envelope) {
 			l.Error = e.Message
 		}
 		s.reduce(e)
+		if e.Type == "snapshot" {
+			a.resolveSessionSearchHit(s)
+		}
 		if following {
 			follow(s)
 		}
@@ -557,6 +563,9 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			}
 		}
 		a.Sessions = next
+		if strings.TrimSpace(a.Search) != "" {
+			a.queueSessionSearch()
+		}
 		chosen := next[0]
 		for _, s := range next {
 			if s.RemoteID == current {
