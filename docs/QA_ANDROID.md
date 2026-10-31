@@ -2,6 +2,15 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.33.0 发布候选
+
+本轮新增桌面壁纸、会话全文搜索与主机工具按需发现，调整只读工具并发；Android 生产代码未变，新增协议投影单测以确认客户端兼容工具发现事件与上下文可选字段。候选版本为 `0.33.0`，versionCode 为 `3300300`；最终 SHA、APK 签名和校验和以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
+
+- 本轮未新增本地 Android 设备验收；实体网络切换、真实业务账号、正式 APK 跨版本覆盖安装、强退重启和手机／平板人工检查均标为未执行，不沿用历史版本的通过结论。
+- 发布流水线要求同一候选 SHA 的 API 31／34／35 界面矩阵、单测、lint 与构建全部通过；报告和截图见 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)，在流水线完成前不记为通过。
+- 工具发现 PR 的首次 API 35 检查失败于模拟器的 Pixel Launcher 无响应弹窗，截图显示弹窗覆盖应用并导致 Espresso 失去焦点；保留[原始报告和截图](https://github.com/nightgopher/easyagent/actions/runs/41159359902)。合入最新主线后重新运行完整矩阵，不跳过失败用例。
+- APK 继续使用固定发布证书，并随完整版本提供 APK 和 ZIP；正式包的身份、版本及 SHA-256 由发布流水线验证。
+
 ## v0.32.0 发布候选
 
 本轮修改原生桌面设置、连接修复与共享技能解析；`mobile-native/` 源码与 v0.31.0 相同。候选版本为 `0.32.0`，versionCode 为 `3200300`；最终 SHA、APK 签名与校验和以附注 tag 和 Release 的 `release.json` / `checksums.txt` 为准。
