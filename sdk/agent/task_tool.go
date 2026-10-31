@@ -37,9 +37,11 @@ type TaskToolOptions struct {
 	Registry *providers.Registry
 	// Tools are offered to the subagent. Any tool named task is removed so
 	// subagents cannot spawn further subagents.
-	Tools       []Tool
-	ConfirmFunc ConfirmFunc
-	MaxTurns    int
+	Tools          []Tool
+	ToolSearchMode ToolSearchMode
+	BuildPrompt    func([]Tool) (string, error)
+	ConfirmFunc    ConfirmFunc
+	MaxTurns       int
 	// ResolveModel optionally supplies catalog metadata for an overridden model.
 	ResolveModel func(modelID, provider string) (ai.Model, error)
 }
@@ -56,7 +58,7 @@ type TaskTool struct {
 func NewTaskTool(opts TaskToolOptions) *TaskTool {
 	tools := make([]Tool, 0, len(opts.Tools))
 	for _, tool := range opts.Tools {
-		if tool.Name() != TaskToolName {
+		if tool.Name() != TaskToolName && tool.Name() != SearchToolsName {
 			tools = append(tools, tool)
 		}
 	}
@@ -72,6 +74,14 @@ func NewTaskTool(opts TaskToolOptions) *TaskTool {
 func (t *TaskTool) SetSystemPrompt(system string) {
 	t.mu.Lock()
 	t.system = system
+	t.mu.Unlock()
+}
+
+// SetPromptBuilder rebuilds the prompt from the child's filtered scope instead
+// of inheriting a parent's tool catalog (notably for readonly children).
+func (t *TaskTool) SetPromptBuilder(build func([]Tool) (string, error)) {
+	t.mu.Lock()
+	t.opts.BuildPrompt = build
 	t.mu.Unlock()
 }
 
@@ -166,13 +176,22 @@ func (t *TaskTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 	t.mu.RLock()
 	system := t.system
+	buildPrompt := t.opts.BuildPrompt
 	t.mu.RUnlock()
+	childTools := t.childTools(params.ReadOnly)
+	if buildPrompt != nil {
+		system, err = buildPrompt(childTools)
+		if err != nil {
+			return ToolResult{IsError: true}, err
+		}
+	}
 
 	child := New(Options{
 		Model:              model,
 		Registry:           t.opts.Registry,
 		System:             system + taskSystemSuffix,
-		Tools:              t.childTools(params.ReadOnly),
+		Tools:              childTools,
+		ToolSearchMode:     t.opts.ToolSearchMode,
 		MaxTurns:           maxTurns,
 		ConfirmFunc:        t.childConfirm(params.Description),
 		LoopDetectSettings: DefaultLoopDetectSettings(),

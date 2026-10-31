@@ -35,9 +35,10 @@ type Dependencies struct {
 	BuildOperations func(cfg config.Config, workspace string) *operations.Operations
 	// AdditionalTools and ToolRevision let an application supply dynamically
 	// discovered tools without coupling the SDK to a particular integration.
-	AdditionalTools func(workspace string) []agent.Tool
-	ToolRevision    func(workspace string) uint64
-	PrepareTools    func(context.Context, string) error
+	AdditionalTools     func(workspace string) []agent.Tool
+	ToolRevision        func(workspace string) uint64
+	ToolDiscoveryPolicy func() (agent.ToolSearchMode, uint64)
+	PrepareTools        func(context.Context, string) error
 	// AcquireTools protects in-flight integrations from configuration teardown.
 	AcquireTools func(context.Context, string) (func(), error)
 }
@@ -54,25 +55,26 @@ type AgentSessionOptions struct {
 // All modes (interactive, print, serve) depend on this object.
 // Application-specific state (profile, goal) is delegated to SessionExt.
 type AgentSession struct {
-	mu           sync.RWMutex
-	skillsMu     sync.RWMutex
-	loadedSkills []skill.Skill
-	runPrefix    []session.Entry
-	running      bool
-	mutating     bool
-	toolVersion  uint64
-	releaseTools func()
-	agent        *agent.Agent
-	session      *session.Session
-	sessionID    string
-	sessionMgr   *sessionmgr.Manager
-	cfg          config.Config
-	extRegistry  *extensions.Registry
-	sessionPath  string
-	deps         Dependencies
-	skillDirs    []string
-	application  Application
-	confirmFunc  agent.ConfirmFunc // 可选：危险工具执行前的确认回调（interactive 注入，serve/feishu 留空=放行）
+	mu                sync.RWMutex
+	skillsMu          sync.RWMutex
+	loadedSkills      []skill.Skill
+	runPrefix         []session.Entry
+	running           bool
+	mutating          bool
+	toolVersion       uint64
+	discoveryRevision uint64
+	releaseTools      func()
+	agent             *agent.Agent
+	session           *session.Session
+	sessionID         string
+	sessionMgr        *sessionmgr.Manager
+	cfg               config.Config
+	extRegistry       *extensions.Registry
+	sessionPath       string
+	deps              Dependencies
+	skillDirs         []string
+	application       Application
+	confirmFunc       agent.ConfirmFunc // 可选：危险工具执行前的确认回调（interactive 注入，serve/feishu 留空=放行）
 	// confirmEnabled 控制已注入回调的生效状态（/confirm on|off 运行时切换；
 	// auto_approve/-y 只是它的初始值）。回调本身始终包装经此开关。
 	confirmEnabled atomic.Bool
@@ -246,7 +248,12 @@ func (s *AgentSession) preparePrompt(ctx context.Context) (*agent.Agent, error) 
 			return nil, err
 		}
 	}
-	if s.deps.ToolRevision != nil && s.deps.ToolRevision(workspace) != s.toolVersion {
+	policyChanged := false
+	if s.deps.ToolDiscoveryPolicy != nil {
+		_, revision := s.deps.ToolDiscoveryPolicy()
+		policyChanged = revision != s.discoveryRevision
+	}
+	if policyChanged || s.deps.ToolRevision != nil && s.deps.ToolRevision(workspace) != s.toolVersion {
 		if err := s.refreshToolsLocked(ctx); err != nil {
 			return nil, err
 		}
@@ -570,6 +577,17 @@ func (s *AgentSession) rebuildAgent(ctx context.Context, registry *providers.Reg
 // Tool and prompt assembly is delegated to the injected Application.
 func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Registry, skillDirs []string) (*agent.Agent, error) {
 	cfg := s.cfg
+	if err := config.ValidateToolSearch(cfg.ToolSearch); err != nil {
+		return nil, err
+	}
+	searchMode, policyRevision := agent.ToolSearchMode(cfg.ToolSearch), uint64(0)
+	if s.deps.ToolDiscoveryPolicy != nil {
+		searchMode, policyRevision = s.deps.ToolDiscoveryPolicy()
+	}
+	disabledReason := ""
+	if searchMode == agent.ToolSearchLocal && !toolAllowed(agent.SearchToolsName, cfg.AllowedTools, cfg.BlockedTools) {
+		searchMode, disabledReason = agent.ToolSearchOff, "search_tools_filtered"
+	}
 	cwd := s.workspaceLocked()
 
 	// Build tools via Application interface
@@ -599,7 +617,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	}
 	model = s.resolveModel(model)
 
-	taskTool := s.newTaskTool(model, registry, toolList)
+	taskTool := s.newTaskTool(model, registry, toolList, searchMode)
 	if taskTool != nil {
 		toolList = append(toolList, taskTool)
 	}
@@ -648,15 +666,23 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	}
 
 	// Build system prompt via Application interface
-	systemPrompt := s.application.BuildPrompt(PromptBuildOptions{
-		CustomPrompt: cfg.PromptTemplate,
-		CWD:          cwd,
-		Tools:        toolList,
-		ContextFiles: contextFiles,
-		Skills:       skills,
-	}, profileName, goal)
+	buildPrompt := func(tools []agent.Tool) (string, error) {
+		visible, summary, err := agent.DiscoveryPromptTools(tools, searchMode)
+		if err != nil {
+			return "", err
+		}
+		return s.application.BuildPrompt(PromptBuildOptions{
+			CustomPrompt: cfg.PromptTemplate, CWD: cwd, Tools: visible,
+			ContextFiles: contextFiles, Skills: skills,
+		}, profileName, goal) + summary, nil
+	}
+	systemPrompt, err := buildPrompt(toolList)
+	if err != nil {
+		return nil, err
+	}
 	if taskTool != nil {
 		taskTool.SetSystemPrompt(systemPrompt)
+		taskTool.SetPromptBuilder(buildPrompt)
 	}
 
 	// Aggregate lifecycle hooks from extension registry
@@ -675,19 +701,22 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	}
 	lifecycleHooks.After = append(lifecycleHooks.After, agent.NewSynopsisAfterHook(synopsisSettings, synopsisStore))
 
+	s.discoveryRevision = policyRevision
 	return agent.New(agent.Options{
-		Model:              model,
-		Registry:           registry,
-		System:             systemPrompt,
-		Tools:              toolList,
-		MaxTurns:           cfg.MaxTurns,
-		Goal:               goal,
-		Session:            s.session,
-		CompactionSettings: compactionSettings,
-		SummarizeFunc:      summarizeFunc,
-		LifecycleHooks:     lifecycleHooks,
-		ConfirmFunc:        s.wrapConfirm(s.confirmFunc),
-		LoopDetectSettings: agent.DefaultLoopDetectSettings(),
+		Model:                    model,
+		Registry:                 registry,
+		System:                   systemPrompt,
+		Tools:                    toolList,
+		ToolSearchMode:           searchMode,
+		ToolSearchDisabledReason: disabledReason,
+		MaxTurns:                 cfg.MaxTurns,
+		Goal:                     goal,
+		Session:                  s.session,
+		CompactionSettings:       compactionSettings,
+		SummarizeFunc:            summarizeFunc,
+		LifecycleHooks:           lifecycleHooks,
+		ConfirmFunc:              s.wrapConfirm(s.confirmFunc),
+		LoopDetectSettings:       agent.DefaultLoopDetectSettings(),
 	}), nil
 }
 
@@ -696,7 +725,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 var subagentExcludedTools = map[string]bool{"ask_user_question": true, "todo_write": true, "full_output": true}
 
 // newTaskTool 为声明支持子 agent 的应用创建 task 工具；工具过滤配置同样作用于 task。
-func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry, tools []agent.Tool) *agent.TaskTool {
+func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry, tools []agent.Tool, searchMode agent.ToolSearchMode) *agent.TaskTool {
 	app, ok := s.application.(interface{ SubagentsEnabled() bool })
 	if !ok || !app.SubagentsEnabled() || !toolAllowed(agent.TaskToolName, s.cfg.AllowedTools, s.cfg.BlockedTools) {
 		return nil
@@ -711,10 +740,11 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 		ResolveModel: func(id, provider string) (ai.Model, error) {
 			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: models.MaxOutput(id)}), nil
 		},
-		Model:       model,
-		Registry:    registry,
-		Tools:       childTools,
-		ConfirmFunc: s.wrapConfirm(s.confirmFunc),
+		Model:          model,
+		Registry:       registry,
+		Tools:          childTools,
+		ToolSearchMode: searchMode,
+		ConfirmFunc:    s.wrapConfirm(s.confirmFunc),
 	})
 }
 

@@ -12,13 +12,14 @@ const clearedPlaceholder = "[older tool result cleared to save context]"
 // 这些工具的 result 体积大、价值随时间递减（旧命令输出、旧文件内容早用完）。
 // 写操作（edit/write）的 result 通常是简短确认，价值高体积小，不清理。
 var compactableTools = map[string]bool{
-	"computer":  true,
-	"read":      true,
-	"bash":      true,
-	"grep":      true,
-	"find":      true,
-	"ls":        true,
-	"web_fetch": true,
+	"search_tools": true,
+	"computer":     true,
+	"read":         true,
+	"bash":         true,
+	"grep":         true,
+	"find":         true,
+	"ls":           true,
+	"web_fetch":    true,
 }
 
 // MicroCompact 清理历史中旧的只读工具结果，保留最近 keepRecent 个完整。

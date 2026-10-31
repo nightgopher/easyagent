@@ -2,6 +2,30 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdown } from '../internal/web/static/js/markdown.js';
 import { filterModels, modelKey } from '../internal/web/static/js/model-picker.js';
+import { ToolDiscoverySettings } from '../internal/web/static/js/tool-discovery.js';
+
+test('tool loading settings only acknowledge a valid host response and recover from errors', async () => {
+  const { api } = await import('../internal/web/static/js/api.js');
+  const original = {get:api.get, post:api.post};
+  const panel = Object.create(ToolDiscoverySettings.prototype);
+  Object.assign(panel,{mode:{value:'off'},saveButton:{},refresh:{},status:{textContent:'',classList:{add(){},remove(){}}},pending:false,available:false});
+  try {
+    api.get = async () => ({mode:'local'});
+    await panel.update();
+    assert.equal(panel.mode.value,'local'); assert.equal(panel.saveButton.disabled,false);
+    api.post = async (path, body) => {assert.equal(path,'/settings/tool-discovery');assert.deepEqual(body,{mode:'off'});throw Error('disk failed');};
+    await panel.update('off');
+    assert.equal(panel.mode.value,'local'); assert.equal(panel.saveButton.disabled,true); assert.match(panel.status.textContent,/操作失败/);
+    api.get = async () => {throw Object.assign(Error('missing'),{status:404});};
+    await panel.update(); assert.match(panel.status.textContent,/更新运行主机/);
+    api.get = async () => '<html>old host</html>';
+    await panel.update(); assert.equal(panel.available,false);
+    api.get = async () => ({mode:'off'});
+    await panel.update(); assert.equal(panel.available,true);
+    api.post = async () => ({mode:'local',effective_from:'next_run'});
+    await panel.update('local'); assert.equal(panel.mode.value,'local'); assert.match(panel.status.textContent,/下一次任务生效/);
+  } finally {api.get=original.get;api.post=original.post;}
+});
 
 test('model search matches names, IDs and providers without changing IDs', () => {
   const models = [{id:'vendor/model-v3',provider:'openai',name:'代码模型'}, {id:'coding',provider:'anthropic',name:'Coding'}];
@@ -171,6 +195,19 @@ test('tool progress stays running and cannot overwrite a final result', () => {
   running = false; nodes['.tool-result'].textContent = 'command canceled';
   panel._updateToolProgress('job', {Content: 'late update'});
   assert.equal(nodes['.tool-result'].textContent, 'command canceled');
+});
+
+test('discovery status only reports loaded tools from a successful committed result', () => {
+  const status = {}, result = {}, panel = Object.create(ChatPanel.prototype);
+  panel._scrollToBottom = () => {};
+  panel._currentToolCalls = {search: {dataset:{toolName:'search_tools'},classList:{remove(){},add(){}},parentElement:{},querySelector:name=>name === '.tool-status' ? status : result}};
+  const details = {kind:'tool_discovery', selected:[{name:'web_fetch'}]};
+  panel._updateToolCall('search','done','found',details);
+  assert.equal(status.textContent,'已加载 1 个工具');
+  panel._updateToolCall('search','error','save failed',details);
+  assert.equal(status.textContent,'执行失败');
+  panel._updateToolCall('search','done','browsing only');
+  assert.equal(status.textContent,'已完成');
 });
 
 test('deployment rejection restores unsent draft without replacing newer input', () => {

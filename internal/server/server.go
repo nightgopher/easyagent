@@ -184,6 +184,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /sessions/{id}/attachments/{attID}/raw", s.getAttachmentRaw)
 	restMux.HandleFunc("GET /usage/summary", s.usageSummary)
 	restMux.HandleFunc("GET /computer/settings", s.getComputerSettings)
+	restMux.HandleFunc("GET /settings/tool-discovery", s.getToolDiscovery)
+	restMux.HandleFunc("POST /settings/tool-discovery", s.setToolDiscovery)
 	restMux.HandleFunc("POST /computer/settings", s.updateComputerSettings)
 	restMux.HandleFunc("POST /computer/permissions", s.requestComputerPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/messages", s.getSessionMessages)

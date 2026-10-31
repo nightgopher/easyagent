@@ -215,6 +215,9 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 
 	// 用完整历史调用 LLM
 	request := a.llmRequest(history)
+	if err := a.validateRequestBudget(request); err != nil {
+		return turnResult{}, history, err
+	}
 	a.emitContextUsage(ctx, request, latestRequestUsage(history))
 	stream, err := provider.Stream(ctx, request)
 	if err != nil {
@@ -273,7 +276,6 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 	if err != nil {
 		return turnResult{assistant: message}, history, err
 	}
-	a.emit(ctx, EventTurnEnd{Message: message, ToolResults: toolResults})
 
 	// 循环检测：遍历本轮 tool calls 更新检测器，命中则发事件 + 注入提醒（柔性，不中断）。
 	if a.loopDetectSettings.Enabled && len(message.ToolCalls) > 0 {
@@ -290,25 +292,38 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 
 	// 如果有 tool calls，将 tool results 追加到历史并继续内层循环
 	if message.StopReason == ai.StopReasonToolUse && len(toolResults) > 0 {
-		history = append(history, toolResults...)
-
-		// 保存 tool results 到 session
-		if a.session != nil {
-			// A canceled request must still close its persisted tool-call records.
-			saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			for _, tr := range toolResults {
+		// A canceled request must still close its persisted tool-call records.
+		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		for i, tr := range toolResults {
+			result, isResult := tr.(ai.ToolResultMessage)
+			search := isResult && a.isDiscoveryCall(message.ToolCalls, result.ToolCallID)
+			if search {
+				result = a.admitDiscovery(history, result)
+				tr = result
+				toolResults[i] = result
+			}
+			if a.session != nil {
 				if err := a.session.AppendMessage(saveCtx, tr); err != nil {
+					if search {
+						a.emit(saveCtx, EventToolExecutionEnd{ToolCallID: result.ToolCallID, ToolName: SearchToolsName, Result: "Could not save discovery result; loading was not confirmed.", IsError: true})
+					}
 					return turnResult{assistant: message}, history, fmt.Errorf("persist tool result: %w", err)
 				}
 			}
+			history = append(history, tr)
+			if search {
+				a.emit(saveCtx, EventToolExecutionEnd{ToolCallID: result.ToolCallID, ToolName: SearchToolsName, Result: result.Content, Details: result.Details, IsError: result.IsError})
+			}
 		}
+		a.emit(ctx, EventTurnEnd{Message: message, ToolResults: toolResults})
 		a.emitContextUsage(ctx, a.llmRequest(history), message.Usage)
 		if err := ctx.Err(); err != nil {
 			return turnResult{assistant: message}, history, err
 		}
 		return turnResult{assistant: message, action: actionContinue}, history, nil
 	}
+	a.emit(ctx, EventTurnEnd{Message: message, ToolResults: toolResults})
 
 	// 内层循环结束（无 tool call），检查 follow-up
 	if next := a.followUpQueue.Drain(); len(next) > 0 {
@@ -350,6 +365,9 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 	contextWindow := a.model.ContextWindow
 	if contextWindow <= 0 {
 		contextWindow = 128000
+	}
+	if a.discovery != nil && a.discovery.deferred > 0 {
+		contextWindow = max(1, requestInputBudget(a.llmRequest(history)))
 	}
 
 	// 一旦到达高水位，微压缩不得用少量节省延后深度压缩。
@@ -593,13 +611,20 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 		return ai.ToolResultMessage{ToolCallID: call.ID, Content: fmt.Sprintf("tool %q not found", call.Name), IsError: true}
 	}
 
+	// Search completion is published only after admission and durable commit.
+	emitEnd := func(event EventToolExecutionEnd) {
+		if _, control := tool.(*searchTools); !control {
+			a.emit(ctx, event)
+		}
+	}
+
 	// 2. Emit start (with raw args for UI display)
 	a.emit(ctx, EventToolExecutionStart{ToolCallID: call.ID, ToolName: call.Name, Args: string(call.Args)})
 
 	// 3. Validate args
 	validated, err := a.decodeToolArgs(call.Args, tool)
 	if err != nil {
-		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
+		emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
 		return ai.ToolResultMessage{ToolCallID: call.ID, Content: err.Error(), IsError: true}
 	}
 
@@ -608,7 +633,7 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 	if preparer, ok := tool.(ToolWithPrepareArguments); ok {
 		prepared, err := preparer.PrepareArguments(ctx, validated)
 		if err != nil {
-			a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
+			emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
 			return ai.ToolResultMessage{ToolCallID: call.ID, Content: err.Error(), IsError: true}
 		}
 		args = prepared
@@ -635,7 +660,7 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 	}
 	if err != nil {
 		// Before hook blocked execution — emit end with error
-		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
+		emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: err.Error(), IsError: true})
 		return ai.ToolResultMessage{ToolCallID: call.ID, Content: err.Error(), IsError: true}
 	}
 	args = callCtx.Args
@@ -689,7 +714,7 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 					msg = fmt.Sprintf("user declined this action: %s", reason)
 				}
 				details := map[string]any{"approval": "declined"}
-				a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: msg, Details: details, IsError: false})
+				emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: msg, Details: details, IsError: false})
 				return ai.ToolResultMessage{ToolCallID: call.ID, Content: msg, Details: details, IsError: false}
 			}
 		}
@@ -720,12 +745,16 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 		if rawResult.Content != "" {
 			content = rawResult.Content
 		}
-		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: content, IsError: true})
+		emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: content, IsError: true})
 		return ai.ToolResultMessage{ToolCallID: call.ID, Content: content, IsError: true, SubagentUsage: rawResult.SubagentUsage}
 	}
 
 	// 8. Run after hooks
 	preHookResult := rawResult
+	var discoveryDetails []byte
+	if _, control := tool.(*searchTools); control {
+		discoveryDetails, _ = json.Marshal(rawResult.Details)
+	}
 	if a.hookSystem != nil {
 		rawResult, err = a.hookSystem.RunAfter(ctx, a.lifecycleHooks.After, callCtx, rawResult)
 	} else {
@@ -741,12 +770,23 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 		// Wrap with AfterHookError to preserve pre-hook result for debugging.
 		hookErr := NewAfterHookError(err, preHookResult)
 		errMsg := fmt.Sprintf("%s (original result: %s)", hookErr.Error(), preHookResult.Content)
-		a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: errMsg, IsError: true})
+		emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: errMsg, IsError: true})
 		return ai.ToolResultMessage{ToolCallID: call.ID, Content: errMsg, IsError: true, SubagentUsage: preHookResult.SubagentUsage}
 	}
 
 	// Accounting belongs to execution, independent of display/content hooks.
 	rawResult.SubagentUsage = preHookResult.SubagentUsage
+	if discoveryDetails != nil {
+		// A hook may replace or mutate Details. Loading facts belong to the
+		// control tool, not to display/synopsis hooks.
+		rawResult.Details = nil
+		if !rawResult.IsError && !preHookResult.IsError {
+			var record discoveryRecord
+			if json.Unmarshal(discoveryDetails, &record) == nil && record.Kind == "tool_discovery" {
+				rawResult.Details = record
+			}
+		}
+	}
 	if a.model.ImagesUnsupported() && len(rawResult.Images) > 0 {
 		rawResult.Images = nil
 		rawResult.Content += "\n" + ai.ImageUnsupportedMessage
@@ -756,7 +796,7 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 	}
 	// 9. Emit end
 	// Result 给 UI 展示，优先 UserFacing（给用户看的更详细内容）；回填 LLM 用 Content（见 appendToolResult）。
-	a.emit(ctx, EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: rawResult.DisplayText(), Details: rawResult.Details, IsError: rawResult.IsError})
+	emitEnd(EventToolExecutionEnd{ToolCallID: call.ID, ToolName: call.Name, Result: rawResult.DisplayText(), Details: rawResult.Details, IsError: rawResult.IsError})
 	return a.appendToolResult(call, rawResult)
 }
 
@@ -839,6 +879,9 @@ func autoContinueMessage(
 			ai.NewTextUserMessage("请继续未完成的输出，直接从截断处继续输出。"),
 		)
 		contReq := a.llmRequest(contContext)
+		if a.validateRequestBudget(contReq) != nil {
+			break
+		}
 		stream, err := provider.Stream(ctx, contReq)
 		if err != nil {
 			slog.Warn("auto-continue request failed", "err", err)

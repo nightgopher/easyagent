@@ -180,6 +180,10 @@ func (t *Tool) ConfigureSession(sessionID string) { t.sessionID = sessionID }
 // Name implements agent.Tool.
 func (t *Tool) Name() string { return "computer" }
 
+func (*Tool) DiscoveryInfo() agent.ToolDiscoveryInfo {
+	return agent.ToolDiscoveryInfo{Deferred: true, SourceID: "builtin:computer", SourceLabel: "Computer control", SearchTerms: []string{"电脑", "屏幕", "截图", "点击", "应用", "界面", "screenshot", "click"}}
+}
+
 // Description tells the model when and how to use the tool.
 func (t *Tool) Description() string {
 	return "macOS 后台应用控制（实验）。先 list_apps 获取 bundle_id、pid、window_id；后续动作必须携带这三个目标标识。" +

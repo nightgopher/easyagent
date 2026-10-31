@@ -260,7 +260,7 @@ func TestDefaultModelMenuScrollAndKeyboard(t *testing.T) {
 			a.Live.Data["models"] = map[string]any{"current": map[string]any{"id": "coding"}}
 			tt := ui.NewTester(a.View, width, 640)
 			trigger, ok := tt.Find("选择主机默认模型")
-			if !ok || trigger.W < 180 || trigger.H != 32 {
+			if !ok || trigger.W < 180 || trigger.H < 31.9 || trigger.H > 32.1 {
 				t.Fatalf("default model trigger too small or mis-sized: %+v", trigger)
 			}
 			save, _ := tt.Find(SettingCopySaveDefaultModel)

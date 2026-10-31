@@ -166,6 +166,9 @@ func (a *preview) contextUsagePanel(c *ui.Context, s *session) {
 		for _, row := range []struct{ label, key string }{{"消息内容", "messages"}, {"系统提示词", "system"}, {"工具定义", "tools"}} {
 			ui.Row(c).Children(func() { a.note(c, row.label); ui.Spacer(c); a.note(c, formatCount(u[row.key])) })
 		}
+		if text := a.toolDiscoveryUsageText(object(u["tool_discovery"])); text != "" {
+			a.note(c, text)
+		}
 		a.note(c, "图片等多模态内容未计入，实际用量以模型返回为准。")
 		if child := object(u["subagent_usage"]); number(child["input_tokens"])+number(child["output_tokens"]) > 0 {
 			ui.Divider(c)

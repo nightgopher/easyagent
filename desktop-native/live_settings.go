@@ -65,6 +65,9 @@ func (a *preview) loadSettingsPage() {
 	switch s.Tab {
 	case "models":
 		a.refreshModels()
+		if !l.Loading["tool-discovery-save"] {
+			a.resource("tool-discovery", "/settings/tool-discovery")
+		}
 	case "usage":
 		a.resource("usage", "/usage/summary")
 	case "experiments":
@@ -173,6 +176,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	})
 	a.preferenceRow(c, SettingCopyCurrentModel, a.current().Model, func() {})
 	a.note(c, SettingCopyModelNote)
+	a.toolDiscoverySettings(c)
 	if !s.host().Local {
 		a.note(c, SettingCopyRemoteModelNote)
 		ui.Row(c).Gap(8).Wrap().Children(func() {

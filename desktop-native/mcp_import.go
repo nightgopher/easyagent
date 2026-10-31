@@ -108,7 +108,7 @@ func validateMCPImport(config map[string]any, partial bool) error {
 			}
 		}
 	}
-	for _, key := range []string{"trust", "enabled"} {
+	for _, key := range []string{"trust", "enabled", "alwaysLoad"} {
 		if value := config[key]; value != nil {
 			if _, ok := value.(bool); !ok {
 				return fmt.Errorf("%s 必须为 true 或 false", key)
@@ -157,6 +157,7 @@ func (s *settingsState) importMCPToForm() error {
 	config := entry.Config
 	next := mcpForm{Workspace: s.Workspace, Scope: s.Scope, MCPName: entry.Name, JSON: s.JSON, MCPBase: config,
 		Command: str(config["command"]), URL: str(config["url"]), Cwd: str(config["cwd"]), Description: str(config["description"]), Trust: boolean(config["trust"])}
+	next.AlwaysLoad = boolean(config["alwaysLoad"])
 	if next.URL == "" {
 		next.URL = str(config["httpUrl"])
 	}
@@ -168,6 +169,9 @@ func (s *settingsState) importMCPToForm() error {
 		next.Transport = "sse"
 	}
 	if s.MCPEditName != "" {
+		if _, ok := config["alwaysLoad"]; !ok {
+			next.AlwaysLoad = s.AlwaysLoad
+		}
 		if _, ok := config["description"]; !ok {
 			next.Description = s.Description
 		}

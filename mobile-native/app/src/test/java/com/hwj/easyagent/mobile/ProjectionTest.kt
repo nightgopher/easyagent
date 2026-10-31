@@ -14,6 +14,19 @@ class ProjectionTest {
     private fun envelope(json: String) = wireJson.decodeFromString(Envelope.serializer(), json)
 
     @Test
+    fun `tool discovery uses existing events and ignores additive context fields`() {
+        val usage = wireJson.decodeFromString(com.hwj.easyagent.mobile.backend.ContextUsage.serializer(),
+            """{"estimated_tokens":800,"context_window":128000,"window_known":true,"tool_discovery":{"mode":"local","resident":12,"loaded":2,"searchable":498}}""")
+        assertEquals(800L, usage.estimatedTokens)
+        val s = ChatSession("s1")
+        s.reduce(envelope("""{"type":"event","session_id":"s1","seq":1,"event":{"type":"tool_start","tool_call_id":"search-1","tool_name":"search_tools","tool_args":{"query":"审批"}}}"""))
+        s.reduce(envelope("""{"type":"event","session_id":"s1","seq":2,"event":{"type":"tool_end","tool_call_id":"search-1","tool_name":"search_tools","tool_result":"工具可用了","tool_details":{"kind":"tool_discovery","version":1,"selected":[{"name":"mcp__oa__pending"}]}}}"""))
+        val tool = s.messages.last { it.tool == "search_tools" }
+        assertEquals("完成", tool.status)
+        assertEquals("工具可用了", tool.result)
+    }
+
+    @Test
     fun `snapshot history builds user assistant tool`() {
         val s = ChatSession("s1")
         s.reduce(

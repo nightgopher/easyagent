@@ -317,6 +317,11 @@ var toolExitCode = regexp.MustCompile(`(?i)exit\s*code:?\s*(-?\d+)`)
 var ansiSequence = regexp.MustCompile("\\x1b\\[[0-?]*[ -/]*[@-~]")
 
 func toolSummary(m *message) string {
+	if m.Tool == "search_tools" && m.Status == "完成" {
+		if details := object(m.Details); str(details["kind"]) == "tool_discovery" {
+			return fmt.Sprintf("已加载 %d 个工具", len(list(details["selected"])))
+		}
+	}
 	if m.Tool == "task" {
 		if n := len(m.Steps); n > 0 {
 			return fmt.Sprintf("%d 步", n)
@@ -370,6 +375,9 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			name := m.Tool
 			if m.Tool == "task" {
 				name = "子任务"
+			}
+			if m.Tool == "search_tools" {
+				name = a.tr("查找工具")
 			}
 			ui.Text(c, name).FontSize(12).FontWeight(500)
 			ui.Text(c, toolDescription(m)).FontSize(11).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0).SingleLine()

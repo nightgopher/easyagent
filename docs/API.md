@@ -157,6 +157,20 @@ Agent 流新增 `thinking_delta`（`text_delta` 携带思考片段、`timestamp`
 
 `context_usage` 包含 `estimated_tokens`、`messages`、`system`、`tools`、`context_window`、`window_known`、`model` 及 `last_request`。前三类相加得到当前估算占用，图片未计入；`window_known:false` 表示默认运行预算。`last_request` 为最近一次请求的实际 `input_tokens` / `output_tokens`，可选 `cached_input_tokens` 区分未报告与零命中，不累加多轮用量。
 
+`context_usage.tool_discovery` 是可选字段，包含 `mode`（当前请求的有效模式）、`catalog_revision`、`resident`（含搜索入口）、`loaded`、`searchable`（尚未加载的候选数）、`definition_tokens`（与 `tools` 相同的文本估算）以及可选 `fallback_reason`。`resident + loaded` 等于该请求的定义数；不会把宿主完整注册表大小当成模型输入。旧客户端可忽略新增字段。
+
+### 工具加载设置
+
+`GET /settings/tool-discovery` 读取当前运行主机策略；`POST /settings/tool-discovery` 接收 `{"mode":"local"}` 或 `{"mode":"off"}`，成功后返回相同结构：
+
+```json
+{"mode":"local","revision":2,"effective_from":"next_run"}
+```
+
+沿用 API 认证。POST 拒绝未知字段、多个 JSON 值、空/非法模式和超过 1 KiB 的请求。写入失败返回 500，内存策略保持原值；成功后下一次任务采用新策略，活跃任务保持原快照。策略版本是当前进程的修订号，不作为跨重启的永久 ID。旧服务端没有此接口时，客户端提示更新主机。
+
+`search_tools` 沿用现有 `tool_start` / `tool_end` 事件。只有结果成功提交后才发送其完成事件；成功选择工具时 `tool_details` 含 `kind: "tool_discovery"`、`version: 1`、`catalog_revision`、`selected: [{name, definition_hash}]`。浏览、零命中、失败结果没有加载事实。下一请求使用当前目录的完整 schema；加载记录不提供额外执行权限。
+
 ### 切换模型
 
 ```
@@ -252,7 +266,7 @@ POST /sessions/{id}/model
 serve 模式内嵌网页控制台（浏览器打开 `http://<host>:<port>/`），无需独立前端：
 
 - **对话**：原有聊天界面（WebSocket 流式 + 会话侧栏 + 模型切换）。
-- **设置**：托管飞书配置、配对、服务状态与 MCP 工具配置。
+- **设置**：工具加载方式、托管飞书配置、配对、服务状态与 MCP 工具配置。
 - **会话**：会话列表、消息回看（含工具调用）、删除。
 
 需要令牌时（非本机访问或已配置服务令牌），页面会弹出登录框，令牌保存在浏览器 localStorage；WebSocket 连接自动附带 `?token=`。
@@ -282,7 +296,7 @@ GET /health
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/mcp?workspace=...` | 状态、配置来源、工具、授权与错误，不返回秘密 |
+| GET | `/mcp?workspace=...` | 状态、配置来源、工具、授权与错误，不返回秘密；服务的 `always_load` 表示是否始终加载定义 |
 | PUT / DELETE | `/mcp/servers/{name}?workspace=...&scope=user` | 保存字段补丁 / 删除该作用域定义 |
 | POST | `/mcp/servers/{name}/{action}` | enable、disable、trust、untrust、reconnect、refresh、login、logout |
 | POST | `/mcp/servers/{name}/tools/{tool}` | body 为 `{"enabled":true}` |

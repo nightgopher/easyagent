@@ -370,5 +370,21 @@
   "每次询问": "Ask every time",
   "搜索知识库…": "Search knowledge base…",
   "获取信息": "Resolving",
-  "扫码失败": "QR login failed"
+  "扫码失败": "QR login failed",
+  "工具加载": "Tool loading",
+  "工具加载模式": "Tool loading mode",
+  "工具加载设置": "Tool loading settings",
+  "完整加载": "Full loading",
+  "按需加载": "On demand",
+  "尚未读取": "Not loaded",
+  "保留基础工具，其他工具在需要时搜索并加载。": "Keep core tools available; discover other tools when needed.",
+  "无法读取工具加载设置；旧版运行主机需要更新后使用。": "Tool loading settings are unavailable. Update older hosts to use this feature.",
+  "重试读取工具加载设置": "Retry loading settings",
+  "应用于当前运行主机 · 下一次任务生效": "Applies to this host from the next task",
+  "工具加载已保存，下一次任务生效。": "Tool loading saved. Applies from the next task.",
+  "运行主机未返回有效的工具加载设置，请更新后重试。": "The host returned invalid tool loading settings. Update it and try again.",
+  "始终加载此服务的工具": "Always load tools from this server",
+  "仅影响工具定义的加载方式；执行仍遵循原有授权。": "Only changes definition loading. Existing approval rules still apply.",
+  "查找工具": "Find tools",
+  "常驻 %s · 已按需加载 %s · 可搜索 %s": "Resident %s · Loaded on demand %s · Searchable %s"
 }

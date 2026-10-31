@@ -81,6 +81,7 @@ type Config struct {
 	ComputerApprovalPolicy string   // computer perform_action 审批策略: "ask"(默认) | "auto"(仅高危确认)
 	ApprovedApps           []string // 已批准执行键鼠控制的应用（bundle id 或名称）
 	MCPConfigPath          string   // User MCP configuration; empty uses ~/.easyagent/mcp.json.
+	ToolSearch             string   // off (default) or local; host tool-definition loading policy.
 
 	// Execution backend
 	ExecutionMode string // "local" (default) or "ssh"
@@ -129,12 +130,13 @@ const HomeDirName = ".easyagent"
 
 func Default() Config {
 	return Config{
-		Name:     "easyagent",
-		Host:     "127.0.0.1",
-		Port:     8080,
-		DataDir:  "./data",
-		MaxTurns: 200,
-		Timeout:  5 * time.Minute,
+		Name:       "easyagent",
+		Host:       "127.0.0.1",
+		Port:       8080,
+		DataDir:    "./data",
+		MaxTurns:   200,
+		ToolSearch: "off",
+		Timeout:    5 * time.Minute,
 
 		Provider: "",
 
@@ -210,6 +212,9 @@ func getEnvInt(name string, fallback int) int {
 
 // LoadFromEnv 从环境变量中加载配置，覆盖默认值。
 func (c *Config) LoadFromEnv() {
+	if value := getEnv("EA_TOOL_SEARCH", ""); value != "" {
+		c.ToolSearch = value
+	}
 	if v := getEnv("EA_PROVIDER", ""); v != "" {
 		c.Provider = v
 	}
@@ -435,6 +440,7 @@ type yamlConfig struct {
 	MaxOutputLen int `yaml:"max_output_len,omitempty"`
 
 	SynopsisThreshold int      `yaml:"synopsis_threshold,omitempty"`
+	ToolSearch        string   `yaml:"tool_search,omitempty"`
 	AllowedTools      []string `yaml:"allowed_tools,omitempty"`
 	BlockedTools      []string `yaml:"blocked_tools,omitempty"`
 
@@ -555,6 +561,9 @@ func (c *Config) LoadFromYAML(path string) error {
 	if yc.SynopsisThreshold > 0 {
 		c.SynopsisThreshold = yc.SynopsisThreshold
 	}
+	if yc.ToolSearch != "" {
+		c.ToolSearch = yc.ToolSearch
+	}
 	if len(yc.AllowedTools) > 0 {
 		c.AllowedTools = yc.AllowedTools
 	}
@@ -609,6 +618,7 @@ func (c *Config) LoadFromYAML(path string) error {
 // boot-time env and yaml sources so saved runtime changes survive restarts.
 
 type runtimeOverrides struct {
+	ToolSearchMode         *string  `json:"tool_search_mode,omitempty"`
 	DisabledSkills         []string `json:"disabled_skills,omitempty"`
 	EnableComputerUse      *bool    `json:"enable_computer_use,omitempty"`
 	ComputerApprovalPolicy *string  `json:"computer_approval_policy,omitempty"`
@@ -627,6 +637,9 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 	var o runtimeOverrides
 	if json.Unmarshal(data, &o) != nil {
 		return
+	}
+	if o.ToolSearchMode != nil {
+		c.ToolSearch = *o.ToolSearchMode
 	}
 	if o.EnableComputerUse != nil {
 		c.EnableComputerUse = *o.EnableComputerUse
@@ -733,7 +746,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills"} {
+	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills", "tool_search_mode"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {

@@ -82,7 +82,7 @@ export class ChatPanel {
         this._addToolCall(event.tool_call_id, event.tool_name, 'running', event.tool_args);
       },
       tool_update: event => this._updateToolProgress(event.tool_call_id, event.partial_result),
-      tool_end: event => this._updateToolCall(event.tool_call_id, event.is_error ? 'error' : 'done', event.tool_result),
+      tool_end: event => this._updateToolCall(event.tool_call_id, event.is_error ? 'error' : 'done', event.tool_result, event.tool_details),
       done: event => this._finalizeStream(event.final_message),
       error: event => this._finalizeWithError(event.error),
     };
@@ -163,7 +163,7 @@ export class ChatPanel {
               this._addToolCall(tc.id, tc.name, completed.has(tc.id) ? 'done' : 'unknown', tc.args);
             }
           }
-        } else if (msg.role === 'toolResult' || msg.role === 'tool') this._updateToolCall(msg.tool_call_id, msg.is_error ? 'error' : 'done', msg.content);
+        } else if (msg.role === 'toolResult' || msg.role === 'tool') this._updateToolCall(msg.tool_call_id, msg.is_error ? 'error' : 'done', msg.content, msg.tool_details);
       }
       this._finishTools(); this._currentStreamEl = null;
       if (!this.messageList.children.length) this.messageList.innerHTML = '<p class="empty-conversation">对话已准备好。写下第一个想法吧。</p>';
@@ -245,7 +245,7 @@ export class ChatPanel {
       else if(msg.role==='assistant'){
         if(msg.content)this._addAssistantMessage(msg.content);
         if(msg.tool_calls?.length){this._startAssistantStream();for(const tc of msg.tool_calls)this._addToolCall(tc.id,tc.name,completed.has(tc.id)?'done':'unknown',tc.args);}
-      }else if(msg.role==='toolResult'||msg.role==='tool')this._updateToolCall(msg.tool_call_id,msg.is_error?'error':'done',msg.content);
+      }else if(msg.role==='toolResult'||msg.role==='tool')this._updateToolCall(msg.tool_call_id,msg.is_error?'error':'done',msg.content, msg.tool_details);
     }
     this._finishTools();this._currentStreamEl=null;
   }
@@ -336,7 +336,8 @@ export class ChatPanel {
     if (!group) { group = document.createElement('details'); group.className = 'tool-group'; group.open = true; group.innerHTML = '<summary>工具执行</summary>'; container.append(group); }
     const el = document.createElement('details'); el.className = `tool-call ${status}`;
     el.innerHTML = '<summary><span class="tool-name"></span><span class="tool-status"></span></summary><pre class="tool-args"></pre><pre class="tool-result"></pre>';
-    el.querySelector('.tool-name').textContent = name || '工具';
+    el.dataset.toolName = name || '';
+    el.querySelector('.tool-name').textContent = name === 'search_tools' ? '查找工具' : name || '工具';
     el.querySelector('.tool-status').textContent = status === 'running' ? '执行中' : status === 'unknown' ? '未收到结果' : '已完成';
     const argEl = el.querySelector('.tool-args'); argEl.textContent = args ? (typeof args === 'string' ? args : JSON.stringify(args, null, 2)) : ''; argEl.hidden = !args;
     el.querySelector('.tool-result').textContent = status === 'running' ? '等待执行结果…' : status === 'unknown' ? '未保存执行结果，可能仍在运行或已中断。请先确认执行状态，避免重复执行有副作用的操作。' : '暂无输出';
@@ -352,10 +353,11 @@ export class ChatPanel {
     el.querySelector('.tool-status').textContent = text;
     el.querySelector('.tool-result').textContent = text;
   }
-  _updateToolCall(id, status, result) {
+  _updateToolCall(id, status, result, details) {
     const el = this._currentToolCalls[id]; if (!el) return;
     el.classList.remove('running', 'done', 'error', 'unknown'); el.classList.add(status);
-    el.querySelector('.tool-status').textContent = status === 'error' ? '执行失败' : '已完成';
+    const loaded = status === 'done' && el.dataset?.toolName === 'search_tools' && details?.kind === 'tool_discovery' && Array.isArray(details.selected);
+    el.querySelector('.tool-status').textContent = status === 'error' ? '执行失败' : loaded ? `已加载 ${details.selected.length} 个工具` : '已完成';
     el.querySelector('.tool-result').textContent = typeof result === 'string' ? result : JSON.stringify(result ?? '无输出', null, 2);
     if (status === 'error') { el.open = true; el.parentElement.open = true; }
     this._scrollToBottom();
