@@ -8,15 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nightgopher/easyagent/sdk/agent"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 type MCPToolAdapter struct {
-	manager *Manager
-	server  string
-	tool    *protocol.Tool
-	timeout time.Duration
+	manager    *Manager
+	server     string
+	tool       *protocol.Tool
+	timeout    time.Duration
+	alwaysLoad bool
 }
 
 func newToolAdapter(manager *Manager, server string, tool *protocol.Tool, cfg MCPServerConfig) *MCPToolAdapter {
@@ -24,7 +25,11 @@ func newToolAdapter(manager *Manager, server string, tool *protocol.Tool, cfg MC
 	if cfg.Timeout > 0 {
 		timeout = time.Duration(cfg.Timeout) * time.Millisecond
 	}
-	return &MCPToolAdapter{manager: manager, server: server, tool: tool, timeout: timeout}
+	return &MCPToolAdapter{manager: manager, server: server, tool: tool, timeout: timeout, alwaysLoad: cfg.AlwaysLoad}
+}
+
+func (t *MCPToolAdapter) DiscoveryInfo() agent.ToolDiscoveryInfo {
+	return agent.ToolDiscoveryInfo{Deferred: !t.alwaysLoad, SourceID: "mcp:" + t.server, SourceLabel: t.server, Aliases: []string{t.tool.Name}}
 }
 func toolNamespace(name string) string {
 	server := namespace(name)

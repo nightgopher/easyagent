@@ -88,6 +88,7 @@ type hostForm struct {
 	RepairCredential                       bool
 }
 type mcpForm struct {
+	AlwaysLoad                                                                         bool
 	Workspace, Scope, MCPName, Transport, Command, Args, Variables, URL, Timeout, JSON string
 	Description, Cwd                                                                   string
 	Advanced, Trust, ProjectTrust, MCPExtra                                            bool
@@ -296,6 +297,7 @@ func (s *settingsState) mcpFormConfig() (map[string]any, error) {
 		transport = "http"
 	}
 	config["type"], config["trust"] = transport, s.Trust
+	config["alwaysLoad"] = s.AlwaysLoad
 	if transport == "stdio" {
 		if strings.TrimSpace(s.Command) != "" {
 			config["command"] = strings.TrimSpace(s.Command)

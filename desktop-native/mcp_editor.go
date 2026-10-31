@@ -29,6 +29,7 @@ func (a *preview) beginMCPEditor(server map[string]any) {
 		if server != nil {
 			s.MCPName, s.MCPEditName = str(server["name"]), str(server["name"])
 			s.Transport, s.Trust, s.Description = str(server["transport"]), boolean(server["trusted"]), str(server["description"])
+			s.AlwaysLoad = boolean(server["always_load"])
 			if str(server["scope"]) == "project" {
 				s.Scope = "项目"
 			}
@@ -209,6 +210,8 @@ func (a *preview) mcpFormEditor(c *ui.Context) {
 		}
 		a.multiline(c, label, &s.Variables, 2, 4)
 		a.input(c, "超时（毫秒）", &s.Timeout, "沿用默认超时", false)
+		ui.Checkbox(c, &s.AlwaysLoad, a.tr("始终加载此服务的工具"))
+		a.note(c, "仅影响工具定义的加载方式；执行仍遵循原有授权。")
 	})
 	ui.Checkbox(c, &s.Trust, "信任并连接此服务")
 }

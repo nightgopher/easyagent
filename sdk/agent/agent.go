@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -25,19 +26,21 @@ const (
 )
 
 type Options struct {
-	Model              ai.Model
-	Registry           *providers.Registry
-	System             string
-	Tools              []Tool
-	MaxTurns           int
-	Goal               string                   // 可选：当前会话目标（goal-driven loop，非空时取消 maxTurns 限制）
-	Session            *session.Session         // 可选：会话持久化
-	CompactionSettings compaction.Settings      // 上下文压缩设置
-	SummarizeFunc      compaction.SummarizeFunc // 可选：摘要生成函数
-	LifecycleHooks     LifecycleHooks           // 可选：工具执行生命周期钩子
-	HookSystem         HookSystemInterface      // 可选：增强型 Hook 系统（优先级排序、超时）
-	ConfirmFunc        ConfirmFunc              // 可选：危险工具执行前向用户确认（未注入则默认放行）
-	LoopDetectSettings LoopDetectSettings       // 循环检测设置（默认启用，连续相同 tool call 触发提醒）
+	Model                    ai.Model
+	Registry                 *providers.Registry
+	System                   string
+	Tools                    []Tool
+	ToolSearchMode           ToolSearchMode // Empty/off preserves complete loading; local discovers deferred definitions.
+	ToolSearchDisabledReason string         // Optional host policy fallback, e.g. an explicitly blocked search_tools.
+	MaxTurns                 int
+	Goal                     string                   // 可选：当前会话目标（goal-driven loop，非空时取消 maxTurns 限制）
+	Session                  *session.Session         // 可选：会话持久化
+	CompactionSettings       compaction.Settings      // 上下文压缩设置
+	SummarizeFunc            compaction.SummarizeFunc // 可选：摘要生成函数
+	LifecycleHooks           LifecycleHooks           // 可选：工具执行生命周期钩子
+	HookSystem               HookSystemInterface      // 可选：增强型 Hook 系统（优先级排序、超时）
+	ConfirmFunc              ConfirmFunc              // 可选：危险工具执行前向用户确认（未注入则默认放行）
+	LoopDetectSettings       LoopDetectSettings       // 循环检测设置（默认启用，连续相同 tool call 触发提醒）
 }
 
 type Agent struct {
@@ -47,6 +50,9 @@ type Agent struct {
 	model              ai.Model
 	system             string
 	tools              map[string]Tool
+	discovery          *toolCatalog
+	discoveryFallback  string
+	initErr            error
 	listeners          []*eventSubscription
 	steeringQueue      *MessageQueue
 	followUpQueue      *MessageQueue
@@ -79,7 +85,7 @@ func New(opts Options) *Agent {
 		loopSettings.ReminderTemplate = DefaultLoopDetectSettings().ReminderTemplate
 	}
 
-	return &Agent{
+	a := &Agent{
 		state:              StateIdle,
 		registry:           opts.Registry,
 		model:              opts.Model,
@@ -98,6 +104,20 @@ func New(opts Options) *Agent {
 		confirmFunc:        opts.ConfirmFunc,
 		loopDetectSettings: loopSettings,
 	}
+	a.discoveryFallback = opts.ToolSearchDisabledReason
+	if opts.ToolSearchMode != "" && opts.ToolSearchMode != ToolSearchOff && opts.ToolSearchMode != ToolSearchLocal {
+		a.initErr = fmt.Errorf("invalid tool search mode %q", opts.ToolSearchMode)
+	} else if opts.ToolSearchMode == ToolSearchLocal && opts.ToolSearchDisabledReason == "" {
+		a.discovery, a.initErr = newToolCatalog(opts.Tools)
+		if a.initErr == nil {
+			if a.discovery.deferred > 0 {
+				a.tools[SearchToolsName] = &searchTools{catalog: a.discovery}
+			} else {
+				a.discoveryFallback = "no_deferred_tools"
+			}
+		}
+	}
+	return a
 }
 
 type eventSubscription struct{ handler EventHandler }
@@ -449,6 +469,9 @@ func (a *Agent) FollowUp(ctx context.Context, msg ai.Message) {
 }
 
 func (a *Agent) provider() (providers.Provider, error) {
+	if a.initErr != nil {
+		return nil, a.initErr
+	}
 	provider, ok := a.registry.Get(a.model.Provider)
 	if !ok {
 		return nil, fmt.Errorf("provider %q not found", a.model.Provider)
@@ -465,6 +488,7 @@ func (a *Agent) toolDefinitions() []ai.ToolDefinition {
 			Parameters:  tool.Parameters(),
 		})
 	}
+	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
 	return defs
 }
 
@@ -477,13 +501,19 @@ func (a *Agent) appendToolResult(call ai.ToolCall, result ToolResult) ai.ToolRes
 }
 
 func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
+	var definitions []ai.ToolDefinition
+	if a.discovery != nil && a.discovery.deferred > 0 {
+		definitions = a.discovery.definitions(messages)
+	} else {
+		definitions = a.toolDefinitions()
+	}
 	// MaxTokens 为 nil 时 provider 会兜底 4096，长回复会在输出触顶后断流；
 	// 模型定义了上限则随请求下发。
 	req := ai.StreamRequest{
 		Model:      a.model,
 		Messages:   ai.MessagesForModel(messages, a.model),
 		System:     a.system,
-		Tools:      a.toolDefinitions(),
+		Tools:      definitions,
 		ToolChoice: nil,
 	}
 	if max := a.model.MaxTokens; max > 0 {

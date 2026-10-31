@@ -27,6 +27,7 @@ type MCPServerConfig struct {
 	Headers      map[string]string `json:"headers,omitempty"`
 	Timeout      int               `json:"timeout,omitempty"`
 	Trust        bool              `json:"trust,omitempty"`
+	AlwaysLoad   bool              `json:"alwaysLoad,omitempty"`
 	Enabled      *bool             `json:"enabled,omitempty"`
 	IncludeTools []string          `json:"includeTools,omitempty"`
 	ExcludeTools []string          `json:"excludeTools,omitempty"`

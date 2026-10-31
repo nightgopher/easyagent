@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nightgopher/easyagent/sdk/agent"
 	protocol "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/nightgopher/easyagent/sdk/agent"
 )
 
 const DefaultTimeout = 60 * time.Second
@@ -48,6 +48,7 @@ type ServerInfo struct {
 	Error       string       `json:"error,omitempty"`
 	ToolCount   int          `json:"tool_count"`
 	Trusted     bool         `json:"trusted"`
+	AlwaysLoad  bool         `json:"always_load"`
 	Enabled     bool         `json:"enabled"`
 	Tools       []ToolInfo   `json:"tools"`
 }
@@ -251,7 +252,7 @@ func (m *Manager) Servers() []ServerInfo {
 	result := make([]ServerInfo, 0, len(m.servers))
 	for name, srv := range m.servers {
 		cfg := srv.entry.Config
-		info := ServerInfo{Name: name, Description: cfg.Description, Source: srv.entry.Source, Scope: srv.entry.Scope, Transport: cfg.Transport(), State: srv.state, Error: srv.err, Trusted: cfg.Trust, Enabled: cfg.enabled(), Tools: []ToolInfo{}}
+		info := ServerInfo{Name: name, Description: cfg.Description, Source: srv.entry.Source, Scope: srv.entry.Scope, Transport: cfg.Transport(), State: srv.state, Error: srv.err, Trusted: cfg.Trust, AlwaysLoad: cfg.AlwaysLoad, Enabled: cfg.enabled(), Tools: []ToolInfo{}}
 		for _, tool := range srv.tools {
 			enabled := isToolEnabled(tool.Name, cfg)
 			if enabled {

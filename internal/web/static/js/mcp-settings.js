@@ -4,7 +4,7 @@ const OAUTH_KEY = 'easyagent:mcp:oauth';
 const labels = {connected:'已连接',connecting:'连接中',disconnected:'已断开',failed:'连接失败',needs_auth:'需要登录',disabled:'已停用'};
 const transportLabels = {stdio:'stdio',http:'Streamable HTTP',sse:'SSE'};
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const fieldIds = ['name','scope','transport','description','command','args','url','env','cwd','headers','oauth','include','exclude','timeout','enabled','trusted'];
+const fieldIds = ['name','scope','transport','description','command','args','url','env','cwd','headers','oauth','include','exclude','timeout','enabled','trusted','always-load'];
 
 export function canUseWebOAuth(href) {
   const url = new URL(href);
@@ -19,6 +19,7 @@ export function serverPatch(values, original = null) {
   if (!['user','project'].includes(values.scope)) throw Error('请选择个人或项目保存位置。');
   if (!['stdio','http','sse'].includes(values.transport)) throw Error('请选择连接方式。');
   const patch = {type:values.transport,description:values.description.trim(),enabled:values.enabled,trust:values.trusted};
+  if (typeof values['always-load'] === 'boolean') patch.alwaysLoad = values['always-load'];
   const changed = original && (original.transport === 'stdio') !== (values.transport === 'stdio');
   const parse = (field, key, kind) => {
     const input = values[field]?.trim();
@@ -215,6 +216,7 @@ export class MCPSettings {
     this.fields.name.value = server?.name || ''; this.fields.scope.value = server?.scope || 'user';
     this.fields.transport.value = server?.transport || 'stdio'; this.fields.description.value = server?.description || '';
     this.fields.enabled.checked = server?.enabled ?? true; this.fields.trusted.checked = server?.trusted ?? false;
+    this.fields['always-load'].checked = server?.always_load ?? false;
     document.getElementById('mcp-editor-title').textContent = server ? `编辑 ${server.name}` : '添加服务';
     document.getElementById('mcp-edit-hint').hidden = !server; document.getElementById('mcp-editor-error').textContent = '';
     document.getElementById('mcp-save').textContent = server ? '保存修改' : '保存并连接';

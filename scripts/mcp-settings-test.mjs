@@ -4,6 +4,13 @@ import { MCPSettings, serverPatch, serverMarkup, canUseWebOAuth, oauthCallback }
 
 const values = overrides => ({name:'files',scope:'user',transport:'stdio',description:'',command:'',args:'',url:'',env:'',cwd:'',headers:'',oauth:'',include:'',exclude:'',timeout:'',enabled:true,trusted:false,...overrides});
 
+test('always-load is independent of service trust and can be switched back off', () => {
+  for (const alwaysLoad of [true,false]) {
+    const patch = serverPatch(values({command:'server','always-load':alwaysLoad}));
+    assert.equal(patch.alwaysLoad,alwaysLoad); assert.equal(patch.trust,false); assert.equal(patch.enabled,true);
+  }
+});
+
 test('editing status alone preserves undisplayed connection and credential fields', () => {
   const patch = serverPatch(values({transport:'http',description:'New label'}),{transport:'http'});
   assert.deepEqual(patch,{type:'http',description:'New label',enabled:true,trust:false});

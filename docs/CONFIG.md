@@ -78,6 +78,20 @@ Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSo
 
 Bash 并非文件路径沙箱；启用它就授予相应系统命令能力。启用后同时提供 `bash_output` / `bash_kill`：`bash` 带 `run_in_background` 时立即返回任务 ID，适合开发服务器、监听和长构建；前台命令到达 `timeout` 仍未结束时不再被终止，而是自动移交后台任务（返回任务 ID，续用 `bash_output` / `bash_kill`），`sleep` 开头的命令除外；后台任务不受 `timeout` 限制，会话关闭或程序退出时终止。serve 模式的 Web 与桌面客户端提供工具审批，等待批准会在两分钟后自动拒绝。SDK 调用者须提供自己的确认回调；不能依赖 TUI 的提示保护服务。`-y` / `EA_AUTO_APPROVE=true` 会显式跳过审批，包括未信任的 MCP 工具。危险命令识别不是安全边界，隔离与 HTTPS 部署见 [安全模型](SECURITY_MODEL.md)。
 
+## 工具按需加载
+
+默认 `off`（完整加载）。设置 → 模型连接 → 工具加载可选择 `local`（按需加载）；Web 设置页也提供相同的主机设置。保存后下一次任务生效，当前任务继续使用开始时的目录与策略。
+
+```yaml
+tool_search: local
+```
+
+也可设置 `EA_TOOL_SEARCH=local` 或 `easyagent serve --tool-search local`。启动优先级：默认值 → YAML → 环境变量 → `<dataDir>/settings.json` 的 `tool_search_mode` → 显式 CLI 参数。运行时 API 保存会更新主机策略。非法模式报错，设置不会写入客户端的主题/语言偏好。
+
+按需模式保持基础文件、终端、交互等工具常驻；MCP 和显式标记的网页、电脑控制、技能市场工具先由 `search_tools` 检索，下一次模型请求获得匹配工具的完整参数，随后按原名执行。现有工具过滤和审批继续生效；服务的 `alwaysLoad: true` 可让该服务的 MCP 工具常驻，详见 [MCP](MCP.md)。
+
+已安装 Skills 的名称、简介与路径仍提供给模型，正文按需读取，不经过工具搜索。搜索采用本地关键词匹配，不额外请求模型或向量服务；可能增加一次模型调用。关闭/过滤 `search_tools` 或没有延迟候选时，使用当前允许的完整工具集合。实现及恢复行为见 [设计记录](decisions/tool-discovery.md)。
+
 ## 可选能力
 
 | 配置 | 用途 |

@@ -46,6 +46,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
 		a.note(c, fmt.Sprintf("%d 个", len(list(m["servers"]))))
 		ui.Spacer(c)
+		a.action(c, "工具加载设置").OnClick(func() { s.Tab = "models"; a.loadSettingsPage() })
 		a.action(c, "刷新").Disabled(l.Loading["mcp"]).OnClick(a.loadSettingsPage)
 		label := "添加服务"
 		if a.settingsFormDirty() {

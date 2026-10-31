@@ -26,6 +26,9 @@ type ContextMessage struct {
 }
 
 func (a *Agent) ContextSnapshot(ctx context.Context) (ContextSnapshot, error) {
+	if a.initErr != nil {
+		return ContextSnapshot{}, a.initErr
+	}
 	var history []ai.Message
 	records := make([]session.CompactionRecord, 0)
 	if a.session != nil {

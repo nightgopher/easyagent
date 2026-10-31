@@ -12,15 +12,16 @@ import (
 // ContextUsage estimates the current prompt, including system and tool schemas.
 // LastRequest is the latest provider measurement, not a sum across turns.
 type ContextUsage struct {
-	SubagentUsage   ai.Usage `json:"subagent_usage"` // cumulative separate-context work; excluded from EstimatedTokens
-	EstimatedTokens int      `json:"estimated_tokens"`
-	ContextWindow   int      `json:"context_window"`
-	WindowKnown     bool     `json:"window_known"`
-	Model           string   `json:"model"`
-	Messages        int      `json:"messages"`
-	System          int      `json:"system"`
-	Tools           int      `json:"tools"`
-	LastRequest     ai.Usage `json:"last_request"`
+	ToolDiscovery   *ToolDiscoveryUsage `json:"tool_discovery,omitempty"`
+	SubagentUsage   ai.Usage            `json:"subagent_usage"` // cumulative separate-context work; excluded from EstimatedTokens
+	EstimatedTokens int                 `json:"estimated_tokens"`
+	ContextWindow   int                 `json:"context_window"`
+	WindowKnown     bool                `json:"window_known"`
+	Model           string              `json:"model"`
+	Messages        int                 `json:"messages"`
+	System          int                 `json:"system"`
+	Tools           int                 `json:"tools"`
+	LastRequest     ai.Usage            `json:"last_request"`
 }
 
 func estimateContext(req ai.StreamRequest, usage ai.Usage) ContextUsage {
@@ -42,6 +43,9 @@ func estimateContext(req ai.StreamRequest, usage ai.Usage) ContextUsage {
 }
 
 func (a *Agent) ContextUsage(ctx context.Context) (ContextUsage, error) {
+	if a.initErr != nil {
+		return ContextUsage{}, a.initErr
+	}
 	var history []ai.Message
 	var err error
 	if a.session != nil {
@@ -55,6 +59,7 @@ func (a *Agent) ContextUsage(ctx context.Context) (ContextUsage, error) {
 
 func (a *Agent) contextUsage(ctx context.Context, req ai.StreamRequest, last ai.Usage) (ContextUsage, error) {
 	usage := estimateContext(req, last)
+	usage.ToolDiscovery = a.discoveryUsage(req, usage.Tools)
 	if a.session != nil {
 		var err error
 		usage.SubagentUsage, err = a.session.SubagentUsage(ctx, "")

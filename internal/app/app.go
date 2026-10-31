@@ -24,20 +24,21 @@ import (
 // It assembles dependencies (providers, session manager, runtime registry, etc.)
 // but does NOT carry session-specific behavior — that belongs to AgentSession.
 type App struct {
-	mcpState     mcpState
-	skillMarket  *skillMarketState
-	cfgMu        sync.Mutex
-	cfg          config.Config
-	skillDirs    []string
-	sessionMgr   *sessionmgr.Manager
-	registry     *providers.Registry
-	sessionStore *runtime.SessionRegistry
-	extRegistry  *extensions.Registry
-	application  runtime.Application            // default application (backward compat)
-	applications map[string]runtime.Application // named applications for per-session selection
-	extraTools   []agent.ExternalToolDef
-	profile      *profile.Store // unified user profile (shared across agents)
-	loopMgr      *scheduler.LoopManager
+	mcpState          mcpState
+	skillMarket       *skillMarketState
+	cfgMu             sync.Mutex
+	cfg               config.Config
+	discoveryRevision uint64
+	skillDirs         []string
+	sessionMgr        *sessionmgr.Manager
+	registry          *providers.Registry
+	sessionStore      *runtime.SessionRegistry
+	extRegistry       *extensions.Registry
+	application       runtime.Application            // default application (backward compat)
+	applications      map[string]runtime.Application // named applications for per-session selection
+	extraTools        []agent.ExternalToolDef
+	profile           *profile.Store // unified user profile (shared across agents)
+	loopMgr           *scheduler.LoopManager
 }
 
 // AppOptions holds the options for creating a new App.
@@ -60,6 +61,12 @@ type AppOptions struct {
 // New creates a new App, assembling all shared dependencies.
 func New(opts AppOptions) (*App, error) {
 	cfg := opts.Config
+	if err := config.ValidateToolSearch(cfg.ToolSearch); err != nil {
+		return nil, err
+	}
+	if cfg.ToolSearch == "" {
+		cfg.ToolSearch = "off"
+	}
 
 	// 后台任务进程组记录：异常退出（SIGKILL/崩溃）后，下次启动清理残留的后台进程
 	basetools.CleanupBackgroundTasks(cfg.DataDir)
@@ -97,16 +104,17 @@ func New(opts AppOptions) (*App, error) {
 	}
 
 	result := &App{
-		cfg:          cfg,
-		skillDirs:    opts.SkillDirs,
-		sessionMgr:   mgr,
-		registry:     reg,
-		sessionStore: store,
-		extRegistry:  extReg,
-		application:  application,
-		applications: apps,
-		profile:      opts.Profile,
-		loopMgr:      scheduler.NewLoopManager(),
+		cfg:               cfg,
+		discoveryRevision: 1,
+		skillDirs:         opts.SkillDirs,
+		sessionMgr:        mgr,
+		registry:          reg,
+		sessionStore:      store,
+		extRegistry:       extReg,
+		application:       application,
+		applications:      apps,
+		profile:           opts.Profile,
+		loopMgr:           scheduler.NewLoopManager(),
 	}
 	result.initMCP()
 	result.skillMarket = initSkillMarket(cfg)
@@ -215,7 +223,14 @@ func (a *App) SessionDepsWithApp(appName string) runtime.Dependencies {
 func (a *App) ReloadRuntimeOverrides() {
 	a.cfgMu.Lock()
 	defer a.cfgMu.Unlock()
+	previous := a.cfg.ToolSearch
 	a.cfg.LoadRuntimeOverrides(a.cfg.DataDir)
+	if config.ValidateToolSearch(a.cfg.ToolSearch) != nil {
+		a.cfg.ToolSearch = previous
+	}
+	if a.cfg.ToolSearch != previous {
+		a.discoveryRevision++
+	}
 }
 
 // SetDefaultModel updates the in-memory configuration and persists the choice to settings.json.
@@ -289,15 +304,16 @@ func (a *App) SetExternalTools(tools []agent.ExternalToolDef) {
 // deps constructs the Dependencies struct for AgentSession creation.
 func (a *App) deps() runtime.Dependencies {
 	return runtime.Dependencies{
-		Registry:        a.registry,
-		SessionMgr:      a.sessionMgr,
-		ExtRegistry:     a.extRegistry,
-		Application:     a.ResolveApplication(""),
-		ExternalTools:   a.extraTools,
-		AdditionalTools: func(workspace string) []agent.Tool { return a.additionalTools(workspace) },
-		ToolRevision:    a.combinedToolRevision,
-		PrepareTools:    a.prepareMCP,
-		AcquireTools:    a.acquireMCP,
+		Registry:            a.registry,
+		SessionMgr:          a.sessionMgr,
+		ExtRegistry:         a.extRegistry,
+		Application:         a.ResolveApplication(""),
+		ExternalTools:       a.extraTools,
+		AdditionalTools:     func(workspace string) []agent.Tool { return a.additionalTools(workspace) },
+		ToolRevision:        a.combinedToolRevision,
+		ToolDiscoveryPolicy: a.toolDiscoveryPolicy,
+		PrepareTools:        a.prepareMCP,
+		AcquireTools:        a.acquireMCP,
 		BuildOperations: func(cfg config.Config, workspace string) *operations.Operations {
 			switch cfg.ExecutionMode {
 			case "ssh":
