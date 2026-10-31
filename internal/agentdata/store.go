@@ -25,17 +25,18 @@ var (
 )
 
 type Agent struct {
-	Knowledge    []KnowledgeBinding `json:"knowledge"`
-	ID           string             `json:"id"`
-	Name         string             `json:"name"`
-	Instructions string             `json:"instructions"`
-	Model        string             `json:"model,omitempty"`
-	Workspace    string             `json:"workspace,omitempty"`
-	Tools        []string           `json:"tools"`
-	Skills       []string           `json:"skills"`
-	Disabled     bool               `json:"disabled"`
-	Version      int64              `json:"version"`
-	UpdatedAt    string             `json:"updated_at"`
+	MemoryEnabled bool               `json:"memory_enabled"`
+	Knowledge     []KnowledgeBinding `json:"knowledge"`
+	ID            string             `json:"id"`
+	Name          string             `json:"name"`
+	Instructions  string             `json:"instructions"`
+	Model         string             `json:"model,omitempty"`
+	Workspace     string             `json:"workspace,omitempty"`
+	Tools         []string           `json:"tools"`
+	Skills        []string           `json:"skills"`
+	Disabled      bool               `json:"disabled"`
+	Version       int64              `json:"version"`
+	UpdatedAt     string             `json:"updated_at"`
 }
 
 type Store struct{ dataDir string }
@@ -84,7 +85,7 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema+knowledgeSchema); err != nil {
+	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema+knowledgeSchema+memorySchema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

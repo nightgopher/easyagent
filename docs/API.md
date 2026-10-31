@@ -99,6 +99,30 @@ curl -H "Authorization: Bearer $EA_API_KEY" http://127.0.0.1:8080/health
 SQLite 中的文档和 FTS5 表是可重建索引，Markdown 原文继续由用户维护。
 
 
+## Agent 独立记忆
+
+在 Agent 配置中显式开启 `memory_enabled: true` 后提供 `memory_search`、
+`memory_save`、`memory_forget`，仍受主机工具限制。它们只操作绑定 Agent 的 SQLite 记忆，
+不读写旧全局 `AGENTS.md`；关闭记忆保留记录，停止 Agent 检索和写入。
+没有自动从所有会话或工具输出提炼记忆的后台任务。
+
+- `GET /agents/{agent}/memories?q=关键词&offset=0`：主人管理视图，包括过期记录；
+  每页最多 50 条，返回 `has_more`、`offset`、`enabled`。
+- `POST /agents/{agent}/memories`：新增，字段 `key`、`content`、`scope`、可选 `expires_at`。
+- `GET/PUT /agents/{agent}/memories/{memory}`：读取或修正；修改必须带 `version`，
+  `key` 和范围不可变。标题最多 120 字，正文最多 4,000 字。
+- `DELETE /agents/{agent}/memories/{memory}`：请求体 `{"version":1}`，并发冲突返回 409。
+
+`scope` 为 `agent`（默认，跨该角色会话复用）或 `workspace`（绑定执行工作目录）。
+归属、工作目录、来源类型和来源会话由服务端填入，不接受模型伪造。
+工具检索先按 Agent、工作目录和有效期过滤，再排序截断；最多返回 8 条。
+`expires_at` 使用 RFC3339，省略为永久；过期记录仍可由主人查看和修正。
+重复保存同一范围、相同标题及内容返回原记录；不同内容要求先检索并显式修正。
+修正和删除在同一 SQLite 事务中更新全文索引，后续检索立即生效。
+已经存在的会话正文和历史工具结果不会因此被重写；对当前事实应重新检索。
+删除工具使用现有确认流程，管理 API 仍沿用主机所有者令牌。
+这是单主机的角色隔离，不等同于企业多用户权限系统。
+
 ## 对话
 
 ### 同步对话
