@@ -51,6 +51,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 
 // CreateSessionRequest is the request body for creating a session.
 type CreateSessionRequest struct {
+	AgentID     string `json:"agent_id,omitempty"`
 	Cwd         string `json:"cwd,omitempty"`
 	Model       string `json:"model,omitempty"`
 	Application string `json:"application,omitempty"` // e.g. "coding", "music"
@@ -58,8 +59,16 @@ type CreateSessionRequest struct {
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	var req CreateSessionRequest
-	// Allow empty body
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	// Allow an empty body, but never fall back to Coding on malformed identity input.
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024))
+	if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeError(w, 400, "invalid session request")
+		return
+	}
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		writeError(w, 400, "expected one session request")
+		return
+	}
 
 	cfg := s.app.Config()
 
@@ -78,7 +87,23 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	deps := s.app.SessionDepsWithApp(req.Application)
+	cfg, deps, err := s.app.SessionSetup(r.Context(), req.Application, req.AgentID, cfg)
+	if err != nil {
+		agentDataError(w, err)
+		return
+	}
+	if req.AgentID != "" && req.Cwd != "" && req.Cwd != cfg.Workspace {
+		writeError(w, 400, "use the agent workspace or edit its configuration first")
+		return
+	}
+	// An explicit session model overrides the agent default.
+	if req.Model != "" {
+		if cfg.Provider == "anthropic" {
+			cfg.AnthropicModel = req.Model
+		} else {
+			cfg.OpenAIModel = req.Model
+		}
+	}
 	opts := runtime.AgentSessionOptions{
 		Config: cfg,
 	}
@@ -89,7 +114,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist the resolved workspace, including sessions using the server default.
-	if err := s.app.SessionManager().SaveMeta(sess.SessionID(), sess.Workspace(), req.Application); err != nil {
+	if req.AgentID != "" {
+		err = s.app.SessionManager().SaveAgentMeta(sess.SessionID(), sess.Workspace(), req.AgentID)
+	} else {
+		err = s.app.SessionManager().SaveMeta(sess.SessionID(), sess.Workspace(), req.Application)
+	}
+	if err != nil {
 		_ = s.app.SessionStore().Delete(sess.SessionID())
 		writeError(w, http.StatusInternalServerError, "cannot save session metadata")
 		return
@@ -178,6 +208,7 @@ func (s *Server) getSessionInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider, modelID := sess.ModelInfo()
+	agentID, _ := s.app.SessionManager().AgentID(sessionID)
 
 	usage, err := sess.ContextUsage(r.Context())
 	if err != nil {
@@ -192,6 +223,7 @@ func (s *Server) getSessionInfo(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{
+		"agent_id":                agentID,
 		"home":                    home,
 		"access_mode":             sess.AccessMode(),
 		"context_usage":           usage,

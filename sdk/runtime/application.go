@@ -50,6 +50,7 @@ type SessionExt interface {
 type ToolBuildOptions struct {
 	// SessionExt is the live per-session state, preserved across tool rebuilds.
 	SessionExt     SessionExt
+	Skills         []skill.Skill
 	SessionID      string
 	Workspace      string
 	MaxOutputLen   int
