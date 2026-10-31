@@ -27,7 +27,7 @@ func (t memoryTool) Description() string {
 }
 func (t memoryTool) Parameters() map[string]any {
 	props := map[string]any{}
-	required := []string{}
+	var required []string
 	field := func(name, kind string) { props[name] = map[string]any{"type": kind} }
 	switch t.action {
 	case "search":
