@@ -66,6 +66,39 @@ curl -H "Authorization: Bearer $EA_API_KEY" http://127.0.0.1:8080/health
 旧会话没有 `agent_id` 时沿用原来的 Coding/Music/KB 行为。
 
 
+## 可绑定知识库
+
+知识库来源属于当前连接的主机；路径是该主机上的 Markdown 目录。
+`GET /knowledge/sources` 会登记现有 `kb_repo_path` / `EA_KB_REPO_PATH`（缺省 `~/agent-lessons`），
+不会移动文件、覆盖已编辑的来源配置，也不会自动授权给业务 Agent。
+旧 `/kb/*` 浏览入口继续使用原配置。
+
+- `GET/POST /knowledge/sources`：列出（含目录可用状态）或创建来源。
+- `GET/PUT /knowledge/sources/{source}`：读取或带 `version` 完整更新。
+- `GET /knowledge/sources/{source}/search?q=关键词`：带来源、相对路径、摘录和更新时间的结果。
+- `GET /knowledge/sources/{source}/document?path=docs/example.md`：读取原文。
+- `POST /knowledge/sources/{source}/reindex`：同步索引；搜索也会检查文件变更。
+
+来源字段为 `name`、绝对 `path`、`directories`（相对目录列表，缺省 `["."]`）、
+`writable`（缺省 false）、`disabled`。来源不可读时显式返回错误，不把旧索引当成当前结果。
+现有 agent-lessons 初始仅纳入 `knowledge/`、`issues/`、`docs/`。
+隐藏目录、原始对话导出目录、回收站、AGENTS.md/CLAUDE.md、自动索引及符号链接不作为知识内容。
+每个来源最多 20,000 个文档，每篇最多 1 MiB UTF-8 文本；大型来源应限定目录。
+
+业务 Agent 配置增加：
+
+```json
+{"knowledge":[{"source_id":"legacy-agent-lessons","access":"read"}]}
+```
+
+绑定后提供 `kb_search`、`kb_read`，仍受主机工具限制。`write` 绑定还要求来源开启 `writable`；
+本阶段检索工具只读，写入另走显式发布流程。
+`GET /agents/{agent}/knowledge?q=关键词` 只查该 Agent 已绑定来源，最多返回 20 条。
+`GET /agents/{agent}/knowledge/{source}/document?path=...` 对原文读取执行相同授权。
+业务 Agent 的知识引用也必须来自已绑定来源：`files` 项可带 `source_id`，其 `scope` 为 `knowledge`。
+SQLite 中的文档和 FTS5 表是可重建索引，Markdown 原文继续由用户维护。
+
+
 ## 对话
 
 ### 同步对话
