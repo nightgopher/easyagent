@@ -242,3 +242,76 @@ MCP 工具连接|MCP tool connections
 此 Mac|This Mac
 原生预览 · 演示数据|Native preview · Demo data
 当前状态：|Status: 
+
+业务能力|Business capabilities
+业务 Agent|Business agents
+记忆与知识|Memory and knowledge
+创建可持续使用的角色，管理它的工具、技能与知识。|Create reusable roles with their own tools, skills, and knowledge.
+管理知识来源、Agent 独立记忆与人工整理发布。|Manage knowledge sources, private agent memories, and reviewed publications.
+下次执行生效|Next run
+创建 Agent|Create agent
+编辑 Agent|Edit agent
+保存 Agent|Save agent
+Agent 名称|Agent name
+角色说明|Role instructions
+默认模型（可选）|Default model (optional)
+工作目录（可选）|Working directory (optional)
+留空使用主机默认模型|Use the host default when empty
+留空自动建立专属目录|Create a dedicated directory when empty
+启用独立记忆|Enable private memory
+停用此 Agent|Disable this agent
+开始会话|Start conversation
+知识来源|Knowledge sources
+Agent 记忆|Agent memory
+独立记忆已开启|Private memory enabled
+独立记忆未开启|Private memory off
+不绑定|Not bound
+只读检索|Read-only search
+检索与人工发布|Search and reviewed publishing
+写入权限已撤销|Write permission revoked
+工具与技能|Tools and skills
+读取工作区文件|Read workspace files
+写入工作区文件|Write workspace files
+向用户提问|Ask the user
+获取当前时间|Get local time
+按需发现已授权工具|Discover permitted tools
+读取网页（需主机开启）|Fetch web pages (if enabled on host)
+搜索网页（需主机开启）|Search the web (if enabled on host)
+额外工具名称（每行一个）|Additional tool names (one per line)
+绑定技能名称（每行一个）|Bound skill names (one per line)
+添加来源|Add source
+配置知识来源|Configure knowledge source
+来源名称|Source name
+主机目录|Directory on host
+纳入的相对目录（每行一个）|Included relative directories (one per line)
+允许人工发布知识文档|Allow reviewed knowledge publications
+停用此来源|Disable this source
+保存来源|Save source
+目录可用|Directory available
+目录不可用|Directory unavailable
+浏览与检索|Browse and search
+返回知识来源|Back to sources
+返回检索结果|Back to results
+重建索引|Rebuild index
+添加记忆|Add memory
+搜索记忆|Search memories
+此 Agent 通用|Across this agent
+工作区记忆|Workspace memory
+已过期|Expired
+修正|Correct
+整理为知识|Publish as knowledge
+保存记忆|Save memory
+记忆标题|Memory title
+记忆内容|Memory content
+有效期（可选）|Expiry (optional)
+发布目录|Destination directory
+知识标题|Knowledge title
+Markdown 正文|Markdown content
+发布预览|Publication preview
+确认发布|Confirm publication
+返回记忆|Back to memories
+当前项不可用|Current selection unavailable
+请选择|Select an option
+管理业务 Agent|Manage business agents
+阅读原文|Read document
+关闭原文|Close document

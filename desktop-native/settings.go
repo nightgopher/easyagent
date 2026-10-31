@@ -132,7 +132,7 @@ func (a *preview) settingsView(c *ui.Context) {
 			ui.TextInput(c, &s.Search).Label(a.tr("搜索设置")).Placeholder(a.tr("搜索设置…")).FontSize(12).Padding(7, 9).Background(searchSurface(c)).Border(1, c.Theme().Border)
 			ui.Scroll(c).Grow(1).MinHeight(0).Padding(14, 0).Children(func() {
 				total := 0
-				for group, title := range []string{"基础设置", "连接与能力"} {
+				for group, title := range []string{"基础设置", "连接与能力", "业务能力"} {
 					count := 0
 					for _, p := range settingsPages {
 						if p.Group == group && settingsPageMatches(p, s.Search) {
@@ -186,7 +186,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 					})
 					a.note(c, page.Description)
-					if page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
+					if page.ID == "agents" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
 							kind := "laptop"
 							if !s.host().Local {
@@ -213,6 +213,10 @@ func (a *preview) settingsView(c *ui.Context) {
 					a.liveSettingsPage(c)
 				} else {
 					switch page.ID {
+					case "agents":
+						a.businessSettings(c)
+					case "memory-knowledge":
+						a.memoryKnowledgeSettings(c)
 					case "general":
 						a.generalSettings(c)
 					case "appearance":

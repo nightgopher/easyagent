@@ -123,6 +123,18 @@ SQLite 中的文档和 FTS5 表是可重建索引，Markdown 原文继续由用�
 删除工具使用现有确认流程，管理 API 仍沿用主机所有者令牌。
 这是单主机的角色隔离，不等同于企业多用户权限系统。
 
+### 将记忆整理为知识
+
+`POST /agents/{agent}/memories/{memory}/publish` 是主人显式发布接口，不向模型提供为工具。
+请求包含 `source_id`、`directory`（必须为来源配置的一个相对目录）、`title`、
+经审阅的 Markdown `content` 和记忆 `version`。
+
+服务同时检查记忆归属/版本、Agent 的 `write` 绑定和来源 `writable`；
+仅写入现有且不含符号链接的目标目录。文档名为 `{memory_id}-v{version}.md`，
+通过临时文件和无覆盖链接提交；同一版本相同内容重复发布返回原路径，内容不同返回 409。
+返回 `saved`、`source_id` 和相对 `path`；索引失败返回已保存事实及 `warning`，可单独重建索引。
+原记忆保留，后续删除记忆不会删除已人工发布的知识文档；不会自动提交或推送知识库 Git 仓库。
+
 ## 对话
 
 ### 同步对话
