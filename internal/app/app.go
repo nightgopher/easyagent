@@ -173,7 +173,6 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 	if loaded, ok := a.sessionStore.Get(sessionID); ok {
 		return loaded, nil
 	}
-	deps := a.deps()
 	opts := runtime.AgentSessionOptions{
 		Config:    a.Config(),
 		SkillDirs: a.skillDirs,
@@ -186,7 +185,8 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 	if err != nil {
 		return nil, err
 	}
-	opts.Config, deps, err = a.SessionSetup(ctx, application, agentID, opts.Config)
+	cfg, deps, err := a.SessionSetup(ctx, application, agentID, opts.Config)
+	opts.Config = cfg
 	if err != nil {
 		return nil, err
 	}
