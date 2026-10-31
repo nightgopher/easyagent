@@ -88,7 +88,7 @@ func (a *preview) sessionRow(c *ui.Context, s *session) {
 				ui.Text(c, fmt.Sprint(s.Unread)).Label("未读结果").FontSize(10).Padding(2, 5).Radius(8).Background(c.Theme().Accent.Alpha(.15)).TextColor(c.Theme().Accent)
 			}
 			if s.Application != "" {
-				ui.Text(c, strings.ToUpper(s.Application)).FontSize(9).Padding(2, 5).Radius(8).Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+				ui.Text(c, a.sessionApplicationLabel(s)).MaxWidth(80).SingleLine().FontSize(9).Padding(2, 5).Radius(8).Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
 			}
 			if s.Running || s.Pending {
 				ui.Text(c, "●").TextColor(c.Theme().Accent)

@@ -31,7 +31,7 @@ func (s *nativeStore) save(name string, version uint64, value any) error {
 	return atomicJSON(filepath.Join(s.dir, name), value)
 }
 func (l *liveState) configBusy() bool {
-	return l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"]
+	return l.Loading["business-save"] || l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"]
 }
 func cloneConfig(cfg clientConfig) clientConfig {
 	cfg.Hosts = append([]hostConfig{}, cfg.Hosts...)

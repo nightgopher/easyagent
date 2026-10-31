@@ -27,12 +27,14 @@ import (
 // Dependencies holds the shared dependencies needed to create an AgentSession.
 // These are provided by the App layer and shared across sessions.
 type Dependencies struct {
-	Registry        *providers.Registry
-	SessionMgr      *sessionmgr.Manager
-	ExtRegistry     *extensions.Registry
-	Application     Application
-	ExternalTools   []agent.ExternalToolDef
-	BuildOperations func(cfg config.Config, workspace string) *operations.Operations
+	Registry    *providers.Registry
+	SessionMgr  *sessionmgr.Manager
+	ExtRegistry *extensions.Registry
+	Application Application
+	// RefreshApplication resolves saved roles and permissions between turns.
+	RefreshApplication func(context.Context) (Application, error)
+	ExternalTools      []agent.ExternalToolDef
+	BuildOperations    func(cfg config.Config, workspace string) *operations.Operations
 	// AdditionalTools and ToolRevision let an application supply dynamically
 	// discovered tools without coupling the SDK to a particular integration.
 	AdditionalTools     func(workspace string) []agent.Tool
@@ -253,7 +255,7 @@ func (s *AgentSession) preparePrompt(ctx context.Context) (*agent.Agent, error) 
 		_, revision := s.deps.ToolDiscoveryPolicy()
 		policyChanged = revision != s.discoveryRevision
 	}
-	if policyChanged || s.deps.ToolRevision != nil && s.deps.ToolRevision(workspace) != s.toolVersion {
+	if s.deps.RefreshApplication != nil || policyChanged || s.deps.ToolRevision != nil && s.deps.ToolRevision(workspace) != s.toolVersion {
 		if err := s.refreshToolsLocked(ctx); err != nil {
 			return nil, err
 		}
@@ -576,6 +578,13 @@ func (s *AgentSession) rebuildAgent(ctx context.Context, registry *providers.Reg
 // buildAgent constructs the agent.Agent for this session.
 // Tool and prompt assembly is delegated to the injected Application.
 func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Registry, skillDirs []string) (*agent.Agent, error) {
+	if s.deps.RefreshApplication != nil {
+		application, err := s.deps.RefreshApplication(ctx)
+		if err != nil {
+			return nil, err
+		}
+		s.application = application
+	}
 	cfg := s.cfg
 	if err := config.ValidateToolSearch(cfg.ToolSearch); err != nil {
 		return nil, err
@@ -589,6 +598,43 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		searchMode, disabledReason = agent.ToolSearchOff, "search_tools_filtered"
 	}
 	cwd := s.workspaceLocked()
+
+	// Load context files
+	contextFiles := prompt.LoadProjectContextFiles(cwd, "")
+
+	// Load skills. Apply host preferences after precedence resolution: disabling a winner
+	// must not silently activate an older duplicate from another shared directory.
+	disabledSkills, err := config.DisabledSkillPaths(cfg.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("read skill preferences: %w", err)
+	}
+	var skills []skill.Skill
+	if len(skillDirs) == 0 {
+		skillDirs = DefaultSkillDirs(cwd)
+	}
+	if cfg.SkillMarketEnabled && cfg.SkillMarketSkillDir != "" {
+		skillDirs = append(append([]string(nil), skillDirs...), cfg.SkillMarketSkillDir)
+	}
+	if len(skillDirs) > 0 {
+		result := skill.LoadFromDirs(skillDirs...)
+		for _, loaded := range result.Skills {
+			if !disabledSkills[filepath.Clean(loaded.FilePath)] {
+				skills = append(skills, loaded)
+			}
+		}
+		for _, diag := range result.Diagnostics {
+			slog.Warn("skill diagnostic", "code", diag.Code, "message", diag.Message, "path", diag.Path)
+		}
+	}
+
+	if filter, ok := s.application.(interface {
+		FilterSkills([]skill.Skill) []skill.Skill
+	}); ok {
+		skills = filter.FilterSkills(skills)
+	}
+	s.skillsMu.Lock()
+	s.loadedSkills = append([]skill.Skill(nil), skills...)
+	s.skillsMu.Unlock()
 
 	// Build tools via Application interface
 	toolList := s.application.BuildTools(s.toolBuildOptions(cwd))
@@ -625,38 +671,6 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	// Compaction settings
 	compactionSettings := compaction.DefaultSettings()
 	summarizeFunc := compaction.LLMSummarizer(registry, model)
-
-	// Load context files
-	contextFiles := prompt.LoadProjectContextFiles(cwd, "")
-
-	// Load skills. Apply host preferences after precedence resolution: disabling a winner
-	// must not silently activate an older duplicate from another shared directory.
-	disabledSkills, err := config.DisabledSkillPaths(cfg.DataDir)
-	if err != nil {
-		return nil, fmt.Errorf("read skill preferences: %w", err)
-	}
-	var skills []skill.Skill
-	if len(skillDirs) == 0 {
-		skillDirs = DefaultSkillDirs(cwd)
-	}
-	if cfg.SkillMarketEnabled && cfg.SkillMarketSkillDir != "" {
-		skillDirs = append(append([]string(nil), skillDirs...), cfg.SkillMarketSkillDir)
-	}
-	if len(skillDirs) > 0 {
-		result := skill.LoadFromDirs(skillDirs...)
-		for _, loaded := range result.Skills {
-			if !disabledSkills[filepath.Clean(loaded.FilePath)] {
-				skills = append(skills, loaded)
-			}
-		}
-		for _, diag := range result.Diagnostics {
-			slog.Warn("skill diagnostic", "code", diag.Code, "message", diag.Message, "path", diag.Path)
-		}
-	}
-
-	s.skillsMu.Lock()
-	s.loadedSkills = append([]skill.Skill(nil), skills...)
-	s.skillsMu.Unlock()
 
 	// Read profile/goal from SessionExt
 	var profileName, goal string
@@ -901,6 +915,7 @@ func (s *AgentSession) toolBuildOptions(cwd string) ToolBuildOptions {
 	return ToolBuildOptions{
 		SessionExt:     s.ext,
 		SessionID:      s.sessionID,
+		Skills:         s.LoadedSkills(),
 		Workspace:      workspace,
 		MaxOutputLen:   cfg.MaxOutputLen,
 		BashOps:        ops.Bash,

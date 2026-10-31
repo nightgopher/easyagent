@@ -29,6 +29,112 @@ curl -H "Authorization: Bearer $EA_API_KEY" http://127.0.0.1:8080/health
 
 ---
 
+## 业务 Agent
+
+业务 Agent 是持久化配置，复用同一会话核心，不为每个角色部署独立程序。
+配置保存在当前主机 `<data_dir>/agents/agents.sqlite`，由该主机的服务令牌管理。
+
+- `GET /agents`：返回 `agents` 和 `default_tools`。
+- `POST /agents`：创建，返回 201 和完整配置。
+- `GET /agents/{agent}`：读取。
+- `PUT /agents/{agent}`：完整更新；必须带上读取到的 `version`，并发修改返回 409。
+
+```json
+{
+  "name": "客户反馈助手",
+  "instructions": "整理客户反馈，区分事实与推测。缺少依据时先向用户确认。",
+  "model": "",
+  "tools": ["read", "write", "ask_user_question", "local_time", "search_tools"],
+  "skills": [],
+  "disabled": false
+}
+```
+
+`tools` 未提供时使用上述精简默认值，显式 `[]` 表示不授权业务工具。
+主机级工具限制仍生效；MCP 工具只有名称被明确授权后才可发现和调用。
+技能按名称选择，以摘要展示，`read_skill` 按需读取正文；绑定技能不增加其他工具权限。
+业务 Agent 不自动继承全局 `AGENTS.md`、个人画像或项目编码提示词。
+
+`workspace` 可指定当前主机的绝对路径；省略时使用专属工作目录。
+文件工具限制在该目录内。角色配置使用当前主机的模型服务，`model` 为空时继承默认模型。
+
+通过 `POST /sessions` 发送 `{"agent_id":"agent-…"}` 创建会话。
+`application` 可省略或为 `business`；`cwd` 必须省略或等于该 Agent 的工作目录。
+会话列表和 `/sessions/{id}/info` 返回 `agent_id`。分叉默认保留归属，显式切换到旧应用时清除归属。
+模型选择保存在会话中；角色说明、技能和工具权限在下次执行前重新读取。
+修改工作目录后需要新建会话。设 `disabled: true` 停止后续执行和新会话创建。
+旧会话没有 `agent_id` 时沿用原来的 Coding/Music/KB 行为。
+
+
+## 可绑定知识库
+
+知识库来源属于当前连接的主机；路径是该主机上的 Markdown 目录。
+`GET /knowledge/sources` 会登记现有 `kb_repo_path` / `EA_KB_REPO_PATH`（缺省 `~/agent-lessons`），
+不会移动文件、覆盖已编辑的来源配置，也不会自动授权给业务 Agent。
+旧 `/kb/*` 浏览入口继续使用原配置。
+
+- `GET/POST /knowledge/sources`：列出（含目录可用状态）或创建来源。
+- `GET/PUT /knowledge/sources/{source}`：读取或带 `version` 完整更新。
+- `GET /knowledge/sources/{source}/search?q=关键词`：带来源、相对路径、摘录和更新时间的结果。
+- `GET /knowledge/sources/{source}/document?path=docs/example.md`：读取原文。
+- `POST /knowledge/sources/{source}/reindex`：同步索引；搜索也会检查文件变更。
+
+来源字段为 `name`、绝对 `path`、`directories`（相对目录列表，缺省 `["."]`）、
+`writable`（缺省 false）、`disabled`。来源不可读时显式返回错误，不把旧索引当成当前结果。
+现有 agent-lessons 初始仅纳入 `knowledge/`、`issues/`、`docs/`。
+隐藏目录、原始对话导出目录、回收站、AGENTS.md/CLAUDE.md、自动索引及符号链接不作为知识内容。
+每个来源最多 20,000 个文档，每篇最多 1 MiB UTF-8 文本；大型来源应限定目录。
+
+业务 Agent 配置增加：
+
+```json
+{"knowledge":[{"source_id":"legacy-agent-lessons","access":"read"}]}
+```
+
+绑定后提供 `kb_search`、`kb_read`，仍受主机工具限制。`write` 绑定还要求来源开启 `writable`；
+本阶段检索工具只读，写入另走显式发布流程。
+`GET /agents/{agent}/knowledge?q=关键词` 只查该 Agent 已绑定来源，最多返回 20 条。
+`GET /agents/{agent}/knowledge/{source}/document?path=...` 对原文读取执行相同授权。
+业务 Agent 的知识引用也必须来自已绑定来源：`files` 项可带 `source_id`，其 `scope` 为 `knowledge`。
+SQLite 中的文档和 FTS5 表是可重建索引，Markdown 原文继续由用户维护。
+
+
+## Agent 独立记忆
+
+在 Agent 配置中显式开启 `memory_enabled: true` 后提供 `memory_search`、
+`memory_save`、`memory_forget`，仍受主机工具限制。它们只操作绑定 Agent 的 SQLite 记忆，
+不读写旧全局 `AGENTS.md`；关闭记忆保留记录，停止 Agent 检索和写入。
+没有自动从所有会话或工具输出提炼记忆的后台任务。
+
+- `GET /agents/{agent}/memories?q=关键词&offset=0`：主人管理视图，包括过期记录；
+  每页最多 50 条，返回 `has_more`、`offset`、`enabled`。
+- `POST /agents/{agent}/memories`：新增，字段 `key`、`content`、`scope`、可选 `expires_at`。
+- `GET/PUT /agents/{agent}/memories/{memory}`：读取或修正；修改必须带 `version`，
+  `key` 和范围不可变。标题最多 120 字，正文最多 4,000 字。
+- `DELETE /agents/{agent}/memories/{memory}`：请求体 `{"version":1}`，并发冲突返回 409。
+
+`scope` 为 `agent`（默认，跨该角色会话复用）或 `workspace`（绑定执行工作目录）。
+归属、工作目录、来源类型和来源会话由服务端填入，不接受模型伪造。
+工具检索先按 Agent、工作目录和有效期过滤，再排序截断；最多返回 8 条。
+`expires_at` 使用 RFC3339，省略为永久；过期记录仍可由主人查看和修正。
+重复保存同一范围、相同标题及内容返回原记录；不同内容要求先检索并显式修正。
+修正和删除在同一 SQLite 事务中更新全文索引，后续检索立即生效。
+已经存在的会话正文和历史工具结果不会因此被重写；对当前事实应重新检索。
+删除工具使用现有确认流程，管理 API 仍沿用主机所有者令牌。
+这是单主机的角色隔离，不等同于企业多用户权限系统。
+
+### 将记忆整理为知识
+
+`POST /agents/{agent}/memories/{memory}/publish` 是主人显式发布接口，不向模型提供为工具。
+请求包含 `source_id`、`directory`（必须为来源配置的一个相对目录）、`title`、
+经审阅的 Markdown `content` 和记忆 `version`。
+
+服务同时检查记忆归属/版本、Agent 的 `write` 绑定和来源 `writable`；
+仅写入现有且不含符号链接的目标目录。文档名为 `{memory_id}-v{version}.md`，
+通过临时文件和无覆盖链接提交；同一版本相同内容重复发布返回原路径，内容不同返回 409。
+返回 `saved`、`source_id` 和相对 `path`；索引失败返回已保存事实及 `warning`，可单独重建索引。
+原记忆保留，后续删除记忆不会删除已人工发布的知识文档；不会自动提交或推送知识库 Git 仓库。
+
 ## 对话
 
 ### 同步对话

@@ -63,16 +63,9 @@ const kbPrompt = `你是用户的"第二大脑"——一个个人知识库助手
 
 知识库位于：%s
 
-这是用户的个人知识仓库，包含多种类型的内容：
-
-| 目录 | 内容 | 格式 |
-|------|------|------|
-| doubao-knowledge/ | 豆包/ChatGPT对话提炼的知识卡片（518张） | ## 摘要 + ## 标签 |
-| chatgpt-export/ | ChatGPT对话导出（98篇） | > URL + ## 👤 User |
-| doubao-export/ | 豆包对话导出（96篇） | 类似 chatgpt-export |
-| issues/ | 踩坑记录 | YAML frontmatter |
-| project-journals/ | 项目开发日志（84个） | 自动生成 |
-| personal/ | 个人画像、简历、副业想法 | 手写 |
+这是用户配置的 Markdown 知识仓库，可能包含经验记录、知识卡片或项目资料。
+先使用 kb_list 或 kb_search 了解实际内容，再使用 kb_read 核实原文。
+不要假定目录名称、条目数量或资料仍然有效；引用时说明来源，并对照当前事实。
 
 ## 你的三大核心职责
 
