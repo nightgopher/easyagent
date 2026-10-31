@@ -80,7 +80,6 @@ func (a *preview) sessionRow(c *ui.Context, s *session) {
 	root.Children(func() {
 		item := ui.ButtonBase(c).Label(s.Title).Grow(1).MinWidth(0).MinHeight(34).Padding(5, 8).Gap(7).OnClick(func() { a.selectSession(s.ID) })
 		item.Children(func() {
-			icon(c, "chat")
 			ui.Text(c, s.Title).FontSize(13).MaxLines(1).Grow(1).MinWidth(0)
 			if s.Pinned {
 				icon(c, "pin")
