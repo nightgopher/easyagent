@@ -224,7 +224,6 @@ func (a *preview) sidebar(c *ui.Context) {
 						item.Background(c.Theme().SurfaceHover)
 					}
 					item.Children(func() {
-						icon(c, "chat")
 						ui.Text(c, s.Title).FontSize(13).MaxLines(1).Grow(1).MinWidth(0)
 						if s.Running {
 							ui.Text(c, "●").TextColor(c.Theme().Accent)
