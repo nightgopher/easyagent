@@ -19,8 +19,9 @@ import (
 // It handles file-based session storage: create, open, fork, list, delete.
 // This is the storage/indexing layer — NOT the runtime behavior layer.
 type Manager struct {
-	dataDir string
-	metaMu  sync.Mutex
+	dataDir  string
+	metaMu   sync.Mutex
+	searchMu sync.Mutex
 }
 
 // SessionInfo holds metadata about a session for listing/indexing.

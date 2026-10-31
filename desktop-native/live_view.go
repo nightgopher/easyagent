@@ -140,8 +140,27 @@ func (a *preview) liveSidebar(c *ui.Context) {
 			})
 			ui.Row(c).Height(32).Gap(7).Padding(0, 9).Background(searchSurface(c)).Border(1, c.Theme().Border).Radius(6).AlignItems(ui.Center).Children(func() {
 				icon(c, "search")
-				ui.TextInputBase(c, &a.Search).Label("搜索会话").Placeholder("搜索会话…").FontSize(12).Grow(1).MinWidth(0)
+				input := ui.TextInputBase(c, &a.Search).Label("搜索会话").Placeholder("搜索会话内容…").FontSize(12).Grow(1).MinWidth(0)
+				if l.SessionSearch.Focus {
+					input.AutoFocus()
+					l.SessionSearch.Focus = false
+				}
+				l.SessionSearch.Composing = input.Composing()
+				if input.Changed() && !input.Composing() {
+					a.queueSessionSearch()
+				}
+				if input.Submitted() {
+					a.queueSessionSearch()
+					a.searchSessionPage(0)
+				}
+				if a.Search != "" {
+					iconButton(c, "x", "清除会话搜索").Size(22, 24).OnClick(func() { a.Search = ""; a.queueSessionSearch() })
+				}
 			})
+			if strings.TrimSpace(a.Search) != "" {
+				a.sessionSearchControls(c)
+				return
+			}
 			ui.Row(c).Gap(14).Children(func() {
 				flatButton(c, "", "最近").TextColor(func() ui.Color {
 					if !a.Archived {
@@ -158,17 +177,14 @@ func (a *preview) liveSidebar(c *ui.Context) {
 			})
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Padding(0, 10).Children(func() {
+			if strings.TrimSpace(a.Search) != "" {
+				a.sessionSearchResults(c)
+				return
+			}
 			groups := []string{}
 			byGroup := map[string][]*session{}
 			for _, s := range a.Sessions {
 				if s.Archived != a.Archived {
-					continue
-				}
-				text := s.Title
-				for _, m := range s.Messages {
-					text += "\n" + m.Text
-				}
-				if !strings.Contains(strings.ToLower(text), strings.ToLower(a.Search)) {
 					continue
 				}
 				group := s.Workspace

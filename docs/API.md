@@ -106,6 +106,8 @@ GET /ws
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/sessions` | 列出所有会话；运行中的会话额外带 `run_state`（`running` / `waiting_confirmation`）和 `pending_confirmations` |
+| `GET` | `/sessions/search` | 搜索当前主机的完整历史标题、用户消息与助手正文，含未打开、归档及压缩前的原始消息 |
+| `GET` | `/sessions/{id}/history?entry_id=...` | 只读原始消息及前后各两条可搜索消息，不改变当前分支或模型上下文 |
 | `POST` | `/sessions` | 创建新会话 |
 | `GET` | `/sessions/{id}/messages` | 获取会话消息（含压缩记录、消息 `entry_id` 与图片） |
 | `POST` | `/sessions/{id}/fork` | 分叉会话：空闲时省略参数复制完整分支；`entry_id` 保留至指定历史消息，空字符串创建空分叉；或 `before_message_index` 在第 N 条用户消息之前分叉（0 从空开始），两者互斥。运行中只能选择本轮开始前的历史点；分叉点与 `kept_messages` / `kept_user_messages` / `dropped_messages` 均基于同一历史快照，不计压缩摘要或当前轮消息 |
@@ -183,6 +185,14 @@ POST /sessions/{id}/model
 ```
 
 ---
+
+### 历史全文搜索
+
+全文搜索使用 `q`（1–256 个 Unicode 字符，忽略大小写的连续文本匹配），可选 `workspace`（完整项目路径）、`archived=all|true|false`（默认全部）、`since`（会话最近活动时间下限，Unix 毫秒）、`limit`（默认 30，最多 100）、`offset`（默认 0，最多 100000）。响应 `{hits, total, unavailable_sessions}` 中，每条 hit 对应一个标题或一条原始消息，包含 `session_id`、`title`、`workspace`、`archived`、`updated_at`、`entry_id`、`role`、`timestamp`、`snippet` 和片段内按 Unicode 字符计算的 `match_start` / `match_end`；标题命中的 `entry_id` 为空。标题优先，其余按会话最近活动、消息时间排序。`total` 是匹配条目数，不是会话数。
+
+搜索不调用模型，不索引思考过程、工具日志或图片；用户消息有 `display_text` 时索引该可见文本。索引位于主机数据目录的 `session-search/index-v1.sqlite`，权限限制在当前用户；第一次搜索建立 SQLite FTS5 trigram 索引，之后检查文件大小和修改时间，只重建变化的会话。1–2 字符的查询扫描已缓存正文。会话重命名、归档和删除在下一次搜索时同步；损坏或正在写入的不完整记录会排除该会话并增加 `unavailable_sessions`，下次搜索重试。索引可在停止服务后删除该目录重建，原始会话仍以 `sessions/*/session.jsonl` 为准。
+
+原始历史接口返回 `{entry_id, messages}`，每条消息包含 `entry_id`、`role`、`timestamp`、`text`。目标消息保留全文，相邻消息最多展示 4000 字，截断时带 `truncated=true`。找不到该会话中的指定消息返回 404。两条接口均使用现有 Bearer 认证，响应设置 `Cache-Control: no-store`。
 
 ## 模型与工具
 
