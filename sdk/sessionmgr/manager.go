@@ -32,6 +32,7 @@ type SessionInfo struct {
 	LastActive   int64  `json:"last_active"`
 	Workspace    string `json:"workspace,omitempty"`
 	Title        string `json:"title,omitempty"`
+	AgentID      string `json:"agent_id,omitempty"`
 	Application  string `json:"application,omitempty"` // e.g. "coding", "music", "kb"
 	Pinned       bool   `json:"pinned"`
 	Archived     bool   `json:"archived"`
@@ -261,6 +262,9 @@ func (m *Manager) copyMeta(sourceID, newID string, application *string) error {
 	}
 	if application != nil {
 		fields["application"] = *application
+		if *application != "business" {
+			fields["agent_id"] = ""
+		}
 	}
 	return meta.write(filepath.Join(m.SessionsDir(), newID), fields)
 }
@@ -340,6 +344,7 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 		if meta, err := readMetadata(filepath.Join(sessionsDir, id)); err == nil {
 			_ = meta.decodeField("workspace", &info.Workspace)
 			_ = meta.decodeField("application", &info.Application)
+			_ = meta.decodeField("agent_id", &info.AgentID)
 			var title string
 			_ = meta.decodeField("title", &title)
 			if title != "" {
@@ -508,4 +513,25 @@ func forkCut(entries []session.Entry, target string) (int, error) {
 		return 0, fmt.Errorf("tool results are incomplete; wait for the current turn to finish")
 	}
 	return cut, nil
+}
+
+// SaveAgentMeta persists session identity together with its application and workspace.
+func (m *Manager) SaveAgentMeta(id, workspace, agentID string) error {
+	return m.updateMeta(id, map[string]any{"workspace": workspace, "application": "business", "agent_id": agentID})
+}
+
+// AgentID fails closed when metadata is unreadable instead of selecting a more privileged default.
+func (m *Manager) AgentID(id string) (string, error) {
+	m.metaMu.Lock()
+	defer m.metaMu.Unlock()
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return "", fmt.Errorf("invalid session id")
+	}
+	meta, err := readMetadata(filepath.Join(m.SessionsDir(), id))
+	if err != nil {
+		return "", err
+	}
+	var agentID string
+	err = meta.decodeField("agent_id", &agentID)
+	return agentID, err
 }

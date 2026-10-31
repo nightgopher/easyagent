@@ -170,6 +170,9 @@ func (a *App) NewSession(ctx context.Context) (*runtime.AgentSession, error) {
 // LoadSession loads an existing AgentSession by ID.
 // If already loaded in the registry, returns the cached instance.
 func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.AgentSession, error) {
+	if loaded, ok := a.sessionStore.Get(sessionID); ok {
+		return loaded, nil
+	}
 	deps := a.deps()
 	opts := runtime.AgentSessionOptions{
 		Config:    a.Config(),
@@ -179,8 +182,16 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 	if workspace != "" {
 		opts.Config.Workspace = workspace
 	}
-	if application != "" {
-		deps = a.SessionDepsWithApp(application)
+	agentID, err := a.sessionMgr.AgentID(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	opts.Config, deps, err = a.SessionSetup(ctx, application, agentID, opts.Config)
+	if err != nil {
+		return nil, err
+	}
+	if agentID != "" && workspace != "" && opts.Config.Workspace != workspace {
+		return nil, fmt.Errorf("agent workspace changed; start a new session")
 	}
 	return a.sessionStore.Load(ctx, sessionID, opts, deps)
 }
