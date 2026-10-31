@@ -126,12 +126,26 @@ func (a *preview) liveSidebar(c *ui.Context) {
 				group := ui.Row(c).Grow(1).Gap(0).AlignItems(ui.Stretch)
 				group.Children(func() {
 					flatButton(c, "plus", "新建会话").Tooltip("在当前会话所在的项目里新建").Grow(1).Height(36).Radius(6, 0, 0, 6).Padding(8, 10).TextColor(c.Theme().Accent).Background(c.Theme().Accent.Alpha(.07)).Border(1, c.Theme().Accent.Alpha(.28)).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(a.newSession)
-					flatButton(c, "chevron-down", "").Label("选择模式").Tooltip("选择模式").Width(26).Height(36).Padding(8, 6).Radius(0, 6, 6, 0).BorderWidth(1, 1, 1, 0).BorderColor(c.Theme().Border).Background(c.Theme().Surface).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(func() { a.toggleMenu(&a.NewMenu) })
+					flatButton(c, "chevron-down", "").Label("选择模式").Tooltip("选择模式").Width(26).Height(36).Padding(8, 6).Radius(0, 6, 6, 0).BorderWidth(1, 1, 1, 0).BorderColor(c.Theme().Border).Background(c.Theme().Surface).Disabled(!l.Connected || l.configBusy() || l.Loading["create-session"]).OnClick(func() {
+						a.toggleMenu(&a.NewMenu)
+						if a.NewMenu {
+							a.resource("business-agents", "/agents")
+						}
+					})
 				})
 				popup := a.menuPanel(c, group, &a.NewMenu, func() {
 					for _, item := range []struct{ Name, Icon, Application string }{{"编程", "cpu", ""}, {"音乐", "sparkle", "music"}, {"知识库", "search", "kb"}} {
 						menuOption(c, item.Icon, item.Name, false).OnClick(func() { a.NewMenu = false; a.createLiveSessionIn("", a.current().Workspace, item.Application) })
 					}
+					ui.Divider(c)
+					ui.Scroll(c).MaxHeight(240).MinHeight(0).Children(func() {
+						for _, role := range a.businessAgents() {
+							if !role.Disabled {
+								menuOption(c.Key(role.ID), "user", role.Name, false).OnClick(func() { a.NewMenu = false; a.startBusinessSession(role.ID) })
+							}
+						}
+					})
+					menuOption(c, "settings", "管理业务 Agent", false).OnClick(func() { a.openSettings("agents") })
 				})
 				if popup.Valid() {
 					popup.Width(group.Bounds().W)

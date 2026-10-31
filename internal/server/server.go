@@ -226,6 +226,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /agents/{agent}/memories/{memory}", s.agentMemory)
 	restMux.HandleFunc("PUT /agents/{agent}/memories/{memory}", s.agentMemory)
 	restMux.HandleFunc("DELETE /agents/{agent}/memories/{memory}", s.agentMemory)
+	restMux.HandleFunc("POST /agents/{agent}/memories/{memory}/publish", s.publishAgentMemory)
 	restMux.HandleFunc("GET /agents", s.businessAgents)
 	restMux.HandleFunc("POST /agents", s.businessAgents)
 	restMux.HandleFunc("GET /agents/{agent}", s.businessAgents)

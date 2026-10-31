@@ -619,6 +619,9 @@ func (a *preview) cancelSettingsTransient() {
 // entry and server state directly; model and MCP compare against snapshots
 // taken at load, edit and save time.
 func (a *preview) settingsFormDirty() bool {
+	if a.Settings.Business.dirty() {
+		return true
+	}
 	s, l := &a.Settings, a.Live
 	switch s.Tab {
 	case "models":
@@ -663,6 +666,7 @@ func (a *preview) settingsFormDirty() bool {
 // switch or a reopened settings window.
 func (a *preview) discardSettingsForms() {
 	s, l := &a.Settings, a.Live
+	s.Business.closeEditors()
 	if s.Tab == "models" && (s.modelForm != l.SavedModelForm || s.APIKey != "") {
 		a.clearModelCheck()
 	}

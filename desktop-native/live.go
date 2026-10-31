@@ -361,6 +361,12 @@ func (a *preview) connectLive() {
 		go voice.Stop()
 	}
 	l.epoch++
+	for key := range l.Data {
+		if strings.HasPrefix(key, "business-") || strings.HasPrefix(key, "knowledge-") || key == "agent-memories" {
+			delete(l.Data, key)
+			delete(l.ResourceErrors, key)
+		}
+	}
 	a.resetSessionSearch()
 	l.Market = nativeMarketState{}
 	l.NewWorkspace = false
@@ -406,6 +412,7 @@ func (a *preview) connectLive() {
 			l.Client = b
 			l.Connecting = false
 			a.refreshLiveSessions("")
+			a.resource("business-agents", "/agents")
 			a.refreshModels()
 			if a.Settings.Open {
 				a.loadSettingsPage()
@@ -550,6 +557,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			}
 			s.Project = filepath.Base(s.Workspace)
 			s.Application = str(m["application"])
+			s.AgentID = str(m["agent_id"])
 			s.Archived = boolean(m["archived"])
 			s.Pinned = boolean(m["pinned"])
 			next = append(next, s)
@@ -585,6 +593,10 @@ func (a *preview) refreshLiveSessions(prefer string) {
 	})
 }
 func (a *preview) loadSession(s *session) {
+	for _, key := range []string{"business-context-memory", "business-context-knowledge", "business-context-document"} {
+		delete(a.Live.Data, key)
+		a.Live.Versions[key]++
+	}
 	if s.RemoteID == "" || a.Live.Client == nil {
 		return
 	}
@@ -611,6 +623,7 @@ func (a *preview) loadSession(s *session) {
 		s.Model = str(m["model"])
 		s.Usage = object(m["context_usage"])
 		s.AccessMode = str(m["access_mode"])
+		s.AgentID = str(m["agent_id"])
 		if a.current() == s {
 			a.Settings.Workspace = s.Workspace
 			if a.Workbench {
@@ -620,6 +633,10 @@ func (a *preview) loadSession(s *session) {
 	})
 }
 func (a *preview) createLiveSession(draft string) {
+	if id := a.current().AgentID; id != "" {
+		a.createBoundSession(draft, "", "business", id)
+		return
+	}
 	workspace := a.current().Workspace
 	if workspace == "" {
 		workspace = a.Live.workspace()
@@ -627,6 +644,20 @@ func (a *preview) createLiveSession(draft string) {
 	a.createLiveSessionIn(draft, workspace, "")
 }
 func (a *preview) createLiveSessionIn(draft, workspace, application string, ready ...func(*session)) {
+	agentID := ""
+	if application == "business" {
+		agentID = a.current().AgentID
+		if workspace != a.current().Workspace {
+			application = ""
+			agentID = ""
+		}
+	}
+	a.createBoundSession(draft, workspace, application, agentID, ready...)
+}
+func (a *preview) startBusinessSession(agentID string) {
+	a.createBoundSession("", "", "business", agentID, func(*session) { a.closeSettings() })
+}
+func (a *preview) createBoundSession(draft, workspace, application, agentID string, ready ...func(*session)) {
 	if a.Live.configBusy() {
 		a.Live.Error = "正在应用连接配置，请稍后创建会话"
 		return
@@ -638,17 +669,21 @@ func (a *preview) createLiveSessionIn(draft, workspace, application string, read
 	origin := a.current()
 	initial := origin.RemoteID == ""
 	model := ""
-	if initial && origin.ModelChosen {
+	if agentID == "" && initial && origin.ModelChosen {
 		model = origin.Model
 	}
 	a.Live.Versions["sessions"]++
-	a.operation("create-session", "POST", "/sessions", map[string]any{"cwd": workspace, "model": model, "application": application}, func(v any) {
+	body := map[string]any{"cwd": workspace, "model": model, "application": application}
+	if agentID != "" {
+		body = map[string]any{"agent_id": agentID}
+	}
+	a.operation("create-session", "POST", "/sessions", body, func(v any) {
 		id := str(object(v)["id"])
 		if id == "" {
 			return
 		}
 		a.Live.Versions["sessions"]++
-		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application}
+		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application, AgentID: agentID}
 		a.NextID++
 		if initial {
 			s.ID = origin.ID

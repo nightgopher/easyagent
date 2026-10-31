@@ -122,8 +122,19 @@ func (a *preview) refreshWorkbench() {
 	case "tools":
 		a.resource("tools", "/tools")
 	case "profile":
+		if s.AgentID != "" {
+			delete(l.Data, "business-context-memory")
+			a.resource("business-context-memory", "/agents/"+s.AgentID+"/memories")
+			return
+		}
 		a.resource("profile", "/profile")
 	case "kb":
+		if s.AgentID != "" {
+			delete(l.Data, "business-context-document")
+			delete(l.Data, "business-context-knowledge")
+			a.resource("business-context-knowledge", "/agents/"+s.AgentID+"/knowledge"+query(map[string]string{"q": w.KBQuery}))
+			return
+		}
 		if w.KBView == "tags" {
 			if w.KBActiveTag != "" {
 				a.resource("kb-tag-entries", "/kb/entries"+query(map[string]string{"tag": w.KBActiveTag}))

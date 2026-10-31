@@ -63,6 +63,11 @@ func (a *preview) loadSettingsPage() {
 	}
 	s := &a.Settings
 	switch s.Tab {
+	case "agents", "memory-knowledge":
+		a.refreshBusiness()
+		if s.Business.Tab == "memories" {
+			a.loadAgentMemories()
+		}
 	case "models":
 		a.refreshModels()
 		if !l.Loading["tool-discovery-save"] {
@@ -105,7 +110,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
+	if tab != "agents" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -113,6 +118,10 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		})
 	}
 	switch tab {
+	case "agents":
+		a.businessSettings(c)
+	case "memory-knowledge":
+		a.memoryKnowledgeSettings(c)
 	case "general":
 		a.generalSettings(c)
 		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型与主机密钥保存在 macOS 钥匙串。")
@@ -548,6 +557,10 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 }
 func (a *preview) selectLiveHost(index int) {
 	l := a.Live
+	if a.Settings.Business.dirty() {
+		a.businessNavigate(func() { a.selectLiveHost(index) })
+		return
+	}
 	if l.configBusy() {
 		l.Error = "正在保存配置，请稍后切换主机"
 		return
@@ -573,6 +586,7 @@ func (a *preview) selectLiveHost(index int) {
 	l.EditQueueID = ""
 	l.EditQueueOwner = nil
 	a.Settings.APIKey = ""
+	a.Settings.Business = businessSettingsState{}
 	a.Settings.feishuForm = feishuForm{}
 	a.Settings.mcpForm = mcpForm{Workspace: l.workspace()}
 	a.Live.SavedMCPForm = a.Settings.mcpForm

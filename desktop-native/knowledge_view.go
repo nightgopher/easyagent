@@ -9,6 +9,10 @@ import (
 )
 
 func (a *preview) profileWorkbench(c *ui.Context) {
+	if a.current().AgentID != "" {
+		a.businessMemoryWorkbench(c)
+		return
+	}
 	l := a.Live
 	if a.resourceFeedback(c, "profile") {
 		return
@@ -70,6 +74,10 @@ func (a *preview) openKBEntry(entry map[string]any) {
 	a.resource("kb-read", "/kb/read"+query(map[string]string{"path": path}))
 }
 func (a *preview) kbWorkbench(c *ui.Context) {
+	if a.current().AgentID != "" {
+		a.businessKnowledgeWorkbench(c)
+		return
+	}
 	l, w := a.Live, &a.Live.Workbench
 	stats := object(l.Data["kb-stats"])
 	totalCount := formatCount(stats["total_entries"])
