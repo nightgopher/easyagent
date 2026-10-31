@@ -25,16 +25,17 @@ var (
 )
 
 type Agent struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Instructions string   `json:"instructions"`
-	Model        string   `json:"model,omitempty"`
-	Workspace    string   `json:"workspace,omitempty"`
-	Tools        []string `json:"tools"`
-	Skills       []string `json:"skills"`
-	Disabled     bool     `json:"disabled"`
-	Version      int64    `json:"version"`
-	UpdatedAt    string   `json:"updated_at"`
+	Knowledge    []KnowledgeBinding `json:"knowledge"`
+	ID           string             `json:"id"`
+	Name         string             `json:"name"`
+	Instructions string             `json:"instructions"`
+	Model        string             `json:"model,omitempty"`
+	Workspace    string             `json:"workspace,omitempty"`
+	Tools        []string           `json:"tools"`
+	Skills       []string           `json:"skills"`
+	Disabled     bool               `json:"disabled"`
+	Version      int64              `json:"version"`
+	UpdatedAt    string             `json:"updated_at"`
 }
 
 type Store struct{ dataDir string }
@@ -83,7 +84,7 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema); err != nil {
+	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema+knowledgeSchema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -136,6 +137,26 @@ func (s *Store) SaveAgent(ctx context.Context, a Agent) (Agent, error) {
 	create := a.ID == ""
 	if create {
 		a.ID, a.Version = "agent-"+uuid.NewString(), 0
+	}
+	if a.Knowledge == nil {
+		a.Knowledge = []KnowledgeBinding{}
+	}
+	if len(a.Knowledge) > 32 {
+		return Agent{}, fmt.Errorf("too many knowledge bindings")
+	}
+	seenSources := map[string]bool{}
+	for _, binding := range a.Knowledge {
+		if binding.Access != "read" && binding.Access != "write" || seenSources[binding.SourceID] {
+			return Agent{}, fmt.Errorf("invalid knowledge binding")
+		}
+		source, err := s.GetSource(ctx, binding.SourceID)
+		if err != nil {
+			return Agent{}, err
+		}
+		if source.Disabled || binding.Access == "write" && !source.Writable {
+			return Agent{}, fmt.Errorf("knowledge source does not permit this access")
+		}
+		seenSources[binding.SourceID] = true
 	}
 	previous := a.Version
 	a.Version++
