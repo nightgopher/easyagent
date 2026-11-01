@@ -59,8 +59,14 @@ jobs:
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan
           disable-animations: true
           working-directory: mobile-native
-          script: |
+          # Overlap compilation with SDK/image downloads, not Android boot:
+          # cold Kotlin compilation can starve Pixel Launcher and trigger an
+          # ANR dialog that covers the app throughout the instrumentation suite.
+          pre-emulator-launch-script: |
             timeout 900 bash -c 'until test -f "$RUNNER_TEMP/android-build.exit"; do sleep 1; done'; cat "$RUNNER_TEMP/android-build.log"; test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
+          script: |
+            test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
+            adb shell svc power stayon true
             result=0; bash ../scripts/check-android-ui.sh --test || result=$?; adb pull /data/local/tmp/easyagent-ui app/build/qa || true; exit "$result"
       - name: Preserve background build diagnostics
         if: always()
