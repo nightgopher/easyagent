@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -83,15 +84,33 @@ func TestFeishuDefaultsAllowWritesAndAskBlocksUntilExplicitDecision(t *testing.T
 				resp, err := server.Client().Do(req)
 				require.NoError(t, err)
 				defer resp.Body.Close()
-				snapshot, err := srv.runSnapshot(run.SessionID, 0, run.ID, nil)
-				require.NoError(t, err)
-				id := snapshot.PendingConfirmations[0].ID
+				// Response headers precede snapshot subscription. Wait for the actual
+				// approval payload, as the Feishu client must, before resolving it.
+				reader := bufio.NewReader(resp.Body)
+				var received strings.Builder
+				var event string
+				var pending pendingConfirmation
+				for pending.ID == "" {
+					line, err := reader.ReadString('\n')
+					require.NoError(t, err)
+					received.WriteString(line)
+					if strings.HasPrefix(line, "event:") {
+						event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+					}
+					if event == "confirmation" && strings.HasPrefix(line, "data:") {
+						require.NoError(t, json.Unmarshal([]byte(strings.TrimPrefix(line, "data:")), &pending))
+					}
+				}
+				id := pending.ID
+				_, err = os.Stat(file)
+				require.True(t, os.IsNotExist(err), "the tool must remain blocked until the client decides")
 				require.NoError(t, srv.confirmRun(run.SessionID, run.ID, id, test.approve, "explicit decision"))
-				data, err := io.ReadAll(resp.Body)
+				data, err := io.ReadAll(reader)
 				require.NoError(t, err)
-				require.Contains(t, string(data), "event: confirmation\n")
-				require.Contains(t, string(data), "event: confirmed\n")
-				require.Contains(t, string(data), fmt.Sprintf(`"approved":%t`, test.approve))
+				received.Write(data)
+				require.Contains(t, received.String(), "event: confirmation\n")
+				require.Contains(t, received.String(), "event: confirmed\n")
+				require.Contains(t, received.String(), fmt.Sprintf(`"approved":%t`, test.approve))
 				require.Error(t, srv.confirmRun(run.SessionID, run.ID, id, true, "replay"))
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
