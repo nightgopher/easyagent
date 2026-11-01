@@ -33,11 +33,18 @@ node --test scripts/web-test.mjs scripts/mcp-settings-test.mjs
 python3 scripts/test_update_mini.py
 python3 scripts/test_desktop_registration.py
 python3 -m unittest discover -s scripts -p "test_release*.py"
+python3 -m unittest discover -s scripts -p "test_ci*.py"
 (cd mobile-native && ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug)
 git diff --check
 ```
 
-质量门禁在 PR、main 推送和每周定时检查中运行：`golangci-lint v2.15.0`（errcheck/staticcheck/govet/gosec/bodyclose）、SDK/服务端 race 检测、74% 加权语句覆盖率下限，以及核心与原生客户端的 `govulncheck v1.9.0`。`verify` 汇总上述检查，任意失败或跳过都会阻止通过现有必需检查。
+质量门禁在 PR、main 推送和每周定时检查中运行：`golangci-lint v2.15.0`（errcheck/staticcheck/govet/gosec/bodyclose）、SDK/服务端 race 检测、74% 加权语句覆盖率下限，以及核心与原生客户端的 `govulncheck v1.9.0`。Go、Web/脚本、Android、iOS、lint、race 和漏洞扫描并行执行，`verify` 汇总全部结果；任意失败、取消或意外跳过都会阻止通过。
+
+同一个 PR 的新推送取消旧运行；main 每次推送使用独立并发组，不取消较早提交。只有文档白名单内的修改（`docs/`、README、根目录 AGENTS/CHANGELOG/CONTRIBUTING）跳过耗时任务，仍产生成功的 `verify` 必需检查，避免路径过滤让 PR 永久等待。运行时 Markdown 提示词及内嵌 Web 文件照常检查；无法确定变更范围时运行全部检查。每周扫描及发布调用始终完整执行。
+
+Go 与 Gradle 优先使用 setup action 的缓存，Go 单测和 race 编译对象分别保存。Node 测试没有 npm 依赖，不创建包缓存；不缓存 Android AVD 或安装包，避免挤占仓库的 10 GB 配额。XcodeGen 使用固定版本及校验和的预编译包；govulncheck 上游没有预编译发行资产，只在小型工具缓存缺失时编译固定版本。
+
+本地只调试桌面 App 时可运行 `(cd desktop-native && go run ./tools/build -sign - -skip-dmg)`；需要验证完整安装包时仍使用上面的 `build-native.sh`。电脑操作 Helper 按源文件、架构、Swift 编译器和 SDK 复用编译结果，版本信息、签名与安装包仍重新生成。
 
 本地可运行：
 
