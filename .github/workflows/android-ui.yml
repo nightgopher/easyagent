@@ -53,6 +53,14 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Free unused hosted-runner toolchains
+        run: |
+          # Some system images require their original userdata size even when
+          # disk-size requests less. API 31 needs over 7 GiB of free space.
+          # This job uses Java/Gradle/Android, not .NET or the CodeQL bundle.
+          df -h "$HOME"
+          sudo rm -rf /usr/share/dotnet "${RUNNER_TOOL_CACHE:?}/CodeQL"
+          df -h "$HOME"
       - name: Build APKs alongside emulator preparation
         run: |
           # Complete SDK writes before either Gradle or the emulator action uses it.
@@ -67,7 +75,8 @@ jobs:
           target: ${{ matrix.target }}
           # The Google APIs image defaults to a 6 GiB userdata partition plus
           # headroom, which can exceed a hosted runner's remaining disk after
-          # a cold build. The fixture APKs and update downloads fit in 2 GiB.
+          # a cold build. Request 2 GiB where supported; the cleanup above also
+          # covers images whose original userdata size is a larger minimum.
           disk-size: 2048M
           emulator-boot-timeout: 180
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan
