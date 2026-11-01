@@ -19,7 +19,7 @@ def api(method, path, data=None, optional=False):
     if result.returncode:
         if optional and "(HTTP 404)" in result.stderr:
             return None
-        raise RuntimeError(result.stderr.strip())
+        raise RuntimeError(f"{method} {path}: {result.stderr.strip()}")
     return json.loads(result.stdout) if result.stdout.strip() else None
 
 
