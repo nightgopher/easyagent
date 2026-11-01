@@ -28,7 +28,6 @@ import androidx.test.runner.lifecycle.Stage
 import com.hwj.easyagent.mobile.backend.SettingsStore
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -125,6 +124,12 @@ class RuntimeUiTest {
             ui.onAllNodes(hasContentDescription("发送") and isEnabled()).fetchSemanticsNodes().isNotEmpty()
         }
         ui.onNodeWithContentDescription("发送").performClick()
+    }
+    private fun nextPrompt(host: RuntimeFixture): JSONObject {
+        // Keep advancing Compose's clock while the real WebSocket delivers
+        // the command; a blocking queue poll can starve scheduled UI effects.
+        ui.waitUntil(10_000) { host.prompts.isNotEmpty() }
+        return requireNotNull(host.prompts.poll())
     }
     private fun screenshot(name: String) {
         ui.waitForIdle()
@@ -256,7 +261,7 @@ class RuntimeUiTest {
         ui.onNodeWithText("引用到当前会话").performClick()
         ui.onNodeWithText("关闭").performClick()
         prompt("使用这些引用")
-        val sent = host.prompts.poll(10, TimeUnit.SECONDS)!!
+        val sent = nextPrompt(host)
         val refs = sent.getJSONObject("inputs").getJSONArray("files")
         assertEquals(2, refs.length())
         assertEquals("workspace", refs.getJSONObject(0).getString("scope"))
@@ -284,7 +289,7 @@ class RuntimeUiTest {
         val host = host("问答主机")
         connect(host); openChat(host)
         prompt("请先问我")
-        host.accept(host.prompts.poll(10, TimeUnit.SECONDS)!!)
+        host.accept(nextPrompt(host))
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"question-1","tool_name":"ask_user_question","args":{"questions":[{"question":"选择框架","options":[{"label":"Compose"},{"label":"Views"}]}]}}"""))
         waitText("选择框架")
         ui.onNodeWithText("Compose", substring = false).performScrollTo().performClick()
@@ -299,9 +304,9 @@ class RuntimeUiTest {
         connect(host)
         openChat(host)
         prompt("执行验收任务")
-        val sent = host.prompts.poll(10, TimeUnit.SECONDS)
+        val sent = nextPrompt(host)
         assertNotNull("prompt must arrive over the real WebSocket", sent)
-        host.accept(sent!!)
+        host.accept(sent)
         waitText("生成中…")
         host.emit("event", "event" to JSONObject("""{"type":"text_delta","text_delta":"流式验收回答"}"""))
         waitText("流式验收回答")
@@ -347,7 +352,7 @@ class RuntimeUiTest {
         connect(host)
         openChat(host)
         prompt("需要拒绝的操作")
-        host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
+        host.accept(nextPrompt(host))
         host.emit("confirmation", "confirmation" to JSONObject("""{"confirmation_id":"c1","tool_name":"write","description":"拒绝验收操作"}"""))
         waitText("拒绝验收操作")
         // The session list shows the pending approval without opening the chat.
@@ -367,7 +372,7 @@ class RuntimeUiTest {
         connect(host)
         openChat(host)
         prompt("逐段验证实时卡片")
-        host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
+        host.accept(nextPrompt(host))
         waitText("生成中…")
         host.emit("event", "event" to JSONObject("""{"type":"thinking_delta","text_delta":"第一段思考"}"""))
         waitText("第一段思考")
@@ -411,7 +416,7 @@ class RuntimeUiTest {
         upload("first.txt")
         waitText("first.txt")
         prompt("发送第一个附件")
-        val sent = requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS))
+        val sent = nextPrompt(host)
         assertEquals("first.txt", sent.getJSONObject("inputs").getJSONArray("attachments").getString(0))
         upload("next.txt")
         waitText("next.txt")
@@ -495,7 +500,7 @@ class RuntimeUiTest {
         connect(host)
         openChat(host)
         prompt("通知验收任务")
-        host.accept(requireNotNull(host.prompts.poll(10, TimeUnit.SECONDS)))
+        host.accept(nextPrompt(host))
         waitText("生成中…")
         val manager = instrumentation.targetContext.getSystemService(NotificationManager::class.java)
         // Viewing the same chat suppresses its alert.

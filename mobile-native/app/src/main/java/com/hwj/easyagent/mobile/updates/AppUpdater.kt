@@ -92,7 +92,11 @@ class AppUpdater internal constructor(
             try {
                 val downloading = currentCoroutineContext().job
                 val file = client.download(update, directory, { percent ->
-                    mutableState.update { if (downloading.isActive) it.copy(progress = percent) else it }
+                    // OkHttp invokes progress on its worker. Publish on the
+                    // updater's UI scope, just like completion and errors.
+                    scope.launch {
+                        mutableState.update { if (downloading.isActive) it.copy(progress = percent) else it }
+                    }
                 }, verifyApk)
                 mutableState.update { it.copy(file = file) }
             } catch (e: CancellationException) { throw e }
