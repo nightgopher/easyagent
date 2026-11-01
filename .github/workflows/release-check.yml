@@ -16,14 +16,29 @@ on:
       - 'desktop-native/**'
       - 'scripts/build-native.sh'
       - 'scripts/check-native-release-build.sh'
-      - 'CHANGELOG.md'
       - 'cmd/easyagent*/**'
+      - '!**/README*.md'
 permissions:
   contents: read
+concurrency:
+  group: release-check-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   release-build:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux/amd64
+            artifact: linux-amd64
+          - target: linux/arm64
+            artifact: linux-arm64
+          - target: darwin/amd64
+            artifact: darwin-amd64
+          - target: darwin/arm64
+            artifact: darwin-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -31,7 +46,33 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: bash scripts/check-release-build.sh
+      - run: bash scripts/check-release-build.sh '${{ matrix.target }}' "$RUNNER_TEMP/core-dist"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: core-check-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/core-dist/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+  core-manifest:
+    needs: release-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: core-check-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/core-dist
+      - run: |
+          chmod +x "$RUNNER_TEMP"/core-dist/easyagent-{linux,darwin}-* "$RUNNER_TEMP"/core-dist/easyagent-bridge-*
+          bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'
     runs-on: macos-15
@@ -42,21 +83,25 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop-native/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop-native/go.sum
       - name: Exercise the native release builder
         run: bash scripts/check-native-release-build.sh
   android-build:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Install the pinned Android build tools
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
@@ -70,6 +115,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop-native/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop-native/go.sum
       - name: Verify the configured release certificate without publishing
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}

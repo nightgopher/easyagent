@@ -10,6 +10,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.Executors
 
 class AppUpdaterTest {
     @get:Rule val folder = TemporaryFolder()
@@ -122,6 +123,35 @@ class AppUpdaterTest {
                 assertFalse(installed)
                 assertNull(updater.state.value.file)
             } finally { updater.close() }
+        }
+    }
+
+    @Test fun `download progress stays on the updater dispatcher`() = runBlocking {
+        Executors.newSingleThreadExecutor { Thread(it, "update-ui") }.asCoroutineDispatcher().use { dispatcher ->
+            MockWebServer().use { server ->
+                val updater = AppUpdater(
+                    InstalledVersion("0.24.0", 2400300), UpdateClient(OkHttpClient(), server.url("/latest"), server.url("/download/")),
+                    folder.root, Prefs(), { _, _ -> }, CoroutineScope(SupervisorJob() + dispatcher), { now },
+                )
+                val uiThread = withContext(dispatcher) { Thread.currentThread() }
+                val progressThread = CompletableDeferred<Thread>()
+                // An unconfined observer exposes the thread publishing progress,
+                // as Compose's instrumentation dispatcher did in the failing UI run.
+                val observer = launch(Dispatchers.Unconfined) {
+                    updater.state.collect {
+                        if ((it.progress ?: 0) > 0) progressThread.complete(Thread.currentThread())
+                    }
+                }
+                try {
+                    enqueue(server)
+                    withContext(dispatcher) { updater.open() }
+                    waitFor { updater.state.value.update != null && !updater.state.value.busy }
+                    server.enqueue(MockResponse().setBody(okio.Buffer().write(bytes)).throttleBody(1024, 10, TimeUnit.MILLISECONDS))
+                    withContext(dispatcher) { updater.download() }
+                    assertSame(uiThread, withTimeout(5_000) { progressThread.await() })
+                    waitFor { updater.state.value.file != null && !updater.state.value.busy }
+                } finally { observer.cancel(); updater.close() }
+            }
         }
     }
 

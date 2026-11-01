@@ -12,9 +12,33 @@ on:
     branches: [main]
 permissions:
   contents: read
+# PRs replace older runs. A unique group for every other event also avoids
+# GitHub cancelling an older pending main run (even with cancel=false).
+concurrency:
+  group: verify-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      full: ${{ steps.paths.outputs.full }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          fetch-depth: 2
+      - id: paths
+        name: Classify changed paths without dropping the required check
+        env:
+          FORCE_FULL: ${{ inputs.ref != '' || (github.event_name != 'pull_request' && github.event_name != 'push') }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ inputs.ref || github.sha }}
+        run: python3 scripts/ci_gate.py changes
+
   test:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -22,35 +46,66 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
+          # Include the separately tested local module. Keep this cache apart
+          # from the quick audit job, which cannot populate test build objects.
+          cache-dependency-path: |
+            go.sum
+            third_party/bubbletea/go.sum
       - run: go test ./...
       - run: go vet ./...
       - run: go test ./...
         working-directory: third_party/bubbletea
+
+  web-scripts:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          # Tests use Node's built-ins; there is no npm dependency/lockfile to cache.
+          package-manager-cache: false
       - run: node --test scripts/web-test.mjs scripts/mcp-settings-test.mjs
+      - run: python3 -m unittest discover -s scripts -p "test_ci*.py"
       - run: python3 -m unittest discover -s scripts -p "test_quality_gates.py"
       - run: python3 scripts/test_update_mini.py
       - run: python3 scripts/test_desktop_registration.py
       - run: python3 -m unittest discover -s scripts -p "test_release*.py"
+      - run: git diff --check
+
+  android:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-java@v6
         if: ${{ hashFiles('mobile-native/gradlew') != '' }}
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        if: ${{ hashFiles('mobile-native/gradlew') != '' }}
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Test, lint and build the Android client
         if: ${{ hashFiles('mobile-native/gradlew') != '' }}
         working-directory: mobile-native
         run: ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-      - run: git diff --check
-
   ios:
-    runs-on: macos-15
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    # Swift tests and simulator cross-compilation do not need an arm64 host.
+    # Leave scarce Apple Silicon runners for actual native bundle execution.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v7
         with:
@@ -59,18 +114,28 @@ jobs:
         if: ${{ hashFiles('mobile-ios/Package.swift') != '' }}
         working-directory: mobile-ios
         run: swift test
+      - name: Download the pinned XcodeGen binary
+        if: ${{ hashFiles('mobile-ios/project.yml') != '' }}
+        run: |
+          archive="$RUNNER_TEMP/easyagent-xcodegen.zip"
+          curl --fail --location --retry 3 --output "$archive" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          printf '%s  %s\n' 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806 "$archive" | shasum -a 256 -c -
+          unzip -q "$archive" -d "$RUNNER_TEMP/easyagent-xcodegen"
+          echo "$RUNNER_TEMP/easyagent-xcodegen/xcodegen/bin" >> "$GITHUB_PATH"
       - name: Build the iOS app
         if: ${{ hashFiles('mobile-ios/project.yml') != '' }}
         working-directory: mobile-ios
         run: |
-          brew install xcodegen
           xcodegen generate
           xcodebuild -project EasyAgent.xcodeproj -scheme EasyAgent \
             -destination 'generic/platform=iOS Simulator' \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY='' build | xcbeautify --quiet
 
   lint:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -95,7 +160,9 @@ jobs:
           retention-days: 7
 
   race-coverage:
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -104,6 +171,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # Race/coverage objects differ from plain builds; the policy script
+          # scopes their cache without adding another module download cache.
+          cache-dependency-path: |
+            go.sum
+            scripts/check_coverage.py
       - name: Race detector and SDK/server coverage
         shell: bash
         run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./sdk/... ./internal/server/... 2>&1 | tee race.log
@@ -119,15 +191,23 @@ jobs:
           retention-days: 7
 
   vulnerabilities:
+    needs: changes
+    if: needs.changes.outputs.full == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            module: .
-          - os: macos-15
-            module: desktop-native
-    runs-on: ${{ matrix.os }}
+          - module: .
+            target-os: linux
+            target-arch: amd64
+            cache-paths: go.sum
+          - module: desktop-native
+            target-os: darwin
+            target-arch: arm64
+            cache-paths: |
+              go.sum
+              desktop-native/go.sum
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -137,25 +217,35 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-go@v7
+        id: go
         with:
           go-version-file: ${{ matrix.module }}/go.mod
-      - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
-      - run: govulncheck ./...
+          cache-dependency-path: ${{ matrix.cache-paths }}
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/govulncheck
+          key: govulncheck-v1.9.0-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}
+      - name: Restore the audit executable (bootstrap only on a cache miss)
+        working-directory: ${{ github.workspace }}
+        run: bash scripts/setup-govulncheck.sh "$RUNNER_TEMP/govulncheck"
+      - name: Audit the shipping target, including Darwin-only source files
+        env:
+          GOOS: ${{ matrix.target-os }}
+          GOARCH: ${{ matrix.target-arch }}
+          CGO_ENABLED: '0'
+        run: '"$RUNNER_TEMP/govulncheck/govulncheck" ./...'
 
   # Keep the existing branch-protection check name. always() prevents failed or
   # skipped dependencies from turning the required check into a green skip.
   verify:
     if: always()
-    needs: [test, lint, race-coverage, vulnerabilities]
-    runs-on: ubuntu-latest
+    needs: [changes, test, web-scripts, android, ios, lint, race-coverage, vulnerabilities]
+    runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - name: Require every quality check to pass
         env:
-          RESULTS: ${{ toJSON(needs.*.result) }}
-        run: |
-          python3 - <<'PYVERIFY'
-          import json, os, sys
-          results = json.loads(os.environ["RESULTS"])
-          print("Required checks:", results)
-          sys.exit(0 if results and all(result == "success" for result in results) else 1)
-          PYVERIFY
+          NEEDS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_gate.py verify

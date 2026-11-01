@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.policy.outputs.version }}
       sha: ${{ steps.policy.outputs.sha }}
@@ -47,8 +47,20 @@ jobs:
     with:
       ref: ${{ needs.validate.outputs.sha }}
   core:
-    needs: [validate, verify]
-    runs-on: ubuntu-latest
+    needs: validate
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux/amd64
+            artifact: linux-amd64
+          - target: linux/arm64
+            artifact: linux-arm64
+          - target: darwin/amd64
+            artifact: darwin-amd64
+          - target: darwin/arm64
+            artifact: darwin-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,15 +72,16 @@ jobs:
       - name: Build core payloads from exact revision
         env:
           TAG: ${{ needs.validate.outputs.version }}
-        run: bash scripts/build-release.sh "$TAG"
+        run: bash scripts/build-release.sh "$TAG" '${{ matrix.target }}'
       - uses: actions/upload-artifact@v7
         with:
-          name: release-core
+          name: release-core-${{ matrix.artifact }}
           path: dist/*
           if-no-files-found: error
           retention-days: 3
+          compression-level: 0
   native:
-    needs: [validate, core]
+    needs: validate
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -78,6 +91,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop-native/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop-native/go.sum
       - name: Build and validate the MyGo native installer
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -105,8 +121,8 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   native-linux:
-    needs: [validate, core]
-    runs-on: ubuntu-latest
+    needs: validate
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -115,6 +131,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop-native/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop-native/go.sum
       - name: Build and validate the Linux native packages
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -131,8 +150,8 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   android:
-    needs: [validate, verify, android-ui]
-    runs-on: ubuntu-latest
+    needs: validate
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -142,10 +161,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Install the pinned Android build tools
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
@@ -162,8 +182,10 @@ jobs:
           if-no-files-found: error
           retention-days: 3
   publish:
-    needs: [validate, core, native, native-linux, android]
-    runs-on: ubuntu-latest
+    # Builds share only the validated revision, not each other's outputs.
+    # The publication barrier still requires every test and functional check.
+    needs: [validate, verify, android-ui, core, native, native-linux, android]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
