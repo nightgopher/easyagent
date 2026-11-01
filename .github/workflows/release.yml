@@ -82,7 +82,7 @@ jobs:
           compression-level: 0
   native:
     needs: validate
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
         with:
@@ -112,7 +112,21 @@ jobs:
           DMG="native-dist/easyagent-native-darwin-arm64.dmg"
           xcrun notarytool store-credentials "easyagent-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
           xcrun notarytool submit "$DMG" --keychain-profile "easyagent-notary" --wait
-          xcrun stapler staple "$DMG"
+          # Retry only transient ticket-download errors after Apple accepted
+          # the submission; rejection, signing and validation failures stop.
+          for attempt in 1 2 3; do
+            if output=$(xcrun stapler staple "$DMG" 2>&1); then
+              printf '%s\n' "$output"
+              break
+            else
+              status=$?
+              printf '%s\n' "$output" >&2
+            fi
+            if (( attempt == 3 )) || ! grep -Eq 'NSURLErrorDomain Code=-(1001|1005|1009)([^0-9]|$)' <<< "$output"; then
+              exit "$status"
+            fi
+            sleep "$((attempt * 5))"
+          done
           xcrun stapler validate "$DMG"
       - uses: actions/upload-artifact@v7
         with:

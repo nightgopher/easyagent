@@ -75,7 +75,7 @@ jobs:
           bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,7 +109,7 @@ jobs:
         run: python3 scripts/build-android.py build dist --test-signing
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -140,7 +140,21 @@ jobs:
           DMG="${DMGS[0]}"
           xcrun notarytool store-credentials "easyagent-preview-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
           xcrun notarytool submit "$DMG" --keychain-profile "easyagent-preview-notary" --wait
-          xcrun stapler staple "$DMG"
+          # Retry only transient ticket-download errors after Apple accepted
+          # the submission; rejection, signing and validation failures stop.
+          for attempt in 1 2 3; do
+            if output=$(xcrun stapler staple "$DMG" 2>&1); then
+              printf '%s\n' "$output"
+              break
+            else
+              status=$?
+              printf '%s\n' "$output" >&2
+            fi
+            if (( attempt == 3 )) || ! grep -Eq 'NSURLErrorDomain Code=-(1001|1005|1009)([^0-9]|$)' <<< "$output"; then
+              exit "$status"
+            fi
+            sleep "$((attempt * 5))"
+          done
           xcrun stapler validate "$DMG"
           git rev-parse HEAD > desktop-native/build.noindex/darwin-arm64/source-commit.txt
       - uses: actions/upload-artifact@v7
