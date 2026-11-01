@@ -25,7 +25,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [31, 34, 35]
+        include:
+          # The app has no Play Services dependency. Use AOSP on older APIs
+          # to avoid first-boot Google app updates competing with UI tests,
+          # and retain Google APIs compatibility coverage on the latest API.
+          - api: 31
+            target: default
+          - api: 34
+            target: default
+          - api: 35
+            target: google_apis
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,7 +64,7 @@ jobs:
           api-level: 35
           system-image-api-level: ${{ matrix.api }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan
           disable-animations: true
           working-directory: mobile-native

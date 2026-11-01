@@ -207,7 +207,11 @@ class RuntimeUiTest {
         waitText("fixture-model", useUnmergedTree = true)
         ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
         ui.onNodeWithText("创建", substring = false).performClick()
-        waitText("全权限")
+        // The create dialog already mentions full access. Wait for the host
+        // write and the exact permission badge, not that explanatory text.
+        ui.waitUntil(10_000) {
+            host.accessMode == "full" && ui.onAllNodesWithText("全权限", substring = false).fetchSemanticsNodes().isNotEmpty()
+        }
         assertEquals("full", host.accessMode)
         val created = host.calls.first { it.path == "/sessions" && it.method == "POST" }
         assertEquals("fixture-model", JSONObject(created.body.clone().readUtf8()).getString("model"))
