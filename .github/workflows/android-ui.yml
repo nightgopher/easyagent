@@ -12,8 +12,12 @@ on:
       - 'scripts/check-android-ui.sh'
       - 'internal/server/**'
       - '.github/workflows/android-ui.yml'
+      - '!**/README*.md'
 permissions:
   contents: read
+concurrency:
+  group: android-ui-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   android-ui:
     runs-on: ubuntu-24.04
@@ -31,7 +35,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-          cache-dependency-path: 'mobile-native/**/*.gradle*'
+          cache-dependency-path: |
+            mobile-native/**/*.gradle.kts
+            mobile-native/gradle/wrapper/gradle-wrapper.properties
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -39,7 +45,9 @@ jobs:
           sudo udevadm trigger --name-match=kvm
       - uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: ${{ matrix.api }}
+          # Compile SDK is 35 for every job; only the device image varies.
+          api-level: 35
+          system-image-api-level: ${{ matrix.api }}
           arch: x86_64
           target: google_apis
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan

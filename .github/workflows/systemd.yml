@@ -10,8 +10,13 @@ on:
       - 'scripts/build-server-deb.sh'
       - 'scripts/check_systemd.py'
       - '.github/workflows/systemd.yml'
+      - '!**/README*.md'
+      - 'internal/web/static/**'
 permissions:
   contents: read
+concurrency:
+  group: systemd-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   systemd:
     runs-on: ubuntu-24.04
