@@ -85,7 +85,7 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema+knowledgeSchema+memorySchema); err != nil {
+	if _, err = db.ExecContext(ctx, "PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;"+schema+knowledgeSchema+memorySchema+workSchema); err != nil {
 		_ = db.Close()
 		return nil, err
 	}

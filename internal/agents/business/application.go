@@ -2,11 +2,13 @@
 package business
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
+	"github.com/nightgopher/easyagent/internal/worktools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
@@ -57,6 +59,14 @@ func (a Application) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 		}
 	}
 	list = append(list, o.ExtensionTools...)
+	tracked := false
+	if a.Store != nil {
+		_, err := a.Store.WorkForSession(context.Background(), o.SessionID)
+		tracked = err == nil
+		if tracked {
+			list = append(list, worktools.Tools(a.Store, o.SessionID)...)
+		}
+	}
 	filtered := []agent.Tool{}
 	seen := map[string]bool{}
 	for _, t := range list {
@@ -64,7 +74,8 @@ func (a Application) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 		boundSkill := name == "read_skill" && len(o.Skills) > 0
 		boundKnowledge := (name == "kb_search" || name == "kb_read") && len(a.Definition.Knowledge) > 0
 		boundMemory := a.Definition.MemoryEnabled && slices.Contains([]string{"memory_search", "memory_save", "memory_forget"}, name)
-		allowed := slices.Contains(a.Definition.Tools, name) || boundSkill || boundKnowledge || boundMemory
+		boundWork := tracked && (name == "work_get" || name == "work_report")
+		allowed := slices.Contains(a.Definition.Tools, name) || boundSkill || boundKnowledge || boundMemory || boundWork
 		if allowed && !seen[name] && (len(o.AllowedTools) == 0 || slices.Contains(o.AllowedTools, name)) && !slices.Contains(o.BlockedTools, name) {
 			filtered = append(filtered, t)
 			seen[name] = true
