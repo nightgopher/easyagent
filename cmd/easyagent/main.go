@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -122,14 +123,16 @@ func main() {
 		cfg.AutoApprove = true
 	}
 
-	// Set log level based on mode
-	switch *modeFlag {
-	case "interactive", "chat":
-		// Suppress INFO logs in TUI mode for cleaner output
-		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})))
-	default:
-		// Keep default INFO level for other modes
+	// UI modes route diagnostics to a log file so log output cannot corrupt
+	// the full-screen TUI; other modes keep stderr logging.
+	closeLog, err := setupLogging(*modeFlag)
+	if err != nil {
+		// Falling back to a quiet stderr handler still beats crashing the TUI
+		// over a log file; the failure itself is recorded for the next run.
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		fmt.Fprintf(os.Stderr, "warning: file logging unavailable: %v\n", err)
 	}
+	defer closeLog()
 
 	// Propagate version to mode package
 	mode.SetVersion(version)
