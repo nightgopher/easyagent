@@ -500,6 +500,14 @@ class RuntimeUiTest {
     }
 
     @Test fun backgroundNotificationsApproveRejectAndOpenTheRightChat() {
+        backgroundNotifications(completeFromSnapshot = false)
+    }
+
+    @Test fun backgroundCompletionSnapshotNotifiesBeforeTheStatusEventArrives() {
+        backgroundNotifications(completeFromSnapshot = true)
+    }
+
+    private fun backgroundNotifications(completeFromSnapshot: Boolean) {
         val host = host("通知主机")
         connect(host)
         openChat(host)
@@ -523,6 +531,7 @@ class RuntimeUiTest {
                     it.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() == "后台审批 $id" &&
                     it.actions?.size == 2
             }
+            if (completeFromSnapshot && !approved) host.completeNextConfirmationInSnapshot = true
             notification.actions[if (approved) 0 else 1].actionIntent.send()
             ui.waitUntil(10_000) {
                 host.calls.any { it.path?.endsWith("/run/confirm") == true && JSONObject(it.body.clone().readUtf8()).optString("confirmation_id") == id }
@@ -530,8 +539,14 @@ class RuntimeUiTest {
             val request = host.calls.first { it.path?.endsWith("/run/confirm") == true && JSONObject(it.body.clone().readUtf8()).optString("confirmation_id") == id }
             assertEquals(approved, JSONObject(request.body.clone().readUtf8()).getBoolean("approved"))
         }
+        if (completeFromSnapshot) {
+            // The confirmation's HTTP reload sees completion before WebSocket
+            // delivers its status. Both transports must describe the same run.
+            ui.waitUntil(10_000) { app.connections.client.value?.activeChat?.run?.state == "completed" }
+        }
         host.emit("status", "state" to "completed", "streaming" to false)
         val resultNotification = waitNotification(manager) { it.channelId == Notifier.CHANNEL_RUNS }
+        assertEquals(1, manager.activeNotifications.count { it.notification.channelId == Notifier.CHANNEL_RUNS })
         val notificationTitle = resultNotification.extras.getCharSequence(Notification.EXTRA_TITLE).toString()
         // A background PendingIntent.send is blocked on API 34+. Exercise the actual user tap.
         instrumentation.uiAutomation.serviceInfo = instrumentation.uiAutomation.serviceInfo.apply {
@@ -583,7 +598,9 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     @Volatile var socket: WebSocket? = null
     private val sequence = AtomicInteger()
     @Volatile var accessMode = "ask"
-    @Volatile private var running = false
+    @Volatile private var runState = ""
+    private val running: Boolean get() = runState == "running" || runState == "waiting_confirmation"
+    @Volatile var completeNextConfirmationInSnapshot = false
     private var runPrompt = ""
     private var requestId = ""
     private var events = JSONArray()
@@ -651,6 +668,10 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                     path == "/sessions" && request.method == "GET" -> json(JSONArray().put(sessionSummary()).toString())
                     path.endsWith("/run/confirm") -> {
                         emit("confirmed", "confirmation_id" to JSONObject(request.body.clone().readUtf8()).getString("confirmation_id"))
+                        if (completeNextConfirmationInSnapshot) {
+                            completeNextConfirmationInSnapshot = false
+                            completeInSnapshot()
+                        }
                         json("{}")
                     }
                     path.endsWith("/run/cancel") -> {
@@ -676,7 +697,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     }
 
     @Synchronized fun accept(prompt: JSONObject) {
-        running = true
+        runState = "running"
         runPrompt = prompt.getString("prompt")
         requestId = prompt.getString("request_id")
         events = JSONArray()
@@ -688,10 +709,18 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
             .put("run_id", "qa-run").put("seq", sequence.incrementAndGet())
         for ((key, field) in fields) value.put(key, field)
         if (type == "event") events.put(value.getJSONObject("event"))
-        if (type == "status") running = value.optString("state") == "running"
+        if (type == "status") runState = value.optString("state")
         if (type == "confirmation") confirmation = value.getJSONObject("confirmation")
         if (type == "confirmed" || type == "status") confirmation = null
         check(socket?.send(value.toString()) == true)
+    }
+
+    @Synchronized private fun completeInSnapshot() {
+        runState = "completed"
+        confirmation = null
+        // Model a terminal event whose WebSocket delivery has not arrived yet.
+        // A concurrent HTTP reload must still return the authoritative state.
+        sequence.incrementAndGet()
     }
 
     /** Like the server's list entry: run state only while a run is active. */
@@ -709,7 +738,7 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
             .put("events", JSONArray(events.toString()))
             .put("pending_confirmations", JSONArray().also { list -> confirmation?.let { list.put(it) } })
         if (runPrompt.isNotEmpty()) value.put("run", JSONObject().put("id", "qa-run")
-            .put("state", if (running) "running" else "cancelled").put("prompt", runPrompt).put("request_id", requestId))
+            .put("state", runState).put("prompt", runPrompt).put("request_id", requestId))
         return value
     }
 
