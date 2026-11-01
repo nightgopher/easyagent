@@ -29,6 +29,25 @@ curl -H "Authorization: Bearer $EA_API_KEY" http://127.0.0.1:8080/health
 
 ---
 
+## 持续任务
+
+持续任务由用户显式加入，每个会话最多一条；普通对话不会自动建任务。
+记录保存在当前主机的 `agents/agents.sqlite`，与会话 JSONL、单次运行回执分别保存。
+
+- `POST /work`：`{"session_id":"...","title":"准备演示"}`，返回 201。同一会话重试返回原记录，不覆盖标题或进展。Agent、应用与工作区由服务端会话元数据绑定。
+- `GET /work?view=attention&q=演示&limit=30&offset=0`：返回 `items`、`has_more`、`offset`。`view` 支持 `all`（默认）、`open`、`attention`；可用 `session_id` 精确过滤。关键词匹配标题、摘要及成果。分页在筛选后进行。
+- `GET /work/{id}`：读取一条。
+- `PUT /work/{id}`：提交 `title`、`state`、`summary`、`question`、`artifacts` 和当前 `version`，冲突返回 409。所属会话不可改写。
+
+工作状态：`active`、`waiting_answer`、`waiting_review`、`blocked`、`completed`、`cancelled`。
+等待回答或受阻必须填写 `question`；其他状态自动清空旧问题。仅用户可结束或重新打开工作。
+成果为 `{"title":"演示文稿","kind":"file","value":"output/demo.pdf"}` 或 `kind:url` 的 HTTP/S 地址，最多 16 项。
+文件路径相对于任务工作区，登记成果不会读取文件、执行命令或打开链接。
+
+HTTP 返回的 `run_id`、`run_state`、`run_error` 来自真实运行记录；`attention` 综合运行审批、失败/中断、待答问题与待验收状态。运行完成不会自动完成工作。会话被删除后保留工作记录，标记 `session_missing`，不重建会话、不自动重发消息。
+
+Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话后获得同样的会话内报告能力，仍遵守运行时工具允许/禁止列表。模型不能建立任务、改换归属、读取其他会话的任务或宣告用户已验收。报告须先读取版本，成果和完成说明应有可核验依据。
+
 ## 业务 Agent
 
 业务 Agent 是持久化配置，复用同一会话核心，不为每个角色部署独立程序。

@@ -2,12 +2,14 @@ package coding
 
 import (
 	"context"
+	"github.com/nightgopher/easyagent/internal/agentdata"
 	"github.com/nightgopher/easyagent/internal/agents/coding/commands"
 	codingprofile "github.com/nightgopher/easyagent/internal/agents/coding/profile"
 	codingprompt "github.com/nightgopher/easyagent/internal/agents/coding/prompt"
 	codingtools "github.com/nightgopher/easyagent/internal/agents/coding/tools"
 	"github.com/nightgopher/easyagent/internal/capture"
 	modelsreg "github.com/nightgopher/easyagent/internal/models"
+	"github.com/nightgopher/easyagent/internal/worktools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/config"
@@ -83,6 +85,7 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 
 	extensions := append([]agent.Tool{}, opts.ExtensionTools...)
 	extensions = append(extensions, capture.Tool{Store: capture.New(a.Cfg.DataDir), Source: "session:" + opts.SessionID})
+	extensions = append(extensions, worktools.Tools(agentdata.New(a.Cfg.DataDir), opts.SessionID)...)
 	return codingtools.BuildList(codingtools.ListOptions{
 		Workspace:              opts.Workspace,
 		AllowOutsideWorkspace:  a.Cfg.AllowOutsideWorkspace,
