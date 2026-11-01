@@ -51,6 +51,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 
 // CreateSessionRequest is the request body for creating a session.
 type CreateSessionRequest struct {
+	Channel     string `json:"channel,omitempty"`
 	AgentID     string `json:"agent_id,omitempty"`
 	Cwd         string `json:"cwd,omitempty"`
 	Model       string `json:"model,omitempty"`
@@ -71,6 +72,11 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := s.app.Config()
+	if req.Channel != "" && req.Channel != "feishu" {
+		writeError(w, http.StatusBadRequest, "unknown session channel")
+		return
+	}
+	cfg.DefaultAccessMode = channelAccessMode(cfg, req.Channel)
 
 	// Apply cwd override if provided
 	if req.Cwd != "" {

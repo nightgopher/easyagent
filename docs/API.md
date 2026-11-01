@@ -197,6 +197,8 @@ GET /ws
 
 `event` 包含递增 `seq`、`run_id` 和 Agent `event`。重连发送 `subscribe`：可重放时返回 `replay`，否则返回 `snapshot`（历史 `messages`、当前 run、已投影事件及 `pending_confirmations`）。客户端按 seq 去重，不将恢复内容当成新请求。序号缺口应重新订阅；`reset:true` 表示历史完整重建，允许序号重新开始。`confirmation` 表示任务等待批准，超时拒绝。旧 run 的取消与批准请求会被拒绝，避免影响后续任务。
 
+当前模型请求遇到可恢复的 HTTP/连接错误时，等待前发送 `model_retry` 事件（SSE 同名），并保留在恢复快照中。示例：`{"type":"model_retry","retry":{"attempt":1,"max_attempts":3,"delay_ms":5000,"retry_at":1793500005000,"status_code":429,"reason":"rate_limit"}}`。`attempt` 从 1 起，`retry_at` 是 Unix 毫秒时间戳，`reason` 为 `rate_limit` / `server_error` / `network`。等待时 run 仍为 `running`，取消接口正常生效；后续模型输出、下一轮 `context_usage` 或终态会结束该等待提示。重试仅重发同一轮模型请求，使用已有工具结果，不重复执行工具；开始输出后的断流不会自动重发。策略见 [CONFIG.md](CONFIG.md)。
+
 历史消息的 `images` 保留数组形状，每张图片通过 `{"attachmentId":"history_...","sessionId":"sess_..."}` 引用会话内已保存的图片，避免在 HTTP / WebSocket 快照中累计内联图片数据。客户端按需请求带认证的 `/sessions/{sessionId}/attachments/{attachmentId}/raw?format=data_url`；引用只在该会话当前分支的祖先记录（包括压缩前记录及保留片段）包含图片时有效，不允许读取兄弟分支。分叉快照使用分叉会话自己的 `sessionId`。图片哈希不能替代认证。客户端仍须兼容旧服务返回的 `data_url` 图片；实时新消息继续使用已有上传附件引用。
 
 任务由会话持有，WS / SSE 连接关闭不会取消任务。服务重启后已接受而未完成的 run 标为 `interrupted`，相同 request ID 不重新执行。凭据保存于 `EA_DATA_DIR/requests`，完整聊天历史仍来自会话 JSONL；硬断电下的外部副作用不保证恰好一次。
@@ -255,7 +257,15 @@ GET /ws
 
 `answers` 按问题顺序排列，每题必须有答案；单选题只允许一个选项或自定义文本，多选题可组合。无效答案返回 400 并保留待回答请求；过期/重复提交返回 409。`approved:false` 表示跳过，不会伪造答案。答案作为工具结果回传模型；无交互通道的入口不会直接返回提问成功。
 
-`access_mode` 为 `ask`（确认危险工具）或 `full`（自动批准普通工具）；仅在当前服务进程的会话内保留，活跃任务返回 409。不会解决已经等待的批准，MCP 独立审批及工作区边界仍有效。
+`access_mode` 为 `ask`（确认危险工具）或 `full`（自动批准普通工具）；保存到会话元数据，重启后仍保留。活跃任务切换权限返回 409，不会解决已经等待的批准，MCP 独立审批及工作区边界仍有效。
+
+### 默认工具权限
+
+`GET /settings/permissions` 返回 `{"default_mode":"ask","feishu_mode":"full","effective_from":"new_session"}`（值以主机配置为准）。`POST /settings/permissions` 接受 `default_mode`、`feishu_mode` 中的一项或两项，每项必须为 `ask` 或 `full`。保存后新会话生效，已有会话的权限不变。
+
+飞书桥接在 `POST /sessions` 和 `POST /chat/stream` 中携带 `channel:"feishu"`，新飞书会话默认使用 `full`，可通过设置改为 `ask`。没有保存过权限的旧会话在首次请求时采用对应入口的默认值；已经保存的会话选择优先。入口标记不替代 API 认证或飞书 owner 配对。
+
+SSE 的 `accepted` 包含 `session_id` 和 `run_id`；订阅前已经存在的待审批也会以 `confirmation` 补发。`confirmed` 包含 `confirmation_id`、`approved` 和 `reason`，用于同步批准、拒绝、取消与超时结果。飞书卡片回调使用现有 `/sessions/{id}/run/confirm` 接口，重复或过期请求返回 409。
 
 工具被拒绝时，`tool_details.approval` 为 `declined`（流及历史均保留）；`is_error` 仍为 false，以避免将用户拒绝当作系统故障重试。
 

@@ -24,6 +24,8 @@ import (
 
 type runTestGateway struct {
 	failAfterTool atomic.Bool
+	retryStatus   int
+	retryAfter    string
 	requests      chan map[string]any
 	finish        chan struct{}
 	disconnected  atomic.Bool
@@ -58,7 +60,14 @@ func newFileRunTestServer(t *testing.T, toolFile string, dataInside ...bool) (*S
 			}
 		}
 		if gateway.failAfterTool.CompareAndSwap(true, false) {
-			w.WriteHeader(502)
+			status := gateway.retryStatus
+			if status == 0 {
+				status = 502
+			}
+			if gateway.retryAfter != "" {
+				w.Header().Set("Retry-After", gateway.retryAfter)
+			}
+			w.WriteHeader(status)
 			fmt.Fprint(w, "test upstream unavailable")
 			return
 		}

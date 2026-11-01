@@ -3,6 +3,7 @@ package ai
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,4 +75,15 @@ func TestHTTPStatusErrorRetryAfterDate(t *testing.T) {
 	err := NewHTTPStatusError(429, future.Format(http.TimeFormat), "busy")
 	assert.InDelta(t, time.Until(future).Seconds(), err.RetryAfter.Seconds(), 1)
 	assert.False(t, NewHTTPStatusError(700, "", "").Retryable())
+}
+
+func TestHTTPStatusErrorPermanentQuota(t *testing.T) {
+	for _, code := range []string{"insufficient_quota", "billing_hard_limit_reached", "billing_not_active", "credit_balance_too_low"} {
+		// The structured code can occur beyond the UI's truncated excerpt.
+		body := `{"error":{"message":"` + strings.Repeat("x", 300) + `","code":"` + code + `"}}`
+		assert.False(t, NewHTTPStatusError(429, "1", body).Retryable(), code)
+	}
+	assert.False(t, NewHTTPStatusError(429, "", `{"error":{"type":"insufficient_quota"}}`).Retryable())
+	assert.True(t, NewHTTPStatusError(429, "", `{"error":"Too many failed attempts, retry later"}`).Retryable())
+	assert.True(t, NewHTTPStatusError(429, "", `{"error":{"code":"rate_limit_exceeded"}}`).Retryable())
 }

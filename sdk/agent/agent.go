@@ -344,6 +344,11 @@ func (a *Agent) PromptStream(ctx context.Context, msg ai.Message) (<-chan AgentS
 			defer finishThinking()
 			for event := range stream.Events() {
 				switch e := event.(type) {
+				case ai.EventRetry:
+					select {
+					case ch <- AgentStreamEvent{Type: StreamEventModelRetry, Retry: &e.Retry, Timestamp: time.Now().UnixMilli()}:
+					case <-ctx.Done():
+					}
 				case ai.EventThinkingDelta:
 					if thinkingStart.IsZero() {
 						thinkingStart = time.Now()
@@ -560,9 +565,11 @@ const (
 	StreamEventLoopDetected     StreamEventType = "loop_detected"
 	StreamEventMicroCompacted   StreamEventType = "micro_compacted"
 	StreamEventAutoContinued    StreamEventType = "auto_continued"
+	StreamEventModelRetry       StreamEventType = "model_retry"
 )
 
 type AgentStreamEvent struct {
+	Retry          *ai.ModelRetry          `json:"retry,omitempty"`
 	ContextUsage   *ContextUsage           `json:"context_usage,omitempty"`
 	Timestamp      int64                   `json:"timestamp,omitempty"`
 	DurationMS     int64                   `json:"duration_ms,omitempty"`

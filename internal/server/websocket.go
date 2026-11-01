@@ -43,21 +43,23 @@ func (s *Server) newUpgrader() *websocket.Upgrader {
 
 // Messages carry both run identity and session-local event sequence.
 type wsClientMessage struct {
-	Inputs         promptInputs `json:"inputs,omitempty"`
-	Type           string       `json:"type"`
-	SessionID      string       `json:"session_id"`
-	Prompt         string       `json:"prompt,omitempty"`
-	RequestID      string       `json:"request_id,omitempty"`
-	RunID          string       `json:"run_id,omitempty"`
-	AfterSeq       uint64       `json:"after_seq,omitempty"`
-	ConfirmationID string       `json:"confirmation_id,omitempty"`
-	Approved       bool         `json:"approved"`
-	Reason         string       `json:"reason,omitempty"`
+	Inputs         promptInputs    `json:"inputs,omitempty"`
+	Type           string          `json:"type"`
+	SessionID      string          `json:"session_id"`
+	Prompt         string          `json:"prompt,omitempty"`
+	RequestID      string          `json:"request_id,omitempty"`
+	RunID          string          `json:"run_id,omitempty"`
+	AfterSeq       uint64          `json:"after_seq,omitempty"`
+	ConfirmationID string          `json:"confirmation_id,omitempty"`
+	Approved       bool            `json:"approved"`
+	Reason         string          `json:"reason,omitempty"`
 	Answers        json.RawMessage `json:"answers,omitempty"`
-	Model          string       `json:"model,omitempty"`
-	Provider       string       `json:"provider,omitempty"`
+	Model          string          `json:"model,omitempty"`
+	Provider       string          `json:"provider,omitempty"`
 }
 type wsServerMessage struct {
+	Approved             bool                   `json:"approved,omitempty"`
+	Reason               string                 `json:"reason,omitempty"`
 	Prompt               string                 `json:"prompt,omitempty"`
 	Queue                *messageQueue          `json:"queue,omitempty"`
 	Type                 string                 `json:"type"`

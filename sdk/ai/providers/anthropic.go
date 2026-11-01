@@ -132,7 +132,11 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 		partial := ai.StreamAssistantMessage{}
 		_ = stream.Push(ctx, ai.EventStart{Partial: partial})
 
+		retriesMade := 0
 		fail := func(err error) {
+			if retriesMade > 0 && ctx.Err() == nil {
+				err = fmt.Errorf("模型请求自动重试 %d 次后仍失败: %w", retriesMade, err)
+			}
 			partial.StopReason = ai.StopReasonError
 			partial.ErrorMsg = err.Error()
 			// ctx 可能已被看门狗取消，终止事件用独立 context 保证送达
@@ -168,7 +172,8 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 					httpRetries++
 					slog.Warn("model request transport error, retrying",
 						"provider", p.Name(), "attempt", attempt, "retries", httpRetries, "err", err)
-					if _, ok := waitModelRetry(ctx, httpRetries, 0); ok {
+					if _, ok := waitModelRetry(ctx, httpRetries, 0, reportModelRetry(ctx, stream, httpRetries, maxRetries, nil)); ok {
+						retriesMade++
 						continue
 					}
 					fail(ctx.Err())
@@ -185,7 +190,8 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 					slog.Warn("model request failed, retrying",
 						"provider", p.Name(), "attempt", attempt, "retries", httpRetries,
 						"status", resp.StatusCode, "retry_after", statusErr.RetryAfter)
-					if _, ok := waitModelRetry(ctx, httpRetries, statusErr.RetryAfter); ok {
+					if _, ok := waitModelRetry(ctx, httpRetries, statusErr.RetryAfter, reportModelRetry(ctx, stream, httpRetries, maxRetries, statusErr)); ok {
+						retriesMade++
 						continue
 					}
 					if ctx.Err() != nil {
@@ -218,6 +224,7 @@ func (p *AnthropicProvider) Stream(ctx context.Context, req ai.StreamRequest) (*
 				streamRetries++
 				select {
 				case <-time.After(time.Duration(attempt) * streamRetryDelay):
+					retriesMade++
 					partial = ai.StreamAssistantMessage{}
 					continue
 				case <-ctx.Done():

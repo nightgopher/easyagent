@@ -1,10 +1,12 @@
 import { api } from './api.js';
 import { copyText } from './clipboard.js';
 import { ToolDiscoverySettings } from './tool-discovery.js';
+import { PermissionSettings } from './permission-settings.js';
 
 export class SettingsPage {
   constructor() {
     this.toolDiscovery = new ToolDiscoverySettings();
+    this.permissions = new PermissionSettings();
     this.form = document.getElementById('feishu-form');
     this.notice = document.getElementById('feishu-notice');
     this.id = document.getElementById('feishu-app-id');
@@ -55,6 +57,7 @@ export class SettingsPage {
   }
   async activate() {
     void this.toolDiscovery.update();
+    void this.permissions.update();
     this.hidePairing(); this.busy(true); this.message('正在读取配置…');
     try { this.render(await api.get('/settings/feishu')); this.message(''); }
     catch (error) { this.message(`加载失败：${error.message}`, true); }

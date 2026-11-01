@@ -33,6 +33,8 @@ type pendingConfirmation struct {
 	Description string          `json:"description"`
 	Args        json.RawMessage `json:"args"`
 	decision    chan agent.ConfirmDecision
+	expiresAt   time.Time
+	ctx         context.Context
 }
 
 // sessionRun is owned by the session, never by a socket or HTTP request.
@@ -336,17 +338,20 @@ func (s *Server) confirmRunTool(ctx context.Context, request agent.ConfirmationR
 			return agent.ConfirmDecision{Reason: "任务已取消，操作未执行"}
 		}
 	}
-	pending := &pendingConfirmation{ID: newRunID("confirm_"), ToolCallID: request.ToolCallID, ToolName: request.ToolName, Description: request.Description, Args: request.Args, decision: make(chan agent.ConfirmDecision, 1)}
+	pending := &pendingConfirmation{ID: newRunID("confirm_"), ToolCallID: request.ToolCallID, ToolName: request.ToolName, Description: request.Description, Args: request.Args, decision: make(chan agent.ConfirmDecision, 1), ctx: ctx}
 	s.runs.mu.Lock()
 	state := s.runs.sessionLocked(run.SessionID)
 	if state.run != run || !runActive(run) {
 		s.runs.mu.Unlock()
 		return agent.ConfirmDecision{Reason: "任务已结束"}
 	}
+	wait := s.runs.confirmationTimeout
+	if request.ToolName != "ask_user_question" {
+		pending.expiresAt = time.Now().Add(wait)
+	}
 	run.pending[pending.ID] = pending
 	run.State = "waiting_confirmation"
 	s.runs.publishLocked(state, wsServerMessage{Type: "confirmation", SessionID: run.SessionID, RunID: run.ID, Confirmation: pending, State: run.State})
-	wait := s.runs.confirmationTimeout
 	s.runs.mu.Unlock()
 	// Questions are user-driven: do not silently expire them on the short
 	// dangerous-action approval timer. Explicit reply/skip/cancel resolves them.
@@ -366,7 +371,7 @@ func (s *Server) confirmRunTool(ctx context.Context, request agent.ConfirmationR
 	s.runs.mu.Lock()
 	delete(run.pending, pending.ID)
 	if state.run == run {
-		s.runs.publishLocked(state, wsServerMessage{Type: "confirmed", SessionID: run.SessionID, RunID: run.ID, ConfirmationID: pending.ID})
+		s.runs.publishLocked(state, wsServerMessage{Type: "confirmed", SessionID: run.SessionID, RunID: run.ID, ConfirmationID: pending.ID, Approved: decision.Approved, Reason: decision.Reason})
 	}
 	if len(run.pending) == 0 && runActive(run) {
 		run.State = "running"
@@ -388,6 +393,9 @@ func (s *Server) confirmRun(sessionID, runID, confirmationID string, approved bo
 	pending := state.run.pending[confirmationID]
 	if pending == nil {
 		return &runAdmissionError{"stale_confirmation", "确认请求不存在或已经处理"}
+	}
+	if pending.ctx != nil && pending.ctx.Err() != nil || !pending.expiresAt.IsZero() && !time.Now().Before(pending.expiresAt) {
+		return &runAdmissionError{"stale_confirmation", "确认请求已取消或超时，操作未执行"}
 	}
 	decision := agent.ConfirmDecision{Approved: approved, Reason: reason}
 	if pending.ToolName == "ask_user_question" && approved {
@@ -635,7 +643,7 @@ func runHTTPError(w http.ResponseWriter, err error) {
 	var admission *runAdmissionError
 	if errors.As(err, &admission) {
 		code := http.StatusConflict
-		if admission.code == "invalid_prompt" || admission.code == "invalid_request_id" || admission.code == "invalid_answers" {
+		if admission.code == "invalid_prompt" || admission.code == "invalid_request_id" || admission.code == "invalid_answers" || admission.code == "invalid_channel" {
 			code = http.StatusBadRequest
 		}
 		if admission.code == "updating" {

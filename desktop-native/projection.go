@@ -62,6 +62,7 @@ type storedMessage struct {
 	Images     []messageImage `json:"images"`
 }
 type agentEvent struct {
+	Retry      *modelRetry    `json:"retry"`
 	DurationMS float64        `json:"duration_ms"`
 	Type       string         `json:"type"`
 	Text       string         `json:"text_delta"`
@@ -210,10 +211,17 @@ func (s *session) history(records []storedMessage) {
 	}
 }
 func (s *session) event(e agentEvent) {
+	switch e.Type {
+	case "text_delta", "thinking_delta", "tool_start", "turn_end", "context_usage", "error", "done":
+		s.ModelRetry = nil
+	}
 	if e.Usage != nil {
 		s.Usage = e.Usage
 	}
 	switch e.Type {
+	case "model_retry":
+		s.ModelRetry = e.Retry
+		s.removeWaiting()
 	case "text_delta", "thinking_delta":
 		kind := ""
 		if e.Type == "thinking_delta" {
@@ -326,6 +334,7 @@ func (s *session) reduce(e envelope) {
 		if !e.Reset && e.Seq < s.Seq {
 			return
 		}
+		s.ModelRetry = nil
 		s.history(e.Messages)
 		s.Run = e.Run
 		s.Seq = e.Seq
@@ -375,6 +384,7 @@ func (s *session) reduce(e envelope) {
 		}
 		s.Seq = max(s.Seq, e.Seq)
 		if s.runID() != e.RunID {
+			s.ModelRetry = nil
 			s.Run = &runInfo{ID: e.RunID, RequestID: e.RequestID, State: e.State, Prompt: e.Prompt}
 			if e.Prompt != "" {
 				s.Messages = append(s.Messages, &message{User: true, Text: e.Prompt, RunID: e.RunID})
@@ -395,6 +405,7 @@ func (s *session) reduce(e envelope) {
 				s.event(*e.Event)
 			}
 		case "confirmation":
+			s.ModelRetry = nil
 			if e.Confirmation != nil {
 				found := false
 				for _, p := range s.Confirmations {
@@ -437,6 +448,7 @@ func (s *session) reduce(e envelope) {
 	s.Running = s.Run.active()
 	s.Pending = len(s.Confirmations) > 0
 	if s.Run != nil && !s.Run.active() {
+		s.ModelRetry = nil
 		s.removeWaiting()
 		s.syncAnchors(s.Run.Anchors)
 		s.Confirmations = nil
@@ -460,6 +472,12 @@ func (s *session) statusText() string {
 		return "等待审批"
 	}
 	if s.Running {
+		if s.ModelRetry != nil {
+			if time.Now().UnixMilli() < s.ModelRetry.RetryAt {
+				return "等待重试"
+			}
+			return "正在重试"
+		}
 		return "生成中"
 	}
 	if s.Run != nil && s.Run.State == "failed" {

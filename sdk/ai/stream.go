@@ -15,6 +15,10 @@ type EventStart struct {
 
 func (EventStart) eventMarker() {}
 
+type EventRetry struct{ Retry ModelRetry }
+
+func (EventRetry) eventMarker() {}
+
 type EventTextStart struct {
 	ContentIndex int                    `json:"content_index"`
 	Partial      StreamAssistantMessage `json:"partial"`
