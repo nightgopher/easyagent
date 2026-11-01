@@ -231,6 +231,12 @@ func nativeCoreFixture(t *testing.T) (*preview, *httptest.Server, string, *atomi
 		last := object(messages[len(messages)-1])
 		text := displayText(last["content"])
 		w.Header().Set("Content-Type", "text/event-stream")
+		if str(last["role"]) != "tool" && strings.Contains(text, "fixture_host_work") {
+			chunk := map[string]any{"choices": []any{map[string]any{"index": 0, "delta": map[string]any{"tool_calls": []any{map[string]any{"index": 0, "id": "fixture-work", "type": "function", "function": map[string]any{"name": "host_work_search", "arguments": `{"view":"open"}`}}}}, "finish_reason": "tool_calls"}}}
+			encoded, _ := json.Marshal(chunk)
+			fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n\n", encoded)
+			return
+		}
 		if str(last["role"]) != "tool" && strings.Contains(text, "fixture_memory_") {
 			name, args := "memory_search", map[string]any{"query": "交付偏好"}
 			if strings.Contains(text, "fixture_memory_save") {

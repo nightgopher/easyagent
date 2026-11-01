@@ -1,12 +1,15 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
+	"github.com/nightgopher/easyagent/internal/hosttools"
 )
 
 type workView struct {
@@ -16,12 +19,13 @@ type workView struct {
 	RunError       string `json:"run_error,omitempty"`
 	Attention      string `json:"attention,omitempty"`
 	SessionMissing bool   `json:"session_missing"`
+	SessionLink    string `json:"session_link"`
 }
 
 // Runtime facts come from the run registry (restored from durable receipts on
 // startup), never from a model's free-text report. They do not end the work.
 func (s *Server) workView(item agentdata.WorkItem) workView {
-	v := workView{WorkItem: item, SessionMissing: !s.app.SessionManager().Exists(item.SessionID)}
+	v := workView{WorkItem: item, SessionMissing: !s.app.SessionManager().Exists(item.SessionID), SessionLink: hosttools.SessionLink(item.SessionID)}
 	s.runs.mu.Lock()
 	if state := s.runs.sessions[item.SessionID]; state != nil && state.run != nil {
 		v.RunID, v.RunState, v.RunError = state.run.ID, state.run.State, state.run.Error
@@ -115,17 +119,31 @@ func (s *Server) listWorkItems(w http.ResponseWriter, r *http.Request) {
 			*target = n
 		}
 	}
-	if limit < 1 || limit > 100 || offset < 0 || offset > 100000 || (view != "" && view != "all" && view != "open" && view != "attention") {
-		writeError(w, 400, "invalid work filter")
+	page, err := s.readWorkItems(r.Context(), query, view, q.Get("session_id"), limit, offset)
+	if err != nil {
+		agentDataError(w, err)
 		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(page)
+}
+
+type workPage struct {
+	Items   []workView `json:"items"`
+	HasMore bool       `json:"has_more"`
+	Offset  int        `json:"offset"`
+}
+
+func (s *Server) readWorkItems(ctx context.Context, query, view, sessionID string, limit, offset int) (workPage, error) {
+	if limit < 1 || limit > 100 || offset < 0 || offset > 100000 || (view != "" && view != "all" && view != "open" && view != "attention") {
+		return workPage{}, fmt.Errorf("invalid work filter")
 	}
 	items := []workView{}
 	matched, more := 0, false
 	for start := 0; start <= 100000; start += 100 {
-		batch, err := s.app.Agents().ListWork(r.Context(), query, q.Get("session_id"), 100, start)
+		batch, err := s.app.Agents().ListWork(ctx, query, sessionID, 100, start)
 		if err != nil {
-			agentDataError(w, err)
-			return
+			return workPage{}, err
 		}
 		for _, item := range batch {
 			v := s.workView(item)
@@ -146,6 +164,5 @@ func (s *Server) listWorkItems(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"items": items, "has_more": more, "offset": offset})
+	return workPage{items, more, offset}, nil
 }

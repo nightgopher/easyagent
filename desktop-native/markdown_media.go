@@ -162,6 +162,12 @@ func (a *preview) renderSessionMarkdown(c *ui.Context, d *markdownDocument, text
 		d.ready = false
 		ctx, b, sid, workspace := l.hostCtx, l.Client, s.RemoteID, s.Workspace
 		d.options.OnLink = func(href string) {
+			if strings.HasPrefix(strings.ToLower(href), "easyagent:") {
+				if a.current() == s && d.MediaScope == scope && ctx.Err() == nil {
+					a.openAgentLink(href)
+				}
+				return
+			}
 			if safeMarkdownLink(href) {
 				go mygo.Shell.OpenExternal(href)
 				return

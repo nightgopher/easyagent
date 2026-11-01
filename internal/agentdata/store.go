@@ -73,7 +73,13 @@ func (s *Store) open(ctx context.Context) (*sql.DB, error) {
 		return nil, err
 	}
 	defer func() { _ = root.Close() }()
-	f, err := root.OpenFile("agents.sqlite", os.O_CREATE|os.O_RDWR, 0600)
+	// Concurrent O_CREATE|O_NOFOLLOW calls can fail with ENOENT on macOS.
+	// Create exclusively, then open an existing file without the create flag.
+	// Both paths remain inside Root and preserve an existing database.
+	f, err := root.OpenFile("agents.sqlite", os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if errors.Is(err, os.ErrExist) {
+		f, err = root.OpenFile("agents.sqlite", os.O_RDWR, 0)
+	}
 	if err != nil {
 		return nil, err
 	}

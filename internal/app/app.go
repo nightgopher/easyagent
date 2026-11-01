@@ -29,6 +29,7 @@ type App struct {
 	cfgMu             sync.Mutex
 	cfg               config.Config
 	discoveryRevision uint64
+	workReader        func(context.Context, string, string, int) (any, error)
 	skillDirs         []string
 	sessionMgr        *sessionmgr.Manager
 	registry          *providers.Registry

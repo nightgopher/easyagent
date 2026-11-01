@@ -10,6 +10,7 @@ on:
     paths:
       - 'mobile-native/**'
       - 'scripts/check-android-ui.sh'
+      - 'scripts/prepare-android-emulator.sh'
       - 'internal/server/**'
       - '.github/workflows/android-ui.yml'
       - '!**/README*.md'
@@ -53,14 +54,6 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Free unused hosted-runner toolchains
-        run: |
-          # Some system images require their original userdata size even when
-          # disk-size requests less. API 31 needs over 7 GiB of free space.
-          # This job uses Java/Gradle/Android, not .NET or the CodeQL bundle.
-          df -h "$HOME"
-          sudo rm -rf /usr/share/dotnet "${RUNNER_TOOL_CACHE:?}/CodeQL"
-          df -h "$HOME"
       - name: Build APKs alongside emulator preparation
         run: |
           # Complete SDK writes before either Gradle or the emulator action uses it.
@@ -75,7 +68,7 @@ jobs:
           target: ${{ matrix.target }}
           # The Google APIs image defaults to a 6 GiB userdata partition plus
           # headroom, which can exceed a hosted runner's remaining disk after
-          # a cold build. Request 2 GiB where supported; the cleanup above also
+          # a cold build. Request 2 GiB where supported; the cleanup below also
           # covers images whose original userdata size is a larger minimum.
           disk-size: 2048M
           emulator-boot-timeout: 180
@@ -86,7 +79,7 @@ jobs:
           # cold Kotlin compilation can starve Pixel Launcher and trigger an
           # ANR dialog that covers the app throughout the instrumentation suite.
           pre-emulator-launch-script: |
-            timeout 900 bash -c 'until test -f "$RUNNER_TEMP/android-build.exit"; do sleep 1; done'; cat "$RUNNER_TEMP/android-build.log"; test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
+            bash ../scripts/prepare-android-emulator.sh
           script: |
             test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
             adb shell svc power stayon true
