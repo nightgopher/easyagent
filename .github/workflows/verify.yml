@@ -103,7 +103,9 @@ jobs:
   ios:
     needs: changes
     if: needs.changes.outputs.full == 'true'
-    runs-on: macos-15
+    # Swift tests and simulator cross-compilation do not need an arm64 host.
+    # Leave scarce Apple Silicon runners for actual native bundle execution.
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v7
         with:
@@ -127,6 +129,7 @@ jobs:
           xcodegen generate
           xcodebuild -project EasyAgent.xcodeproj -scheme EasyAgent \
             -destination 'generic/platform=iOS Simulator' \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY='' build | xcbeautify --quiet
 
   lint:
