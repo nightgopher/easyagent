@@ -80,7 +80,7 @@ func (a *preview) loadSettingsPage() {
 	case "experiments":
 		a.resource("computer", "/computer/settings")
 	case "mcp":
-		a.resource("mcp", "/mcp"+query(map[string]string{"workspace": s.Workspace}))
+		a.loadMCPStatus(false)
 	case "capabilities":
 		a.refreshSkillLists()
 	case "feishu":

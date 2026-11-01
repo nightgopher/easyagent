@@ -36,11 +36,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 	m := object(l.Data["mcp"])
 	workspace := s.Workspace
 	apply := func(v any) {
-		if a.Settings.Workspace == workspace {
-			l.Data["mcp"] = v
-		} else {
-			a.loadSettingsPage()
-		}
+		a.applyMCPStatus(workspace, v)
 	}
 	ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
 		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
@@ -604,6 +600,7 @@ func (a *preview) cancelMCPLogin() {
 	l.Loading["mcp-login"] = false
 }
 func (a *preview) cancelSettingsTransient() {
+	a.cancelMCPStatus()
 	a.Settings.HostTokenField.CancelFocus()
 	if a.Settings.Tab == "models" {
 		a.clearModelCheck()
