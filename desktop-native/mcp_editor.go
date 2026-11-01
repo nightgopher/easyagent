@@ -93,11 +93,7 @@ func (a *preview) saveMCPEditor() {
 	}
 	path := "/mcp/servers/" + pathSegment(entry.Name) + query(map[string]string{"workspace": workspace, "scope": scope})
 	a.operation("mcp-save", "PUT", path, entry.Config, func(v any) {
-		if s.Workspace == workspace {
-			l.Data["mcp"] = v
-		} else {
-			a.loadSettingsPage()
-		}
+		a.applyMCPStatus(workspace, v)
 		a.resetMCPEditor()
 		l.Notice = "MCP 配置已保存。"
 	})
