@@ -90,10 +90,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        if: ${{ hashFiles('mobile-native/gradlew') != '' }}
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Test, lint and build the Android client
         if: ${{ hashFiles('mobile-native/gradlew') != '' }}
         working-directory: mobile-native

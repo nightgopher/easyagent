@@ -34,10 +34,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Enable KVM access
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -61,11 +62,10 @@ jobs:
           script: |
             timeout 900 bash -c 'until test -f "$RUNNER_TEMP/android-build.exit"; do sleep 1; done'; cat "$RUNNER_TEMP/android-build.log"; test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
             result=0; bash ../scripts/check-android-ui.sh --test || result=$?; adb pull /data/local/tmp/easyagent-ui app/build/qa || true; exit "$result"
-      - name: Stop Gradle and preserve build diagnostics
+      - name: Preserve background build diagnostics
         if: always()
         run: |
           cat "$RUNNER_TEMP/android-build.log" || true
-          mobile-native/gradlew --stop
       - uses: actions/upload-artifact@v7
         if: always()
         with:

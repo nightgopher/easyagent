@@ -97,10 +97,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            mobile-native/**/*.gradle.kts
-            mobile-native/gradle/wrapper/gradle-wrapper.properties
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
+        with:
+          # Persist incremental build results for consecutive PR pushes; tag
+          # builds only read caches, since their immutable refs are not reused.
+          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
       - name: Install the pinned Android build tools
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'

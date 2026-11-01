@@ -42,7 +42,7 @@ git diff --check
 
 同一个 PR 的新推送取消旧运行；main 每次推送使用独立并发组，不取消较早提交。只有文档白名单内的修改（`docs/`、README、根目录 AGENTS/CHANGELOG/CONTRIBUTING）跳过耗时任务，仍产生成功的 `verify` 必需检查，避免路径过滤让 PR 永久等待。运行时 Markdown 提示词及内嵌 Web 文件照常检查；无法确定变更范围时运行全部检查。每周扫描及发布调用始终完整执行。
 
-Go 与 Gradle 优先使用 setup action 的缓存，Go 单测和 race 编译对象分别保存。Node 测试没有 npm 依赖，不创建包缓存；不缓存 Android AVD 或安装包，避免挤占仓库的 10 GB 配额。XcodeGen 使用固定版本及校验和的预编译包；govulncheck 上游没有预编译发行资产，只在小型工具缓存缺失时编译固定版本。
+Go 使用 setup-go 缓存，单测和 race 编译对象分别保存；Gradle 使用官方 setup-gradle 保存增量构建结果、去重依赖并清理未使用缓存，正式 tag 只读缓存。Node 测试没有 npm 依赖，不创建包缓存；不缓存 Android AVD 或安装包，避免挤占仓库的 10 GB 配额。XcodeGen 使用固定版本及校验和的预编译包；govulncheck 上游没有预编译发行资产，只在小型工具缓存缺失时编译固定版本。
 
 本地只调试桌面 App 时可运行 `(cd desktop-native && go run ./tools/build -sign - -skip-dmg)`；需要验证完整安装包时仍使用上面的 `build-native.sh`。电脑操作 Helper 按源文件、架构、Swift 编译器和 SDK 复用编译结果，版本信息、签名与安装包仍重新生成。
 
