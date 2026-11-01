@@ -65,6 +65,11 @@ jobs:
           system-image-api-level: ${{ matrix.api }}
           arch: x86_64
           target: ${{ matrix.target }}
+          # The Google APIs image defaults to a 6 GiB userdata partition plus
+          # headroom, which can exceed a hosted runner's remaining disk after
+          # a cold build. The fixture APKs and update downloads fit in 2 GiB.
+          disk-size: 2048M
+          emulator-boot-timeout: 180
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader -feature -Vulkan
           disable-animations: true
           working-directory: mobile-native
