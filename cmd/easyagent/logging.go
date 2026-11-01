@@ -10,6 +10,10 @@ import (
 	"github.com/nightgopher/easyagent/sdk/config"
 )
 
+// logFilePerm keeps diagnostics private to the user (gosec G302); the log can
+// carry prompt fragments and tool errors, so it must not be group/world read.
+const logFilePerm = 0o600
+
 // uiModes run a full-screen (AltScreen) TUI that owns the terminal. Log output
 // written to stderr while such a UI is active is interleaved with redraws and
 // corrupts the display, so those modes route diagnostics to a log file instead.
@@ -30,26 +34,38 @@ func setupLogging(mode string) (func(), error) {
 	}
 
 	logDir := filepath.Join(config.HomeDir(), "logs")
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
+	if err := os.MkdirAll(logDir, 0o700); err != nil {
 		return func() {}, fmt.Errorf("create log dir: %w", err)
 	}
 
 	logPath := filepath.Join(logDir, "easyagent.log")
 	oldPath := logPath + ".old"
 	if fileExists(oldPath) {
-		os.Remove(oldPath)
+		if err := os.Remove(oldPath); err != nil {
+			return func() {}, fmt.Errorf("rotate old log: %w", err)
+		}
 	}
 	if fileExists(logPath) {
-		os.Rename(logPath, oldPath)
+		if err := os.Rename(logPath, oldPath); err != nil {
+			return func() {}, fmt.Errorf("rotate log: %w", err)
+		}
 	}
 
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	// Opening through os.Root with a literal file name confines symlink
+	// traversal and keeps gosec's file-inclusion rule (G304) satisfied.
+	root, err := os.OpenRoot(logDir)
 	if err != nil {
+		return func() {}, fmt.Errorf("open log dir: %w", err)
+	}
+	f, err := root.OpenFile("easyagent.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, logFilePerm)
+	if err != nil {
+		_ = root.Close()
 		return func() {}, fmt.Errorf("open log file: %w", err)
 	}
 
 	cleanup := sync.OnceFunc(func() {
-		f.Close()
+		_ = f.Close()
+		_ = root.Close()
 	})
 	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	return cleanup, nil
