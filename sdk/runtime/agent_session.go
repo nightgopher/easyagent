@@ -82,6 +82,31 @@ type AgentSession struct {
 	confirmEnabled  atomic.Bool
 	accessModeSaved bool
 	ext             SessionExt
+
+	// seenSkillDiagnostics dedupes skill load warnings across agent rebuilds
+	// within this session: switching models or refreshing tools reloads skills
+	// and would otherwise repeat identical diagnostics each time.
+	seenSkillDiagnostics map[string]struct{}
+}
+
+var skillDiagnosticsMu sync.Mutex
+
+// logSkillDiagnosticsOnce warns about a skill load problem once per session
+// even when skills are reloaded repeatedly (model switches, tool refreshes).
+func logSkillDiagnosticsOnce(s *AgentSession, diags []skill.Diagnostic) {
+	skillDiagnosticsMu.Lock()
+	defer skillDiagnosticsMu.Unlock()
+	if s.seenSkillDiagnostics == nil {
+		s.seenSkillDiagnostics = make(map[string]struct{})
+	}
+	for _, diag := range diags {
+		key := string(diag.Code) + "\x00" + diag.Path + "\x00" + diag.Message
+		if _, seen := s.seenSkillDiagnostics[key]; seen {
+			continue
+		}
+		s.seenSkillDiagnostics[key] = struct{}{}
+		slog.Warn("skill diagnostic", "code", diag.Code, "message", diag.Message, "path", diag.Path)
+	}
 }
 
 // NewAgentSession creates a new AgentSession.
@@ -643,8 +668,8 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 				skills = append(skills, loaded)
 			}
 		}
-		for _, diag := range result.Diagnostics {
-			slog.Warn("skill diagnostic", "code", diag.Code, "message", diag.Message, "path", diag.Path)
+		if len(result.Diagnostics) > 0 {
+			logSkillDiagnosticsOnce(s, result.Diagnostics)
 		}
 	}
 
