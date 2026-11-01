@@ -75,3 +75,21 @@ func (s *Server) businessAgents(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.NewEncoder(w).Encode(saved)
 }
+
+func (s *Server) ensureSteward(w http.ResponseWriter, r *http.Request) {
+	var input struct{}
+	if !decodeAgentJSON(w, r, &input) {
+		return
+	}
+	item, err := s.app.Agents().EnsureSteward(r.Context())
+	if err == nil && item.Disabled {
+		err = agentdata.ErrDisabled
+	}
+	if err != nil {
+		agentDataError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(item)
+}

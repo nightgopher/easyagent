@@ -8,10 +8,12 @@ import (
 	"strings"
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
+	"github.com/nightgopher/easyagent/internal/hosttools"
 	"github.com/nightgopher/easyagent/internal/worktools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/sessionmgr"
 	"github.com/nightgopher/easyagent/sdk/skill"
 	"github.com/nightgopher/easyagent/sdk/tools"
 )
@@ -20,6 +22,8 @@ type Application struct {
 	Definition agentdata.Agent
 	Config     config.Config
 	Store      *agentdata.Store
+	Sessions   *sessionmgr.Manager
+	WorkReader hosttools.WorkReader
 }
 
 func (a Application) NewSessionExt() runtime.SessionExt { return nil }
@@ -57,6 +61,9 @@ func (a Application) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 		for _, action := range []string{"search", "save", "forget"} {
 			list = append(list, memoryTool{store: a.Store, agentID: a.Definition.ID, workspace: o.Workspace, sessionID: o.SessionID, action: action})
 		}
+	}
+	if a.Store != nil {
+		list = append(list, hosttools.Tools(a.Store, a.Sessions, a.Definition.ID, a.WorkReader)...)
 	}
 	list = append(list, o.ExtensionTools...)
 	tracked := false
