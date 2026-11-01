@@ -15,7 +15,7 @@ func (s *Server) chat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	run, _, err := s.startRun(req.SessionID, req.Prompt, req.RequestID, req.Inputs)
+	run, _, err := s.startChannelRun(req.SessionID, req.Prompt, req.RequestID, req.Channel, req.Inputs)
 	if err != nil {
 		runHTTPError(w, err)
 		return
@@ -36,7 +36,7 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
-	run, duplicate, err := s.startRun(req.SessionID, req.Prompt, req.RequestID, req.Inputs)
+	run, duplicate, err := s.startChannelRun(req.SessionID, req.Prompt, req.RequestID, req.Channel, req.Inputs)
 	if err != nil {
 		runHTTPError(w, err)
 		return
@@ -71,6 +71,10 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 			writeRunSSE(w, string(event.Type), event)
 		}
 	}
+	// Confirmation may precede subscription, or still be pending on a retry.
+	for _, pending := range snapshot.PendingConfirmations {
+		writeRunSSE(w, "confirmation", pending)
+	}
 	// A completed duplicate is replayed above; no new execution or subscription wait.
 	if snapshot.Run != nil && !runActive(snapshot.Run) {
 		return
@@ -84,10 +88,13 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 			return
 		case data := <-observer.outgoing:
 			var event struct {
-				Type         string                 `json:"type"`
-				Event        agent.AgentStreamEvent `json:"event"`
-				State        string                 `json:"state"`
-				Confirmation *pendingConfirmation   `json:"confirmation"`
+				Type           string                 `json:"type"`
+				Event          agent.AgentStreamEvent `json:"event"`
+				State          string                 `json:"state"`
+				Confirmation   *pendingConfirmation   `json:"confirmation"`
+				ConfirmationID string                 `json:"confirmation_id"`
+				Approved       bool                   `json:"approved"`
+				Reason         string                 `json:"reason"`
 			}
 			if json.Unmarshal(data, &event) != nil {
 				continue
@@ -97,6 +104,9 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 			}
 			if event.Type == "confirmation" {
 				writeRunSSE(w, "confirmation", event.Confirmation)
+			}
+			if event.Type == "confirmed" {
+				writeRunSSE(w, "confirmed", map[string]any{"confirmation_id": event.ConfirmationID, "approved": event.Approved, "reason": event.Reason})
 			}
 			if event.Type == "status" && event.State != "running" && event.State != "waiting_confirmation" {
 				return

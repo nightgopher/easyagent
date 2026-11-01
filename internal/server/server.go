@@ -106,6 +106,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 // ChatRequest is the request body for chat endpoints.
 type ChatRequest struct {
+	Channel   string       `json:"channel,omitempty"`
 	Inputs    promptInputs `json:"inputs,omitempty"`
 	Prompt    string       `json:"prompt"`
 	SessionID string       `json:"session_id,omitempty"`
@@ -194,6 +195,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /sessions/{id}/background-tasks/{task}", s.getBackgroundTask)
 	restMux.HandleFunc("POST /sessions/{id}/background-tasks/{task}/stop", s.stopBackgroundTask)
 	restMux.HandleFunc("POST /sessions/{id}/permissions", s.setSessionPermissions)
+	restMux.HandleFunc("GET /settings/permissions", s.getPermissionSettings)
+	restMux.HandleFunc("POST /settings/permissions", s.setPermissionSettings)
 	restMux.HandleFunc("GET /sessions/{id}/run", s.getRun)
 	restMux.HandleFunc("POST /sessions/{id}/run/cancel", s.cancelRunHTTP)
 	restMux.HandleFunc("POST /sessions/{id}/run/continue", s.continueRunHTTP)

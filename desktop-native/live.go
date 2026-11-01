@@ -61,6 +61,8 @@ type liveState struct {
 	LastFileState                                                          string
 	LastDrafts                                                             string
 	LastSave                                                               time.Time
+	NextSessionRefresh                                                     time.Time
+	SelectAfterRefresh                                                     string
 	Rename, DeleteSession, NewWorkspace                                    bool
 	TitleInput                                                             string
 	ResourceTab                                                            string
@@ -222,6 +224,9 @@ func (a *preview) liveTick() bool {
 		}
 	}
 	changed = a.tickSessionSearch() || changed
+	if l.Connected && l.Client != nil && !l.NextSessionRefresh.IsZero() && time.Now().After(l.NextSessionRefresh) && !l.Loading["session-index"] {
+		a.refreshLiveSessions("")
+	}
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
@@ -361,6 +366,10 @@ func (a *preview) connectLive() {
 		go voice.Stop()
 	}
 	l.epoch++
+	l.SelectAfterRefresh = ""
+	l.NextSessionRefresh = time.Time{}
+	delete(l.Data, "permissions")
+	delete(l.ResourceErrors, "permissions")
 	for key := range l.Data {
 		if strings.HasPrefix(key, "business-") || strings.HasPrefix(key, "knowledge-") || key == "agent-memories" {
 			delete(l.Data, key)
@@ -523,18 +532,27 @@ func (a *preview) refreshModels() {
 }
 func (a *preview) refreshLiveSessions(prefer string) {
 	l := a.Live
+	l.NextSessionRefresh = time.Now().Add(5 * time.Second)
+	if prefer != "" {
+		l.SelectAfterRefresh = prefer
+	}
+	if l.Loading["session-index"] {
+		return
+	}
 	l.Versions["sessions"]++
 	version := l.Versions["sessions"]
-	a.call("GET", "/sessions", nil, func(v any) {
+	a.operation("session-index", "GET", "/sessions", nil, func(v any) {
 		if version != l.Versions["sessions"] {
 			return
 		}
+		prefer = l.SelectAfterRefresh
 		old := map[string]*session{}
 		for _, s := range a.Sessions {
 			old[s.RemoteID] = s
 		}
 		current := a.current().RemoteID
 		var next []*session
+		var active []*session
 		for _, item := range list(v) {
 			m := object(item)
 			id := str(m["id"])
@@ -561,8 +579,14 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			s.Archived = boolean(m["archived"])
 			s.Pinned = boolean(m["pinned"])
 			next = append(next, s)
+			if state := str(m["run_state"]); (state == "running" || state == "waiting_confirmation") && (s.Seq == 0 || !s.Running) {
+				active = append(active, s)
+			}
 		}
 		sort.SliceStable(next, func(i, j int) bool { return next[i].Pinned && !next[j].Pinned })
+		if local := old[""]; local != nil && current == "" && prefer == "" {
+			next = append([]*session{local}, next...)
+		}
 		if len(next) == 0 {
 			next = []*session{old[""]}
 			if next[0] == nil {
@@ -571,6 +595,9 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			}
 		}
 		a.Sessions = next
+		for _, s := range active {
+			a.subscribe(s)
+		}
 		if strings.TrimSpace(a.Search) != "" {
 			a.queueSessionSearch()
 		}
@@ -583,6 +610,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 		for _, s := range next {
 			if prefer != "" && s.RemoteID == prefer {
 				chosen = s
+				l.SelectAfterRefresh = ""
 			}
 		}
 		changed := a.Active != chosen.ID

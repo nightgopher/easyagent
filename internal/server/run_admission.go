@@ -35,6 +35,13 @@ func retryRun(run *sessionRun, sessionID, prompt string, inputs promptInputs) (*
 }
 
 func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptInputs) (run *sessionRun, duplicate bool, err error) {
+	return s.startChannelRun(sessionID, prompt, requestID, "", values...)
+}
+
+func (s *Server) startChannelRun(sessionID, prompt, requestID, channel string, values ...promptInputs) (run *sessionRun, duplicate bool, err error) {
+	if channel != "" && channel != "feishu" {
+		return nil, false, &runAdmissionError{"invalid_channel", "unknown session channel"}
+	}
 	inputs := promptInputs{}
 	if len(values) > 0 {
 		inputs = values[0]
@@ -137,7 +144,7 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 			release()
 		}
 	}()
-	sess, err := s.resolveSession(ctx, sessionID)
+	sess, err := s.resolveChannelSession(ctx, sessionID, channel)
 	if err != nil {
 		return nil, false, err
 	}
@@ -163,7 +170,7 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 	}
 	// Keep the runtime's busy guard and MCP tool lease as the authoritative
 	// execution boundary; the reservation only protects server-side mutations.
-	if err := sess.TrySetConfirmFunc(s.confirmRunTool); err != nil {
+	if err := sess.TrySetInitialAccessMode(s.confirmRunTool, channelAccessMode(s.app.Config(), channel)); err != nil {
 		return nil, false, admissionRuntimeError(err)
 	}
 	baseEntryID, err := sess.Session().Storage().GetLeaf(ctx)

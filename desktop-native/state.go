@@ -26,6 +26,7 @@ type message struct {
 }
 type nativePlanEntry struct{ Content, Status string }
 type session struct {
+	ModelRetry                                   *modelRetry
 	WaitingSecond                                int64
 	FileReferences                               []fileReference
 	MentionIndex                                 int

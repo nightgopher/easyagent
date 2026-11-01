@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -17,7 +18,8 @@ type HTTPStatusError struct {
 	// RetryAfter 来自 Retry-After 的秒数或 HTTP-date，0 表示未提供或已过期。
 	RetryAfter time.Duration
 	// Detail 是单行截断的正文摘录，仅作简短原因展示。
-	Detail string
+	Detail    string
+	permanent bool
 }
 
 func (e *HTTPStatusError) Error() string {
@@ -27,9 +29,9 @@ func (e *HTTPStatusError) Error() string {
 	return fmt.Sprintf("API error %d: %s", e.StatusCode, e.Detail)
 }
 
-// Retryable 报告该状态码是否属于瞬态故障（429 与 5xx），值得重试。
+// Retryable excludes explicit quota/billing failures even when reported as 429.
 func (e *HTTPStatusError) Retryable() bool {
-	return e.StatusCode == http.StatusTooManyRequests || (e.StatusCode >= 500 && e.StatusCode <= 599)
+	return !e.permanent && (e.StatusCode == http.StatusTooManyRequests || (e.StatusCode >= 500 && e.StatusCode <= 599))
 }
 
 // NewHTTPStatusError 从 HTTP 响应构造结构化状态码错误。
@@ -39,7 +41,35 @@ func NewHTTPStatusError(statusCode int, retryAfter, body string) *HTTPStatusErro
 		StatusCode: statusCode,
 		RetryAfter: parseRetryAfter(retryAfter),
 		Detail:     truncateDetail(body),
+		permanent:  permanentModelError(body),
 	}
+}
+
+func permanentModelError(body string) bool {
+	var payload struct {
+		Error struct{ Code, Type string }
+	}
+	if json.Unmarshal([]byte(body), &payload) != nil {
+		return false
+	}
+	for _, code := range []string{payload.Error.Code, payload.Error.Type} {
+		switch strings.ToLower(code) {
+		case "insufficient_quota", "billing_hard_limit_reached", "billing_not_active", "credit_balance_too_low":
+			return true
+		}
+	}
+	return false
+}
+
+// ModelRetry describes a retry of the current model request, never a tool replay.
+// RetryAt is a Unix millisecond timestamp; no upstream response body is exposed.
+type ModelRetry struct {
+	Attempt     int    `json:"attempt"`
+	MaxAttempts int    `json:"max_attempts"`
+	DelayMS     int64  `json:"delay_ms"`
+	RetryAt     int64  `json:"retry_at"`
+	StatusCode  int    `json:"status_code,omitempty"`
+	Reason      string `json:"reason"`
 }
 
 func parseRetryAfter(v string) time.Duration {

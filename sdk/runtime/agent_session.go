@@ -76,11 +76,12 @@ type AgentSession struct {
 	deps              Dependencies
 	skillDirs         []string
 	application       Application
-	confirmFunc       agent.ConfirmFunc // 可选：危险工具执行前的确认回调（interactive 注入，serve/feishu 留空=放行）
+	confirmFunc       agent.ConfirmFunc // Installed by the interactive or server entrypoint.
 	// confirmEnabled 控制已注入回调的生效状态（/confirm on|off 运行时切换；
 	// auto_approve/-y 只是它的初始值）。回调本身始终包装经此开关。
-	confirmEnabled atomic.Bool
-	ext            SessionExt
+	confirmEnabled  atomic.Bool
+	accessModeSaved bool
+	ext             SessionExt
 }
 
 // NewAgentSession creates a new AgentSession.
@@ -96,11 +97,6 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 	}
 
 	s.application = deps.Application
-	if opts.Config.AutoApprove {
-		s.confirmFunc = func(context.Context, agent.ConfirmationRequest) agent.ConfirmDecision {
-			return agent.ConfirmDecision{Approved: true, Reason: "explicit auto-approve mode"}
-		}
-	}
 
 	// Create per-session extension (holds application-specific state like profile/goal)
 	if deps.Application != nil {
@@ -138,6 +134,31 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 			return nil, fmt.Errorf("open new session: %w", err)
 		}
 		slog.Info("created new session", "id", s.sessionID)
+	}
+
+	mode, err := s.sessionMgr.LoadAccessMode(s.sessionID)
+	if err != nil {
+		_ = s.Close()
+		return nil, fmt.Errorf("load session permissions: %w", err)
+	}
+	s.accessModeSaved = mode != ""
+	if mode == "" {
+		mode = opts.Config.InitialAccessMode()
+		if opts.SessionID == "" {
+			if err := s.sessionMgr.SaveAccessMode(s.sessionID, mode); err != nil {
+				_ = s.Close()
+				return nil, fmt.Errorf("save session permissions: %w", err)
+			}
+			s.accessModeSaved = true
+		}
+	}
+	if mode == "full" {
+		s.confirmFunc = func(_ context.Context, req agent.ConfirmationRequest) agent.ConfirmDecision {
+			if req.RequiresApproval || req.ForceConfirmation {
+				return agent.ConfirmDecision{Reason: "此操作需要交互审批通道"}
+			}
+			return agent.ConfirmDecision{Approved: true, Reason: "explicit full access mode"}
+		}
 	}
 
 	choice, err := s.sessionMgr.LoadModel(s.sessionID)
@@ -787,7 +808,7 @@ func toolAllowed(name string, allowed, blocked []string) bool {
 }
 
 // SetConfirmFunc 注入危险工具执行前的确认回调。
-// 供交互式入口（chat TUI）调用以启用确认；serve/feishu 等单向流入口不调用，保持默认放行。
+// TUI and server runs install their respective confirmation transport here.
 // 在首次 PromptStream 之前调用即可生效；若 agent 已构建则会触发重建。
 func (s *AgentSession) SetConfirmFunc(fn agent.ConfirmFunc) {
 	if err := s.TrySetConfirmFunc(fn); err != nil {
@@ -797,21 +818,35 @@ func (s *AgentSession) SetConfirmFunc(fn agent.ConfirmFunc) {
 
 // TrySetConfirmFunc refuses to replace an active run's agent or approval owner.
 func (s *AgentSession) TrySetConfirmFunc(fn agent.ConfirmFunc) error {
-	return s.trySetConfirmFunc(fn, nil)
+	return s.trySetConfirmFunc(fn, nil, false)
 }
 
 // TrySetAccessMode changes the confirmation owner and mode atomically while idle.
 func (s *AgentSession) TrySetAccessMode(fn agent.ConfirmFunc, ask bool) error {
-	return s.trySetConfirmFunc(fn, &ask)
+	return s.trySetConfirmFunc(fn, &ask, false)
 }
 
-func (s *AgentSession) trySetConfirmFunc(fn agent.ConfirmFunc, ask *bool) error {
+// TrySetInitialAccessMode adopts a channel default for legacy sessions only.
+// Saved defaults and explicit session choices always win.
+func (s *AgentSession) TrySetInitialAccessMode(fn agent.ConfirmFunc, mode string) error {
+	if !config.ValidAccessMode(mode) {
+		return fmt.Errorf("access mode must be ask or full")
+	}
+	ask := mode == "ask"
+	return s.trySetConfirmFunc(fn, &ask, true)
+}
+
+func (s *AgentSession) trySetConfirmFunc(fn agent.ConfirmFunc, ask *bool, initial bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.busyLocked() {
 		return agent.ErrAgentBusy
 	}
+	if initial && s.accessModeSaved {
+		ask = nil
+	}
 	previous, enabled := s.confirmFunc, s.confirmEnabled.Load()
+	previousAgent, previousVersion := s.agent, s.toolVersion
 	wasUnset := previous == nil
 	s.confirmFunc = fn
 	if wasUnset && fn != nil {
@@ -829,6 +864,21 @@ func (s *AgentSession) trySetConfirmFunc(fn agent.ConfirmFunc, ask *bool) error 
 			return err
 		}
 	}
+	if ask != nil && s.sessionMgr != nil {
+		mode := "full"
+		if *ask {
+			mode = "ask"
+		}
+		if err := s.sessionMgr.SaveAccessMode(s.sessionID, mode); err != nil {
+			s.confirmFunc = previous
+			s.confirmEnabled.Store(enabled)
+			s.agent, s.toolVersion = previousAgent, previousVersion
+			return err
+		}
+	}
+	if ask != nil {
+		s.accessModeSaved = true
+	}
 	return nil
 }
 
@@ -841,7 +891,7 @@ func (s *AgentSession) IsBusy() bool {
 
 // wrapConfirm lets /confirm off skip ordinary tool prompts. MCP tools requiring
 // approval still use the callback unless auto-approval was explicitly configured.
-// 回调为空（serve/feishu）返回 nil，保持引擎默认放行语义。
+// A nil callback retains the engine's noninteractive behavior.
 func (s *AgentSession) wrapConfirm(fn agent.ConfirmFunc) agent.ConfirmFunc {
 	if fn == nil {
 		return nil
@@ -856,11 +906,22 @@ func (s *AgentSession) wrapConfirm(fn agent.ConfirmFunc) agent.ConfirmFunc {
 
 // SetConfirmEnabled 运行时切换确认开关（/confirm on|off）。
 func (s *AgentSession) SetConfirmEnabled(enabled bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.confirmFunc == nil {
 		return // 从未注入回调：本来就没确认可言
 	}
+	if s.sessionMgr != nil {
+		mode := "full"
+		if enabled {
+			mode = "ask"
+		}
+		if err := s.sessionMgr.SaveAccessMode(s.sessionID, mode); err != nil {
+			slog.Warn("session permissions unchanged", "error", err)
+			return
+		}
+	}
+	s.accessModeSaved = true
 	s.confirmEnabled.Store(enabled)
 }
 

@@ -9,14 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestModelRetryBackoff：500ms 起指数退避，封顶 8s。
+// TestModelRetryBackoff：5s 起指数退避，封顶 30s。
 func TestModelRetryBackoff(t *testing.T) {
-	assert.Equal(t, 500*time.Millisecond, modelRetryBackoff(1))
-	assert.Equal(t, time.Second, modelRetryBackoff(2))
-	assert.Equal(t, 2*time.Second, modelRetryBackoff(3))
-	assert.Equal(t, 4*time.Second, modelRetryBackoff(4))
-	assert.Equal(t, 8*time.Second, modelRetryBackoff(5))
-	assert.Equal(t, 8*time.Second, modelRetryBackoff(50))
+	assert.Equal(t, 5*time.Second, modelRetryBackoff(1))
+	assert.Equal(t, 10*time.Second, modelRetryBackoff(2))
+	assert.Equal(t, 20*time.Second, modelRetryBackoff(3))
+	assert.Equal(t, 30*time.Second, modelRetryBackoff(4))
+	assert.Equal(t, 30*time.Second, modelRetryBackoff(50))
 }
 
 // TestWaitModelRetry：有 Retry-After 时遵守（封顶），否则指数退避；ctx 取消立即返回。

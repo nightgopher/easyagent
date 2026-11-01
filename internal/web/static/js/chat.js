@@ -43,7 +43,7 @@ export class ChatPanel {
     document.getElementById('command-result-close').onclick = () => { document.getElementById('command-result').hidden = true; this.input.focus(); };
     this.stopBtn.addEventListener('click', () => {
       if (!this.ws.sendCancel(this.state.currentSessionId)) this._notice('连接已断开，重新连接后可停止任务。');
-      else this.status.textContent = '正在停止…';
+      else { this._setModelRetry(null); this.status.textContent = '正在停止…'; }
     });
     this.messageList.addEventListener('scroll', () => {
       this.follow = this.messageList.scrollHeight - this.messageList.scrollTop - this.messageList.clientHeight < 80;
@@ -65,19 +65,25 @@ export class ChatPanel {
     this.ws.on('replay',data=>{this._runState(data);if(data.session_id===this.state.currentSessionId)this._confirmations(data.pending_confirmations || []);});
     this.ws.on('confirmation',data=>{
       this.busy.add(data.session_id);
-      if(data.session_id===this.state.currentSessionId){this._showConfirmation(data.confirmation);this.status.textContent='等待你的确认';}
+      if(data.session_id===this.state.currentSessionId){this._setModelRetry(null);this._showConfirmation(data.confirmation);this.status.textContent='等待你的确认';}
     });
     this.ws.on('close', () => {
       this.views.clear(); this._updateButtons();
       this._notice('连接已断开，正在重连。草稿已保留；任务仍在服务端运行，重连后会恢复输出。');
     });
     this.streamHandlers = {
+      model_retry: event => this._setModelRetry(event.retry),
+      context_usage: () => this._setModelRetry(null),
+      thinking_delta: () => this._setModelRetry(null),
+      turn_end: () => this._setModelRetry(null),
       text_delta: event => {
+        this._setModelRetry(null);
         if (!this._currentStreamEl) this._startAssistantStream();
         this._currentStreamText += event.text_delta || '';
         this._scheduleStreamRender();
       },
       tool_start: event => {
+        this._setModelRetry(null);
         if (!this._currentStreamEl) this._startAssistantStream();
         this._addToolCall(event.tool_call_id, event.tool_name, 'running', event.tool_args);
       },
@@ -106,14 +112,17 @@ export class ChatPanel {
     });
     this.ws.on('status', data => {
       if (data.streaming) this.busy.add(data.session_id); else this.busy.delete(data.session_id);
-      if (data.session_id === this.state.currentSessionId) this.state.streaming = !!data.streaming;
+      if (data.session_id === this.state.currentSessionId) {
+        this.state.streaming = !!data.streaming;
+        if (!data.streaming) this._setModelRetry(null);
+      }
       this._updateButtons();
       if(data.session_id===this.state.currentSessionId && data.state!=='waiting_confirmation') this._confirmations([]);
     });
   }
   async selectSession(id) {
     if (this.visibleSession && this.busy.has(this.visibleSession)) {
-      this.views.set(this.visibleSession, {nodes:[...this.messageList.childNodes], streamEl:this._currentStreamEl, text:this._currentStreamText, tools:this._currentToolCalls, events:[]});
+      this.views.set(this.visibleSession, {nodes:[...this.messageList.childNodes], streamEl:this._currentStreamEl, text:this._currentStreamText, tools:this._currentToolCalls, retry:this.modelRetry, events:[]});
     }
     if (this.visibleSession) this.positions.set(this.visibleSession, {top:this.messageList.scrollTop, follow:this.follow});
     this.commandMenu.close(); document.getElementById('command-result').hidden = true;
@@ -125,9 +134,11 @@ export class ChatPanel {
       this.show();
       const saved = this.views.get(id);
       if (saved) {
+        this._setModelRetry(saved.retry);
         this.messageList.replaceChildren(...saved.nodes); this._currentStreamEl = saved.streamEl; this._currentStreamText = saved.text; this._currentToolCalls = saved.tools;
         this.views.delete(id);
         for (const {type,event} of saved.events) this.streamHandlers[type](event);
+        this._updateButtons();
         this._scrollToBottom();
       } else await this.loadHistory(id);
     } else this.hide();
@@ -140,6 +151,7 @@ export class ChatPanel {
   show() { this.emptyState.hidden = true; this.messageList.hidden = false; this.panel.classList.add('has-session'); }
   hide() { this.emptyState.hidden = false; this.messageList.hidden = true; this.panel.classList.remove('has-session'); }
   clear() {
+    this._setModelRetry(null);
     this.messageList.replaceChildren(); this._currentStreamEl = null; this._currentStreamText = '';
     this._currentToolCalls = {}; this.follow = true; this.jump.hidden = true;
   }
@@ -220,7 +232,7 @@ export class ChatPanel {
   _runState(data) {
     const active=['running','waiting_confirmation'].includes(data.run?.state);
     if(active)this.busy.add(data.session_id);else this.busy.delete(data.session_id);
-    if(data.session_id===this.state.currentSessionId)this.state.streaming=active;
+    if(data.session_id===this.state.currentSessionId){this.state.streaming=active;if(!active)this._setModelRetry(null);}
     this._updateButtons();
   }
   _snapshot(data) {
@@ -371,6 +383,7 @@ export class ChatPanel {
     });
   }
   _finalizeStream(finalMessage) {
+    this._setModelRetry(null);
     if(this.renderFrame){cancelAnimationFrame(this.renderFrame);this.renderFrame=null;}
     if (this._currentStreamEl) {
       const text = finalMessage?.text || this._currentStreamText || '';
@@ -381,6 +394,25 @@ export class ChatPanel {
     this.state.streaming = false; this._updateButtons(); this._scrollToBottom();
   }
   _finalizeWithError(error) { this._notice(error || '任务失败，请重试。'); this._finalizeStream(); }
+  _setModelRetry(retry) {
+    clearInterval(this.retryTimer); this.retryTimer = null;
+    this.modelRetry = retry || null;
+    if (retry?.retry_at > Date.now()) {
+      this.retryTimer = setInterval(() => {
+        this._updateButtons();
+        if (!this.modelRetry || this.modelRetry.retry_at <= Date.now()) {
+          clearInterval(this.retryTimer); this.retryTimer = null;
+        }
+      }, 1000);
+    }
+  }
+  _retryLabel(now = Date.now()) {
+    const retry = this.modelRetry;
+    if (!retry) return '';
+    const seconds = Math.max(0, Math.ceil((retry.retry_at - now) / 1000));
+    const reason = retry.reason === 'rate_limit' ? '模型暂时限流' : retry.reason === 'network' ? '模型连接暂时中断' : '模型服务暂时不可用';
+    return seconds ? `${reason}，${seconds} 秒后重试（${retry.attempt}/${retry.max_attempts}）` : `正在重新请求模型（${retry.attempt}/${retry.max_attempts}）`;
+  }
   _updateButtons() {
     this.input.disabled = !!this.state.restoringSession;
     document.getElementById('command-trigger').disabled = !!this.state.restoringSession;
@@ -389,7 +421,7 @@ export class ChatPanel {
     this.sendBtn.disabled = this.state.restoringSession || !this.input.value.trim() || this.commandRunning || this.creating || this.loading || this.state.modelChanging || this.state.modelInfoLoading || (!isCommand && (!this.ws.connected || this.busy.has(this.state.currentSessionId) || this.pendingSends?.has(this.state.currentSessionId)));
     this.stopBtn.disabled = !this.ws.connected;
     document.getElementById('model-select').disabled = !!(this.state.streaming || this.state.modelChanging || this.state.modelInfoLoading || this.creating || !this.ws.connected || !this.state.models?.length);
-    this.status.textContent = this.state.restoringSession ? '正在恢复对话' : this.commandRunning ? '正在执行命令' : this.state.streaming ? '正在处理' : this.ws.connected ? '准备就绪' : '等待连接';
+    this.status.textContent = this.state.restoringSession ? '正在恢复对话' : this.commandRunning ? '正在执行命令' : this.state.streaming ? (this._retryLabel() || '正在处理') : this.ws.connected ? '准备就绪' : '等待连接';
   }
   async _command(text) {
     const parsed = parseCommand(text), command = commands.find(c => c.name === parsed?.name);

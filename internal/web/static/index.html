@@ -134,6 +134,15 @@
           <div class="mcp-editor-options"><label for="tool-discovery-mode">加载方式</label><select id="tool-discovery-mode" class="settings-input" style="width:180px;max-width:100%" disabled><option value="">尚未读取</option><option value="off">完整加载</option><option value="local">按需加载</option></select><button id="tool-discovery-save" class="btn" disabled>保存</button><button id="tool-discovery-refresh" type="button" class="btn btn-ghost">刷新</button></div>
           <p id="tool-discovery-status" class="settings-notice" role="status" aria-live="polite"></p>
         </form>
+        <form id="permission-defaults-form" class="settings-section" aria-labelledby="permission-defaults-title">
+          <h2 id="permission-defaults-title">默认工具权限</h2>
+          <p class="settings-hint">保存到当前运行主机，新会话生效；已有会话保留各自的权限选择。</p>
+          <label for="permission-default-mode">桌面 / 网页 / 移动端</label><select id="permission-default-mode" class="settings-input" disabled><option value="">尚未读取</option><option value="ask">每次询问</option><option value="full">完全权限</option></select>
+          <label for="permission-feishu-mode">飞书</label><select id="permission-feishu-mode" class="settings-input" disabled><option value="">尚未读取</option><option value="full">完全权限</option><option value="ask">每次询问</option></select>
+          <p class="settings-hint">飞书默认完全权限；选择每次询问后，在机器人私聊卡片中批准或拒绝。完全权限自动批准普通工具操作；MCP 信任、工作区路径限制与必须回答的问题仍单独生效。</p>
+          <div class="settings-actions"><button type="submit" class="btn btn-primary" disabled>保存默认权限</button><button id="permission-defaults-refresh" type="button" class="btn btn-ghost">刷新</button></div>
+          <p id="permission-defaults-status" class="settings-notice" role="status" aria-live="polite"></p>
+        </form>
         <div class="settings-tabs" role="tablist" aria-label="设置类别">
           <button id="settings-tab-feishu" role="tab" aria-selected="true" aria-controls="settings-feishu">飞书连接</button>
           <button id="settings-tab-mcp" role="tab" aria-selected="false" aria-controls="settings-mcp" tabindex="-1">MCP 工具</button>

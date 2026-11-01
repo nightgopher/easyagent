@@ -19,9 +19,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nightgopher/easyagent/internal/worktree"
-	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
+	"github.com/nightgopher/easyagent/internal/worktree"
+	"github.com/nightgopher/easyagent/sdk/ai"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 // ChatRoute binds a Feishu chat to a local project and easyagent session.
@@ -54,8 +55,10 @@ type Handler struct {
 
 	// Sender context: per-chat sender OpenID for tool callbacks.
 	// Keyed by chatKey to avoid multi-chat race conditions.
-	senders  map[string]string
-	senderMu sync.Mutex
+	senders     map[string]string
+	senderMu    sync.Mutex
+	approvalsMu sync.Mutex
+	approvals   map[string]*toolApproval
 }
 
 // NewHandler creates a new message handler.
@@ -427,6 +430,9 @@ func (h *Handler) HandleCardAction(ctx context.Context, event *callback.CardActi
 		return cardToast("error", "未授权"), nil
 	}
 	value := event.Event.Action.Value
+	if stringValue(value["approval_id"]) != "" {
+		return h.handleToolApproval(ctx, event), nil
+	}
 	action := stringValue(value[worktreeCardActionKey])
 	chatKey := stringValue(value[worktreeCardChatKey])
 	if chatKey == "" && event.Event.Context != nil {
@@ -561,6 +567,7 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 	values := map[string]string{
 		"prompt":     prompt,
 		"session_id": sessionID,
+		"channel":    "feishu",
 	}
 	if len(requestIDs) > 0 && requestIDs[0] != "" {
 		values["request_id"] = requestIDs[0]
@@ -613,6 +620,7 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	var currentEvent string
+	var runID string
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -626,6 +634,14 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 			data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 
 			switch currentEvent {
+			case "accepted":
+				var ev struct {
+					SessionID string `json:"session_id"`
+					RunID     string `json:"run_id"`
+				}
+				if json.Unmarshal([]byte(data), &ev) == nil {
+					sessionID, runID = ev.SessionID, ev.RunID
+				}
 			case "text_delta":
 				var ev struct {
 					TextDelta string `json:"text_delta"`
@@ -649,10 +665,26 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 					slog.Debug("tool started", "tool", ev.ToolName)
 					if updates != nil {
 						updates.update(buf.String(), FooterMetrics{
-							Status:    fmt.Sprintf("正在执行 %s", ev.ToolName),
+							Status:    fmt.Sprintf("正在准备 %s", ev.ToolName),
 							ElapsedMs: time.Since(startTime).Milliseconds(),
 						})
 					}
+				}
+
+			case "model_retry":
+				var ev struct {
+					Retry *ai.ModelRetry `json:"retry"`
+				}
+				if json.Unmarshal([]byte(data), &ev) == nil && ev.Retry != nil && updates != nil {
+					reason := "模型服务暂时不可用"
+					if ev.Retry.Reason == "rate_limit" {
+						reason = "模型服务暂时限流"
+					}
+					if ev.Retry.Reason == "network" {
+						reason = "模型连接暂时中断"
+					}
+					status := fmt.Sprintf("%s，正在自动重试（%d/%d，本次等待 %d 秒）；已完成的操作会保留", reason, ev.Retry.Attempt, ev.Retry.MaxAttempts, (ev.Retry.DelayMS+999)/1000)
+					updates.update(buf.String(), FooterMetrics{Status: status, ElapsedMs: time.Since(startTime).Milliseconds()})
 				}
 
 			case "tool_update":
@@ -672,15 +704,35 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 					updates.update(buf.String(), FooterMetrics{Status: "正在思考", ElapsedMs: time.Since(startTime).Milliseconds()})
 				}
 			case "confirmation":
-				var ev struct {
-					ToolName string `json:"tool_name"`
-				}
-				if json.Unmarshal([]byte(data), &ev) == nil && updates != nil {
-					status := "等待工具审批，请在网页或桌面批准"
+				var ev toolApproval
+				if json.Unmarshal([]byte(data), &ev) == nil {
+					status := "等待工具审批，请在机器人私聊卡片中处理"
+					if err := h.sendToolApproval(ctx, sessionID, runID, ev); err != nil {
+						slog.Warn("cannot send approval card", "error", err)
+						status = "审批卡片发送失败，操作不会自动批准；请重试或在同一主机的会话中处理"
+					}
 					if len(ev.ToolName) <= 128 && confirmationToolNamePattern.MatchString(ev.ToolName) {
 						status += fmt.Sprintf(" · `%s`", ev.ToolName)
 					}
-					updates.update(buf.String(), FooterMetrics{Status: status, ElapsedMs: time.Since(startTime).Milliseconds()})
+					if updates != nil {
+						updates.update(buf.String(), FooterMetrics{Status: status, ElapsedMs: time.Since(startTime).Milliseconds()})
+					}
+				}
+			case "confirmed":
+				var ev struct {
+					ID       string `json:"confirmation_id"`
+					Approved bool   `json:"approved"`
+					Reason   string `json:"reason"`
+				}
+				if json.Unmarshal([]byte(data), &ev) == nil {
+					h.finishToolApproval(ctx, ev.ID, ev.Approved, ev.Reason)
+					if updates != nil {
+						status := "已批准，继续处理"
+						if !ev.Approved {
+							status = "操作未获批准，继续处理回复"
+						}
+						updates.update(buf.String(), FooterMetrics{Status: status, ElapsedMs: time.Since(startTime).Milliseconds()})
+					}
 				}
 			case "done":
 				var ev struct {
@@ -843,7 +895,7 @@ func (h *Handler) clearWorktreeRoute(chatKey string, route *ChatRoute) {
 
 func (h *Handler) createSession(ctx context.Context, cwd string) (string, error) {
 	url := fmt.Sprintf("%s/sessions", h.piAgentURL)
-	body, _ := json.Marshal(map[string]string{"cwd": cwd})
+	body, _ := json.Marshal(map[string]string{"cwd": cwd, "channel": "feishu"})
 	req, _ := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	setAgentAuth(req, h.piAgentAPIKey)

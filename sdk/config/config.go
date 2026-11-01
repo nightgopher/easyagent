@@ -73,7 +73,9 @@ type Config struct {
 	AllowOutsideWorkspace  bool // Explicit file-path policy; independent of confirmation.
 	Workspace              string
 	EnableBash             bool
-	AutoApprove            bool // 全权模式：跳过危险工具的 y/n 确认（信得过自己环境再开）
+	AutoApprove            bool              // 全权模式：跳过危险工具的 y/n 确认（信得过自己环境再开）
+	DefaultAccessMode      string            // ask/full; empty preserves AutoApprove compatibility.
+	ChannelAccessModes     map[string]string // Application-defined channel defaults.
 	EnableWeb              bool
 	WebTimeoutSeconds      int
 	EnableWebSearch        bool
@@ -235,6 +237,9 @@ func (c *Config) LoadFromEnv() {
 	}
 	c.EnableBash = getEnvBool("EA_ENABLE_BASH", c.EnableBash)
 	c.AutoApprove = getEnvBool("EA_AUTO_APPROVE", c.AutoApprove)
+	if mode := getEnv("EA_DEFAULT_ACCESS_MODE", ""); ValidAccessMode(mode) {
+		c.DefaultAccessMode = mode
+	}
 	c.AllowOutsideWorkspace = getEnvBool("EA_ALLOW_OUTSIDE_WORKSPACE", c.AllowOutsideWorkspace)
 	c.EnableWeb = getEnvBool("EA_ENABLE_WEB", c.EnableWeb)
 	c.WebTimeoutSeconds = getEnvInt("EA_WEB_TIMEOUT_SECONDS", c.WebTimeoutSeconds)
@@ -424,13 +429,15 @@ type yamlConfig struct {
 	OpenAIModel   string `yaml:"openai_model,omitempty"`
 	OpenAIBaseURL string `yaml:"openai_base_url,omitempty"`
 
-	Workspace         string `yaml:"workspace,omitempty"`
-	MCPConfigPath     string `yaml:"mcp_config,omitempty"`
-	EnableBash        bool   `yaml:"enable_bash,omitempty"`
-	AutoApprove       bool   `yaml:"auto_approve,omitempty"`
-	EnableWeb         bool   `yaml:"enable_web,omitempty"`
-	WebTimeoutSeconds int    `yaml:"web_timeout_seconds,omitempty"`
-	EnableWebSearch   bool   `yaml:"enable_web_search,omitempty"`
+	Workspace          string            `yaml:"workspace,omitempty"`
+	MCPConfigPath      string            `yaml:"mcp_config,omitempty"`
+	EnableBash         bool              `yaml:"enable_bash,omitempty"`
+	AutoApprove        bool              `yaml:"auto_approve,omitempty"`
+	DefaultAccessMode  string            `yaml:"default_access_mode,omitempty"`
+	ChannelAccessModes map[string]string `yaml:"channel_access_modes,omitempty"`
+	EnableWeb          bool              `yaml:"enable_web,omitempty"`
+	WebTimeoutSeconds  int               `yaml:"web_timeout_seconds,omitempty"`
+	EnableWebSearch    bool              `yaml:"enable_web_search,omitempty"`
 
 	ExecutionMode string `yaml:"execution_mode,omitempty"`
 	SSHHost       string `yaml:"ssh_host,omitempty"`
@@ -534,6 +541,20 @@ func (c *Config) LoadFromYAML(path string) error {
 	if yc.AutoApprove {
 		c.AutoApprove = true
 	}
+	if yc.DefaultAccessMode != "" {
+		if !ValidAccessMode(yc.DefaultAccessMode) {
+			return fmt.Errorf("default_access_mode must be ask or full")
+		}
+		c.DefaultAccessMode = yc.DefaultAccessMode
+	}
+	for _, mode := range yc.ChannelAccessModes {
+		if !ValidAccessMode(mode) {
+			return fmt.Errorf("channel_access_modes values must be ask or full")
+		}
+	}
+	if yc.ChannelAccessModes != nil {
+		c.ChannelAccessModes = yc.ChannelAccessModes
+	}
 	if yc.EnableWeb {
 		c.EnableWeb = true
 	}
@@ -618,13 +639,15 @@ func (c *Config) LoadFromYAML(path string) error {
 // boot-time env and yaml sources so saved runtime changes survive restarts.
 
 type runtimeOverrides struct {
-	ToolSearchMode         *string  `json:"tool_search_mode,omitempty"`
-	DisabledSkills         []string `json:"disabled_skills,omitempty"`
-	EnableComputerUse      *bool    `json:"enable_computer_use,omitempty"`
-	ComputerApprovalPolicy *string  `json:"computer_approval_policy,omitempty"`
-	ApprovedApps           []string `json:"approved_apps,omitempty"`
-	DefaultModel           *string  `json:"default_model,omitempty"`
-	DefaultProvider        *string  `json:"default_provider,omitempty"`
+	DefaultAccessMode      *string           `json:"default_access_mode,omitempty"`
+	ChannelAccessModes     map[string]string `json:"channel_access_modes,omitempty"`
+	ToolSearchMode         *string           `json:"tool_search_mode,omitempty"`
+	DisabledSkills         []string          `json:"disabled_skills,omitempty"`
+	EnableComputerUse      *bool             `json:"enable_computer_use,omitempty"`
+	ComputerApprovalPolicy *string           `json:"computer_approval_policy,omitempty"`
+	ApprovedApps           []string          `json:"approved_apps,omitempty"`
+	DefaultModel           *string           `json:"default_model,omitempty"`
+	DefaultProvider        *string           `json:"default_provider,omitempty"`
 }
 
 // LoadRuntimeOverrides applies <dataDir>/settings.json on top of c. Missing
@@ -637,6 +660,21 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 	var o runtimeOverrides
 	if json.Unmarshal(data, &o) != nil {
 		return
+	}
+	if o.DefaultAccessMode != nil && ValidAccessMode(*o.DefaultAccessMode) {
+		c.DefaultAccessMode = *o.DefaultAccessMode
+	}
+	if len(o.ChannelAccessModes) > 0 {
+		modes := make(map[string]string, len(c.ChannelAccessModes)+len(o.ChannelAccessModes))
+		for channel, mode := range c.ChannelAccessModes {
+			modes[channel] = mode
+		}
+		for channel, mode := range o.ChannelAccessModes {
+			if ValidAccessMode(mode) {
+				modes[channel] = mode
+			}
+		}
+		c.ChannelAccessModes = modes
 	}
 	if o.ToolSearchMode != nil {
 		c.ToolSearch = *o.ToolSearchMode
@@ -746,7 +784,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills", "tool_search_mode"} {
+	for _, key := range []string{"default_access_mode", "channel_access_modes", "enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills", "tool_search_mode"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {

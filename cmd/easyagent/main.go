@@ -184,7 +184,7 @@ func main() {
 		if *legacyTUI {
 			must(mode.NewInteractiveMode(sess, cmds, application).Run(context.Background()))
 		} else {
-			must(tui.Run(sess, cmds, application, cfg.AutoApprove))
+			must(tui.Run(sess, cmds, application, sess.AccessMode() == "full"))
 		}
 
 	case "run":

@@ -65,6 +65,7 @@ Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSo
 | `EA_HOME` | `~/.easyagent` | 用户配置与凭据目录 |
 | `EA_ENABLE_BASH` | `false` | 启用命令执行工具 |
 | `EA_AUTO_APPROVE` | `false` | 跳过交互工具确认，对应 `-y` |
+| `EA_DEFAULT_ACCESS_MODE` | 沿用 `EA_AUTO_APPROVE`，未开启时为 `ask` | 新会话默认 `ask` / `full`；已保存的主机设置优先 |
 | `EA_ALLOW_OUTSIDE_WORKSPACE` | `false` | 允许文件工具访问工作区外路径 |
 | `EA_ENABLE_WEB` | `false` | 启用网页抓取工具 |
 | `EA_ENABLE_WEB_SEARCH` | `false` | 启用搜索工具 |
@@ -77,6 +78,20 @@ Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSo
 `easyagent serve --allow-outside-workspace` 与环境开关等效。默认检查绝对路径、相对路径及符号链接，防止文件工具逃出工作区；放开后仍受运行用户的系统权限限制。此开关与 `-y`、API 认证独立。HTTP 工作区文件接口仍有自己的路径检查，不能把文件工具开关理解为所有 API 的任意路径访问许可。
 
 Bash 并非文件路径沙箱；启用它就授予相应系统命令能力。启用后同时提供 `bash_output` / `bash_kill`：`bash` 带 `run_in_background` 时立即返回任务 ID，适合开发服务器、监听和长构建；前台命令到达 `timeout` 仍未结束时不再被终止，而是自动移交后台任务（返回任务 ID，续用 `bash_output` / `bash_kill`），`sleep` 开头的命令除外；后台任务不受 `timeout` 限制，会话关闭或程序退出时终止。serve 模式的 Web 与桌面客户端提供工具审批，等待批准会在两分钟后自动拒绝。SDK 调用者须提供自己的确认回调；不能依赖 TUI 的提示保护服务。`-y` / `EA_AUTO_APPROVE=true` 会显式跳过审批，包括未信任的 MCP 工具。危险命令识别不是安全边界，隔离与 HTTPS 部署见 [安全模型](SECURITY_MODEL.md)。
+
+## 默认工具权限
+
+桌面「设置 → 工具权限」与 Web 设置页可分别保存普通客户端和飞书的默认权限。飞书默认为 `full`（完全权限），普通客户端未设置时沿用 `EA_AUTO_APPROVE`，通常为 `ask`（每次询问）。保存到当前主机 `<dataDir>/settings.json`，无需重启；只影响新会话。每个会话的权限会独立保存，重启后保留。已有会话可在会话权限菜单切换；飞书可用 `/new` 创建采用新默认值的会话。
+
+YAML 可配置：
+
+```yaml
+default_access_mode: ask
+channel_access_modes:
+  feishu: full
+```
+
+`full` 自动批准普通工具确认，不解除 MCP 的独立信任要求、必须回答的问题、工具启用开关或工作区路径限制。飞书选择 `ask` 后，通过已配对使用者的机器人私聊卡片允许一次或拒绝；普通工具审批两分钟未处理会拒绝，绝不会因超时自动放行。
 
 ## 工具按需加载
 
@@ -145,12 +160,14 @@ tool_search: local
 | `EA_THINKING_BUDGET` | `thinking_budget` | Anthropic `enabled` 模式必填，至少 1024 token；请求输出上限同时为预算预留回答空间 |
 | `EA_REASONING_EFFORT` | `reasoning_effort` | OpenAI 兼容服务的可选推理强度；具体支持值由模型决定，留空不发送 |
 | `EA_STREAM_IDLE_TIMEOUT` | — | 正数 Go 时长，例如 `300s` / `5m`；默认 300 秒。任意 body 字节到达即刷新，独立于 120 秒响应头超时 |
-| `EA_MODEL_MAX_RETRIES` | — | 收到 200 响应头之前的瞬态失败（429/5xx、连接错误）的重试上限，0–10，默认 2。遵守秒数或 HTTP-date 形式的 `Retry-After`；要求等待超过 30s 时直接返回错误，交由用户稍后重试，不会提前重发。未提供时从 500ms 指数退避，封顶 8s。400/401/403 不重试；开始输出后不重试，取消立即终止。与零内容流的恢复次数独立 |
+| `EA_MODEL_MAX_RETRIES` | — | 收到 200 响应头之前的瞬态失败（429/5xx、连接错误）的重试上限，0–10，默认 3（首次请求后最多再试 3 次）。无 `Retry-After` 时依次等待 5、10、20 秒，增加次数时单次封顶 30 秒。优先遵守秒数或 HTTP-date 形式的 `Retry-After`，单次超过 2 分钟时停止自动重试，不会提前重发。400/401/403、明确的额度/计费错误不重试；开始输出后不重试，取消立即终止。与零内容流的恢复次数独立 |
 | `EA_AUTO_CONTINUE` | — | `true` / `false`（默认开启）；长回复遇到 length 截断或网关吞掉 finish_reason 时自动续写并提示用户 |
 
 仅对支持的模型启用思考；它可能增加耗时和 token。GLM-5.3 系列强制思考，不能选择 `disabled`；其原生 API 仅支持 `max` / `high` / `low` 等指定强度，参见[智谱思考文档](https://docs.bigmodel.cn/cn/guide/capabilities/thinking)。Anthropic 签名思考块会随工具上下文完整保存和回传，参见[官方思考文档](https://platform.claude.com/docs/en/docs/build-with-claude/extended-thinking)。OpenAI Chat Completions 的 `reasoning_effort` 支持值依模型而定，参见[官方接口说明](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)。
 
 SSE 空流仍按原有上限退避重试；空闲超时仅在一个 body 字节都未收到时重试一次。有部分数据或调用方取消时不会自动重发。错误包含第几轮模型请求、连接尝试序号、响应头时间、首个 body 字节时间、接收字节数和最后数据距今时间，便于定位网关与上游停滞；不会记录请求正文或密钥。
+
+自动重试只重发当前轮的模型请求，保留已经执行并保存的工具结果，不重跑整条任务。等待期间任务仍处于运行中，桌面/网页显示倒计时和次数，飞书卡片显示次数与本次等待时间；停止任务会中断等待。自动恢复失败后，支持续跑的任务仍可使用「从已保存的工具结果继续」。
 
 ## 分叉与失败续跑
 

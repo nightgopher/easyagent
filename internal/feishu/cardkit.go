@@ -282,7 +282,7 @@ func (c *Client) sendCardKitMessage(ctx context.Context, chatID, cardID, replyTo
 		url = fmt.Sprintf("https://open.feishu.cn/open-apis/im/v1/messages/%s/reply", replyTo)
 		body = fmt.Sprintf(`{"msg_type":"interactive","content":%s}`, jsonString(content))
 	} else {
-		url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id"
+		url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=" + receiveIDType(chatID)
 		body = fmt.Sprintf(`{"receive_id":"%s","msg_type":"interactive","content":%s}`, chatID, jsonString(content))
 	}
 

@@ -63,6 +63,8 @@ func (a *preview) loadSettingsPage() {
 	}
 	s := &a.Settings
 	switch s.Tab {
+	case "permissions":
+		a.resource("permissions", "/settings/permissions")
 	case "agents", "memory-knowledge":
 		a.refreshBusiness()
 		if s.Business.Tab == "memories" {
@@ -83,6 +85,7 @@ func (a *preview) loadSettingsPage() {
 		a.refreshSkillLists()
 	case "feishu":
 		a.resource("feishu", "/settings/feishu")
+		a.resource("permissions", "/settings/permissions")
 	case "skillMarket":
 		a.searchMarket()
 		a.marketRead("installed", "/skills/market/installed", nil)
@@ -110,7 +113,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "agents" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
+	if tab != "permissions" && tab != "agents" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -122,6 +125,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.businessSettings(c)
 	case "memory-knowledge":
 		a.memoryKnowledgeSettings(c)
+	case "permissions":
+		a.livePermissionSettings(c)
 	case "general":
 		a.generalSettings(c)
 		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型与主机密钥保存在 macOS 钥匙串。")
@@ -143,6 +148,7 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 	case "skillMarket":
 		a.liveMarketSettings(c)
 	case "feishu":
+		a.livePermissionSettings(c)
 		a.liveFeishuSettings(c)
 	}
 }

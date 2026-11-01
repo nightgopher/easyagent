@@ -46,9 +46,7 @@ func (m *InteractiveMode) Run(ctx context.Context) error {
 	cwd, _ := os.Getwd()
 
 	// 注入危险工具确认回调：交互模式下弹 y/n 确认。
-	// 仅在交互式入口注入；serve/feishu 不注入（默认放行）。
-	// auto_approve（easyagent.yaml / EA_AUTO_APPROVE / -y）只决定初始状态：
-	// 会话内随时 /confirm on|off 运行时切换。
+	// 保留会话已保存的权限；未设置时采用主机默认值。
 	// 时机安全：ConfirmFunc 仅在 Agent 等待确认时被调，此时主循环阻塞在
 	// range stream 上、不在读 stdin，故此处独立读 os.Stdin 不会与主 scanner 抢占。
 	m.session.SetConfirmFunc(func(ctx context.Context, req agent.ConfirmationRequest) agent.ConfirmDecision {
@@ -57,7 +55,6 @@ func (m *InteractiveMode) Run(ctx context.Context) error {
 		}
 		return promptConfirm(os.Stdout, os.Stdin, req.Description)
 	})
-	m.session.SetConfirmEnabled(!m.app.Config().AutoApprove)
 
 	// Print banner
 	ui.PrintBanner(os.Stdout)

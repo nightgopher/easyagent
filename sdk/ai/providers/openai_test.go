@@ -666,12 +666,25 @@ func TestStreamRetries429Then503ThenSucceeds(t *testing.T) {
 
 	// EventStart 只推一次，重试不产生重复内容
 	starts := 0
+	var retries []ai.ModelRetry
 	for _, ev := range events {
 		if _, ok := ev.(ai.EventStart); ok {
 			starts++
 		}
+		if ev, ok := ev.(ai.EventRetry); ok {
+			retries = append(retries, ev.Retry)
+		}
 	}
 	assert.Equal(t, 1, starts)
+	require.Len(t, retries, 2)
+	assert.Equal(t, 1, retries[0].Attempt)
+	assert.Equal(t, modelMaxRetries, retries[0].MaxAttempts)
+	assert.Equal(t, 429, retries[0].StatusCode)
+	assert.Equal(t, "rate_limit", retries[0].Reason)
+	assert.Equal(t, int64(2), retries[0].DelayMS)
+	assert.Positive(t, retries[0].RetryAt)
+	assert.Equal(t, 2, retries[1].Attempt)
+	assert.Equal(t, 503, retries[1].StatusCode)
 }
 
 // TestStreamHTTP4xxNoRetry：400 属请求错误，不重试。
@@ -694,7 +707,7 @@ func TestStreamHTTP4xxNoRetry(t *testing.T) {
 	assert.Equal(t, ai.StopReasonError, msg.StopReason)
 }
 
-// TestStreamHTTPRetryExhaustsBudget：默认上限 2 次，耗尽后以最后一个状态码报错。
+// TestStreamHTTPRetryExhaustsBudget：默认上限 3 次，耗尽后以最后一个状态码报错。
 func TestStreamHTTPRetryExhaustsBudget(t *testing.T) {
 	fastModelRetry(t)
 
@@ -710,8 +723,9 @@ func TestStreamHTTPRetryExhaustsBudget(t *testing.T) {
 	_, msg, err := collectStream(t, p)
 
 	require.Error(t, err)
-	assert.Equal(t, int32(3), atomic.LoadInt32(&hits), "首次请求 + 2 次重试")
+	assert.Equal(t, int32(4), atomic.LoadInt32(&hits), "首次请求 + 3 次重试")
 	assert.Contains(t, err.Error(), "503")
+	assert.Contains(t, err.Error(), "自动重试 3 次")
 	assert.Equal(t, ai.StopReasonError, msg.StopReason)
 }
 

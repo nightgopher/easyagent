@@ -11,9 +11,13 @@ type nativeRecovery struct{ Kind, Message, Settings, Action string }
 
 var authenticationError = regexp.MustCompile(`(?i)认证|unauthori[sz]ed|invalid.*(?:key|token)|\b40[13]\b|authentication`)
 var limitError = regexp.MustCompile(`(?i)\b429\b|rate.?limit|限流|quota|配额`)
+var quotaError = regexp.MustCompile(`(?i)insufficient_quota|billing_hard_limit_reached|billing_not_active|credit_balance_too_low`)
 var connectionError = regexp.MustCompile(`(?i)network|fetch failed|ECONN|timeout|timed? ?out|stream idle|断线|连接|超时|socket`)
 
 func classifyRecovery(text string) nativeRecovery {
+	if quotaError.MatchString(text) {
+		return nativeRecovery{"quota", "模型额度或余额不足。补充额度或切换模型后，可继续已保存的进度。", "models", "检查模型服务"}
+	}
 	if authenticationError.MatchString(text) {
 		tab := "models"
 		if regexp.MustCompile(`(?i)服务认证|连接令牌|bearer`).MatchString(text) {
@@ -22,7 +26,7 @@ func classifyRecovery(text string) nativeRecovery {
 		return nativeRecovery{"authentication", "凭据未被服务接受。检查连接令牌或模型密钥后重新发送。", tab, "检查凭据"}
 	}
 	if limitError.MatchString(text) {
-		return nativeRecovery{"rate_limit", "模型服务暂时限流或配额不足。检查额度，稍后再发送；任务不会自动重试。", "models", "检查模型服务"}
+		return nativeRecovery{"rate_limit", "模型服务仍在限流，本轮请求已停止。稍后可从已保存的进度继续。", "models", "检查模型服务"}
 	}
 	if connectionError.MatchString(text) {
 		return nativeRecovery{"network", "连接中断或请求超时。重新连接后先核对执行记录，再决定是否重发。", "connections", "检查连接"}
@@ -30,6 +34,10 @@ func classifyRecovery(text string) nativeRecovery {
 	return nativeRecovery{"other", "任务未正常完成。请展开工具结果和错误详情，核对已执行的操作。", "", "查看详情"}
 }
 func (a *preview) recoveryView(c *ui.Context, s *session) {
+	if s.Run.active() && s.ModelRetry != nil {
+		a.modelRetryView(c, s)
+		return
+	}
 	if s.Run == nil || s.Run.active() || s.Run.State != "failed" && s.Run.State != "interrupted" {
 		return
 	}

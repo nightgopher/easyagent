@@ -36,14 +36,14 @@ var streamRetryDelay = time.Second
 
 // 收到 200 响应头之前的瞬态失败（429/5xx、传输错误）的重试上限，与空流重试相互独立。
 // 可用 EA_MODEL_MAX_RETRIES 覆盖。变量化以便测试。
-var modelMaxRetries = 2
+var modelMaxRetries = 3
 
-// 瞬态失败的退避：500ms 起指数退避，封顶 8s。Retry-After 超过 30s 时
+// 瞬态失败的退避：5s 起指数退避，封顶 30s。Retry-After 超过 2min 时
 // 直接报错交给用户稍后重试，不提前重发。变量化以便测试。
 var (
-	modelRetryBackoffBase = 500 * time.Millisecond
-	modelRetryBackoffMax  = 8 * time.Second
-	modelRetryAfterMax    = 30 * time.Second
+	modelRetryBackoffBase = 5 * time.Second
+	modelRetryBackoffMax  = 30 * time.Second
+	modelRetryAfterMax    = 2 * time.Minute
 )
 
 // modelRetryBackoff 返回第 n 次（从 1 起）瞬态失败重试前的退避时间。
@@ -59,13 +59,16 @@ func modelRetryBackoff(n int) time.Duration {
 }
 
 // waitModelRetry 等待一次重试间隔，取消或超过自动等待上限时不重试。
-func waitModelRetry(ctx context.Context, n int, retryAfter time.Duration) (time.Duration, bool) {
+func waitModelRetry(ctx context.Context, n int, retryAfter time.Duration, onWait ...func(time.Duration)) (time.Duration, bool) {
 	wait := retryAfter
 	if wait <= 0 {
 		wait = modelRetryBackoff(n)
 	}
-	if wait > modelRetryAfterMax {
+	if wait > modelRetryAfterMax || ctx.Err() != nil {
 		return wait, false
+	}
+	for _, notify := range onWait {
+		notify(wait)
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
@@ -74,6 +77,20 @@ func waitModelRetry(ctx context.Context, n int, retryAfter time.Duration) (time.
 		return wait, false
 	case <-timer.C:
 		return wait, true
+	}
+}
+
+func reportModelRetry(ctx context.Context, stream *ai.EventStream, attempt, limit int, status *ai.HTTPStatusError) func(time.Duration) {
+	return func(wait time.Duration) {
+		retry := ai.ModelRetry{Attempt: attempt, MaxAttempts: limit, DelayMS: wait.Milliseconds(), RetryAt: time.Now().Add(wait).UnixMilli(), Reason: "network"}
+		if status != nil {
+			retry.StatusCode = status.StatusCode
+			retry.Reason = "server_error"
+			if status.StatusCode == http.StatusTooManyRequests {
+				retry.Reason = "rate_limit"
+			}
+		}
+		_ = stream.Push(ctx, ai.EventRetry{Retry: retry})
 	}
 }
 

@@ -3,6 +3,29 @@ import assert from 'node:assert/strict';
 import { renderMarkdown } from '../internal/web/static/js/markdown.js';
 import { filterModels, modelKey } from '../internal/web/static/js/model-picker.js';
 import { ToolDiscoverySettings } from '../internal/web/static/js/tool-discovery.js';
+import { PermissionSettings } from '../internal/web/static/js/permission-settings.js';
+
+test('permission defaults save both channels and do not acknowledge failed or unsupported settings', async () => {
+  const { api } = await import('../internal/web/static/js/api.js');
+  const original = {get:api.get,post:api.post};
+  const panel = Object.create(PermissionSettings.prototype);
+  const controls = [{},{}];
+  Object.assign(panel,{form:{querySelectorAll:()=>controls},general:{value:''},feishu:{value:''},refresh:{},status:{textContent:'',classList:{add(){},remove(){}}},pending:false,available:false});
+  try {
+    api.get = async () => ({default_mode:'ask',feishu_mode:'full'});
+    await panel.update(); assert.equal(panel.feishu.value,'full'); assert.equal(controls[0].disabled,false);
+    api.post = async (path, body) => {assert.equal(path,'/settings/permissions');assert.deepEqual(body,{default_mode:'full',feishu_mode:'ask'});throw Error('disk failed');};
+    await panel.update({default_mode:'full',feishu_mode:'ask'});
+    assert.equal(panel.feishu.value,'full'); assert.equal(panel.available,false); assert.match(panel.status.textContent,/失败/);
+    api.get = async () => '<html>old host</html>';
+    await panel.update(); assert.equal(panel.available,false);
+    api.get = async () => {throw Object.assign(Error('missing'),{status:404});};
+    await panel.update(); assert.match(panel.status.textContent,/更新运行主机/);
+    api.post = async () => ({default_mode:'full',feishu_mode:'ask'});
+    await panel.update({default_mode:'full',feishu_mode:'ask'});
+    assert.equal(panel.feishu.value,'ask'); assert.match(panel.status.textContent,/新会话生效/);
+  } finally {api.get=original.get;api.post=original.post;}
+});
 
 test('tool loading settings only acknowledge a valid host response and recover from errors', async () => {
   const { api } = await import('../internal/web/static/js/api.js');
@@ -106,6 +129,39 @@ test('emphasis can contain inline code and links without leaking markup or HTML'
 
 import { ChatPanel } from '../internal/web/static/js/chat.js';
 import { api } from '../internal/web/static/js/api.js';
+test('model retry remains cancellable, survives snapshots, and clears on output or terminal status', () => {
+  const oldDocument = globalThis.document;
+  globalThis.document = {getElementById: () => ({})};
+  const listeners = new Map(), panel = Object.create(ChatPanel.prototype);
+  Object.assign(panel, {
+    state:{currentSessionId:'a',streaming:true},input:{value:''},busy:new Set(['a']),views:new Map(),
+    ws:{connected:true,on:(name,fn)=>listeners.set(name,fn)},status:{},sendBtn:{style:{}},stopBtn:{style:{}},
+    messageList:{replaceChildren(){}},jump:{},notice:{},_scrollToBottom(){},_finishTools(){},show(){},_renderHistory(){},
+    _startAssistantStream(){this._currentStreamEl={};this._currentStreamText='';},_scheduleStreamRender(){},
+  });
+  try {
+    panel._bindWS();
+    const retry = {attempt:1,max_attempts:3,retry_at:Date.now()+10000,reason:'rate_limit'};
+    listeners.get('event:model_retry')({retry},'a');
+    assert.match(panel.status.textContent,/秒后重试（1\/3）/);
+    assert.equal(panel.stopBtn.style.display,'flex'); assert.equal(panel.stopBtn.disabled,false);
+    assert.ok(panel.retryTimer); assert.equal(panel.state.streaming,true);
+    listeners.get('event:model_retry')({retry:{...retry,attempt:2}},'other');
+    assert.equal(panel.modelRetry.attempt,1);
+    panel._snapshot({session_id:'a',run:{state:'running'},events:[{type:'model_retry',retry}]});
+    assert.equal(panel.modelRetry.attempt,1); assert.match(panel.status.textContent,/限流/);
+    assert.equal(panel._retryLabel(retry.retry_at+1),'正在重新请求模型（1/3）');
+    listeners.get('event:text_delta')({text_delta:'继续完成'},'a');
+    assert.equal(panel.modelRetry,null); assert.equal(panel.retryTimer,null);
+    listeners.get('event:model_retry')({retry},'a');
+    listeners.get('status')({session_id:'a',streaming:false,state:'cancelled'});
+    assert.equal(panel.modelRetry,null); assert.equal(panel.retryTimer,null);
+    assert.equal(panel.stopBtn.style.display,'none');
+    panel._setModelRetry(retry); panel.clear();
+    assert.equal(panel.modelRetry,null); assert.equal(panel.retryTimer,null);
+  } finally {panel._setModelRetry(null);globalThis.document=oldDocument;}
+});
+
 test('commands execute separately from prompts, preserving failed or edited drafts', async () => {
   const oldDocument = globalThis.document, oldGet = api.get;
   const nodes = new Map();

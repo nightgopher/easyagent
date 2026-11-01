@@ -44,7 +44,7 @@ func TestStreamChatReportsWaitingForServerApprovalWithoutExposingArguments(t *te
 					return nil, fmt.Errorf("unexpected progress card elements")
 				}
 				footer := cardData.Body.Elements[2].Content
-				if strings.Contains(footer, "等待工具审批，请在网页或桌面批准") {
+				if strings.Contains(footer, "审批卡片发送失败，操作不会自动批准") {
 					if cardData.Body.Elements[0].Content != "正在准备" {
 						t.Errorf("approval status lost existing reply text")
 					}
