@@ -62,7 +62,7 @@ type businessSettingsState struct {
 	PublishSourceID, PublishDirectory, PublishTitle, PublishContent string
 }
 
-var businessBaseTools = []string{"read", "write", "ask_user_question", "local_time", "search_tools", "web_fetch", "web_search"}
+var businessBaseTools = []string{"read", "write", "ask_user_question", "local_time", "search_tools", "web_fetch", "web_search", "host_work_search", "host_session_search", "host_agents_list"}
 var businessDefaultTools = []string{"read", "write", "ask_user_question", "local_time", "search_tools"}
 
 func businessDecode[T any](v any) T {
