@@ -46,6 +46,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # Include the separately tested local module. Keep this cache apart
+          # from the quick audit job, which cannot populate test build objects.
+          cache-dependency-path: |
+            go.sum
+            third_party/bubbletea/go.sum
       - run: go test ./...
       - run: go vet ./...
       - run: go test ./...
@@ -161,6 +166,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
+          # Race/coverage objects differ from plain builds; the policy script
+          # scopes their cache without adding another module download cache.
+          cache-dependency-path: |
+            go.sum
+            scripts/check_coverage.py
       - name: Race detector and SDK/server coverage
         shell: bash
         run: go test -race -count=1 -covermode=atomic -coverprofile=coverage.out ./sdk/... ./internal/server/... 2>&1 | tee race.log

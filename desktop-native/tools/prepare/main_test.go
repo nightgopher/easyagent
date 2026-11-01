@@ -3,8 +3,60 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestComputerHelperCacheInvalidatesSourceAndToolchain(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "desktop-native")
+	source := filepath.Join(root, "native/computer-use/main.swift")
+	for _, directory := range []string{filepath.Dir(source), cwd, filepath.Join(root, "bin")} {
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(path, content string, mode os.FileMode) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(content), mode); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A fake compiler records actual invocations; a cache hit must avoid it.
+	write(filepath.Join(root, "bin/xcrun"), `#!/bin/sh
+if [ "$2" = --version ] || [ "$1" = --sdk ]; then echo "$TEST_SDK_VERSION"; exit; fi
+echo compiled >> "$TEST_COMPILE_LOG"
+while [ "$1" != -o ]; do shift; done
+echo executable > "$2"
+`, 0755)
+	log := filepath.Join(root, "compiles")
+	t.Setenv("PATH", filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TEST_SDK_VERSION", "1")
+	t.Setenv("TEST_COMPILE_LOG", log)
+	output := filepath.Join(root, "output/helper")
+	build := func(want int) {
+		t.Helper()
+		buildComputerHelper(root, cwd, "arm64", "/sdk", output)
+		data, err := os.ReadFile(log)
+		if err != nil || strings.Count(string(data), "compiled") != want {
+			t.Fatalf("compiler calls: %q, %v; want %d", data, err, want)
+		}
+		if data, err := os.ReadFile(output); err != nil || string(data) != "executable\n" {
+			t.Fatalf("missing packaged helper: %q, %v", data, err)
+		}
+	}
+	write(source, "first source", 0644)
+	build(1)
+	build(1)
+	write(source, "changed source", 0644)
+	build(2)
+	t.Setenv("TEST_SDK_VERSION", "2")
+	build(3)
+	if err := os.Remove(filepath.Join(cwd, "build.noindex/helper-cache/arm64/easyagent-cua-helper")); err != nil {
+		t.Fatal(err)
+	}
+	build(4)
+}
 
 func TestResetResourcesRemovesPreviousRuntimeOnly(t *testing.T) {
 	root := t.TempDir()

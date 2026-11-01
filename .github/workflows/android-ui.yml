@@ -43,6 +43,11 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Build APKs alongside emulator preparation
+        run: |
+          # Complete SDK writes before either Gradle or the emulator action uses it.
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
+          (result=0; bash scripts/check-android-ui.sh --prepare > "$RUNNER_TEMP/android-build.log" 2>&1 || result=$?; echo "$result" > "$RUNNER_TEMP/android-build.exit") &
       - uses: reactivecircus/android-emulator-runner@v2
         with:
           # Compile SDK is 35 for every job; only the device image varies.
@@ -54,7 +59,13 @@ jobs:
           disable-animations: true
           working-directory: mobile-native
           script: |
-            result=0; bash ../scripts/check-android-ui.sh || result=$?; adb pull /data/local/tmp/easyagent-ui app/build/qa || true; exit "$result"
+            timeout 900 bash -c 'until test -f "$RUNNER_TEMP/android-build.exit"; do sleep 1; done'; cat "$RUNNER_TEMP/android-build.log"; test "$(cat "$RUNNER_TEMP/android-build.exit")" = 0
+            result=0; bash ../scripts/check-android-ui.sh --test || result=$?; adb pull /data/local/tmp/easyagent-ui app/build/qa || true; exit "$result"
+      - name: Stop Gradle and preserve build diagnostics
+        if: always()
+        run: |
+          cat "$RUNNER_TEMP/android-build.log" || true
+          mobile-native/gradlew --stop
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -63,3 +74,4 @@ jobs:
             mobile-native/app/build/reports/androidTests
             mobile-native/app/build/outputs/androidTest-results
             mobile-native/app/build/qa
+            ${{ runner.temp }}/android-build.log

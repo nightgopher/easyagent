@@ -27,6 +27,18 @@ jobs:
   release-build:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux/amd64
+            artifact: linux-amd64
+          - target: linux/arm64
+            artifact: linux-arm64
+          - target: darwin/amd64
+            artifact: darwin-amd64
+          - target: darwin/arm64
+            artifact: darwin-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,7 +46,33 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
-      - run: bash scripts/check-release-build.sh
+      - run: bash scripts/check-release-build.sh '${{ matrix.target }}' "$RUNNER_TEMP/core-dist"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: core-check-${{ matrix.artifact }}
+          path: ${{ runner.temp }}/core-dist/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+  core-manifest:
+    needs: release-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: core-check-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/core-dist
+      - run: |
+          chmod +x "$RUNNER_TEMP"/core-dist/easyagent-{linux,darwin}-* "$RUNNER_TEMP"/core-dist/easyagent-bridge-*
+          bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'
     runs-on: macos-15

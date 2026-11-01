@@ -49,6 +49,18 @@ jobs:
   core:
     needs: validate
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux/amd64
+            artifact: linux-amd64
+          - target: linux/arm64
+            artifact: linux-arm64
+          - target: darwin/amd64
+            artifact: darwin-amd64
+          - target: darwin/arm64
+            artifact: darwin-arm64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -60,13 +72,14 @@ jobs:
       - name: Build core payloads from exact revision
         env:
           TAG: ${{ needs.validate.outputs.version }}
-        run: bash scripts/build-release.sh "$TAG"
+        run: bash scripts/build-release.sh "$TAG" '${{ matrix.target }}'
       - uses: actions/upload-artifact@v7
         with:
-          name: release-core
+          name: release-core-${{ matrix.artifact }}
           path: dist/*
           if-no-files-found: error
           retention-days: 3
+          compression-level: 0
   native:
     needs: validate
     runs-on: macos-15
