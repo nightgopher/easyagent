@@ -20,6 +20,7 @@ type liveResult struct {
 	discard func()
 }
 type liveState struct {
+	MCPStatus                                                              nativeMCPStatus
 	SessionSearch                                                          nativeSessionSearch
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
@@ -227,6 +228,7 @@ func (a *preview) liveTick() bool {
 	if l.Connected && l.Client != nil && !l.NextSessionRefresh.IsZero() && time.Now().After(l.NextSessionRefresh) && !l.Loading["session-index"] {
 		a.refreshLiveSessions("")
 	}
+	a.tickMCPStatus()
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
@@ -352,6 +354,10 @@ func (a *preview) connectLive() {
 		l.Error = "正在保存配置，请稍后重连"
 		return
 	}
+	a.cancelMCPStatus()
+	l.MCPStatus = nativeMCPStatus{}
+	delete(l.Data, "mcp")
+	delete(l.ResourceErrors, "mcp")
 	if l.streamCancel != nil {
 		l.streamCancel()
 	}
@@ -948,6 +954,7 @@ func (a *preview) closeLive() {
 		return
 	}
 	l := a.Live
+	a.cancelMCPStatus()
 	if l.Voice != nil {
 		_, _ = l.Voice.Stop()
 	}
