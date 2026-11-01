@@ -178,7 +178,7 @@ func (a *preview) businessAgentEditor(c *ui.Context) {
 	}
 	flatButton(c, glyph, a.tr("工具与技能")).Justify(ui.Start).Padding(10, 0).OnClick(func() { s.Advanced = !s.Advanced })
 	if s.Advanced {
-		labels := []string{"读取工作区文件", "写入工作区文件", "向用户提问", "获取当前时间", "按需发现已授权工具", "读取网页（需主机开启）", "搜索网页（需主机开启）"}
+		labels := []string{"读取工作区文件", "写入工作区文件", "向用户提问", "获取当前时间", "按需发现已授权工具", "读取网页（需主机开启）", "搜索网页（需主机开启）", "查询当前主机全部跟进任务", "搜索当前主机全部会话（含归档）", "查看当前主机 Agent 目录"}
 		ui.Row(c).Wrap().Gap(12).Children(func() {
 			for i, name := range businessBaseTools {
 				on := slices.Contains(v.Tools, name)

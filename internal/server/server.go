@@ -145,6 +145,9 @@ func New(application *app.App, slashCmds *slashcmd.Registry) *Server {
 		srv.marketJobs = newMarketJobRegistry(srv.ctx, application)
 	}
 	srv.restoreRunReceipts()
+	application.SetWorkReader(func(ctx context.Context, query, view string, offset int) (any, error) {
+		return srv.readWorkItems(ctx, query, view, "", 20, offset)
+	})
 
 	// Wire loop trigger: when a /loop fires, inject the prompt into the target session
 	if application.LoopManager() != nil {
@@ -236,6 +239,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /agents/{agent}/memories/{memory}/publish", s.publishAgentMemory)
 	restMux.HandleFunc("GET /agents", s.businessAgents)
 	restMux.HandleFunc("POST /agents", s.businessAgents)
+	restMux.HandleFunc("POST /agents/steward", s.ensureSteward)
 	restMux.HandleFunc("GET /agents/{agent}", s.businessAgents)
 	restMux.HandleFunc("PUT /agents/{agent}", s.businessAgents)
 	restMux.HandleFunc("POST /sessions/{id}/compact", s.compactSession)
