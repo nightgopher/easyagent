@@ -51,6 +51,7 @@ func (a *preview) forkNativeSessionTo(s *session, application *string) {
 	a.operation("fork/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/fork", body, func(v any) { a.refreshLiveSessions(str(object(v)["id"])) })
 }
 func (a *preview) sessionOptions(c *ui.Context, s *session, close func()) {
+	menuOption(c, "activity", "加入任务跟进", false).Disabled(s.RemoteID == "" || !a.Live.Connected || a.Live.Loading["work-save"]).OnClick(func() { close(); a.trackSession(s) })
 	busy := s.Running || s.Pending || s.Sending
 	pin := "置顶"
 	if s.Pinned {

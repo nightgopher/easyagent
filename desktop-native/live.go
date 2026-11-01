@@ -21,6 +21,7 @@ type liveResult struct {
 }
 type liveState struct {
 	MCPStatus                                                              nativeMCPStatus
+	Work                                                                   nativeWorkState
 	SessionSearch                                                          nativeSessionSearch
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
@@ -229,6 +230,7 @@ func (a *preview) liveTick() bool {
 		a.refreshLiveSessions("")
 	}
 	a.tickMCPStatus()
+	a.tickWork()
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
@@ -383,6 +385,11 @@ func (a *preview) connectLive() {
 		}
 	}
 	a.resetSessionSearch()
+	a.closeWork()
+	l.Work = nativeWorkState{}
+	delete(l.Data, "work")
+	delete(l.ResourceErrors, "work")
+	delete(l.ResourceErrors, "work-save")
 	l.Market = nativeMarketState{}
 	l.NewWorkspace = false
 	a.NewMenu = false
@@ -617,6 +624,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			if prefer != "" && s.RemoteID == prefer {
 				chosen = s
 				l.SelectAfterRefresh = ""
+				a.Archived = s.Archived
 			}
 		}
 		changed := a.Active != chosen.ID
@@ -716,6 +724,7 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 		if id == "" {
 			return
 		}
+		a.closeWork()
 		a.Live.Versions["sessions"]++
 		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application, AgentID: agentID}
 		a.NextID++
@@ -955,6 +964,7 @@ func (a *preview) closeLive() {
 	}
 	l := a.Live
 	a.cancelMCPStatus()
+	a.closeWork()
 	if l.Voice != nil {
 		_, _ = l.Voice.Stop()
 	}
