@@ -117,6 +117,7 @@ func (a *preview) liveSidebar(c *ui.Context) {
 	l := a.Live
 	ui.Column(c).Width(260).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Padding(14).Gap(12).Children(func() {
+			flatButton(c, "activity", "任务跟进").Justify(ui.Start).OnClick(a.openWork)
 			ui.Row(c).Gap(8).Children(func() {
 				a.text(c, "对话").Bold()
 				ui.Spacer(c)

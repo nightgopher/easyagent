@@ -4,7 +4,7 @@
 
 ## Platform
 
-web / desktop
+adaptive
 
 ## Users
 

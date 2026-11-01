@@ -85,6 +85,7 @@ func (a *preview) workspacePath(resource, path, sid string) string {
 	return "/workspace/" + resource + query(map[string]string{"path": path, "session_id": sid})
 }
 func (a *preview) openResource(tab string) {
+	a.closeWork()
 	a.Workbench = true
 	a.Live.Workbench.Tab = tab
 	a.refreshWorkbench()

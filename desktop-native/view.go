@@ -110,6 +110,10 @@ func (a *preview) View(c *ui.Context) {
 					a.sidebar(c)
 				}
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+					if a.Live != nil && a.Live.Work.Open {
+						a.workItemsView(c)
+						return
+					}
 					a.toolbar(c)
 					a.transcript(c)
 					a.composer(c)
@@ -117,7 +121,7 @@ func (a *preview) View(c *ui.Context) {
 						a.liveTerminal(c)
 					}
 				})
-				if a.Workbench {
+				if a.Workbench && (a.Live == nil || !a.Live.Work.Open) {
 					a.workbench(c)
 				}
 			})
