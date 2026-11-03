@@ -10,6 +10,9 @@ class HostConnections(
     private val onAlert: ((AgentClient, Alert) -> Unit)? = null,
 ) {
     private val clients = LinkedHashMap<String, AgentClient>()
+    // Coil resolves image transports on worker threads. Publish a complete,
+    // immutable snapshot instead of iterating the UI-owned mutable map there.
+    @Volatile private var imageClients: List<AgentClient> = emptyList()
     private val mutableState = MutableStateFlow(HostSettings())
     private val mutableClient = MutableStateFlow<AgentClient?>(null)
     val state = mutableState.asStateFlow()
@@ -43,6 +46,7 @@ class HostConnections(
     }
 
     fun shutdown() {
+        imageClients = emptyList()
         clients.values.forEach { it.shutdown() }
         clients.clear()
         mutableClient.value = null
@@ -67,6 +71,7 @@ class HostConnections(
                 }
             }
         }
+        imageClients = next.hosts.mapNotNull { clients[it.id] }
         mutableState.value = next
         mutableClient.value = clients[next.activeId]
     }
@@ -79,7 +84,7 @@ class HostConnections(
 
     fun httpFor(url: String): okhttp3.OkHttpClient? {
         val origin = originOf(url) ?: return null
-        return clients.values.firstOrNull { originOf(it.config.url) == origin }?.api?.http
+        return imageClients.firstOrNull { originOf(it.config.url) == origin }?.api?.http
     }
 
     private fun originOf(url: String): String? = url.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }
