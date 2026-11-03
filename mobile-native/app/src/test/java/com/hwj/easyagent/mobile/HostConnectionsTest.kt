@@ -123,9 +123,12 @@ class HostConnectionsTest {
         assertEquals(1, a.sockets.get())
         assertEquals(1, b.sockets.get())
         for (host in listOf(a, b)) {
-            assertTrue(host.authorizations.any { it.first == "/ws" })
-            assertTrue(host.authorizations.any { it.first == "/sessions" })
-            assertTrue(host.authorizations.all { it.second == "Bearer ${host.id}-token" })
+            // Network callbacks still append while resume() refreshes sessions.
+            // synchronizedList requires its monitor while obtaining a snapshot.
+            val authorizations = synchronized(host.authorizations) { host.authorizations.toList() }
+            assertTrue(authorizations.any { it.first == "/ws" })
+            assertTrue(authorizations.any { it.first == "/sessions" })
+            assertTrue(authorizations.all { it.second == "Bearer ${host.id}-token" })
         }
     }
 
