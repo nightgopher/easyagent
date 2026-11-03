@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/ai/models"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 // ─── GET /tools ───────────────────────────────────────────────────────────────
@@ -82,13 +85,16 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 	provider := cfg.Provider
 	modelID := ""
 	switch provider {
-	case "openai":
+	case "openai", "deepv":
 		modelID = cfg.OpenAIModel
 	case "anthropic":
 		modelID = cfg.AnthropicModel
 	}
 	if modelID != "" {
 		current = &ModelInfo{ID: modelID, Provider: provider, Name: modelID, ContextWindow: knownWindow(modelID)}
+		if provider == "deepv" && current.ContextWindow > 160000 {
+			current.ContextWindow = 160000
+		}
 		current.SupportsImages = s.app.ResolveModel(ai.Model{ID: modelID, Provider: provider}).SupportsImages
 	}
 
@@ -99,6 +105,34 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 			result.DiscoveryError = err.Error()
 		} else if len(models) > 0 {
 			result.Models, result.Source = models, "gateway"
+		}
+	}
+	if provider == "deepv" {
+		account, err := easycode.NewManager(config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"))
+		if err == nil {
+			var available []easycode.Model
+			available, err = account.Models(r.Context())
+			if err == nil {
+				for _, item := range available {
+					window := item.ContextWindow
+					if window == 0 {
+						window = knownWindow(item.ID)
+						if window > 160000 {
+							window = 160000
+						}
+					}
+					model := ModelInfo{ID: item.ID, Name: item.Name, Provider: "deepv", SupportsImages: item.SupportsImages, ContextWindow: window}
+					result.Models = append(result.Models, model)
+					if current != nil && item.ID == current.ID {
+						current.SupportsImages = item.SupportsImages
+						current.ContextWindow = window
+					}
+				}
+				result.Source = "easycode"
+			}
+		}
+		if err != nil {
+			result.DiscoveryError = err.Error()
 		}
 	}
 	// A configured model can still be used when discovery is unsupported. Do

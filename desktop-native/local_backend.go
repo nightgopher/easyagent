@@ -35,10 +35,11 @@ type modelConfig struct {
 	HasKey                                                       bool
 }
 type clientConfig struct {
-	Hosts      []hostConfig
-	ActiveHost string
-	Model      modelConfig
-	Workspace  string
+	Hosts         []hostConfig
+	ActiveHost    string
+	Model         modelConfig
+	PreviousModel *modelConfig `json:",omitempty"`
+	Workspace     string
 }
 
 func atomicJSON(path string, value any) error {
@@ -191,7 +192,10 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	if os.Getenv("EA_WORKSPACE") == "" && env["EA_WORKSPACE"] == "" {
 		env["EA_WORKSPACE"] = home
 	}
-	if model.Mode == "override" {
+	if model.Mode == "easycode" {
+		env["EA_PROVIDER"] = "deepv"
+		env["EA_MODEL"], env["OPENAI_MODEL"] = model.Model, model.Model
+	} else if model.Mode == "override" {
 		key, err := secrets.Get("model")
 		if err != nil {
 			return nil, err
@@ -324,6 +328,13 @@ func validatedModel(cfg modelConfig) (modelConfig, error) {
 	if cfg.Mode == "inherit" {
 		return modelConfig{Mode: "inherit"}, nil
 	}
+	if cfg.Mode == "easycode" && cfg.Provider == "deepv" {
+		cfg.Model = strings.TrimSpace(cfg.Model)
+		if cfg.Model == "" || len(cfg.Model) > 200 || strings.ContainsAny(cfg.Model, "\r\n\t") {
+			return cfg, errors.New("请选择可用的 EasyCode 模型")
+		}
+		return cfg, nil
+	}
 	if cfg.Mode != "override" || (cfg.Provider != "openai" && cfg.Provider != "anthropic") {
 		return cfg, errors.New("请选择有效的模型服务类型")
 	}
@@ -339,6 +350,9 @@ func validatedModel(cfg modelConfig) (modelConfig, error) {
 	return cfg, nil
 }
 func modelEnvironmentDescription(cfg modelConfig) string {
+	if cfg.Mode == "easycode" {
+		return "EasyCode · " + cfg.Model
+	}
 	if cfg.Mode != "override" {
 		return "沿用命令行配置"
 	}

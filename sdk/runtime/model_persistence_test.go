@@ -67,3 +67,35 @@ func TestInitialSessionModelSurvivesReopen(t *testing.T) {
 	defer s.Close()
 	require.Equal(t, "initial", s.cfg.OpenAIModel)
 }
+
+func TestEasyCodeSwitchKeepsPriorSessionPreference(t *testing.T) {
+	ctx := context.Background()
+	manager := sessionmgr.NewManager(t.TempDir())
+	registry := providers.NewRegistry()
+	cfg := config.Default()
+	cfg.Provider = "openai"
+	cfg.OpenAIModel = "previous-model"
+	deps := Dependencies{SessionMgr: manager, Registry: registry, ExtRegistry: extensions.NewRegistry(), Application: &confirmationTestApplication{}}
+	s, err := NewAgentSession(ctx, AgentSessionOptions{Config: cfg}, deps)
+	require.NoError(t, err)
+	id := s.SessionID()
+	require.NoError(t, s.Close())
+	registry.Register(providers.NewDeepVProvider("http://127.0.0.1:1", nil))
+	cfg.Provider = "deepv"
+	cfg.OpenAIModel = "account-model"
+	s, err = NewAgentSession(ctx, AgentSessionOptions{Config: cfg, SessionID: id}, deps)
+	require.NoError(t, err)
+	provider, model := s.ModelInfo()
+	require.Equal(t, "deepv", provider)
+	require.Equal(t, "account-model", model)
+	saved, err := manager.LoadModel(id)
+	require.NoError(t, err)
+	require.Equal(t, "openai", saved.Provider)
+	require.Equal(t, "previous-model", saved.Model)
+	require.NoError(t, s.SwitchModel(ctx, "explicit-choice", "deepv"))
+	require.NoError(t, s.Close())
+	saved, err = manager.LoadModel(id)
+	require.NoError(t, err)
+	require.Equal(t, "deepv", saved.Provider)
+	require.Equal(t, "explicit-choice", saved.Model)
+}

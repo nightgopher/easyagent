@@ -57,7 +57,7 @@ type Config struct {
 	Timeout                       time.Duration
 
 	// Provider
-	Provider string // anthropic / openai
+	Provider string // anthropic / openai / deepv
 
 	// Anthropic
 	AnthropicAPIKey  string
@@ -648,6 +648,7 @@ type runtimeOverrides struct {
 	ApprovedApps           []string          `json:"approved_apps,omitempty"`
 	DefaultModel           *string           `json:"default_model,omitempty"`
 	DefaultProvider        *string           `json:"default_provider,omitempty"`
+	EasyCodeDefaultModel   *string           `json:"easycode_default_model,omitempty"`
 }
 
 // LoadRuntimeOverrides applies <dataDir>/settings.json on top of c. Missing
@@ -686,7 +687,9 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 		c.ComputerApprovalPolicy = *o.ComputerApprovalPolicy
 	}
 	c.ApprovedApps = o.ApprovedApps
-	if o.DefaultModel != nil && *o.DefaultModel != "" {
+	if c.Provider == "deepv" && o.EasyCodeDefaultModel != nil && *o.EasyCodeDefaultModel != "" {
+		c.OpenAIModel = *o.EasyCodeDefaultModel
+	} else if c.Provider != "deepv" && o.DefaultModel != nil && *o.DefaultModel != "" {
 		if o.DefaultProvider != nil && *o.DefaultProvider != "" {
 			c.Provider = *o.DefaultProvider
 		}
@@ -699,6 +702,15 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 			c.OpenAIModel = *o.DefaultModel
 		}
 	}
+}
+
+// SaveEasyCodeDefaultModel keeps the account's selection separate from the
+// previous gateway/provider settings so signing out can restore them.
+func SaveEasyCodeDefaultModel(dataDir, model string) error {
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+	return mutateRuntimeOverrides(dataDir, func(o *runtimeOverrides) { o.EasyCodeDefaultModel = &model })
 }
 
 // SaveRuntimeOverrideDefaultModel persists default model and optional provider.
@@ -784,7 +796,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"default_access_mode", "channel_access_modes", "enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "disabled_skills", "tool_search_mode"} {
+	for _, key := range []string{"default_access_mode", "channel_access_modes", "enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "easycode_default_model", "disabled_skills", "tool_search_mode"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {

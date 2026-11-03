@@ -606,6 +606,9 @@ func (a *preview) cancelSettingsTransient() {
 	a.Settings.HostTokenField.CancelFocus()
 	if a.Settings.Tab == "models" {
 		a.clearModelCheck()
+		if a.Live.Loading["easycode-login"] {
+			a.cancelEasyCodeLogin()
+		}
 	}
 	a.cancelQR()
 	a.cancelMCPLogin()

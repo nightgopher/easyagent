@@ -2,6 +2,13 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.38.0 发布候选
+
+本轮新增桌面端飞书登录 EasyCode 和账号模型调用，`mobile-native/` 源码与 v0.37.2 相同。候选版本为 `0.38.0`，versionCode 为 `3800300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
+
+- 发布流水线要求对同一候选 SHA 重新运行 API 31 / 34 / 35 界面矩阵、单测、lint 和构建，结果以对应的 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)为准；流水线完成前不记为通过。
+- 本轮未执行实体手机、实体相机、蜂窝网络或正式 APK 跨版本覆盖安装验收；此前版本的验收记录不计为本轮通过。
+
 ## v0.37.2 发布候选
 
 本轮修复 Android 配对成功后在主线程关闭 TLS 导致凭据丢失、扫码默认横屏，以及无已保存主机时无法返回主页和长配对码撑满页面的问题。版本为 `0.37.2`，versionCode 为 `3702300`；最终候选 SHA、正式签名和摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。

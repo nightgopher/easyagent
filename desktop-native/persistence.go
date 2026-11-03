@@ -31,9 +31,16 @@ func (s *nativeStore) save(name string, version uint64, value any) error {
 	return atomicJSON(filepath.Join(s.dir, name), value)
 }
 func (l *liveState) configBusy() bool {
-	return l.Loading["business-save"] || l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"]
+	return l.configMutating() || l.Loading["easycode-login"]
+}
+func (l *liveState) configMutating() bool {
+	return l.Loading["business-save"] || l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"] || l.Loading["easycode-apply"] || l.Loading["easycode-logout"]
 }
 func cloneConfig(cfg clientConfig) clientConfig {
 	cfg.Hosts = append([]hostConfig{}, cfg.Hosts...)
+	if cfg.PreviousModel != nil {
+		previous := *cfg.PreviousModel
+		cfg.PreviousModel = &previous
+	}
 	return cfg
 }

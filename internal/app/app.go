@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	"github.com/nightgopher/easyagent/internal/agents/coding"
+	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
 	"github.com/nightgopher/easyagent/sdk/agent"
@@ -260,12 +262,15 @@ func (a *App) SetDefaultModel(provider, model string) error {
 	}
 	a.cfg.Provider = provider
 	switch provider {
-	case "openai":
+	case "openai", "deepv":
 		a.cfg.OpenAIModel = model
 	case "anthropic":
 		a.cfg.AnthropicModel = model
 	default:
 		a.cfg.OpenAIModel = model
+	}
+	if provider == "deepv" {
+		return config.SaveEasyCodeDefaultModel(a.cfg.DataDir, model)
 	}
 	return config.SaveRuntimeOverrideDefaultModel(a.cfg.DataDir, provider, model)
 }
@@ -433,6 +438,13 @@ func registerProviders(registry *providers.Registry, cfg config.Config) error {
 		return err
 	}
 	switch cfg.Provider {
+	case "deepv":
+		account, err := easycode.NewManager(config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"))
+		if err != nil {
+			return err
+		}
+		registry.Register(providers.NewDeepVProvider(account.BaseURL(), account))
+		return nil
 	case "anthropic":
 		if cfg.AnthropicAPIKey != "" {
 			registry.Register(providers.NewAnthropicProvider(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL, thinking))
@@ -448,9 +460,9 @@ func registerProviders(registry *providers.Registry, cfg config.Config) error {
 		}
 		return fmt.Errorf("EA_PROVIDER=openai but OPENAI_API_KEY is empty")
 	case "":
-		return fmt.Errorf("EA_PROVIDER is not set (valid values: anthropic, openai)")
+		return fmt.Errorf("EA_PROVIDER is not set (valid values: anthropic, openai, deepv)")
 	default:
-		return fmt.Errorf("unknown EA_PROVIDER %q (valid values: anthropic, openai)", cfg.Provider)
+		return fmt.Errorf("unknown EA_PROVIDER %q (valid values: anthropic, openai, deepv)", cfg.Provider)
 	}
 }
 
