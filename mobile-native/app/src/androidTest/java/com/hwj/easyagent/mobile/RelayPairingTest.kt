@@ -56,17 +56,24 @@ class RelayPairingTest {
                 withContext(Dispatchers.Main) { store.save(host) }
                 assertEquals(1, fixture.claims.get())
                 val api = fixture.api(requireNotNull(restored.token))
+                val closed = CountDownLatch(1)
                 try {
                     assertTrue(withContext(Dispatchers.Main) { api.get("/sessions").toString().contains("saved conversation") })
                     val echo = CountDownLatch(1)
                     api.openSocket(object : WebSocketListener() {
                         override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send("private chat") }
                         override fun onMessage(webSocket: WebSocket, text: String) { if (text == "private chat") echo.countDown() }
+                        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { closed.countDown() }
+                        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { closed.countDown() }
                     })
                     assertTrue("Saved credential must reopen chat over pinned TLS", echo.await(10, TimeUnit.SECONDS))
                 } finally {
                     withContext(Dispatchers.Main) { api.close() }
                 }
+                // cancelAll() closes sockets immediately, but OkHttp releases an
+                // active WebSocket's pool entry after its reader/callback returns.
+                assertTrue("Chat socket did not close", closed.await(10, TimeUnit.SECONDS))
+                assertTrue("Network callbacks did not finish", api.http.dispatcher.executorService.awaitTermination(10, TimeUnit.SECONDS))
                 assertEquals(0, api.http.connectionPool.connectionCount())
                 assertTrue(api.http.dispatcher.executorService.isShutdown)
             } finally {
