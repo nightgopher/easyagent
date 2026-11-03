@@ -75,7 +75,9 @@ jobs:
           bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'
-    runs-on: macos-26
+    # Both labels are standard Apple Silicon runners. Keep 26 as the default;
+    # a repository variable permits an explicit 15 fallback during shortages.
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || 'macos-26' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,7 +111,7 @@ jobs:
         run: python3 scripts/build-android.py build dist --test-signing
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: macos-26
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || 'macos-26' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
