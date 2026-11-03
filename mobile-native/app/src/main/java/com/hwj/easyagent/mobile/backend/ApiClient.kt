@@ -32,16 +32,19 @@ internal fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
 }
 
 /** 对应 desktop-native/backend.go 的 backendClient：Bearer 鉴权的 REST 调用与 /ws 升级。 */
-class ApiClient(val baseUrl: String, private val token: String) {
-    private val http = OkHttpClient.Builder()
+class ApiClient(val baseUrl: String, private val token: String, relay: RelayConfig? = null) {
+    private val relayTransport = relay?.let { require(baseUrl == it.baseUrl); RelayTransport(it) }
+    internal val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
         .writeTimeout(45, TimeUnit.SECONDS)
         .pingInterval(20, TimeUnit.SECONDS)
         .followRedirects(false)
+        .apply { relayTransport?.configure(this) }
         .build()
 
     fun close() {
+        relayTransport?.close()
         http.dispatcher.cancelAll()
         http.connectionPool.evictAll()
         http.dispatcher.executorService.shutdown()

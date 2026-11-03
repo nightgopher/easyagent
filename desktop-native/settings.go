@@ -207,7 +207,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else if page.ID == "permissions" {
 						a.note(c, "权限配置应用于当前主机，选择后自动保存。")
-					} else if page.ID != "capabilities" && page.ID != "mcp" {
+					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -215,6 +215,8 @@ func (a *preview) settingsView(c *ui.Context) {
 					a.liveSettingsPage(c)
 				} else {
 					switch page.ID {
+					case "remote-access":
+						a.note(c, "连接此 Mac 的本地核心后，可生成手机配对二维码并管理设备。")
 					case "agents":
 						a.businessSettings(c)
 					case "memory-knowledge":

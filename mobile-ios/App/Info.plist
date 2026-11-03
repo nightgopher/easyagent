@@ -30,6 +30,8 @@
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>EasyAgent 需要访问你添加的主机（例如同一网络或 Tailscale 中的 Mac / 迷你主机）来传输对话与执行结果。
 </string>
+	<key>NSCameraUsageDescription</key>
+	<string>扫描电脑 EasyAgent 的配对二维码，建立加密远程连接。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

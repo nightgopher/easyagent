@@ -12,8 +12,8 @@ public struct HostListView: View {
     public var body: some View {
         List {
             ForEach(model.hosts) { host in
-                Button {
-                    Task { await model.connect(hostID: host.id) }
+                NavigationLink {
+                    SessionListView().task { await model.connect(hostID: host.id) }
                 } label: {
                     HStack {
                         VStack(alignment: .leading) {
@@ -55,15 +55,31 @@ struct AddHostSheet: View {
     @State private var apiKey = ""
     @State private var validating = false
     @State private var errorText: String?
+    @State private var pairing = false
+    @State private var scanning = false
+    @State private var pairCode = ""
+    @State private var claimed: (AgentHost, String)?
 
     var body: some View {
         NavigationStack {
             Form {
+                Section {
+                    Button("扫码配对电脑", systemImage: "qrcode.viewfinder") { pairing = true; scanning = true }
+                    Button(pairing ? "填写主机地址" : "粘贴配对码") { pairing.toggle(); errorText = nil }
+                }.disabled(validating)
+                if pairing {
+                    Section("手机远程访问") {
+                        Text("在电脑的设置 → 手机远程访问中生成二维码，无需配置 VPN。")
+                        SecureField("配对码", text: $pairCode).autocorrectionDisabled().disabled(claimed != nil)
+                        Button(claimed == nil ? "配对并连接" : "重试保存", action: pair).disabled(validating || pairCode.isEmpty)
+                    }
+                } else {
                 TextField("名称", text: $name)
                 TextField("地址（http://100.64.0.1:8080）", text: $address)
                     .autocorrectionDisabled()
                 SecureField("API Key", text: $apiKey)
                     .autocorrectionDisabled()
+                }
                 if let errorText {
                     Text(errorText).foregroundStyle(.red).font(.caption)
                 }
@@ -72,9 +88,33 @@ struct AddHostSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
-                    if validating { ProgressView() } else { Button("保存") { save() } }
+                    if validating { ProgressView() } else if !pairing { Button("保存") { save() } }
                 }
             }
+            .sheet(isPresented: $scanning) {
+                PairScanner { code in
+                    scanning = false
+                    pairCode = code
+                    pair()
+                }
+            }
+        }
+    }
+
+    private func pair() {
+        guard !validating else { return }
+        validating = true
+        errorText = nil
+        Task {
+            do {
+                if claimed == nil {
+                    claimed = try await RelayPairCode.parse(pairCode).claim(deviceName: "iPhone / iPad")
+                }
+                if let (host, token) = claimed { try await model.savePairedHost(host, token: token) }
+                pairCode = ""; claimed = nil
+                dismiss()
+            } catch { errorText = error.localizedDescription }
+            validating = false
         }
     }
 
@@ -120,7 +160,7 @@ public struct SessionListView: View {
         .overlay {
             if model.sessions.isEmpty {
                 ContentUnavailableView("没有会话", systemImage: "bubble.left.and.bubble.right",
-                                       description: Text(model.linkOnline ? "主机上一时会话还没建" : "未连接主机"))
+                                       description: Text(model.errorMessage ?? (model.linkOnline ? "这台主机还没有会话" : "未连接主机")))
             }
         }
         .refreshable { await model.reloadSessions() }
@@ -151,6 +191,7 @@ public struct SessionListView: View {
 public struct ChatView: View {
     @Environment(AppModel.self) private var model
     @State private var draft = ""
+    @State private var sending = false
     private let sessionID: String
 
     public init(sessionID: String) {
@@ -173,13 +214,14 @@ public struct ChatView: View {
                 }
             }
             Divider()
+            if let error = model.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(.horizontal) }
             HStack(spacing: 8) {
                 TextField("输入消息…", text: $draft, axis: .vertical)
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...5)
                     .onSubmit { send() }
                 Button("发送", systemImage: "paperplane.fill") { send() }
-                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty || sending || !model.linkOnline)
             }
             .padding()
         }
@@ -188,9 +230,13 @@ public struct ChatView: View {
     }
 
     private func send() {
+        guard !sending, model.linkOnline else { return }
         let text = draft
-        draft = ""
-        Task { await model.send(draft: text) }
+        sending = true
+        Task {
+            if await model.send(draft: text), draft == text { draft = "" }
+            sending = false
+        }
     }
 }
 

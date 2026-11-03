@@ -99,6 +99,11 @@ func writeDeploymentJSON(w http.ResponseWriter, v any) {
 }
 
 func (s *Server) serveUntilSignal(addr string) error {
+	if h, err := s.remoteAccess(); err == nil {
+		defer h.Close()
+	} else {
+		return err
+	}
 	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	defer s.cancel()

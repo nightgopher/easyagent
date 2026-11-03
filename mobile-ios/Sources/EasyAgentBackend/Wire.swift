@@ -38,6 +38,20 @@ public struct SessionSummary: Codable, Equatable, Identifiable, Sendable {
         case runState = "run_state"
         case pendingConfirmations = "pending_confirmations"
     }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        lastActive = try c.decodeIfPresent(Double.self, forKey: .lastActive) ?? 0
+        createdAt = try c.decodeIfPresent(Double.self, forKey: .createdAt) ?? 0
+        workspace = try c.decodeIfPresent(String.self, forKey: .workspace) ?? ""
+        application = try c.decodeIfPresent(String.self, forKey: .application) ?? ""
+        archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        runState = try c.decodeIfPresent(String.self, forKey: .runState) ?? ""
+        pendingConfirmations = try c.decodeIfPresent(Int.self, forKey: .pendingConfirmations) ?? 0
+    }
 }
 
 public struct HealthResponse: Codable, Sendable {
@@ -60,12 +74,14 @@ public struct Host: Codable, Equatable, Identifiable, Sendable {
     /// Base URL, e.g. http://100.64.0.1:8080 — no trailing slash.
     public var baseURL: URL
     public var createdAt: Date
+    public var relay: RelayConfig?
 
-    public init(id: UUID = UUID(), name: String, baseURL: URL, createdAt: Date = Date()) {
+    public init(id: UUID = UUID(), name: String, baseURL: URL, createdAt: Date = Date(), relay: RelayConfig? = nil) {
         self.id = id
         self.name = name
         self.baseURL = baseURL
         self.createdAt = createdAt
+        self.relay = relay
     }
 }
 
@@ -119,7 +135,7 @@ public actor APIClient {
     private let now: @Sendable () -> Date
 
     public init(host: Host, apiKeyProvider: @escaping @Sendable () -> String,
-                session: URLSession = .shared, now: @escaping @Sendable () -> Date = Date.init) {
+                session: URLSession = .shared, now: @escaping @Sendable () -> Date = { Date() }) {
         self.host = host
         self.apiKeyProvider = apiKeyProvider
         self.session = session
@@ -131,9 +147,7 @@ public actor APIClient {
     }
 
     public func sessions() async throws -> [SessionSummary] {
-        struct Wrapper: Codable { let sessions: [SessionSummary]? }
-        let wrapper: Wrapper = try await get("sessions")
-        return wrapper.sessions ?? []
+        try await get("sessions")
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {

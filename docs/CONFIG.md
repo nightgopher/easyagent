@@ -29,6 +29,8 @@ Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MO
 
 桌面客户端启动自己的本地服务时生成独立的随机 `EA_SERVER_API_KEY`，保留用户模型配置；远程连接使用目标服务的令牌。
 
+扫码中继使用独立的设备凭据，不向手机或中继发放 Owner Key。中继服务单独使用 `EA_RELAY_REGISTRATION_KEY` 控制电脑注册，默认监听回环 `127.0.0.1:8787`，须置于 HTTPS/WSS 代理后；[部署与配对说明](RELAY_ACCESS_DESIGN.md)。
+
 | 服务配置 | 默认 / 行为 |
 |---|---|
 | `EA_HOST` / `EA_PORT` | `127.0.0.1` / `8080`；`serve --listen` 可指定监听地址 |

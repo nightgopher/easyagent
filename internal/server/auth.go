@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/nightgopher/easyagent/internal/relay"
 	"github.com/nightgopher/easyagent/sdk/config"
 )
 
@@ -19,6 +20,9 @@ import (
 //      本机消费方（网页 UI、飞书 bridge、桌面端）零配置继续可用。
 
 func (s *Server) authorized(r *http.Request) bool {
+	if relay.DeviceID(r.Context()) != "" {
+		return true
+	}
 	if s.apiKey != "" {
 		return s.checkToken(r, bearerToken(r))
 	}
@@ -55,6 +59,9 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request) int {
 // wsAuthorized 在 WebSocket 升级前做同等校验；token 支持 ?token= 查询参数
 // （浏览器 WebSocket 无法自定义 header）。
 func (s *Server) wsAuthorized(r *http.Request) bool {
+	if relay.DeviceID(r.Context()) != "" {
+		return true
+	}
 	if s.apiKey != "" {
 		token := r.URL.Query().Get("token")
 		if token == "" {

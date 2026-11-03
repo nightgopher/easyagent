@@ -4,6 +4,19 @@ import Foundation
 @testable import EasyAgentBackend
 
 @Suite struct ChatProjectionTests {
+    @Test func currentServerSnapshotEventAndReplayPreserveHistoryWithoutDuplicates() throws {
+        var projection = ChatProjection()
+        func envelope(_ json: String) throws -> WSServerMessage { try JSONDecoder().decode(WSServerMessage.self, from: Data(json.utf8)) }
+        projection.apply(try envelope(#"{"type":"snapshot","session_id":"s1","seq":10,"run_id":"r1","messages":[{"role":"user","content":"历史问题"},{"role":"assistant","content":"历史答案"}],"run":{"id":"r1","state":"running","prompt":"新的问题"},"events":[]}"#))
+        #expect(projection.entries.map(\.text) == ["历史问题", "历史答案", "新的问题"])
+        let delta = try envelope(#"{"type":"event","session_id":"s1","seq":11,"run_id":"r1","event":{"type":"text_delta","text_delta":"新答"}}"#)
+        projection.apply(delta)
+        projection.apply(delta)
+        projection.apply(try envelope(#"{"type":"replay","session_id":"s1","seq":12,"run":{"state":"completed"},"events":[{"type":"event","seq":11,"run_id":"r1","event":{"type":"text_delta","text_delta":"新答"}},{"type":"event","seq":12,"run_id":"r1","event":{"type":"text_delta","text_delta":"案"}}]}"#))
+        #expect(projection.entries.map(\.text) == ["历史问题", "历史答案", "新的问题", "新答案"])
+        #expect(projection.runState == "completed")
+    }
+
     /// 构造服务端形状的 events 容器（[AgentEvent] 数组）。
     private func events(_ json: String) -> AnyDecodable? {
         guard let data = json.data(using: .utf8),

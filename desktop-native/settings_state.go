@@ -39,6 +39,7 @@ var settingsPages = []settingsPage{
 	{"appearance", "外观", "sparkle", "选择适合你的界面配色与背景壁纸。", "立即生效", 0},
 	{"usage", "用量统计", "activity", "查看近 30 天 Token 消耗与各会话用量排行。", "", 0},
 	{"connections", "运行主机", "laptop", "选择任务运行的位置，管理远程 Agent 连接。", "", 1},
+	{"remote-access", "手机远程访问", "globe", "扫码配对手机，通过加密中继访问这台电脑。", "立即生效", 1},
 	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
 	{"permissions", "工具权限", "shield", "配置新会话与飞书的默认工具权限。", "新会话生效", 1},
 	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
@@ -102,7 +103,8 @@ type feishuForm struct {
 	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
 }
 type settingsState struct {
-	Business businessSettingsState
+	RelayURL, RelayRegistrationKey string
+	Business                       businessSettingsState
 	modelForm
 	hostForm
 	mcpForm

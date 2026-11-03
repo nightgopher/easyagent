@@ -31,7 +31,7 @@ enum class LinkStatus { CONNECTING, CONNECTED, DISCONNECTED }
  * 所有状态只在主线程修改；UI 通过 [revision] 感知变化后直接读取。
  */
 class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDrafts) {
-    val api = ApiClient(config.url, requireNotNull(config.token))
+    val api = ApiClient(config.url, requireNotNull(config.token), config.relay)
     val link = MutableStateFlow(LinkStatus.CONNECTING)
     val sessions = MutableStateFlow<List<SessionSummary>>(emptyList())
     val taskStates = MutableStateFlow<Map<String, String>>(emptyMap())

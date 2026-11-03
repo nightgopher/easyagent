@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/internal/relay"
 	"github.com/nightgopher/easyagent/internal/scheduler"
 	"github.com/nightgopher/easyagent/internal/web"
 	"github.com/nightgopher/easyagent/sdk/agent"
@@ -32,6 +33,8 @@ func (s *Server) SetVersion(v string) {
 // Server provides HTTP REST + SSE endpoints for the agent.
 // It routes requests to AgentSessions via the App's SessionRegistry.
 type Server struct {
+	remoteMu          sync.Mutex
+	remoteHost        *relay.Host
 	activity          activityGate
 	runs              *runRegistry
 	workspaceSnapshot func(string) (map[string]fileState, []string) // nil uses the default scanner
@@ -177,6 +180,11 @@ func (s *Server) Handler() http.Handler {
 	// REST API routes with middleware
 	restMux := http.NewServeMux()
 	restMux.HandleFunc("GET /health", s.health)
+	restMux.HandleFunc("GET /remote-access", s.manageRemoteAccess)
+	restMux.HandleFunc("POST /remote-access", s.manageRemoteAccess)
+	restMux.HandleFunc("POST /remote-access/pair", s.manageRemoteAccess)
+	restMux.HandleFunc("DELETE /remote-access/pair", s.manageRemoteAccess)
+	restMux.HandleFunc("DELETE /remote-access/devices/{id}", s.manageRemoteAccess)
 	restMux.HandleFunc("/admin/deploy", s.deploymentControl)
 	restMux.HandleFunc("POST /chat", s.chat)
 	restMux.HandleFunc("POST /chat/stream", s.chatStream)
@@ -301,6 +309,8 @@ func (s *Server) Handler() http.Handler {
 
 	// Register REST API routes (these take precedence over "/" catch-all)
 	topMux.Handle("/health", restHandler)
+	topMux.Handle("/remote-access", restHandler)
+	topMux.Handle("/remote-access/", restHandler)
 	topMux.Handle("/admin/deploy", restHandler)
 	topMux.Handle("/chat", restHandler)
 	topMux.Handle("/chat/", restHandler)

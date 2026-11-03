@@ -106,12 +106,11 @@ final class StubURLProtocol: URLProtocol {
         await #expect(throws: APIError.unauthorized) { _ = try await client.health() }
     }
 
-    @Test func sessionsDecodesWrapper() async throws {
+    @Test func sessionsDecodesServerArrayWithOmittedIdleFields() async throws {
         StubURLProtocol.responder = { _ in
             (200, """
-            {"sessions":[{"id":"s1","title":"hello","last_active":5,"created_at":4,
-                          "workspace":"/w","application":"coding","archived":false,"pinned":false,
-                          "run_state":"","pending_confirmations":0}]}
+            [{"id":"s1","title":"hello","last_active":5,"created_at":4,
+              "workspace":"/w","application":"coding","archived":false,"pinned":false}]
             """.data(using: .utf8)!)
         }
         defer { StubURLProtocol.responder = nil }
@@ -120,6 +119,8 @@ final class StubURLProtocol: URLProtocol {
         let sessions = try await client.sessions()
         #expect(sessions.count == 1)
         #expect(sessions.first?.id == "s1")
+        #expect(sessions.first?.runState == "")
+        #expect(sessions.first?.pendingConfirmations == 0)
     }
 
     @Test func requestCarriesBearerToken() async throws {

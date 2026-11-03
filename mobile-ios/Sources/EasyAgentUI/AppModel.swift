@@ -19,11 +19,15 @@ public final class AppModel {
     private var socket: ChatSocket?
     private let hostStore: HostStore
     private let keyStore: any APIKeyStore
+    private let directSession: URLSession
     private var pumpTask: Task<Void, Never>?
+    private var relayTransport: RelayTransport?
+    private var connectionGeneration: UInt64 = 0
 
-    public init(hostStore: HostStore, keyStore: any APIKeyStore = SystemKeychainStore()) {
+    public init(hostStore: HostStore, keyStore: any APIKeyStore = SystemKeychainStore(), session: URLSession = .shared) {
         self.hostStore = hostStore
         self.keyStore = keyStore
+        self.directSession = session
     }
 
     public var currentHost: AgentHost? {
@@ -43,65 +47,103 @@ public final class AppModel {
 
     public func connect(hostID: UUID) async {
         guard let host = hosts.first(where: { $0.id == hostID }) else { return }
+        let generation = connectionGeneration &+ 1
+        await disconnect()
+        guard generation == connectionGeneration else { return }
+        if currentHostID != hostID { activeSessionID = nil }
         currentHostID = hostID
+        let session: URLSession
+        do {
+            if let relay = host.relay {
+                guard host.baseURL == (try relay.baseURL()) else { throw RelayError.invalidCode }
+                let transport = try await RelayTransport.open(relay)
+                guard generation == connectionGeneration else { transport.close(); return }
+                relayTransport = transport
+                session = transport.session
+            } else { session = directSession }
+        } catch {
+            if generation == connectionGeneration { errorMessage = error.localizedDescription }
+            return
+        }
         let keyStore = self.keyStore
         let provider: @Sendable () -> String = { keyStore.key(for: hostID) ?? "" }
-        client = APIClient(host: host, apiKeyProvider: provider)
-        let socket = ChatSocket(host: host, apiKeyProvider: provider)
+        client = APIClient(host: host, apiKeyProvider: provider, session: session)
+        let socket = ChatSocket(host: host, apiKeyProvider: provider, session: session)
         self.socket = socket
         projection = ChatProjection()
-        await socket.connect()
-        await socket.subscribe(sessionID: activeSessionID ?? "")
         startPump(on: socket)
-        await reloadSessions()
+        await socket.connect()
+        guard generation == connectionGeneration else { await socket.disconnect(); return }
+        if let id = activeSessionID { await socket.subscribe(sessionID: id) }
+        if generation == connectionGeneration { await reloadSessions() }
     }
 
     public func disconnect() async {
+        connectionGeneration &+= 1
         pumpTask?.cancel()
         pumpTask = nil
-        await socket?.disconnect()
+        let previous = socket
         socket = nil
+        client = nil
+        relayTransport?.close()
+        relayTransport = nil
         linkOnline = false
+        await previous?.disconnect()
+    }
+
+    public func savePairedHost(_ paired: AgentHost, token: String) async throws {
+        var host = paired
+        if let saved = hosts.first(where: { $0.baseURL == host.baseURL && $0.relay != nil }) { host.id = saved.id }
+        try keyStore.saveKey(token, for: host.id)
+        await add(host: host)
+        await connect(hostID: host.id)
     }
 
     public func reloadSessions() async {
         guard let client else { return }
+        let generation = connectionGeneration
         do {
-            sessions = try await client.sessions()
+            let loaded = try await client.sessions()
+            guard generation == connectionGeneration else { return }
+            sessions = loaded
             errorMessage = nil
         } catch let error as APIError {
-            errorMessage = describe(error)
+            if generation == connectionGeneration { errorMessage = describe(error) }
         } catch {
-            errorMessage = error.localizedDescription
+            if generation == connectionGeneration { errorMessage = error.localizedDescription }
         }
     }
 
     public func open(sessionID: String) async {
+        guard activeSessionID != sessionID else { return }
+        if let previous = activeSessionID, previous != sessionID { await socket?.unsubscribe(sessionID: previous) }
         activeSessionID = sessionID
         projection = ChatProjection()
         guard let socket else { return }
         await socket.subscribe(sessionID: sessionID)
     }
 
-    public func send(draft: String) async {
+    public func send(draft: String) async -> Bool {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let sessionID = activeSessionID, let socket else { return }
-        projection.appendUser(trimmed)
+        guard !trimmed.isEmpty, let sessionID = activeSessionID, let socket else { return false }
         let requestID = UUID().uuidString
         guard await socket.sendPrompt(sessionID: sessionID, requestID: requestID, prompt: trimmed) else {
             errorMessage = "连接已断开，草稿已保留"
-            return
+            return false
         }
+        return true
     }
 
     // MARK: - internals
 
     private func startPump(on socket: ChatSocket) {
         pumpTask?.cancel()
+        let generation = connectionGeneration
         pumpTask = Task { [weak self] in
             let stream = await socket.events()
             for await event in stream {
                 await MainActor.run {
+                    guard !Task.isCancelled, self?.connectionGeneration == generation else { return }
                     self?.handle(event)
                 }
             }
@@ -117,8 +159,8 @@ public final class AppModel {
         case .server(let message):
             if message.type == "error", let sessionID = message.sessionID,
                sessionID == activeSessionID || activeSessionID == nil {
-                // 错误消息有 message 字段；WSServerMessage 未建模它，用 code 兜底展示。
-                errorMessage = message.code.map { "服务错误：\($0)" }
+                // 优先显示服务端消息，旧服务端只有 code 时提供兜底。
+                errorMessage = message.message ?? message.code.map { "服务错误：\($0)" }
             }
             guard message.sessionID == nil || message.sessionID == activeSessionID else { return }
             if message.type == "snapshot", message.sessionID != activeSessionID { return }

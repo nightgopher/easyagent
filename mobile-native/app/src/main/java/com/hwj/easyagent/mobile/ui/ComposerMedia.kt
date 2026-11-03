@@ -127,6 +127,18 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
             upload(listOf(result))
         }
     }
+    fun takePicture() {
+        val dir = File(context.cacheDir, "camera").apply { mkdirs() }
+        val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
+        cameraFile = file
+        runCatching { camera.launch(FileProvider.getUriForFile(context, context.packageName + ".files", file)) }
+            .onFailure { cameraFile = null; file.delete(); client.error.value = "无法打开相机" }
+    }
+    // Declaring CAMERA for QR scanning also makes external capture intents
+    // require this permission on Android; preserve the existing photo flow.
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) takePicture() else client.error.value = "需要相机权限才能拍照，也可以从相册选择"
+    }
 
     fun transcribe(wav: ByteArray) {
         transcribing = true
@@ -219,12 +231,8 @@ fun MediaComposer(client: AgentClient, session: ChatSession, link: LinkStatus, q
                             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                                 DropdownMenuItem(text = { Text("拍照") }, onClick = {
                                     menu = false
-                                    val dir = File(context.cacheDir, "camera").apply { mkdirs() }
-                                    val file = File(dir, "capture-${System.currentTimeMillis()}.jpg")
-                                    cameraFile = file
-                                    runCatching {
-                                        camera.launch(FileProvider.getUriForFile(context, context.packageName + ".files", file))
-                                    }.onFailure { client.error.value = "无法打开相机" }
+                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) takePicture()
+                                    else cameraPermission.launch(Manifest.permission.CAMERA)
                                 })
                                 DropdownMenuItem(text = { Text("从相册选择") }, onClick = {
                                     menu = false

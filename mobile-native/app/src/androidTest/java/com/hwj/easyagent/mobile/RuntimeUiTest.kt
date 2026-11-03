@@ -82,6 +82,20 @@ class RuntimeUiTest {
     }
 
     private fun host(name: String) = RuntimeFixture(name).also { hosts += it }
+
+    @Test fun invalidRelayPairingDoesNotSaveCredentialsAndDirectConnectionStillWorks() {
+        waitText("扫码配对电脑")
+        ui.onNodeWithText("粘贴配对码").performClick()
+        fill("配对码", "not-an-easyagent-pair-code")
+        ui.onNodeWithText("配对并连接").performScrollTo().performClick()
+        waitText("这不是 EasyAgent 配对码")
+        assertTrue(app.connections.state.value.hosts.isEmpty())
+        screenshot("relay-pairing-error")
+        ui.onNodeWithText("填写主机地址").performScrollTo().performClick()
+        val direct = host("直连仍可用")
+        connect(direct)
+        openChat(direct)
+    }
     private fun waitText(text: String, useUnmergedTree: Boolean = false) {
         try {
             ui.waitUntil(15_000) { ui.onAllNodesWithText(text, substring = true, useUnmergedTree = useUnmergedTree).fetchSemanticsNodes().isNotEmpty() }

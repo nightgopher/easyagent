@@ -1,6 +1,7 @@
 package com.hwj.easyagent.mobile.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -44,6 +45,9 @@ import androidx.compose.ui.unit.dp
 import com.hwj.easyagent.mobile.backend.ApiClient
 import com.hwj.easyagent.mobile.backend.ApiException
 import com.hwj.easyagent.mobile.backend.HostConfig
+import com.hwj.easyagent.mobile.backend.RelayPairCode
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import com.hwj.easyagent.mobile.backend.getString
 import com.hwj.easyagent.mobile.backend.obj
 import kotlinx.coroutines.launch
@@ -66,12 +70,15 @@ fun ConnectionScreen(
     var testing by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf<String?>(null) }
     var resultOk by remember { mutableStateOf(false) }
+    var pairing by remember { mutableStateOf(false) }
+    var pairCode by remember { mutableStateOf("") }
+    var paired by remember { mutableStateOf<HostConfig?>(null) }
     val scope = rememberCoroutineScope()
 
     if (canCancel) BackHandler(onBack = onCancel)
 
     fun config(): HostConfig? = try {
-        HostConfig(ApiClient.normalize(url), token.trim(), id, name.trim())
+        HostConfig(ApiClient.normalize(url), token.trim(), id, name.trim(), initial?.relay)
     } catch (e: IllegalArgumentException) {
         resultOk = false
         result = e.message
@@ -93,7 +100,7 @@ fun ConnectionScreen(
         testing = true
         result = null
         scope.launch {
-            val api = ApiClient(config.url, requireNotNull(config.token))
+            val api = ApiClient(config.url, requireNotNull(config.token), config.relay)
             try {
                 val version = api.get("/health").obj().getString("version")
                 // /health 不鉴权，再请求会话列表验证令牌。
@@ -108,6 +115,28 @@ fun ConnectionScreen(
                 testing = false
             }
         }
+    }
+
+    fun pair(raw: String) {
+        if (testing) return
+        testing = true
+        result = null
+        scope.launch {
+            try {
+                // Keep a successful claim in memory if local secure storage fails;
+                // the one-use code must not be submitted again to retry saving.
+                val host = paired ?: RelayPairCode.parse(raw).claim(android.os.Build.MODEL).also { paired = it }
+                onSave(host)
+                pairCode = ""
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) {
+                resultOk = false
+                result = if (e is ApiException || e is IllegalArgumentException) e.message else "配对或保存失败，请重试；必要时在电脑上撤销设备后重新扫码"
+            } finally { testing = false }
+        }
+    }
+    val scanner = rememberLauncherForActivityResult(ScanContract()) { scan ->
+        scan.contents?.let { pairCode = it; pair(it) }
     }
 
     Scaffold(
@@ -132,77 +161,94 @@ fun ConnectionScreen(
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                "填写运行 easyagent 服务的主机地址和服务令牌（EA_SERVER_API_KEY，未设置时使用 EA_API_KEY）。手机需要先接入与主机相同的网络，例如同一 tailnet。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it; result = null },
-                label = { Text("连接名称（可选）") },
-                placeholder = { Text("例如：迷你主机") },
-                singleLine = true,
-                enabled = !testing,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it; result = null },
-                label = { Text("服务地址") },
-                placeholder = { Text("http://主机地址:8080") },
-                singleLine = true,
-                enabled = !testing,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it; result = null },
-                label = { Text("服务令牌") },
-                singleLine = true,
-                enabled = !testing,
-                visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { showToken = !showToken }) {
-                        Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = if (showToken) "隐藏令牌" else "显示令牌")
+            if (initial == null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(onClick = { pairing = true; scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("扫描电脑 EasyAgent 的配对二维码").setBeepEnabled(false).setBarcodeImageEnabled(false)) }, enabled = !testing) {
+                        Text("扫码配对电脑")
                     }
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (initial != null && initial.token == null) {
-                Text("无法读取已保存的令牌，请重新填写；服务未设置令牌时可留空。", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { pairing = !pairing; result = null }, enabled = !testing) { Text(if (pairing) "填写主机地址" else "粘贴配对码") }
+                }
             }
-            result?.let {
+            if (pairing) {
+                Text("在电脑的设置 → 手机远程访问中生成二维码。无需配置 VPN，配对码仅在 5 分钟内有效。")
+                OutlinedTextField(value = pairCode, onValueChange = { pairCode = it; paired = null }, label = { Text("配对码") }, visualTransformation = PasswordVisualTransformation(), enabled = !testing && paired == null, modifier = Modifier.fillMaxWidth())
+                Button(onClick = { pair(pairCode) }, enabled = !testing && pairCode.isNotBlank()) {
+                    if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text(if (paired != null) "重试保存" else "配对并连接")
+                }
+                result?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            } else {
                 Text(
-                    it,
+                    if (initial?.relay != null) "这台电脑通过加密中继连接。更换电脑身份或恢复凭据时，请在电脑上撤销此设备并重新扫码。" else "填写运行 easyagent 服务的主机地址和服务令牌（EA_SERVER_API_KEY，未设置时使用 EA_API_KEY）。手机需要先接入与主机相同的网络，例如同一 tailnet。",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (resultOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; result = null },
+                    label = { Text("连接名称（可选）") },
+                    placeholder = { Text("例如：迷你主机") },
+                    singleLine = true,
+                    enabled = !testing,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = url,
+                    onValueChange = { url = it; result = null },
+                    label = { Text("服务地址") },
+                    placeholder = { Text("http://主机地址:8080") },
+                    singleLine = true,
+                    enabled = !testing && initial?.relay == null,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it; result = null },
+                    label = { Text("服务令牌") },
+                    singleLine = true,
+                    enabled = !testing && initial?.relay == null,
+                    visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { showToken = !showToken }) {
+                            Icon(if (showToken) Icons.Filled.VisibilityOff else Icons.Filled.Visibility, contentDescription = if (showToken) "隐藏令牌" else "显示令牌")
+                        }
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (initial != null && initial.token == null) {
+                    Text("无法读取已保存的令牌，请重新填写；服务未设置令牌时可留空。", color = MaterialTheme.colorScheme.error)
+                }
+                result?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (resultOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedButton(
+                        onClick = { verify() },
+                        enabled = !testing && url.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("测试连接")
+                    }
+                    Button(
+                        onClick = { save() },
+                        enabled = !testing && url.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("保存并连接")
+                    }
+                }
+                Text(
+                    "保存后自动连接，离线时会自动重试。令牌按主机经 Android Keystore 加密保存在本机，不随备份上传。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(
-                    onClick = { verify() },
-                    enabled = !testing && url.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("测试连接")
-                }
-                Button(
-                    onClick = { save() },
-                    enabled = !testing && url.isNotBlank(),
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("保存并连接")
-                }
-            }
-            Text(
-                "保存后自动连接，离线时会自动重试。令牌按主机经 Android Keystore 加密保存在本机，不随备份上传。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

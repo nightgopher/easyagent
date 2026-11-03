@@ -600,6 +600,8 @@ func (a *preview) cancelMCPLogin() {
 	l.Loading["mcp-login"] = false
 }
 func (a *preview) cancelSettingsTransient() {
+	a.clearRemotePair()
+	a.Settings.RelayURL, a.Settings.RelayRegistrationKey = "", ""
 	a.cancelMCPStatus()
 	a.Settings.HostTokenField.CancelFocus()
 	if a.Settings.Tab == "models" {
