@@ -1,6 +1,7 @@
 package com.hwj.easyagent.mobile.backend
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -32,8 +33,10 @@ internal fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
 }
 
 /** 对应 desktop-native/backend.go 的 backendClient：Bearer 鉴权的 REST 调用与 /ws 升级。 */
-class ApiClient(val baseUrl: String, private val token: String, relay: RelayConfig? = null) {
-    private val relayTransport = relay?.let { require(baseUrl == it.baseUrl); RelayTransport(it) }
+class ApiClient internal constructor(val baseUrl: String, private val token: String, private val relayTransport: RelayTransport?) {
+    constructor(baseUrl: String, token: String, relay: RelayConfig? = null) : this(
+        baseUrl, token, relay?.let { require(baseUrl == it.baseUrl); RelayTransport(it) },
+    )
     internal val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(45, TimeUnit.SECONDS)
@@ -43,11 +46,16 @@ class ApiClient(val baseUrl: String, private val token: String, relay: RelayConf
         .apply { relayTransport?.configure(this) }
         .build()
 
-    fun close() {
-        relayTransport?.close()
-        http.dispatcher.cancelAll()
-        http.connectionPool.evictAll()
-        http.dispatcher.executorService.shutdown()
+    // Closing a pooled TLS socket writes close_notify. Android forbids that on
+    // Main, even after the request has succeeded. Finish cleanup on cancellation too.
+    suspend fun close() = withContext(NonCancellable + Dispatchers.IO) {
+        try {
+            relayTransport?.close()
+        } finally {
+            http.dispatcher.cancelAll()
+            http.connectionPool.evictAll()
+            http.dispatcher.executorService.shutdown()
+        }
     }
 
     suspend fun get(path: String): JsonElement = request("GET", path, null)

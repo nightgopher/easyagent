@@ -81,6 +81,9 @@ func main() {
 		case "/sessions":
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`[{"id":"fixture","title":"saved conversation","last_active":1,"created_at":1,"pinned":false,"archived":false}]`))
+		case "/sessions/fixture/run":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"type":"snapshot","session_id":"fixture","seq":0,"messages":[{"role":"assistant","content":"Saved private chat over relay"}],"events":[],"pending_confirmations":[]}`))
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"sessions":[],"ok":true}`))

@@ -49,6 +49,7 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     private val chats = HashMap<String, ChatSession>()
     private var socket: WebSocket? = null
     private var reconnectJob: Job? = null
+    private var closing: Job? = null
     private var backoffMs = 1_000L
     @Volatile private var closed = false
 
@@ -113,17 +114,22 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     }
 
     @Synchronized fun shutdown() {
+        if (closed) return
         closed = true
         reconnectJob?.cancel()
         socket?.cancel()
         socket = null
         scope.cancel()
-        api.close()
+        // This cleanup must outlive the cancelled UI/request scope.
+        closing = CoroutineScope(Dispatchers.IO).launch { api.close() }
         link.value = LinkStatus.DISCONNECTED
     }
 
     /** Tests and other lifecycle owners can await cancelled in-flight requests. */
-    internal suspend fun awaitShutdown() { scope.coroutineContext.job.join() }
+    internal suspend fun awaitShutdown() {
+        scope.coroutineContext.job.join()
+        closing?.join()
+    }
 
     fun touch() {
         saveDrafts()

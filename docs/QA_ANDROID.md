@@ -2,6 +2,15 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.37.1 发布候选
+
+本轮修复 Android 配对成功后在主线程关闭 TLS 导致凭据丢失，以及扫码默认横屏。版本为 `0.37.1`，versionCode 为 `3701300`；最终候选 SHA、正式签名和摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。
+
+- Android 15 / API 35 arm64 独立模拟器在旧实现上复现 `NetworkOnMainThreadException`：电脑已登记 1 台设备，手机尚未保存凭据。修复后通过真实 MainActivity 与香港中继的配对、加密保存、读取聊天内容、界面重建与连接清理，电脑仍只登记 1 台测试设备。
+- 新增自包含的 Android 原生 TLS 回归，覆盖配对后的 Keystore 保存、会话与 WebSocket 恢复、取消清理，以及保存失败后点击重试不会再次配对；扫码界面验证竖屏并保留截图。公网复现使用临时电脑身份，不接触真实用户会话，CI 回归不依赖公网中继。
+- 发布前完整运行单测、lint、签名 APK 构建演练与 API 31 / 34 / 35 UI 矩阵；最终 SHA 的结果以 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml) 为准，流水线完成前不记为通过。
+- RMX6699 实体机、实体相机识码、蜂窝切换及正式 APK 覆盖安装未执行。未清除现有设备记录或替换正在使用的客户端；旧失败配对留下的凭据需要在电脑上手动撤销。
+
 ## v0.37.0 发布候选
 
 本轮增加中继扫码/粘贴配对、设备凭据保存及每台主机独立的端到端 TLS 传输。版本为 `0.37.0`，versionCode 为 `3700300`；最终候选 SHA、正式证书和资产摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。

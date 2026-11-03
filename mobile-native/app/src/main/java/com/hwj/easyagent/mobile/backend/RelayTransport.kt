@@ -77,8 +77,9 @@ data class RelayPairCode(
         }
     }
 
-    suspend fun claim(deviceName: String): HostConfig {
-        val api = ApiClient(relay.baseUrl, "", relay)
+    suspend fun claim(deviceName: String): HostConfig = claim(deviceName, ApiClient(relay.baseUrl, "", relay))
+
+    internal suspend fun claim(deviceName: String, api: ApiClient): HostConfig {
         try {
             val result = api.post("/pair/claim", buildJsonObject { put("pair_token", pairToken); put("name", deviceName.take(64)) }).obj()
             val token = result.getString("device_token")

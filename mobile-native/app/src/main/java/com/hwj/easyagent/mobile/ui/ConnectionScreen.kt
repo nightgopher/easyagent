@@ -61,6 +61,7 @@ fun ConnectionScreen(
     onCancel: () -> Unit,
     onSave: (HostConfig) -> Unit,
     onUpdates: () -> Unit,
+    claim: suspend (RelayPairCode) -> HostConfig = { it.claim(android.os.Build.MODEL) },
 ) {
     val id = rememberSaveable { initial?.id ?: UUID.randomUUID().toString() }
     var name by rememberSaveable { mutableStateOf(initial?.name ?: "") }
@@ -125,18 +126,26 @@ fun ConnectionScreen(
             try {
                 // Keep a successful claim in memory if local secure storage fails;
                 // the one-use code must not be submitted again to retry saving.
-                val host = paired ?: RelayPairCode.parse(raw).claim(android.os.Build.MODEL).also { paired = it }
+                val host = paired ?: claim(RelayPairCode.parse(raw)).also { paired = it }
                 onSave(host)
                 pairCode = ""
             } catch (e: kotlinx.coroutines.CancellationException) { throw e
             } catch (e: Exception) {
                 resultOk = false
-                result = if (e is ApiException || e is IllegalArgumentException) e.message else "配对或保存失败，请重试；必要时在电脑上撤销设备后重新扫码"
+                result = when {
+                    paired != null -> "电脑已完成配对，但手机保存凭据失败，请点“重试保存”"
+                    e is ApiException || e is IllegalArgumentException -> e.message
+                    else -> "配对失败，请重试；必要时在电脑上撤销设备后重新扫码"
+                }
             } finally { testing = false }
         }
     }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { scan ->
-        scan.contents?.let { pairCode = it; pair(it) }
+        scan.contents?.let {
+            if (it != pairCode) paired = null
+            pairCode = it
+            pair(it)
+        }
     }
 
     Scaffold(
@@ -163,7 +172,7 @@ fun ConnectionScreen(
         ) {
             if (initial == null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { pairing = true; scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("扫描电脑 EasyAgent 的配对二维码").setBeepEnabled(false).setBarcodeImageEnabled(false)) }, enabled = !testing) {
+                    OutlinedButton(onClick = { pairing = true; scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("扫描电脑 EasyAgent 的配对二维码").setBeepEnabled(false).setBarcodeImageEnabled(false).setOrientationLocked(false)) }, enabled = !testing && paired == null) {
                         Text("扫码配对电脑")
                     }
                     TextButton(onClick = { pairing = !pairing; result = null }, enabled = !testing) { Text(if (pairing) "填写主机地址" else "粘贴配对码") }
