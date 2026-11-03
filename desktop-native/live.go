@@ -20,6 +20,7 @@ type liveResult struct {
 	discard func()
 }
 type liveState struct {
+	EasyCode                                                               nativeEasyCodeState
 	MCPStatus                                                              nativeMCPStatus
 	Work                                                                   nativeWorkState
 	SessionSearch                                                          nativeSessionSearch
@@ -177,6 +178,9 @@ func (a *preview) expectedModelForm() modelForm {
 	f := modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: m.BaseURL, Model: m.Model, Thinking: thinkingLabel(m.Thinking), ReasoningEffort: m.ReasoningEffort, ThinkingBudget: m.ThinkingBudget, StreamIdleTimeout: m.StreamIdleTimeout}
 	if m.Mode == "override" {
 		f.Mode = "在桌面客户端配置"
+	}
+	if m.Mode == "easycode" {
+		f.Mode = SettingCopyEasyCodeMode
 	}
 	if m.Provider == "anthropic" {
 		f.Provider = "Anthropic"

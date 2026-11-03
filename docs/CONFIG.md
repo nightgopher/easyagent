@@ -23,7 +23,11 @@ EA_API_KEY=your-api-key
 
 应显式填写自己的模型与地址。`EA_MODEL`、`EA_BASE_URL`、`EA_API_KEY` 分别优先于 `OPENAI_MODEL`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`。
 
-Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 当前支持 `openai` / `anthropic`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+
+EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 可执行 `easyagent easycode login` 打开浏览器授权，`easyagent easycode models` 列出账号可用模型，再设置 `EA_PROVIDER=deepv` 与 `EA_MODEL=<模型 ID>`。`easyagent easycode status` 和 `easyagent easycode logout` 查询或退出本机账号。
+
+EasyAgent 的 EasyCode 凭据位于 `EA_HOME/easycode/credentials.json`，使用用户私有目录和文件权限，并独立于 EasyCode 原客户端。访问令牌到期自动续期；退出只删除这份本机凭据。桌面使用自身的 `EA_HOME=core-home`，与普通 CLI 各自登录。默认服务是 `https://api-code.deepvlab.ai`；测试或自建服务可通过 `EA_EASYCODE_BASE_URL` 指定 HTTPS 地址（本机回环地址允许 HTTP）。
 
 `EA_SERVER_API_KEY` 单独设置 HTTP API Bearer 令牌，不改变上游模型密钥。未设置时兼容使用 `EA_API_KEY` 作为服务令牌。使用 Anthropic 时，上游密钥来自 `ANTHROPIC_API_KEY`。
 

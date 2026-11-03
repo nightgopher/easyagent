@@ -29,6 +29,7 @@ const (
 	SettingCopyLocalSource       = "本地模型来源"
 	SettingCopyCmdlineMode       = "沿用命令行配置"
 	SettingCopyDesktopMode       = "在桌面客户端配置"
+	SettingCopyEasyCodeMode      = "EasyCode 飞书登录"
 	SettingCopyCmdlineNote       = "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。"
 )
 

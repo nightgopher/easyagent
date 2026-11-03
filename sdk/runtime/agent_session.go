@@ -191,9 +191,18 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 		_ = s.Close()
 		return nil, fmt.Errorf("load session model: %w", err)
 	}
-	if choice.Model != "" {
+	preserveSavedModel := false
+	if choice.Model != "" && choice.Provider != s.cfg.Provider && (choice.Provider == "deepv" || s.cfg.Provider == "deepv") && deps.Registry != nil {
+		_, savedAvailable := deps.Registry.Get(choice.Provider)
+		_, currentAvailable := deps.Registry.Get(s.cfg.Provider)
+		// A prior session may refer to a provider no longer configured after
+		// switching accounts. Use the active source for this run, but retain the
+		// saved preference so it returns if the original provider is restored.
+		preserveSavedModel = !savedAvailable && currentAvailable
+	}
+	if choice.Model != "" && !preserveSavedModel {
 		switch choice.Provider {
-		case "openai":
+		case "openai", "deepv":
 			s.cfg.Provider, s.cfg.OpenAIModel = choice.Provider, choice.Model
 		case "anthropic":
 			s.cfg.Provider, s.cfg.AnthropicModel = choice.Provider, choice.Model
@@ -212,9 +221,11 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 	if err != nil {
 		return nil, fmt.Errorf("build agent: %w", err)
 	}
-	if err := s.saveModel(); err != nil {
-		_ = s.Close()
-		return nil, fmt.Errorf("save session model: %w", err)
+	if !preserveSavedModel {
+		if err := s.saveModel(); err != nil {
+			_ = s.Close()
+			return nil, fmt.Errorf("save session model: %w", err)
+		}
 	}
 	s.agent = ag
 	s.toolVersion = version
@@ -410,7 +421,7 @@ func (s *AgentSession) ModelInfo() (string, string) {
 	defer s.mu.RUnlock()
 	modelID := s.cfg.AnthropicModel
 	providerName := s.cfg.Provider
-	if providerName == "openai" {
+	if providerName == "openai" || providerName == "deepv" {
 		modelID = s.cfg.OpenAIModel
 	}
 	if modelID == "" {
@@ -448,7 +459,7 @@ func (s *AgentSession) SwitchModel(ctx context.Context, modelID string, provider
 
 	providerName := s.cfg.Provider
 	switch providerName {
-	case "openai":
+	case "openai", "deepv":
 		s.cfg.OpenAIModel = modelID
 	case "anthropic":
 		s.cfg.AnthropicModel = modelID
@@ -479,7 +490,7 @@ func (s *AgentSession) saveModel() error {
 		return nil
 	}
 	model := s.cfg.AnthropicModel
-	if s.cfg.Provider == "openai" {
+	if s.cfg.Provider == "openai" || s.cfg.Provider == "deepv" {
 		model = s.cfg.OpenAIModel
 	}
 	if model == "" || s.cfg.Provider == "" {
@@ -693,7 +704,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	// Determine model
 	modelID := cfg.AnthropicModel
 	providerName := cfg.Provider
-	if providerName == "openai" {
+	if providerName == "openai" || providerName == "deepv" {
 		modelID = cfg.OpenAIModel
 	}
 	if modelID == "" {
@@ -706,6 +717,16 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		Provider:      providerName,
 		ContextWindow: models.ContextWindow(modelID),
 		MaxTokens:     models.MaxOutput(modelID),
+	}
+	if providerName == "deepv" {
+		// The EasyCode service limits input plus output per request. Other
+		// providers' model catalogs may advertise a larger context/output.
+		if model.ContextWindow > 160000 {
+			model.ContextWindow = 160000
+		}
+		if model.MaxTokens > 32000 {
+			model.MaxTokens = 32000
+		}
 	}
 	model = s.resolveModel(model)
 

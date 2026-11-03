@@ -58,6 +58,12 @@ func (a *preview) operation(key, method, path string, body any, done func(any)) 
 }
 func (a *preview) loadSettingsPage() {
 	l := a.Live
+	if a.Settings.Tab == "models" && a.Settings.host().Local && (a.Settings.Mode == SettingCopyEasyCodeMode || l.Config.Model.Mode == "easycode") {
+		a.refreshEasyCodeStatus()
+		if l.Config.Model.Mode == "easycode" {
+			a.refreshEasyCodeModels()
+		}
+	}
 	if l.Client == nil {
 		return
 	}
@@ -135,7 +141,7 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.livePermissionSettings(c)
 	case "general":
 		a.generalSettings(c)
-		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型与主机密钥保存在 macOS 钥匙串。")
+		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型 API Key 与主机密钥保存在 macOS 钥匙串；EasyCode 登录凭据保存在仅当前用户可访问的目录。")
 		a.action(c, "打开应用数据目录").AlignSelf(ui.Start).OnClick(func() { go mygo.Shell.OpenPath(l.Dir) })
 	case "appearance":
 		a.appearanceSettings(c)
@@ -211,9 +217,18 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	ui.Column(c).Gap(12).Disabled(busy).Children(func() {
 		ui.RadioGroup(c, func() {
 			ui.Row(c).Gap(20).Wrap().Children(func() {
-				for _, mode := range []string{SettingCopyCmdlineMode, SettingCopyDesktopMode} {
+				for _, mode := range []string{SettingCopyCmdlineMode, SettingCopyDesktopMode, SettingCopyEasyCodeMode} {
 					if ui.Radio(c, &s.Mode, mode, a.tr(mode)).Changed() {
 						a.clearModelCheck()
+						if mode == SettingCopyEasyCodeMode {
+							if l.Config.Model.Mode != "easycode" {
+								s.Model = ""
+							}
+							a.refreshEasyCodeStatus()
+							if l.EasyCode.LoggedIn {
+								a.refreshEasyCodeModels()
+							}
+						}
 					}
 				}
 			})
@@ -270,6 +285,8 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 				a.note(c, "留空沿用模型默认；仅对支持的模型开启思考，可能增加耗时和 token。adaptive 仅供支持它的 Anthropic 模型使用。")
 			})
 			a.note(c, "配置适用于此 Mac 的本地 Agent。密钥保存在 macOS 钥匙串；远程 Agent 的访问令牌在运行主机中配置。")
+		} else if s.Mode == SettingCopyEasyCodeMode {
+			a.note(c, "使用飞书登录 EasyCode，无需单独配置网关；模型使用所登录账号的额度。")
 		} else {
 			a.note(c, "读取 ~/.easyagent/config.yaml、~/.easyagent/.env 和当前环境中的模型与工具配置。修改后点击应用即可重新读取。")
 			a.action(c, "配置全局模型").AlignSelf(ui.Start).OnClick(func() {
@@ -281,12 +298,15 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 			})
 		}
 	})
+	if s.Mode == SettingCopyEasyCodeMode {
+		a.easyCodeSettings(c)
+	}
 	running := false
 	for _, session := range a.Sessions {
 		running = running || session.Running || session.Pending || session.Sending
 	}
 	missingURL := s.Mode == "在桌面客户端配置" && strings.TrimSpace(s.BaseURL) == ""
-	incomplete := missingURL || s.Mode == "在桌面客户端配置" && strings.TrimSpace(s.Model) == ""
+	incomplete := missingURL || s.Mode == "在桌面客户端配置" && strings.TrimSpace(s.Model) == "" || s.Mode == SettingCopyEasyCodeMode && (!l.EasyCode.LoggedIn || strings.TrimSpace(s.Model) == "")
 	ui.Row(c).Gap(12).Wrap().Margin(12, 0, 0, 0).Children(func() {
 		a.action(c, "检测连接").Disabled(busy || missingURL).OnClick(a.checkLiveModel)
 		a.primary(c, "应用并重新连接").Disabled(busy || l.Connecting || incomplete || running).OnClick(a.applyLiveModel)
@@ -362,6 +382,10 @@ func (a *preview) modelCandidateForCheck() (modelConfig, string, error) {
 
 func (a *preview) checkLiveModel() {
 	l := a.Live
+	if a.Settings.Mode == SettingCopyEasyCodeMode {
+		a.refreshEasyCodeModels()
+		return
+	}
 	if l.configBusy() || l.Loading["model-check"] {
 		return
 	}
@@ -440,6 +464,10 @@ func (a *preview) checkLiveModel() {
 }
 func (a *preview) applyLiveModel() {
 	l := a.Live
+	if a.Settings.Mode == SettingCopyEasyCodeMode {
+		a.applyEasyCodeModel(a.Settings.Model)
+		return
+	}
 	if l.configBusy() || l.Loading["model-check"] {
 		l.Error = "正在保存配置，请稍后再试"
 		return

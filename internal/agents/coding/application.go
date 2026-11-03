@@ -34,7 +34,7 @@ func NewCodingApplication(cfg config.Config) CodingApplication {
 
 	// 网关模式以远端目录为准，本地清单只补充模型元数据。
 	// 拉取失败保留本地清单，并明确提示，避免把回退误认为同步成功。
-	if cfg.OpenAIBaseURL != "" {
+	if cfg.OpenAIBaseURL != "" && cfg.Provider != "deepv" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if gwModels, err := modelsreg.FetchGatewayModelDefs(ctx, cfg.OpenAIBaseURL, cfg.OpenAIAPIKey); err == nil {
 			if cfg.Provider == "openai" {

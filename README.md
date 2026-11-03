@@ -46,6 +46,14 @@ sudo systemctl enable --now easyagent-bridge   # 飞书桥接（配置后启用�
 
 文件名随版本变化，按架构到 [Releases](https://github.com/nightgopher/easyagent/releases/latest) 选择；升级 `dpkg -i` 保留配置，`sudo dpkg --purge easyagent-server` 移除全部数据。迷你主机持续部署见 [部署文档](docs/MINI_DEPLOY.md)。
 
+### 使用飞书登录 EasyCode
+
+在桌面客户端选择「设置 → 模型连接 → EasyCode 飞书登录」，或在首次未连接时点击「飞书登录 EasyCode」。在浏览器选择组织并完成飞书授权后，EasyAgent 会读取该账号可用的模型并启用，无需另装或配置网关。每个人使用自己登录的 EasyCode 账号及额度；可用模型、组织策略和实际计费由 EasyCode 服务决定。
+
+登录凭据与 EasyCode 原客户端分开保存在本机用户私有目录（目录权限 `0700`、凭据文件 `0600`），访问凭据到期会自动续期。退出 EasyAgent 中的 EasyCode 账号会清除本机凭据并恢复之前的模型配置，不会退出其他 EasyCode 客户端。当前登录入口支持 macOS 和 Linux 原生桌面；远程主机使用该主机自身的模型配置。
+
+### 配置其他模型与网页
+
 当前环境变量使用 `EA_*`，旧的 `PI_GO_*` 配置需要迁移。OpenAI 兼容服务的最小配置：
 
 ```dotenv

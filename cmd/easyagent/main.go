@@ -34,6 +34,13 @@ import (
 var version = "dev"
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "easycode" {
+		if err := runEasyCodeCommand(context.Background(), os.Args[2:], config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"), os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
 		fmt.Printf("easyagent %s\n", version)
 		return

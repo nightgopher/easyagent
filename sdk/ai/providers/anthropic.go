@@ -20,10 +20,11 @@ import (
 // AnthropicProvider 通过 HTTP 直接调用 Anthropic Messages API。
 // 不依赖 anthropic-sdk-go，减少外部依赖。
 type AnthropicProvider struct {
-	thinking ThinkingOptions
-	apiKey   string
-	baseURL  string // 例如 https://api.anthropic.com 或 https://api.longcat.chat/anthropic
-	client   *http.Client
+	thinking     ThinkingOptions
+	apiKey       string
+	baseURL      string // 例如 https://api.anthropic.com 或 https://api.longcat.chat/anthropic
+	providerName string
+	client       *http.Client
 }
 
 func NewAnthropicProvider(apiKey, baseURL string, options ...ThinkingOptions) *AnthropicProvider {
@@ -44,7 +45,12 @@ func NewAnthropicProvider(apiKey, baseURL string, options ...ThinkingOptions) *A
 	}
 }
 
-func (p *AnthropicProvider) Name() string { return "anthropic" }
+func (p *AnthropicProvider) Name() string {
+	if p.providerName != "" {
+		return p.providerName
+	}
+	return "anthropic"
+}
 
 func (p *AnthropicProvider) StreamSimple(ctx context.Context, req ai.SimpleStreamRequest) (*ai.EventStream, error) {
 	return p.Stream(ctx, ai.StreamRequest{
@@ -92,13 +98,14 @@ type anthropicToolSchema struct {
 }
 
 type anthropicRequest struct {
-	Thinking  *thinkingParam        `json:"thinking,omitempty"`
-	Model     string                `json:"model"`
-	Messages  []anthropicMessage    `json:"messages"`
-	System    string                `json:"system,omitempty"`
-	MaxTokens int                   `json:"max_tokens"`
-	Stream    bool                  `json:"stream"`
-	Tools     []anthropicToolSchema `json:"tools,omitempty"`
+	Thinking    *thinkingParam        `json:"thinking,omitempty"`
+	Temperature *float64              `json:"temperature,omitempty"`
+	Model       string                `json:"model"`
+	Messages    []anthropicMessage    `json:"messages"`
+	System      string                `json:"system,omitempty"`
+	MaxTokens   int                   `json:"max_tokens"`
+	Stream      bool                  `json:"stream"`
+	Tools       []anthropicToolSchema `json:"tools,omitempty"`
 }
 
 // ─── Stream ───────────────────────────────────────────────────────────────────────
@@ -443,7 +450,9 @@ func (p *AnthropicProvider) handleSSEEvent(
 				StopReason string `json:"stop_reason"`
 			} `json:"delta"`
 			Usage struct {
-				OutputTokens int `json:"output_tokens"`
+				OutputTokens int  `json:"output_tokens"`
+				InputTokens  *int `json:"input_tokens"`
+				CacheRead    *int `json:"cache_read_input_tokens"`
 			} `json:"usage"`
 		}
 		if err := json.Unmarshal([]byte(data), &raw); err != nil {
@@ -459,6 +468,12 @@ func (p *AnthropicProvider) handleSSEEvent(
 		}
 		if raw.Usage.OutputTokens > 0 {
 			partial.Usage.OutputTokens = raw.Usage.OutputTokens
+		}
+		if raw.Usage.InputTokens != nil {
+			partial.Usage.InputTokens = *raw.Usage.InputTokens
+		}
+		if raw.Usage.CacheRead != nil {
+			partial.Usage.CachedInputTokens = raw.Usage.CacheRead
 		}
 
 	case "message_stop":
@@ -497,11 +512,12 @@ func (p *AnthropicProvider) buildRequest(req ai.StreamRequest, stream bool) anth
 	}
 
 	apiReq := anthropicRequest{
-		Model:     req.Model.ID,
-		MaxTokens: maxTokens,
-		Stream:    stream,
-		System:    req.System,
-		Messages:  convertToAnthropicMessages(req.Messages),
+		Model:       req.Model.ID,
+		Temperature: req.Temperature,
+		MaxTokens:   maxTokens,
+		Stream:      stream,
+		System:      req.System,
+		Messages:    convertToAnthropicMessages(req.Messages),
 	}
 
 	if p.thinking.Mode != "" {
@@ -539,7 +555,7 @@ func convertToAnthropicMessages(msgs []ai.Message) []anthropicMessage {
 				case "text":
 					blocks = append(blocks, anthropicContentBlock{Type: "text", Text: block.Text})
 				case "image":
-					if block.Image != nil {
+					if block.Image != nil && len(block.Image.Data) > 0 {
 						blocks = append(blocks, anthropicContentBlock{
 							Type: "image",
 							Source: &anthropicImageSource{
@@ -554,7 +570,7 @@ func convertToAnthropicMessages(msgs []ai.Message) []anthropicMessage {
 							Type: "image",
 							Source: &anthropicImageSource{
 								Type: "url",
-								Data: block.Image.URL,
+								URL:  block.Image.URL,
 							},
 						})
 					}

@@ -317,6 +317,15 @@ func (a *preview) disconnectedHint(c *ui.Context) {
 		ui.Row(c).Gap(8).Children(func() {
 			a.action(c, "重新连接").Disabled(l.Connecting).OnClick(a.connectLive)
 			a.action(c, "管理运行主机").OnClick(func() { a.openSettings("connections") })
+			if a.Settings.host().Local {
+				a.action(c, "飞书登录 EasyCode").Disabled(l.Connecting).OnClick(func() {
+					a.openSettings("models")
+					if a.Settings.Open && a.Settings.Tab == "models" {
+						a.Settings.Mode = SettingCopyEasyCodeMode
+						a.refreshEasyCodeStatus()
+					}
+				})
+			}
 		})
 	})
 }

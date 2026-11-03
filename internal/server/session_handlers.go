@@ -86,7 +86,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	// Apply model override if provided
 	if req.Model != "" {
 		switch cfg.Provider {
-		case "openai":
+		case "openai", "deepv":
 			cfg.OpenAIModel = req.Model
 		case "anthropic":
 			cfg.AnthropicModel = req.Model
@@ -306,7 +306,7 @@ func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
 	provider := cfg.Provider
 	modelID := ""
 	switch provider {
-	case "openai":
+	case "openai", "deepv":
 		modelID = cfg.OpenAIModel
 	case "anthropic":
 		modelID = cfg.AnthropicModel

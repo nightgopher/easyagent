@@ -9,7 +9,7 @@ func (a *preview) quitBlockReason() string {
 		}
 	}
 	if a.Live != nil {
-		if a.Live.configBusy() {
+		if a.Live.configMutating() {
 			return "正在保存配置，请稍后再退出或重启。"
 		}
 		for _, f := range a.Live.Workbench.Files {
