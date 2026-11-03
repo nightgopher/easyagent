@@ -83,6 +83,30 @@ class RuntimeUiTest {
 
     private fun host(name: String) = RuntimeFixture(name).also { hosts += it }
 
+    @Test fun relayScannerKeepsPortraitPhoneUpright() {
+        instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, "android.permission.CAMERA")
+        activity.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
+        waitText("扫码配对电脑")
+        ui.onNodeWithText("扫码配对电脑").performClick()
+        var scanner: android.app.Activity? = null
+        try {
+            ui.waitUntil(10_000) {
+                instrumentation.runOnMainSync {
+                    scanner = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                        .firstOrNull { it is com.journeyapps.barcodescanner.CaptureActivity }
+                }
+                scanner?.resources?.configuration?.orientation == Configuration.ORIENTATION_PORTRAIT
+            }
+            assertEquals(ActivityInfo.SCREEN_ORIENTATION_FULL_USER, scanner?.requestedOrientation)
+            screenshot("relay-scanner-portrait")
+        } finally {
+            instrumentation.runOnMainSync { scanner?.finish() }
+            activity.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        }
+        waitText("配对码")
+        assertTrue(app.connections.state.value.hosts.isEmpty())
+    }
+
     @Test fun invalidRelayPairingDoesNotSaveCredentialsAndDirectConnectionStillWorks() {
         waitText("扫码配对电脑")
         ui.onNodeWithText("粘贴配对码").performClick()
