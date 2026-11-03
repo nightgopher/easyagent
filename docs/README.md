@@ -23,6 +23,7 @@
 - [架构](ARCHITECTURE.md)：源码分层、数据流和公共 SDK。
 - [工具发现与按需加载](decisions/tool-discovery.md)：工具分层、本地搜索、会话恢复和 Skills 边界。
 - [核心机制](INTERNALS.md)：工具生命周期、确认门、循环检测、双层压缩与事件流。
+- [听歌习惯沉淀与推荐闭环](MUSIC_PROFILE_PROPOSAL.md)：music Application 现状、个性化推荐与反馈闭环的缺口分析（提案）。
 - [贡献指南](CONTRIBUTING.md)：本地验证、PR、合并及分支清理。
 - [Worktree 开发指南](WORKTREES.md)：并行任务隔离、会话提交纪律与收尾清理。
 - [SDK 边界](decisions/sdk-extraction.md)、[Skills 与 Application](decisions/skills-vs-application.md)、[移除 LSP 工具](decisions/remove-lsp-tools.md)：仍适用的设计取舍。工作流引擎的取舍记录见 decisions/workflow-engine.md（功能已于 2026-10 下线）。
