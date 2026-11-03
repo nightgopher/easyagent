@@ -28,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.ui.ChatScreen
 import com.hwj.easyagent.mobile.ui.ConnectionScreen
 import com.hwj.easyagent.mobile.ui.EasyAgentTheme
+import com.hwj.easyagent.mobile.ui.EmptyHomeScreen
 import com.hwj.easyagent.mobile.ui.HostsScreen
 import com.hwj.easyagent.mobile.ui.SessionsScreen
 import com.hwj.easyagent.mobile.ui.UpdateDialog
@@ -126,10 +127,10 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
     }
 
     when {
-        state.hosts.isEmpty() || editing -> key(editingId) {
+        editing -> key(editingId) {
             ConnectionScreen(
                 initial = state.hosts.firstOrNull { it.id == editingId },
-                canCancel = state.hosts.isNotEmpty(),
+                canCancel = true,
                 onUpdates = app.updater::open,
                 onCancel = { editing = false },
                 onSave = { config ->
@@ -139,9 +140,17 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                 },
             )
         }
-        managing || current == null -> HostsScreen(
+        state.hosts.isEmpty() || (!managing && current == null) -> EmptyHomeScreen(
+            hasSavedHosts = state.hosts.isNotEmpty(),
+            onConnect = {
+                if (state.hosts.isEmpty()) { editingId = null; editing = true }
+                else managing = true
+            },
+            onUpdates = app.updater::open,
+        )
+        managing -> HostsScreen(
             connections = connections,
-            canGoBack = current != null,
+            canGoBack = true,
             onBack = { managing = false },
             onAdd = { editingId = null; editing = true },
             onEdit = { editingId = it.id; editing = true },
