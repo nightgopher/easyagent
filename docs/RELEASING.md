@@ -55,17 +55,17 @@ git push origin refs/tags/v0.1.1-rc.1
 
 ### Apple Silicon 执行机容量不足
 
-原生构建、签名预览和正式发布默认使用 GitHub 标准 `macos-26` ARM 执行机。如果 GitHub 因容量不足无法分配该镜像，可临时将仓库 Actions 变量 `EASYAGENT_MACOS_ARM_RUNNER` 设为 `macos-15`，再重跑受影响的 job。两个标签均为标准 Apple Silicon 执行机；构建、实际 bundle 检查、签名和公证步骤不变。切换操作系统版本不保证另一个池一定有容量，若两个池都不可用仍需等待恢复。
+原生构建、签名预览和正式发布默认使用 GitHub 标准 `macos-26` ARM 执行机。如果 GitHub 因容量不足无法分配该镜像，可临时将仓库 Actions 变量 `EASYAGENT_MACOS_ARM_RUNNER` 设为 `macos-15` 或 `xcode-27`，再重跑受影响的 job。这些标签均为标准 Apple Silicon 执行机；构建、实际 bundle 检查、签名和公证步骤不变。`xcode-27` 使用较新的 macOS 和 Xcode，切换后仍须完成全部检查；不同镜像不保证各自都有容量，均不可用时仍需等待恢复。
 
 ```bash
-gh variable set EASYAGENT_MACOS_ARM_RUNNER --repo nightgopher/easyagent --body macos-15
+gh variable set EASYAGENT_MACOS_ARM_RUNNER --repo nightgopher/easyagent --body xcode-27
 # 排队前已确定执行机的 job 需要等待结束后重跑；指定失败 job 的 databaseId。
 gh run rerun <run-id> --repo nightgopher/easyagent --job <job-id>
 # 恢复默认时，仅删除本仓库这个变量。
 gh variable delete EASYAGENT_MACOS_ARM_RUNNER --repo nightgopher/easyagent
 ```
 
-变量仅识别 `macos-15`（GitHub 表达式比较不区分大小写）；未设置或其他值使用 `macos-26`，不会转向自托管或收费标签。它影响本仓库此后排队的全部原生发布类任务，切换前检查是否有并行发布；已有 tag 和发布资产保持不变。恢复后删除变量，重新使用默认镜像。
+变量仅识别 `macos-15` 和 `xcode-27`（GitHub 表达式比较不区分大小写）；未设置或其他值使用 `macos-26`，不会转向自托管或收费标签。它影响本仓库此后排队的全部原生发布类任务，切换前检查是否有并行发布；已有 tag 和发布资产保持不变。恢复后删除变量，重新使用默认镜像。
 
 ## 安装与核验
 

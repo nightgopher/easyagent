@@ -82,7 +82,7 @@ jobs:
           compression-level: 0
   native:
     needs: validate
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || 'macos-26' }}
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
     steps:
       - uses: actions/checkout@v7
         with:
