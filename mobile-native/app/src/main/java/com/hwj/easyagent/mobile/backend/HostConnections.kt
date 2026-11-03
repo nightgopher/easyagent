@@ -22,7 +22,8 @@ class HostConnections(
     fun clientFor(id: String): AgentClient? = clients[id]
 
     fun save(config: HostConfig) {
-        settings.save(config)
+        val existing = if (config.relay != null) state.value.hosts.firstOrNull { it.url == config.url && it.relay != null } else null
+        settings.save(if (existing != null) config.copy(id = existing.id) else config)
         update(settings.load())
     }
 
@@ -52,7 +53,7 @@ class HostConnections(
         while (iterator.hasNext()) {
             val (id, client) = iterator.next()
             val host = next.hosts.firstOrNull { it.id == id }
-            if (host == null || host.url != client.config.url || host.token != client.config.token) {
+            if (host == null || host.url != client.config.url || host.token != client.config.token || host.relay != client.config.relay) {
                 client.shutdown()
                 iterator.remove()
             }
@@ -74,6 +75,11 @@ class HostConnections(
     fun tokenFor(url: String): String? {
         val origin = originOf(url) ?: return null
         return state.value.hosts.firstOrNull { originOf(it.url) == origin }?.token?.takeIf { it.isNotEmpty() }
+    }
+
+    fun httpFor(url: String): okhttp3.OkHttpClient? {
+        val origin = originOf(url) ?: return null
+        return clients.values.firstOrNull { originOf(it.config.url) == origin }?.api?.http
     }
 
     private fun originOf(url: String): String? = url.toHttpUrlOrNull()?.let { "${it.scheme}://${it.host}:${it.port}" }

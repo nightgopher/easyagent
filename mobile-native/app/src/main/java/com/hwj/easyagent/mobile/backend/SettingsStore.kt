@@ -20,6 +20,7 @@ data class HostConfig(
     val token: String?,
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
+    val relay: RelayConfig? = null,
 ) {
     val label: String get() = name.ifBlank { url }
 }
@@ -40,7 +41,7 @@ internal object NoDrafts : DraftStore {
 }
 
 @Serializable
-private data class StoredHost(val id: String, val name: String, val url: String)
+private data class StoredHost(val id: String, val name: String, val url: String, val relay: RelayConfig? = null)
 
 /** 运行主机地址与令牌。令牌用 Android Keystore 内的 AES 密钥加密后再落盘，对应桌面端的钥匙串。 */
 class SettingsStore internal constructor(private val prefs: SharedPreferences, private val cipher: TokenCipher) : DraftStore {
@@ -49,7 +50,7 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
     fun load(): HostSettings {
         val hosts = records().map {
             val token = prefs.getString(tokenKey(it.id), null)?.let(cipher::decrypt)
-            HostConfig(it.url, token, it.id, it.name)
+            HostConfig(it.url, token, it.id, it.name, it.relay)
         }
         val selected = prefs.getString(KEY_ACTIVE, null)
         return HostSettings(hosts, selected?.takeIf { id -> hosts.any { it.id == id } } ?: hosts.firstOrNull()?.id)
@@ -62,7 +63,8 @@ class SettingsStore internal constructor(private val prefs: SharedPreferences, p
         val token = requireNotNull(config.token) { "请重新填写此主机的服务令牌" }
         val encrypted = cipher.encrypt(token)
         check(cipher.decrypt(encrypted) == token) { "无法保存服务令牌，请重试" }
-        val record = StoredHost(config.id, config.name.trim(), url)
+        config.relay?.let { it.validate(); require(url == it.baseUrl) { "配对地址与电脑身份不一致" } }
+        val record = StoredHost(config.id, config.name.trim(), url, config.relay)
         val index = hosts.indexOfFirst { it.id == config.id }
         if (index < 0) hosts.add(record) else hosts[index] = record
         commit(prefs.edit().putString(KEY_HOSTS, encode(hosts)).putString(tokenKey(config.id), encrypted).putString(KEY_ACTIVE, config.id))

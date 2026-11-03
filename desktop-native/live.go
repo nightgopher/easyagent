@@ -72,6 +72,7 @@ type liveState struct {
 	QRCode, QRURL, QRUserCode                                              string
 	QRImage                                                                []byte
 	QRBitmap                                                               *ui.Bitmap
+	RemoteAccess                                                           nativeRemoteAccess
 	Voice                                                                  voiceRecorder
 	VoiceOwner                                                             *session
 	VoiceStarted                                                           time.Time
@@ -261,6 +262,11 @@ func (a *preview) liveTick() bool {
 		a.pollQR()
 		changed = true
 	}
+	if a.Settings.Open && a.Settings.Tab == "remote-access" && a.Settings.host().Local && time.Now().After(l.RemoteAccess.NextPoll) && !l.Loading["remote-access"] && !l.Loading["remote-save"] && !l.Loading["remote-pair"] && !l.Loading["remote-revoke"] {
+		l.RemoteAccess.NextPoll = time.Now().Add(3 * time.Second)
+		a.resource("remote-access", "/remote-access")
+		changed = true
+	}
 	w := &l.Workbench
 	if !w.KBSearchAt.IsZero() && !time.Now().Before(w.KBSearchAt) {
 		w.KBSearchAt = time.Time{}
@@ -320,6 +326,7 @@ func (a *preview) call(method, path string, body any, done func(any)) {
 }
 func (a *preview) resource(key, path string) {
 	l := a.Live
+	remoteGeneration := l.RemoteAccess.Generation
 	l.Versions[key]++
 	version := l.Versions[key]
 	l.Loading[key] = true
@@ -344,11 +351,18 @@ func (a *preview) resource(key, path string) {
 				return
 			}
 			l.Data[key] = value
+			if key == "remote-access" && remoteGeneration == l.RemoteAccess.Generation && !boolean(object(value)["pairing"]) && !l.Loading["remote-pair"] {
+				l.RemoteAccess.Payload, l.RemoteAccess.Bitmap = "", nil
+			}
 		})
 	}()
 }
 func (a *preview) connectLive() {
 	l := a.Live
+	a.clearRemotePair()
+	a.Settings.RelayURL, a.Settings.RelayRegistrationKey = "", ""
+	delete(l.Data, "remote-access")
+	delete(l.ResourceErrors, "remote-access")
 	a.cancelQR()
 	a.cancelMCPLogin()
 	a.cancelVoice()

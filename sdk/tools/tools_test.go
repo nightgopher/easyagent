@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nightgopher/easyagent/sdk/agent"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -134,9 +136,28 @@ func TestBashTool_TimeoutPreservesOutput(t *testing.T) {
 func TestBashTool_ParentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	timer := time.AfterFunc(100*time.Millisecond, cancel)
-	defer timer.Stop()
-	result, err := NewBashTool().Execute(ctx, []byte(`{"command":"echo partial; sleep 10", "timeout":30}`), nil)
+	dir := t.TempDir()
+	type outcome struct {
+		result agent.ToolResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := NewBashTool(WithBashWorkspace(dir)).Execute(ctx, []byte(`{"command":"echo partial; : > ready; sleep 10", "timeout":30}`), nil)
+		done <- outcome{result, err}
+	}()
+	// Wait until the child actually writes output; a fixed 100 ms timer can
+	// cancel before process startup on busy native/relay CI runners.
+	require.Eventually(t, func() bool { _, err := os.Stat(filepath.Join(dir, "ready")); return err == nil }, 5*time.Second, 10*time.Millisecond)
+	cancel()
+	var result agent.ToolResult
+	var err error
+	select {
+	case got := <-done:
+		result, err = got.result, got.err
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancelled command did not exit")
+	}
 	require.ErrorIs(t, err, context.Canceled)
 	assert.True(t, result.IsError)
 	assert.Contains(t, result.Content, "canceled")

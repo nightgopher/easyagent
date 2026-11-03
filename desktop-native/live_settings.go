@@ -63,6 +63,10 @@ func (a *preview) loadSettingsPage() {
 	}
 	s := &a.Settings
 	switch s.Tab {
+	case "remote-access":
+		if s.host().Local {
+			a.resource("remote-access", "/remote-access")
+		}
 	case "permissions":
 		a.resource("permissions", "/settings/permissions")
 	case "agents", "memory-knowledge":
@@ -121,6 +125,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		})
 	}
 	switch tab {
+	case "remote-access":
+		a.liveRemoteAccessSettings(c)
 	case "agents":
 		a.businessSettings(c)
 	case "memory-knowledge":

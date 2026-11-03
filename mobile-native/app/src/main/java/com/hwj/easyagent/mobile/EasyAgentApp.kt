@@ -50,18 +50,14 @@ class EasyAgentApp : Application() {
         val notifier = Notifier(this)
         connections = HostConnections(settings) { client, alert -> notifier.post(client, alert) }
         // 附件图片的共享加载器：按图片地址匹配已保存主机并注入 Bearer 令牌，自带内存与磁盘缓存。
-        val http = OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val request = chain.request()
-                val token = connections.tokenFor(request.url.toString())
-                chain.proceed(
-                    if (token.isNullOrEmpty()) request
-                    else request.newBuilder().header("Authorization", "Bearer $token").build(),
-                )
-            }
-            .build()
+        val http = OkHttpClient.Builder().followRedirects(false).build()
         imageLoader = ImageLoader.Builder(this)
-            .okHttpClient(http)
+            .callFactory(okhttp3.Call.Factory { request ->
+                val token = connections.tokenFor(request.url.toString())
+                val authenticated = if (token.isNullOrEmpty()) request else request.newBuilder().header("Authorization", "Bearer $token").build()
+                // Relay attachments use the same pinned transport as REST/chat.
+                (connections.httpFor(request.url.toString()) ?: http).newCall(authenticated)
+            })
             .crossfade(true)
             .build()
     }

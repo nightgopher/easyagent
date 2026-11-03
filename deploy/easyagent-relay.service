@@ -1,0 +1,31 @@
+[Unit]
+Description=EasyAgent encrypted relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+User=easyagent-relay
+StateDirectory=easyagent-relay
+StateDirectoryMode=0700
+WorkingDirectory=/var/lib/easyagent-relay
+EnvironmentFile=/etc/easyagent-relay.env
+ExecStart=/usr/local/bin/easyagent-relay -listen 127.0.0.1:8787 -state /var/lib/easyagent-relay/routes.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+UMask=0077
+LimitNOFILE=8192
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

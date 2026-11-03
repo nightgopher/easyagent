@@ -9,6 +9,19 @@ import org.junit.Test
 import java.util.Base64
 
 class SettingsStoreTest {
+    @Test fun `relay metadata persists without plaintext credentials and validates host identity`() {
+        val prefs = MemoryPreferences()
+        val store = SettingsStore(prefs, TestTokenCipher)
+        val relay = com.hwj.easyagent.mobile.backend.RelayConfig("https://relay.example", "r".repeat(43), "sha256:" + Base64.getEncoder().encodeToString(ByteArray(32)))
+        val host = HostConfig(relay.baseUrl, "device-secret", "paired", "computer", relay)
+        store.save(host)
+        assertEquals(host, SettingsStore(prefs, TestTokenCipher).load().hosts.single())
+        assertFalse(prefs.getString("hosts", "")!!.contains("device-secret"))
+        assertNotEquals("device-secret", prefs.getString("token:paired", null))
+        assertThrows(IllegalArgumentException::class.java) { store.save(host.copy(url = "https://wrong.invalid")) }
+        assertEquals(host, store.load().hosts.single())
+    }
+
     @Test
     fun `legacy single host migrates once without replacing its encrypted token`() {
         val prefs = MemoryPreferences()

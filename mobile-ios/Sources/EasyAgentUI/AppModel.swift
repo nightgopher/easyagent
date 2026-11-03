@@ -20,6 +20,8 @@ public final class AppModel {
     private let hostStore: HostStore
     private let keyStore: any APIKeyStore
     private var pumpTask: Task<Void, Never>?
+    private var relayTransport: RelayTransport?
+    private var connectionGeneration: UInt64 = 0
 
     public init(hostStore: HostStore, keyStore: any APIKeyStore = SystemKeychainStore()) {
         self.hostStore = hostStore
@@ -43,25 +45,50 @@ public final class AppModel {
 
     public func connect(hostID: UUID) async {
         guard let host = hosts.first(where: { $0.id == hostID }) else { return }
+        await disconnect()
+        let generation = connectionGeneration
+        if currentHostID != hostID { activeSessionID = nil }
         currentHostID = hostID
+        let session: URLSession
+        do {
+            if let relay = host.relay {
+                guard host.baseURL == (try relay.baseURL()) else { throw RelayError.invalidCode }
+                let transport = try await RelayTransport.open(relay)
+                guard generation == connectionGeneration else { transport.close(); return }
+                relayTransport = transport
+                session = transport.session
+            } else { session = .shared }
+        } catch { errorMessage = error.localizedDescription; return }
         let keyStore = self.keyStore
         let provider: @Sendable () -> String = { keyStore.key(for: hostID) ?? "" }
-        client = APIClient(host: host, apiKeyProvider: provider)
-        let socket = ChatSocket(host: host, apiKeyProvider: provider)
+        client = APIClient(host: host, apiKeyProvider: provider, session: session)
+        let socket = ChatSocket(host: host, apiKeyProvider: provider, session: session)
         self.socket = socket
         projection = ChatProjection()
-        await socket.connect()
-        await socket.subscribe(sessionID: activeSessionID ?? "")
         startPump(on: socket)
+        await socket.connect()
+        if let id = activeSessionID { await socket.subscribe(sessionID: id) }
         await reloadSessions()
     }
 
     public func disconnect() async {
+        connectionGeneration &+= 1
         pumpTask?.cancel()
         pumpTask = nil
         await socket?.disconnect()
         socket = nil
+        client = nil
+        relayTransport?.close()
+        relayTransport = nil
         linkOnline = false
+    }
+
+    public func savePairedHost(_ paired: AgentHost, token: String) async throws {
+        var host = paired
+        if let saved = hosts.first(where: { $0.baseURL == host.baseURL && $0.relay != nil }) { host.id = saved.id }
+        try keyStore.saveKey(token, for: host.id)
+        await add(host: host)
+        await connect(hostID: host.id)
     }
 
     public func reloadSessions() async {
@@ -77,21 +104,23 @@ public final class AppModel {
     }
 
     public func open(sessionID: String) async {
+        guard activeSessionID != sessionID else { return }
+        if let previous = activeSessionID, previous != sessionID { await socket?.unsubscribe(sessionID: previous) }
         activeSessionID = sessionID
         projection = ChatProjection()
         guard let socket else { return }
         await socket.subscribe(sessionID: sessionID)
     }
 
-    public func send(draft: String) async {
+    public func send(draft: String) async -> Bool {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let sessionID = activeSessionID, let socket else { return }
-        projection.appendUser(trimmed)
+        guard !trimmed.isEmpty, let sessionID = activeSessionID, let socket else { return false }
         let requestID = UUID().uuidString
         guard await socket.sendPrompt(sessionID: sessionID, requestID: requestID, prompt: trimmed) else {
             errorMessage = "连接已断开，草稿已保留"
-            return
+            return false
         }
+        return true
     }
 
     // MARK: - internals
@@ -118,7 +147,7 @@ public final class AppModel {
             if message.type == "error", let sessionID = message.sessionID,
                sessionID == activeSessionID || activeSessionID == nil {
                 // 错误消息有 message 字段；WSServerMessage 未建模它，用 code 兜底展示。
-                errorMessage = message.code.map { "服务错误：\($0)" }
+                errorMessage = message.message ?? message.code.map { "服务错误：\($0)" }
             }
             guard message.sessionID == nil || message.sessionID == activeSessionID else { return }
             if message.type == "snapshot", message.sessionID != activeSessionID { return }

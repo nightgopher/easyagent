@@ -44,11 +44,16 @@ public struct WSServerMessage: Decodable, Sendable {
     public var event: AnyDecodable?
     public var events: AnyDecodable?
     public var prompt: String?
+    public var messages: AnyDecodable?
+    public var run: AnyDecodable?
+    public var reset: Bool?
+    public var message: String?
 
     public init(type: String, sessionID: String? = nil, runID: String? = nil,
                 requestID: String? = nil, seq: UInt64? = nil, state: String? = nil,
                 duplicate: Bool? = nil, code: String? = nil,
-                event: AnyDecodable? = nil, events: AnyDecodable? = nil, prompt: String? = nil) {
+                event: AnyDecodable? = nil, events: AnyDecodable? = nil, prompt: String? = nil,
+                messages: AnyDecodable? = nil, run: AnyDecodable? = nil, reset: Bool? = nil, message: String? = nil) {
         self.type = type
         self.sessionID = sessionID
         self.runID = runID
@@ -60,10 +65,11 @@ public struct WSServerMessage: Decodable, Sendable {
         self.event = event
         self.events = events
         self.prompt = prompt
+        self.messages = messages; self.run = run; self.reset = reset; self.message = message
     }
 
     enum CodingKeys: String, CodingKey {
-        case type, seq, state, duplicate, code, event, events, prompt
+        case type, seq, state, duplicate, code, event, events, prompt, messages, run, reset, message
         case sessionID = "session_id"
         case runID = "run_id"
         case requestID = "request_id"
@@ -108,6 +114,11 @@ public actor ChatSocket {
     private var lastSeqBySession: [String: UInt64] = [:]
     private var subscribedSessions: Set<String> = []
     private var receiveLoopTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private var heartbeatTask: Task<Void, Never>?
+    private var ready = false
+    private var reconnectDelay: UInt64 = 1
+    private var generation: UInt64 = 0
 
     public init(host: Host, apiKeyProvider: @escaping @Sendable () -> String, session: URLSession = .shared) {
         self.host = host
@@ -138,36 +149,43 @@ public actor ChatSocket {
         task.resume()
         receiveLoopTask = Task { [weak self] in
             guard let self else { return }
-            await self.emit(.opened)
             await self.receiveLoop(on: task)
         }
     }
 
     public func disconnect() {
+        generation &+= 1
+        ready = false
+        reconnectTask?.cancel()
+        reconnectTask = nil
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
         receiveLoopTask?.cancel()
         receiveLoopTask = nil
         task?.cancel(with: .goingAway, reason: nil)
         task = nil
+        emit(.closed)
     }
 
     /// 订阅会话投影；重连后自动带 after_seq 续传。
-    public func subscribe(sessionID: String) {
+    public func subscribe(sessionID: String) async {
         subscribedSessions.insert(sessionID)
-        try? send(WSClientMessage(type: "subscribe", sessionID: sessionID,
+        guard ready else { return }
+        try? await send(WSClientMessage(type: "subscribe", sessionID: sessionID,
                                   afterSeq: lastSeqBySession[sessionID]))
     }
 
-    public func unsubscribe(sessionID: String) {
+    public func unsubscribe(sessionID: String) async {
         subscribedSessions.remove(sessionID)
         lastSeqBySession[sessionID] = nil
-        try? send(WSClientMessage(type: "unsubscribe", sessionID: sessionID))
+        try? await send(WSClientMessage(type: "unsubscribe", sessionID: sessionID))
     }
 
     /// 发送提示词。返回 false 表示尚未连接，调用方保留草稿。
     @discardableResult
-    public func sendPrompt(sessionID: String, requestID: String, prompt: String) -> Bool {
+    public func sendPrompt(sessionID: String, requestID: String, prompt: String) async -> Bool {
         do {
-            try send(WSClientMessage(type: "prompt", sessionID: sessionID,
+            try await send(WSClientMessage(type: "prompt", sessionID: sessionID,
                                      prompt: prompt, requestID: requestID))
             return true
         } catch {
@@ -175,8 +193,8 @@ public actor ChatSocket {
         }
     }
 
-    public func ping() {
-        try? send(WSClientMessage(type: "ping"))
+    public func ping() async {
+        try? await send(WSClientMessage(type: "ping"))
     }
 
     // MARK: - internals
@@ -187,21 +205,43 @@ public actor ChatSocket {
         return components.url!
     }
 
-    private func send(_ message: WSClientMessage) throws {
-        guard let task else { throw APIError.unreachable("socket closed") }
+    private func send(_ message: WSClientMessage) async throws {
+        guard let task, ready else { throw APIError.unreachable("socket closed") }
         let data = try JSONEncoder().encode(message)
-        task.send(.string(String(data: data, encoding: .utf8) ?? "")) { _ in }
+        try await task.send(.string(String(data: data, encoding: .utf8) ?? ""))
     }
 
     private func receiveLoop(on task: URLSessionWebSocketTask) async {
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                task.sendPing { error in
+                    if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+                }
+            }
+            guard self.task === task, !Task.isCancelled else { return }
+            ready = true
+            reconnectDelay = 1
+            emit(.opened)
+            for id in subscribedSessions {
+                try await send(WSClientMessage(type: "subscribe", sessionID: id, afterSeq: lastSeqBySession[id]))
+            }
+            heartbeatTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(nanoseconds: 20_000_000_000)
+                        try await self?.send(WSClientMessage(type: "ping"))
+                    } catch { task.cancel(with: .goingAway, reason: nil); return }
+                }
+            }
+        } catch { connectionFailed(task); return }
         // 每条消息一个迭代；socket 关闭时退出并触发重连。
         while !Task.isCancelled {
             do {
                 let message = try await task.receive()
-                await handle(message)
+                guard self.task === task else { return }
+                handle(message)
             } catch {
-                await emit(.closed)
-                reconnect()
+                connectionFailed(task)
                 return
             }
         }
@@ -211,29 +251,35 @@ public actor ChatSocket {
         guard case .string(let text) = message,
               let data = text.data(using: String.Encoding.utf8),
               let decoded = try? JSONDecoder().decode(WSServerMessage.self, from: data) else { return }
-        if let sessionID = decoded.sessionID, let seq = decoded.seq, seq > (lastSeqBySession[sessionID] ?? 0) {
+        if let sessionID = decoded.sessionID, let seq = decoded.seq, decoded.reset == true || seq > (lastSeqBySession[sessionID] ?? 0) {
             lastSeqBySession[sessionID] = seq
         }
         emit(.server(decoded))
     }
 
     /// 指数退避重连，成功后重放订阅。M1 固定上限 30s；后台挂起由系统断连触发同一路径。
-    private func reconnect() {
-        Task { [weak self] in
+    private func connectionFailed(_ failed: URLSessionWebSocketTask) {
+        guard task === failed else { return }
+        ready = false
+        task = nil
+        failed.cancel(with: .goingAway, reason: nil)
+        heartbeatTask?.cancel(); heartbeatTask = nil
+        emit(.closed)
+        let expectedGeneration = generation
+        let delay = reconnectDelay * 1_000_000_000 + UInt64.random(in: 0...500_000_000)
+        reconnectDelay = min(reconnectDelay * 2, 30)
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            do { try await Task.sleep(nanoseconds: delay) } catch { return }
             guard let self else { return }
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
-            guard !Task.isCancelled else { return }
-            await self.disconnect()
-            await self.connect()
-            let sessions = await self.subscribedSessionsSnapshot()
-            for sessionID in sessions {
-                await self.subscribe(sessionID: sessionID)
-            }
+            await self.reconnectIfCurrent(expectedGeneration)
         }
     }
 
-    private func subscribedSessionsSnapshot() -> Set<String> {
-        subscribedSessions
+    private func reconnectIfCurrent(_ expectedGeneration: UInt64) {
+        guard generation == expectedGeneration else { return }
+        reconnectTask = nil
+        connect()
     }
 
     private func emit(_ event: ChatLinkEvent) {
