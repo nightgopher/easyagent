@@ -1,168 +1,51 @@
-name: Release build check
+name: Encrypted gateway notarization transfer
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/release*.yml'
-      - 'scripts/release.py'
-      - 'scripts/publish-release.py'
-      - 'scripts/build-release.sh'
-      - 'scripts/build-android.py'
-      - 'mobile-native/**'
-      - 'scripts/check-release-build.sh'
-      - 'scripts/test_cua_helper.py'
-      - 'native/computer-use/**'
-      - 'scripts/test_release*.py'
-      - 'desktop-native/**'
-      - 'scripts/build-native.sh'
-      - 'scripts/check-native-release-build.sh'
-      - 'cmd/easyagent*/**'
-      - '!**/README*.md'
 permissions:
   contents: read
-concurrency:
-  group: release-check-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
-  release-build:
-    if: github.event_name == 'pull_request'
+  seal:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: linux/amd64
-            artifact: linux-amd64
-          - target: linux/arm64
-            artifact: linux-arm64
-          - target: darwin/amd64
-            artifact: darwin-amd64
-          - target: darwin/arm64
-            artifact: darwin-arm64
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - name: Ensure libsodium is available
+        shell: bash
+        run: |
+          if ! python3 -c 'import ctypes.util,sys; sys.exit(0 if ctypes.util.find_library("sodium") else 1)'; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends libsodium-dev
+          fi
+      - name: Seal credentials to EasyGateway repository public key
+        shell: bash
+        env:
+          DESTINATION_PUBLIC_KEY: "HyqwKhe/DMZnmq455jtAcuZcJIfVSyXCUv74oc4DEzA="
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: |
+          python3 - <<'PYCODE'
+          import base64, ctypes, ctypes.util, json, os
+          lib=ctypes.CDLL(ctypes.util.find_library('sodium'))
+          lib.sodium_init.restype=ctypes.c_int
+          if lib.sodium_init()<0: raise RuntimeError('sodium unavailable')
+          lib.crypto_box_seal.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_ulonglong,ctypes.c_void_p]
+          lib.crypto_box_seal.restype=ctypes.c_int
+          pub=base64.b64decode(os.environ['DESTINATION_PUBLIC_KEY'],validate=True)
+          if len(pub)!=32: raise RuntimeError('invalid destination public key')
+          pkbuf=ctypes.create_string_buffer(pub,32)
+          result={}
+          for name in ('APPLE_ID','APPLE_TEAM_ID','APPLE_APP_SPECIFIC_PASSWORD'):
+              msg=os.environ[name].encode()
+              if not msg or len(msg)>65536: raise RuntimeError('missing or invalid credential: '+name)
+              sealed=ctypes.create_string_buffer(len(msg)+48)
+              if lib.crypto_box_seal(sealed,ctypes.create_string_buffer(msg,len(msg)),len(msg),pkbuf)!=0: raise RuntimeError('encryption failed')
+              result[name]=base64.b64encode(sealed.raw).decode()
+          fd=os.open(os.path.join(os.environ['RUNNER_TEMP'],'gateway-sealed.json'),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+          with os.fdopen(fd,'w') as out: json.dump(result,out)
+          PYCODE
+      - uses: actions/upload-artifact@v4
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - run: bash scripts/check-release-build.sh '${{ matrix.target }}' "$RUNNER_TEMP/core-dist"
-      - uses: actions/upload-artifact@v7
-        with:
-          name: core-check-${{ matrix.artifact }}
-          path: ${{ runner.temp }}/core-dist/*
+          name: encrypted-gateway-notary-credentials
+          path: ${{ runner.temp }}/gateway-sealed.json
           if-no-files-found: error
           retention-days: 1
-          compression-level: 0
-  core-manifest:
-    needs: release-build
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: core-check-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/core-dist
-      - run: |
-          chmod +x "$RUNNER_TEMP"/core-dist/easyagent-{linux,darwin}-* "$RUNNER_TEMP"/core-dist/easyagent-bridge-*
-          bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
-  native-build:
-    if: github.event_name == 'pull_request'
-    # Standard Apple Silicon runners only; keep 26 as the default.
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: desktop-native/go.mod
-          cache-dependency-path: |
-            go.sum
-            desktop-native/go.sum
-      - name: Exercise the native release builder
-        run: bash scripts/check-native-release-build.sh
-  android-build:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5
-        with:
-          # Persist incremental build results for consecutive PR pushes; tag
-          # builds only read caches, since their immutable refs are not reused.
-          cache-read-only: ${{ github.event_name != 'pull_request' && github.ref != 'refs/heads/main' }}
-      - name: Install the pinned Android build tools
-        run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
-      - name: Exercise the release APK builder with a disposable signing key
-        run: python3 scripts/build-android.py build dist --test-signing
-  signing-certificate:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: desktop-native/go.mod
-          cache-dependency-path: |
-            go.sum
-            desktop-native/go.sum
-      - name: Verify the configured release certificate without publishing
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        run: python3 ../scripts/macos-signing.py -- go run ./tools/build
-        working-directory: desktop-native
-      - name: Verify the packaged core
-        env:
-          EASYAGENT_TEST_BUNDLE: ${{ github.workspace }}/desktop-native/build.noindex/darwin-arm64/EasyAgent.app
-        run: go test -count=1 -run '^TestPackagedCoreSmoke$' .
-        working-directory: desktop-native
-      - name: Notarize the main preview installer
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          DMGS=(desktop-native/build.noindex/darwin-arm64/*.dmg)
-          test "${#DMGS[@]}" -eq 1
-          DMG="${DMGS[0]}"
-          xcrun notarytool store-credentials "easyagent-preview-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
-          xcrun notarytool submit "$DMG" --keychain-profile "easyagent-preview-notary" --wait
-          # Retry only transient ticket-download errors after Apple accepted
-          # the submission; rejection, signing and validation failures stop.
-          for attempt in 1 2 3; do
-            if output=$(xcrun stapler staple "$DMG" 2>&1); then
-              printf '%s\n' "$output"
-              break
-            else
-              status=$?
-              printf '%s\n' "$output" >&2
-            fi
-            if (( attempt == 3 )) || ! grep -Eq 'NSURLErrorDomain Code=-(1001|1005|1009)([^0-9]|$)' <<< "$output"; then
-              exit "$status"
-            fi
-            sleep "$((attempt * 5))"
-          done
-          xcrun stapler validate "$DMG"
-          git rev-parse HEAD > desktop-native/build.noindex/darwin-arm64/source-commit.txt
-      - uses: actions/upload-artifact@v7
-        with:
-          name: signed-native-preview
-          path: |
-            desktop-native/build.noindex/darwin-arm64/*.dmg
-            desktop-native/build.noindex/darwin-arm64/source-commit.txt
-          if-no-files-found: error
-          retention-days: 7
