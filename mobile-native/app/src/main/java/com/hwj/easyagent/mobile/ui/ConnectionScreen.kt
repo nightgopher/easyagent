@@ -31,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,13 +78,19 @@ fun ConnectionScreen(
     var scanned by remember { mutableStateOf(false) }
     var paired by remember { mutableStateOf<HostConfig?>(null) }
     var confirmLeave by remember { mutableStateOf(false) }
+    var cancellingPair by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     fun cancel() {
-        if (testing) return
-        if (paired != null) confirmLeave = true else onCancel()
+        if ((testing && pairing) || paired != null) {
+            cancellingPair = testing && paired == null
+            confirmLeave = true
+        } else onCancel()
     }
     if (canCancel) BackHandler { cancel() }
+    LaunchedEffect(testing, paired) {
+        if (!testing && paired == null) confirmLeave = false
+    }
 
     fun config(): HostConfig? = try {
         HostConfig(ApiClient.normalize(url), token.trim(), id, name.trim(), initial?.relay)
@@ -163,7 +170,7 @@ fun ConnectionScreen(
                 actions = { TextButton(onClick = onUpdates, enabled = !testing) { Text("检查更新") } },
                 navigationIcon = {
                     if (canCancel) {
-                        IconButton(onClick = { cancel() }, enabled = !testing) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                        IconButton(onClick = { cancel() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                     }
                 },
             )
@@ -282,9 +289,9 @@ fun ConnectionScreen(
     if (confirmLeave) {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("连接尚未保存") },
-            text = { Text("电脑已完成配对，但手机未保存凭据。返回后需要在电脑上撤销这次配对，再重新扫码。") },
-            confirmButton = { TextButton(onClick = { confirmLeave = false }) { Text("继续保存") } },
+            title = { Text(if (cancellingPair && paired == null) "配对正在进行" else "连接尚未保存") },
+            text = { Text(if (cancellingPair && paired == null) "电脑可能正在完成配对。返回后如电脑已出现此设备，请先撤销记录再重新扫码。" else "电脑已完成配对，但手机未保存凭据。返回后需要在电脑上撤销这次配对，再重新扫码。") },
+            confirmButton = { TextButton(onClick = { confirmLeave = false }) { Text(if (cancellingPair && paired == null) "继续等待" else "继续保存") } },
             dismissButton = { TextButton(onClick = { confirmLeave = false; onCancel() }) { Text("仍要返回") } },
         )
     }

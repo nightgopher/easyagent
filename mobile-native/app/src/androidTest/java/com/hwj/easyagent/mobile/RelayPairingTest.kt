@@ -183,6 +183,32 @@ class RelayPairingUiTest {
             assertEquals(1, fixture.claims.get())
         }
     }
+
+    @Test fun userCanReturnWhilePairingIsInProgress() {
+        val entered = AtomicBoolean()
+        val cancelled = AtomicBoolean()
+        val gate = CompletableDeferred<HostConfig>()
+        val code = RelayPairCode(1, "https://relay.example", "r".repeat(43),
+            "sha256:" + Base64.getEncoder().encodeToString(ByteArray(32)), "p".repeat(43),
+            "Fixture computer", Instant.now().plusSeconds(300).toString())
+        ui.setContent {
+            MaterialTheme {
+                ConnectionScreen(null, true, { cancelled.set(true) }, {}, {}, claim = { entered.set(true); gate.await() })
+            }
+        }
+        ui.onNodeWithText("粘贴配对码").performClick()
+        ui.onNodeWithText("配对码").performTextReplacement(wireJson.encodeToString(code))
+        ui.onNodeWithText("配对并连接").performScrollTo().performClick()
+        ui.waitUntil(10_000) { entered.get() }
+        ui.onNodeWithContentDescription("返回").assertIsEnabled().performClick()
+        ui.onNodeWithText("配对正在进行").assertExists()
+        ui.onNodeWithText("继续等待").performClick()
+        assertFalse(cancelled.get())
+        ui.onNodeWithContentDescription("返回").performClick()
+        ui.onNodeWithText("仍要返回").performClick()
+        assertTrue(cancelled.get())
+        gate.cancel()
+    }
 }
 
 /** Ephemeral local WSS relay forwarding inner TLS bytes. No public service or user data. */

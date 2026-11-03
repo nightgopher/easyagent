@@ -8,7 +8,7 @@
 
 - Android 15 / API 35 arm64 独立模拟器在旧实现上复现 `NetworkOnMainThreadException`：电脑已登记 1 台设备，手机尚未保存凭据。修复后通过真实 MainActivity 与香港中继的配对、加密保存、读取聊天内容、界面重建与连接清理，电脑仍只登记 1 台测试设备。
 - 新增自包含的 Android 原生 TLS 回归，覆盖配对后的 Keystore 保存、会话与 WebSocket 恢复、取消清理，以及保存失败后点击重试不会再次配对；扫码界面验证竖屏并保留截图。公网复现使用临时电脑身份，不接触真实用户会话，CI 回归不依赖公网中继。
-- 新增空主页及主机增删后的导航、长配对码输入、扫码失败后返回和凭据未保存时的离开确认测试；扫描返回使用模拟结果，实体相机识码仍需人工验收。
+- 新增空主页及主机增删后的导航、长配对码输入、扫码失败后返回、配对进行中和凭据未保存时的离开确认测试；扫描返回使用模拟结果，实体相机识码仍需人工验收。
 - 主页调整后的[首轮三平台测试](https://github.com/nightgopher/easyagent/actions/runs/41615619079)发现更新测试仍等待旧的连接页，已改为验证主页和连接页的更新入口。API 31 的一次配对测试在 15 秒测试等待结束前未完成，日志未记录最终原因；测试等待现覆盖网络请求自身的超时，并在失败时输出无凭据的隧道诊断，保留真实 TLS 和重试断言。
 - v0.37.1 的 [PR 三平台矩阵](https://github.com/nightgopher/easyagent/actions/runs/41604957314)全部通过，但 [Release 首轮](https://github.com/nightgopher/easyagent/actions/runs/41606421030)在 API 31 / 34 的连接池检查中发现测试时序问题：配对和聊天已成功，取消后的 WebSocket 回调尚未释放连接。测试现等待关闭回调及网络执行器结束，再断言连接数为零；未删除断言、跳过用例或重跑旧版本凑绿，原标签保留且不公开。
 - 发布前完整运行单测、lint、签名 APK 构建演练与 API 31 / 34 / 35 UI 矩阵；最终 SHA 的结果以 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml) 为准，流水线完成前不记为通过。
