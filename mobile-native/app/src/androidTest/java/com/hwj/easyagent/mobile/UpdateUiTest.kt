@@ -88,7 +88,18 @@ class UpdateUiTest {
     }
 
     private fun shell(command: String): String = ParcelFileDescriptor.AutoCloseInputStream(instrumentation.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
-    private fun waitText(text: String) = ui.waitUntil(20_000) { ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+    private fun waitText(text: String) = ui.waitUntil(20_000) {
+        // The system installer/settings can still own the foreground briefly
+        // after Back; Compose has no root until MainActivity resumes.
+        if (instrumentation.uiAutomation.rootInActiveWindow?.packageName?.toString() != instrumentation.targetContext.packageName) {
+            false
+        } else {
+            try { ui.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty() }
+            catch (e: IllegalStateException) {
+                if (e.message?.contains("No compose hierarchies found") == true) false else throw e
+            }
+        }
+    }
     private fun launch() { activity = ActivityScenario.launch(MainActivity::class.java) }
     private fun check() {
         ui.onNodeWithText("检查更新").performClick()
@@ -118,14 +129,20 @@ class UpdateUiTest {
         launch()
         waitText("发现新版本 99.0.0")
         ui.onNodeWithText("稍后").performClick()
-        waitText("连接运行主机")
+        waitText("还没有连接电脑")
         activity.recreate()
-        waitText("连接运行主机")
+        waitText("还没有连接电脑")
         assertEquals(2, server.requestCount)
         check()
         // The prompt can still show the earlier result while the manual check is in flight.
-        ui.waitUntil(10_000) { server.requestCount == 4 }
+        ui.waitUntil(10_000) { server.requestCount == 4 && !app.updater.state.value.busy }
         assertEquals(4, server.requestCount)
+        ui.onNodeWithText("稍后").performClick()
+        ui.onNodeWithText("连接电脑").performClick()
+        waitText("连接运行主机")
+        check()
+        ui.waitUntil(10_000) { server.requestCount == 6 }
+        assertEquals(6, server.requestCount)
         synchronized(calls) { assertTrue(calls.all { it == null }) }
     }
 
