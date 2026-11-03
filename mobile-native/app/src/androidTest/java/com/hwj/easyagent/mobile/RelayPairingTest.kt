@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
@@ -56,17 +57,24 @@ class RelayPairingTest {
                 withContext(Dispatchers.Main) { store.save(host) }
                 assertEquals(1, fixture.claims.get())
                 val api = fixture.api(requireNotNull(restored.token))
+                val closed = CountDownLatch(1)
                 try {
                     assertTrue(withContext(Dispatchers.Main) { api.get("/sessions").toString().contains("saved conversation") })
                     val echo = CountDownLatch(1)
                     api.openSocket(object : WebSocketListener() {
                         override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send("private chat") }
                         override fun onMessage(webSocket: WebSocket, text: String) { if (text == "private chat") echo.countDown() }
+                        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { closed.countDown() }
+                        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { closed.countDown() }
                     })
                     assertTrue("Saved credential must reopen chat over pinned TLS", echo.await(10, TimeUnit.SECONDS))
                 } finally {
                     withContext(Dispatchers.Main) { api.close() }
                 }
+                // cancelAll() closes sockets immediately, but OkHttp releases an
+                // active WebSocket's pool entry after its reader/callback returns.
+                assertTrue("Chat socket did not close", closed.await(10, TimeUnit.SECONDS))
+                assertTrue("Network callbacks did not finish", api.http.dispatcher.executorService.awaitTermination(10, TimeUnit.SECONDS))
                 assertEquals(0, api.http.connectionPool.connectionCount())
                 assertTrue(api.http.dispatcher.executorService.isShutdown)
             } finally {
@@ -97,27 +105,50 @@ class RelayPairingTest {
 class RelayPairingUiTest {
     @get:Rule val ui = createComposeRule()
 
+    private fun waitForRetry(fixture: RelayFixture, failure: AtomicReference<Throwable?>) {
+        try {
+            // The TLS request has a 45 s read timeout plus connection setup;
+            // don't time out the UI assertion before the request can finish.
+            ui.waitUntil(60_000) {
+                failure.get() != null || ui.onAllNodesWithText("重试保存").fetchSemanticsNodes().isNotEmpty()
+            }
+        } catch (e: ComposeTimeoutException) {
+            throw AssertionError("Pairing did not finish: ${fixture.diagnostics()}", e)
+        }
+        failure.get()?.let { throw AssertionError("Pairing failed: ${fixture.diagnostics()}", it) }
+    }
+
     @Test fun secureStorageRetryDoesNotPairSamePhoneTwice() {
         RelayFixture().use { fixture ->
             val saved = AtomicReference<HostConfig?>()
             val saves = AtomicInteger()
+            val cancelled = AtomicBoolean()
+            val failure = AtomicReference<Throwable?>()
             val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
             try {
                 ui.setContent {
                     MaterialTheme {
-                        ConnectionScreen(null, false, {}, { host ->
+                        ConnectionScreen(null, true, { cancelled.set(true) }, { host ->
                             if (saves.incrementAndGet() == 1) error("Simulated Keystore write failure")
                             store.save(host)
                             saved.set(host)
-                        }, {}, claim = { it.claim("Android test phone", fixture.api()) })
+                        }, {}, claim = {
+                            try { it.claim("Android test phone", fixture.api()) }
+                            catch (e: Exception) { failure.set(e); throw e }
+                        })
                     }
                 }
                 ui.onNodeWithText("粘贴配对码").performClick()
                 ui.onNodeWithText("配对码").performTextReplacement(wireJson.encodeToString(fixture.code))
                 ui.onNodeWithText("配对并连接").performScrollTo().performClick()
-                ui.waitUntil(15_000) { ui.onAllNodesWithText("重试保存").fetchSemanticsNodes().isNotEmpty() }
+                waitForRetry(fixture, failure)
                 ui.onNodeWithText("电脑已完成配对，但手机保存凭据失败，请点“重试保存”").assertExists()
                 ui.onNodeWithText("扫码配对电脑").assertIsNotEnabled()
+                ui.onNodeWithText("填写主机地址").assertIsNotEnabled()
+                ui.onNodeWithContentDescription("返回").performClick()
+                ui.onNodeWithText("连接尚未保存").assertExists()
+                ui.onNodeWithText("继续保存").performClick()
+                assertFalse(cancelled.get())
                 ui.onNodeWithText("重试保存").performScrollTo().performClick()
                 ui.waitUntil(10_000) { saved.get() != null }
                 assertEquals(2, saves.get())
@@ -127,6 +158,56 @@ class RelayPairingUiTest {
                 saved.get()?.let { store.remove(it.id) }
             }
         }
+    }
+
+    @Test fun userCanLeaveAfterAClaimedCredentialCouldNotBeSaved() {
+        RelayFixture().use { fixture ->
+            val cancelled = AtomicBoolean()
+            val failure = AtomicReference<Throwable?>()
+            ui.setContent {
+                MaterialTheme {
+                    ConnectionScreen(null, true, { cancelled.set(true) }, { error("Simulated Keystore write failure") }, {},
+                        claim = {
+                            try { it.claim("Android test phone", fixture.api()) }
+                            catch (e: Exception) { failure.set(e); throw e }
+                        })
+                }
+            }
+            ui.onNodeWithText("粘贴配对码").performClick()
+            ui.onNodeWithText("配对码").performTextReplacement(wireJson.encodeToString(fixture.code))
+            ui.onNodeWithText("配对并连接").performScrollTo().performClick()
+            waitForRetry(fixture, failure)
+            ui.onNodeWithContentDescription("返回").performClick()
+            ui.onNodeWithText("仍要返回").performClick()
+            assertTrue(cancelled.get())
+            assertEquals(1, fixture.claims.get())
+        }
+    }
+
+    @Test fun userCanReturnWhilePairingIsInProgress() {
+        val entered = AtomicBoolean()
+        val cancelled = AtomicBoolean()
+        val gate = CompletableDeferred<HostConfig>()
+        val code = RelayPairCode(1, "https://relay.example", "r".repeat(43),
+            "sha256:" + Base64.getEncoder().encodeToString(ByteArray(32)), "p".repeat(43),
+            "Fixture computer", Instant.now().plusSeconds(300).toString())
+        ui.setContent {
+            MaterialTheme {
+                ConnectionScreen(null, true, { cancelled.set(true) }, {}, {}, claim = { entered.set(true); gate.await() })
+            }
+        }
+        ui.onNodeWithText("粘贴配对码").performClick()
+        ui.onNodeWithText("配对码").performTextReplacement(wireJson.encodeToString(code))
+        ui.onNodeWithText("配对并连接").performScrollTo().performClick()
+        ui.waitUntil(10_000) { entered.get() }
+        ui.onNodeWithContentDescription("返回").assertIsEnabled().performClick()
+        ui.onNodeWithText("配对正在进行").assertExists()
+        ui.onNodeWithText("继续等待").performClick()
+        assertFalse(cancelled.get())
+        ui.onNodeWithContentDescription("返回").performClick()
+        ui.onNodeWithText("仍要返回").performClick()
+        assertTrue(cancelled.get())
+        gate.cancel()
     }
 }
 
@@ -141,6 +222,11 @@ private class RelayFixture : AutoCloseable {
     private val outerCert = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost").build()
     private val outerTrust = HandshakeCertificates.Builder().addTrustedCertificate(outerCert.certificate).build()
     val claims = AtomicInteger()
+    private val outerRequests = AtomicInteger()
+    private val outerOpened = AtomicInteger()
+    private val upstreamFrames = AtomicInteger()
+    private val downstreamFrames = AtomicInteger()
+    private val tunnelError = AtomicReference<String?>()
     val code: RelayPairCode
 
     init {
@@ -162,30 +248,36 @@ private class RelayFixture : AutoCloseable {
         inner.start()
         outer.useHttps(HandshakeCertificates.Builder().heldCertificate(outerCert).build().sslSocketFactory(), false)
         outer.dispatcher = object : Dispatcher() {
-            override fun dispatch(request: RecordedRequest) = MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
-                private lateinit var socket: Socket
-                override fun onOpen(webSocket: WebSocket, response: Response) {
-                    socket = Socket("127.0.0.1", inner.port)
-                    sockets.add(socket)
-                    workers.execute {
-                        try {
-                            val buffer = ByteArray(16384)
-                            while (true) {
-                                val count = socket.getInputStream().read(buffer)
-                                if (count < 0) break
-                                if (!webSocket.send(buffer.toByteString(0, count))) break
-                            }
-                        } catch (_: java.io.IOException) {
-                        } finally { socket.close(); sockets.remove(socket); webSocket.close(1000, "tunnel closed") }
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                outerRequests.incrementAndGet()
+                return MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
+                    private lateinit var socket: Socket
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        outerOpened.incrementAndGet()
+                        socket = Socket("127.0.0.1", inner.port)
+                        sockets.add(socket)
+                        workers.execute {
+                            try {
+                                val buffer = ByteArray(16384)
+                                while (true) {
+                                    val count = socket.getInputStream().read(buffer)
+                                    if (count < 0) break
+                                    downstreamFrames.incrementAndGet()
+                                    if (!webSocket.send(buffer.toByteString(0, count))) break
+                                }
+                            } catch (_: java.io.IOException) {
+                            } finally { socket.close(); sockets.remove(socket); webSocket.close(1000, "tunnel closed") }
+                        }
                     }
-                }
-                override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                    try { socket.getOutputStream().write(bytes.toByteArray()) }
-                    catch (_: java.io.IOException) { webSocket.close(1011, "tunnel failed") }
-                }
-                override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { if (::socket.isInitialized) socket.close() }
-                override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { socket.close(); webSocket.close(code, reason) }
-            })
+                    override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+                        upstreamFrames.incrementAndGet()
+                        try { socket.getOutputStream().write(bytes.toByteArray()) }
+                        catch (e: java.io.IOException) { tunnelError.set(e.javaClass.simpleName); webSocket.close(1011, "tunnel failed") }
+                    }
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { tunnelError.set(t.javaClass.simpleName); if (::socket.isInitialized) socket.close() }
+                    override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { socket.close(); webSocket.close(code, reason) }
+                })
+            }
         }
         outer.start()
         code = RelayPairCode(1, outer.url("/").toString().trimEnd('/'), "r".repeat(43), fingerprint, "p".repeat(43), "Fixture computer", Instant.now().plusSeconds(300).toString())
@@ -195,6 +287,10 @@ private class RelayFixture : AutoCloseable {
         val client = OkHttpClient.Builder().sslSocketFactory(outerTrust.sslSocketFactory(), outerTrust.trustManager).build()
         return ApiClient(code.relay.baseUrl, token, RelayTransport(code.relay, client))
     }
+
+    fun diagnostics(): String = "outerRequests=${outerRequests.get()}, outerOpened=${outerOpened.get()}, " +
+        "upstreamFrames=${upstreamFrames.get()}, downstreamFrames=${downstreamFrames.get()}, " +
+        "claims=${claims.get()}, tunnelError=${tunnelError.get()}"
 
     override fun close() {
         sockets.forEach { it.close() }

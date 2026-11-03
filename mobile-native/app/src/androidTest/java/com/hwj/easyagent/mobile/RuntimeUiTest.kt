@@ -8,6 +8,8 @@ import android.os.SystemClock
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.app.Notification
 import android.app.NotificationManager
+import android.app.Activity
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -22,10 +24,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.espresso.Espresso.closeSoftKeyboard
+import androidx.test.espresso.Espresso.pressBack
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import com.hwj.easyagent.mobile.backend.SettingsStore
+import com.hwj.easyagent.mobile.backend.HostConfig
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicInteger
@@ -68,6 +72,8 @@ class RuntimeUiTest {
         }
         instrumentation.targetContext.getSystemService(NotificationManager::class.java).cancelAll()
         activity = ActivityScenario.launch(MainActivity::class.java)
+        waitText("还没有连接电脑")
+        ui.onNodeWithText("连接电脑").performClick()
     }
 
     @After fun close() {
@@ -82,6 +88,90 @@ class RuntimeUiTest {
     }
 
     private fun host(name: String) = RuntimeFixture(name).also { hosts += it }
+
+    @Test fun emptyHomeCanBeReopenedAndLongPastedCodesStayCompact() {
+        waitText("连接运行主机")
+        ui.onNodeWithContentDescription("返回").performClick()
+        waitText("还没有连接电脑")
+        ui.onNodeWithText("检查更新").assertIsDisplayed()
+        screenshot("empty-home")
+        activity.recreate()
+        waitText("还没有连接电脑")
+        ui.onNodeWithText("连接电脑").performClick()
+        ui.onNodeWithText("粘贴配对码").performClick()
+        fill("配对码", "invalid-" + "x".repeat(1200))
+        val heightDp = ui.onNodeWithText("配对码").fetchSemanticsNode().boundsInRoot.height / ui.density.density
+        assertTrue("Pasted pairing code field should stay compact: $heightDp dp", heightDp <= 160f)
+        closeSoftKeyboard()
+        ui.onNodeWithText("配对并连接").assertIsDisplayed().performClick()
+        waitText("这不是 EasyAgent 配对码")
+        screenshot("pairing-long-code")
+        pressBack()
+        waitText("还没有连接电脑")
+    }
+
+    @Test fun scannedFailureShowsStatusAndCanReturnHome() {
+        instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, "android.permission.CAMERA")
+        ui.onNodeWithText("扫码配对电脑").performClick()
+        var scanner: Activity? = null
+        ui.waitUntil(10_000) {
+            instrumentation.runOnMainSync {
+                scanner = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                    .firstOrNull { it is com.journeyapps.barcodescanner.CaptureActivity }
+            }
+            scanner != null
+        }
+        instrumentation.runOnMainSync {
+            requireNotNull(scanner).setResult(Activity.RESULT_OK, Intent().putExtra("SCAN_RESULT", "invalid-" + "x".repeat(1200)))
+            requireNotNull(scanner).finish()
+        }
+        waitText("这不是 EasyAgent 配对码")
+        ui.onNodeWithText("已扫描配对码").assertIsDisplayed()
+        ui.onNodeWithText("配对码").assertDoesNotExist()
+        ui.onNodeWithText("重试配对").assertIsDisplayed()
+        screenshot("pairing-scanned-error")
+        ui.onNodeWithText("改为粘贴配对码").performClick()
+        ui.onNodeWithText("配对码").assertIsDisplayed()
+        ui.onNodeWithContentDescription("返回").performClick()
+        waitText("还没有连接电脑")
+        ui.onNodeWithText("连接电脑").performClick()
+        waitText("扫码配对电脑")
+    }
+
+    @Test fun addingOrRemovingHostsKeepsNavigationUsable() {
+        val first = host("导航测试主机")
+        connect(first)
+        ui.onNodeWithContentDescription("切换运行主机").performClick()
+        ui.onNodeWithText("管理运行主机").performClick()
+        ui.onNodeWithContentDescription("添加主机").performClick()
+        waitText("连接运行主机")
+        ui.onNodeWithContentDescription("返回").performClick()
+        waitText("运行主机")
+        ui.onNodeWithContentDescription("移除 导航测试主机").performClick()
+        ui.onNodeWithText("移除", substring = false).performClick()
+        waitText("还没有连接电脑")
+        ui.onNodeWithText("连接电脑").performClick()
+        waitText("连接运行主机")
+    }
+
+    @Test fun unreadableSavedHostCanReturnHomeAndBeRepaired() {
+        val broken = host("凭据不可读")
+        val other = host("备用电脑")
+        val config = HostConfig(broken.url, "qa-token", name = broken.name)
+        ui.onNodeWithContentDescription("返回").performClick()
+        instrumentation.runOnMainSync {
+            app.connections.save(config)
+            instrumentation.targetContext.getSharedPreferences("easyagent-host", 0).edit()
+                .putString("token:${config.id}", "invalid-ciphertext").commit()
+            app.connections.save(HostConfig(other.url, "qa-token", name = other.name))
+            app.connections.select(config.id)
+        }
+        waitText("连接需要修复")
+        ui.onNodeWithText("管理运行主机").performClick()
+        waitText("令牌无法读取，请编辑连接")
+        ui.onNodeWithContentDescription("返回").performClick()
+        waitText("连接需要修复")
+    }
 
     @Test fun relayScannerKeepsPortraitPhoneUpright() {
         instrumentation.uiAutomation.grantRuntimePermission(instrumentation.targetContext.packageName, "android.permission.CAMERA")

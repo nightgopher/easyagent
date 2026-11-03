@@ -53,6 +53,20 @@ git push origin refs/tags/v0.1.1-rc.1
 
 发布失败后先看 Actions 日志。纯网络上传失败可以重跑同一 tag，继续未公开的草稿；若需要改代码或脚本，提交修复后使用新版本，不移动旧 tag。草稿中出现不匹配的提交或额外资产会拒绝发布，应先核查来源。
 
+### Apple Silicon 执行机容量不足
+
+原生构建、签名预览和正式发布默认使用 GitHub 标准 `macos-26` ARM 执行机。如果 GitHub 因容量不足无法分配该镜像，可临时将仓库 Actions 变量 `EASYAGENT_MACOS_ARM_RUNNER` 设为 `macos-15` 或 `xcode-27`，再重跑受影响的 job。这些标签均为标准 Apple Silicon 执行机；构建、实际 bundle 检查、签名和公证步骤不变。`xcode-27` 使用较新的 macOS 和 Xcode，切换后仍须完成全部检查；不同镜像不保证各自都有容量，均不可用时仍需等待恢复。
+
+```bash
+gh variable set EASYAGENT_MACOS_ARM_RUNNER --repo nightgopher/easyagent --body xcode-27
+# 排队前已确定执行机的 job 需要等待结束后重跑；指定失败 job 的 databaseId。
+gh run rerun <run-id> --repo nightgopher/easyagent --job <job-id>
+# 恢复默认时，仅删除本仓库这个变量。
+gh variable delete EASYAGENT_MACOS_ARM_RUNNER --repo nightgopher/easyagent
+```
+
+变量仅识别 `macos-15` 和 `xcode-27`（GitHub 表达式比较不区分大小写）；未设置或其他值使用 `macos-26`，不会转向自托管或收费标签。它影响本仓库此后排队的全部原生发布类任务，切换前检查是否有并行发布；已有 tag 和发布资产保持不变。恢复后删除变量，重新使用默认镜像。
+
 ## 安装与核验
 
 macOS 桌面从 Release 下载 `easyagent-native-darwin-arm64.dmg`（Apple Silicon）。原生客户端支持签名自动更新，也可通过 DMG 手动更新；从 v0.17.2 起安装包使用固定证书签名以保留系统授权；v0.17.1 及此前公开包使用 ad hoc 测试签名。自 v0.30.1 起使用 Apple Developer ID Application 证书签名（对外用户可直接通过 Gatekeeper 安装，首次打开仍需确认一次）；公证（notarization）接入后可免除该确认。固定签名与 GitHub SHA-256 校验均不代替 Apple 的开发者认证和公证。
