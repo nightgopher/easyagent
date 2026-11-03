@@ -113,6 +113,8 @@ class HostConnectionsTest {
         connections.select("a")
         assertSame(ca, connections.client.value)
         assertSame(cb, connections.clientFor("b"))
+        assertSame(ca.api.http, connections.httpFor(a.config.url + "/attachment/a.png"))
+        assertSame(cb.api.http, connections.httpFor(b.config.url + "/attachment/b.png"))
         assertEquals("a", settings.load().activeId)
         assertEquals("draft for a", sa.draft)
         assertEquals("draft for b", sb.draft)
@@ -123,9 +125,12 @@ class HostConnectionsTest {
         assertEquals(1, a.sockets.get())
         assertEquals(1, b.sockets.get())
         for (host in listOf(a, b)) {
-            assertTrue(host.authorizations.any { it.first == "/ws" })
-            assertTrue(host.authorizations.any { it.first == "/sessions" })
-            assertTrue(host.authorizations.all { it.second == "Bearer ${host.id}-token" })
+            // Network callbacks still append while resume() refreshes sessions.
+            // synchronizedList requires its monitor while obtaining a snapshot.
+            val authorizations = synchronized(host.authorizations) { host.authorizations.toList() }
+            assertTrue(authorizations.any { it.first == "/ws" })
+            assertTrue(authorizations.any { it.first == "/sessions" })
+            assertTrue(authorizations.all { it.second == "Bearer ${host.id}-token" })
         }
     }
 
@@ -143,12 +148,15 @@ class HostConnectionsTest {
         assertEquals("keep through reconnect", ca.chat("shared").draft)
         connections.remove("a")
         assertNull(connections.clientFor("a"))
+        assertNull(connections.httpFor(a.config.url + "/attachment/a.png"))
+        assertSame(cb.api.http, connections.httpFor(b.config.url + "/attachment/b.png"))
         assertSame(cb, connections.client.value)
         assertEquals(LinkStatus.DISCONNECTED, ca.link.value)
         delay(1_200)
         assertEquals(2, a.sockets.get())
         connections.remove("b")
         assertNull(connections.client.value)
+        assertNull(connections.httpFor(b.config.url + "/attachment/b.png"))
         assertTrue(connections.state.value.hosts.isEmpty())
     }
 
