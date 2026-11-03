@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import kotlinx.serialization.encodeToString
 import okhttp3.OkHttpClient
@@ -108,11 +109,12 @@ class RelayPairingUiTest {
         RelayFixture().use { fixture ->
             val saved = AtomicReference<HostConfig?>()
             val saves = AtomicInteger()
+            val cancelled = AtomicBoolean()
             val store = SettingsStore(InstrumentationRegistry.getInstrumentation().targetContext)
             try {
                 ui.setContent {
                     MaterialTheme {
-                        ConnectionScreen(null, false, {}, { host ->
+                        ConnectionScreen(null, true, { cancelled.set(true) }, { host ->
                             if (saves.incrementAndGet() == 1) error("Simulated Keystore write failure")
                             store.save(host)
                             saved.set(host)
@@ -125,6 +127,11 @@ class RelayPairingUiTest {
                 ui.waitUntil(15_000) { ui.onAllNodesWithText("重试保存").fetchSemanticsNodes().isNotEmpty() }
                 ui.onNodeWithText("电脑已完成配对，但手机保存凭据失败，请点“重试保存”").assertExists()
                 ui.onNodeWithText("扫码配对电脑").assertIsNotEnabled()
+                ui.onNodeWithText("填写主机地址").assertIsNotEnabled()
+                ui.onNodeWithContentDescription("返回").performClick()
+                ui.onNodeWithText("连接尚未保存").assertExists()
+                ui.onNodeWithText("继续保存").performClick()
+                assertFalse(cancelled.get())
                 ui.onNodeWithText("重试保存").performScrollTo().performClick()
                 ui.waitUntil(10_000) { saved.get() != null }
                 assertEquals(2, saves.get())
@@ -133,6 +140,26 @@ class RelayPairingUiTest {
             } finally {
                 saved.get()?.let { store.remove(it.id) }
             }
+        }
+    }
+
+    @Test fun userCanLeaveAfterAClaimedCredentialCouldNotBeSaved() {
+        RelayFixture().use { fixture ->
+            val cancelled = AtomicBoolean()
+            ui.setContent {
+                MaterialTheme {
+                    ConnectionScreen(null, true, { cancelled.set(true) }, { error("Simulated Keystore write failure") }, {},
+                        claim = { it.claim("Android test phone", fixture.api()) })
+                }
+            }
+            ui.onNodeWithText("粘贴配对码").performClick()
+            ui.onNodeWithText("配对码").performTextReplacement(wireJson.encodeToString(fixture.code))
+            ui.onNodeWithText("配对并连接").performScrollTo().performClick()
+            ui.waitUntil(15_000) { ui.onAllNodesWithText("重试保存").fetchSemanticsNodes().isNotEmpty() }
+            ui.onNodeWithContentDescription("返回").performClick()
+            ui.onNodeWithText("仍要返回").performClick()
+            assertTrue(cancelled.get())
+            assertEquals(1, fixture.claims.get())
         }
     }
 }

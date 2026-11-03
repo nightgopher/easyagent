@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -73,10 +74,16 @@ fun ConnectionScreen(
     var resultOk by remember { mutableStateOf(false) }
     var pairing by remember { mutableStateOf(false) }
     var pairCode by remember { mutableStateOf("") }
+    var scanned by remember { mutableStateOf(false) }
     var paired by remember { mutableStateOf<HostConfig?>(null) }
+    var confirmLeave by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    if (canCancel) BackHandler(onBack = onCancel)
+    fun cancel() {
+        if (testing) return
+        if (paired != null) confirmLeave = true else onCancel()
+    }
+    if (canCancel) BackHandler { cancel() }
 
     fun config(): HostConfig? = try {
         HostConfig(ApiClient.normalize(url), token.trim(), id, name.trim(), initial?.relay)
@@ -144,6 +151,7 @@ fun ConnectionScreen(
         scan.contents?.let {
             if (it != pairCode) paired = null
             pairCode = it
+            scanned = true
             pair(it)
         }
     }
@@ -152,10 +160,10 @@ fun ConnectionScreen(
         topBar = {
             TopAppBar(
                 title = { Text(if (initial == null) "连接运行主机" else "编辑运行主机") },
-                actions = { TextButton(onClick = onUpdates) { Text("检查更新") } },
+                actions = { TextButton(onClick = onUpdates, enabled = !testing) { Text("检查更新") } },
                 navigationIcon = {
                     if (canCancel) {
-                        IconButton(onClick = onCancel) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                        IconButton(onClick = { cancel() }, enabled = !testing) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
                     }
                 },
             )
@@ -175,14 +183,25 @@ fun ConnectionScreen(
                     OutlinedButton(onClick = { pairing = true; scanner.launch(ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("扫描电脑 EasyAgent 的配对二维码").setBeepEnabled(false).setBarcodeImageEnabled(false).setOrientationLocked(false)) }, enabled = !testing && paired == null) {
                         Text("扫码配对电脑")
                     }
-                    TextButton(onClick = { pairing = !pairing; result = null }, enabled = !testing) { Text(if (pairing) "填写主机地址" else "粘贴配对码") }
+                    TextButton(onClick = {
+                        pairing = !pairing
+                        if (pairing) { scanned = false; pairCode = "" }
+                        result = null
+                    }, enabled = !testing && paired == null) { Text(if (pairing) "填写主机地址" else "粘贴配对码") }
                 }
             }
             if (pairing) {
                 Text("在电脑的设置 → 手机远程访问中生成二维码。无需配置 VPN，配对码仅在 5 分钟内有效。")
-                OutlinedTextField(value = pairCode, onValueChange = { pairCode = it; paired = null }, label = { Text("配对码") }, visualTransformation = PasswordVisualTransformation(), enabled = !testing && paired == null, modifier = Modifier.fillMaxWidth())
+                if (scanned) {
+                    Text("已扫描配对码", style = MaterialTheme.typography.titleSmall)
+                    TextButton(onClick = { scanned = false; pairCode = ""; result = null }, enabled = !testing && paired == null) {
+                        Text("改为粘贴配对码")
+                    }
+                } else {
+                    OutlinedTextField(value = pairCode, onValueChange = { pairCode = it; paired = null }, label = { Text("配对码") }, visualTransformation = PasswordVisualTransformation(), maxLines = 3, enabled = !testing && paired == null, modifier = Modifier.fillMaxWidth())
+                }
                 Button(onClick = { pair(pairCode) }, enabled = !testing && pairCode.isNotBlank()) {
-                    if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text(if (paired != null) "重试保存" else "配对并连接")
+                    if (testing) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text(if (paired != null) "重试保存" else if (scanned) "重试配对" else "配对并连接")
                 }
                 result?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             } else {
@@ -259,5 +278,14 @@ fun ConnectionScreen(
                 )
             }
         }
+    }
+    if (confirmLeave) {
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = { Text("连接尚未保存") },
+            text = { Text("电脑已完成配对，但手机未保存凭据。返回后需要在电脑上撤销这次配对，再重新扫码。") },
+            confirmButton = { TextButton(onClick = { confirmLeave = false }) { Text("继续保存") } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false; onCancel() }) { Text("仍要返回") } },
+        )
     }
 }

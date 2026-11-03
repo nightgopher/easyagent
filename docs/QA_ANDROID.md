@@ -4,10 +4,11 @@
 
 ## v0.37.2 发布候选
 
-本轮修复 Android 配对成功后在主线程关闭 TLS 导致凭据丢失，以及扫码默认横屏。版本为 `0.37.2`，versionCode 为 `3702300`；最终候选 SHA、正式签名和摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。
+本轮修复 Android 配对成功后在主线程关闭 TLS 导致凭据丢失、扫码默认横屏，以及无已保存主机时无法返回主页和长配对码撑满页面的问题。版本为 `0.37.2`，versionCode 为 `3702300`；最终候选 SHA、正式签名和摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。
 
 - Android 15 / API 35 arm64 独立模拟器在旧实现上复现 `NetworkOnMainThreadException`：电脑已登记 1 台设备，手机尚未保存凭据。修复后通过真实 MainActivity 与香港中继的配对、加密保存、读取聊天内容、界面重建与连接清理，电脑仍只登记 1 台测试设备。
 - 新增自包含的 Android 原生 TLS 回归，覆盖配对后的 Keystore 保存、会话与 WebSocket 恢复、取消清理，以及保存失败后点击重试不会再次配对；扫码界面验证竖屏并保留截图。公网复现使用临时电脑身份，不接触真实用户会话，CI 回归不依赖公网中继。
+- 新增空主页及主机增删后的导航、长配对码输入、扫码失败后返回和凭据未保存时的离开确认测试；扫描返回使用模拟结果，实体相机识码仍需人工验收。
 - v0.37.1 的 [PR 三平台矩阵](https://github.com/nightgopher/easyagent/actions/runs/41604957314)全部通过，但 [Release 首轮](https://github.com/nightgopher/easyagent/actions/runs/41606421030)在 API 31 / 34 的连接池检查中发现测试时序问题：配对和聊天已成功，取消后的 WebSocket 回调尚未释放连接。测试现等待关闭回调及网络执行器结束，再断言连接数为零；未删除断言、跳过用例或重跑旧版本凑绿，原标签保留且不公开。
 - 发布前完整运行单测、lint、签名 APK 构建演练与 API 31 / 34 / 35 UI 矩阵；最终 SHA 的结果以 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml) 为准，流水线完成前不记为通过。
 - RMX6699 实体机、实体相机识码、蜂窝切换及正式 APK 覆盖安装未执行。未清除现有设备记录或替换正在使用的客户端；旧失败配对留下的凭据需要在电脑上手动撤销。
