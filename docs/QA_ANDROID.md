@@ -2,6 +2,14 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.37.0 发布候选
+
+本轮增加中继扫码/粘贴配对、设备凭据保存及每台主机独立的端到端 TLS 传输。版本为 `0.37.0`，versionCode 为 `3700300`；最终候选 SHA、正式证书和资产摘要以附注 tag 与 `release.json` / `checksums.txt` 为准。
+
+- 本地 JVM 单测、Debug / Release lint、Debug 构建和一次性证书 Release APK 演练通过；测试证书不作为正式升级身份。OkHttp 与本地 Go fixture、公网中继的联调覆盖一次性配对、REST / WebSocket、约 1.2 MiB 附件上下行、错误公钥拒绝、重连及撤销。
+- UI 矩阵保留原有全部用例，增加无效配对码不会保存凭据且仍可改用直连的回归。API 31 / 34 / 35 的报告与截图见 [PR #63](https://github.com/nightgopher/easyagent/pull/63) 和最终同一 SHA 的 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)；流水线完成前不记为通过。
+- 实体相机扫码、蜂窝网络切换、真实模型/业务账号、正式 APK 跨版本覆盖安装及手机/平板人工检查未执行。现有设备和正在运行的桌面应用保持原状，网络 fixture 的通过不代替这些人工项目。
+
 ## v0.33.0 发布候选
 
 本轮新增桌面壁纸、会话全文搜索与主机工具按需发现，调整只读工具并发；Android 生产代码未变，新增协议投影单测以确认客户端兼容工具发现事件与上下文可选字段。候选版本为 `0.33.0`，versionCode 为 `3300300`；最终 SHA、APK 签名和校验和以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
