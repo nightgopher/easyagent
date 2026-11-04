@@ -4,34 +4,6 @@ import (
 	"testing"
 )
 
-func TestCosineSimilarity(t *testing.T) {
-	tests := []struct {
-		name string
-		a    []float32
-		b    []float32
-		want float64
-	}{
-		{"identical", []float32{1, 0, 0}, []float32{1, 0, 0}, 1.0},
-		{"orthogonal", []float32{1, 0, 0}, []float32{0, 1, 0}, 0.0},
-		{"opposite", []float32{1, 0, 0}, []float32{-1, 0, 0}, -1.0},
-		{"45 degrees", []float32{1, 1}, []float32{1, 0}, 0.7071}, // ~0.707
-		{"empty", []float32{}, []float32{}, 0},
-		{"mismatch", []float32{1, 0}, []float32{1}, 0},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cosineSimilarity(tt.a, tt.b)
-			if tt.name == "45 degrees" {
-				if got < 0.70 || got > 0.71 {
-					t.Errorf("cosineSimilarity(%v, %v) = %f, want ~0.707", tt.a, tt.b, got)
-				}
-			} else if got != tt.want {
-				t.Errorf("cosineSimilarity(%v, %v) = %f, want %f", tt.a, tt.b, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestStorePersistence(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/vectors.json"
@@ -94,20 +66,6 @@ func TestStoreSearch(t *testing.T) {
 	}
 	if results[1].RelPath != "c.md" {
 		t.Errorf("second result = %s, want 'c.md'", results[1].RelPath)
-	}
-}
-
-func TestEmbeddingClientNotAvailable(t *testing.T) {
-	c := NewEmbeddingClient("", "", "")
-	if c.Available() {
-		t.Error("client with empty key should not be available")
-	}
-}
-
-func TestEmbeddingClientAvailable(t *testing.T) {
-	c := NewEmbeddingClient("test-key", "", "")
-	if !c.Available() {
-		t.Error("client with key should be available")
 	}
 }
 

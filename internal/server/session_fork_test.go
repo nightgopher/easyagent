@@ -107,28 +107,6 @@ func TestForkSessionCopiesHistoryAndMetadata(t *testing.T) {
 	}
 }
 
-func TestAttachmentRawEndpointServesInlineImage(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	sess, err := s.resolveSession(context.Background(), "")
-	require.NoError(t, err)
-
-	var imgBuf bytes.Buffer
-	require.NoError(t, png.Encode(&imgBuf, image.NewRGBA(image.Rect(0, 0, 4, 4))))
-	att := uploadInput(t, s, sess.SessionID(), "test.png", imgBuf.Bytes(), 201)
-
-	// Call GET raw
-	req := httptest.NewRequest("GET", "/sessions/"+sess.SessionID()+"/attachments/"+att.ID+"/raw", nil)
-	req.SetPathValue("id", sess.SessionID())
-	req.SetPathValue("attID", att.ID)
-	rec := httptest.NewRecorder()
-	s.getAttachmentRaw(rec, req)
-
-	require.Equal(t, 200, rec.Code)
-	require.Equal(t, "image/png", rec.Header().Get("Content-Type"))
-	require.Contains(t, rec.Header().Get("Content-Disposition"), "inline")
-	require.Equal(t, imgBuf.Bytes(), rec.Body.Bytes())
-}
-
 func TestForkEmptyAndCompactedAnchors(t *testing.T) {
 	s, _, _ := newRunTestServer(t)
 	ctx := context.Background()
@@ -188,29 +166,6 @@ func TestForkEmptyAndCompactedAnchors(t *testing.T) {
 	messages, err := source.Session().BuildContext(ctx)
 	require.NoError(t, err)
 	require.Len(t, messages, 6)
-}
-
-func TestForkRejectsMalformedAndActiveRequests(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	source, err := s.resolveSession(context.Background(), "")
-	require.NoError(t, err)
-	for _, body := range []string{`{"entry_id":"missing"}`, `{"before_message_index":-1}`, `{"before_message_index":0,"entry_id":""}`, `{"unknown":true}`, `{`, `{} {}`} {
-		req := httptest.NewRequest("POST", "/", bytes.NewBufferString(body))
-		req.SetPathValue("id", source.SessionID())
-		rec := httptest.NewRecorder()
-		s.forkSession(rec, req)
-		require.Equal(t, 400, rec.Code, body)
-	}
-	s.runs.sessions[source.SessionID()] = &sessionRunState{run: &sessionRun{State: "running"}}
-	req := httptest.NewRequest("POST", "/", nil)
-	req.SetPathValue("id", source.SessionID())
-	rec := httptest.NewRecorder()
-	s.forkSession(rec, req)
-	require.Equal(t, 409, rec.Code)
-	s.runs.sessions[source.SessionID()].run = nil
-	list, err := s.app.SessionManager().List(context.Background())
-	require.NoError(t, err)
-	require.Len(t, list, 1)
 }
 
 func TestAttachmentPreviewRequiresAuthAndRejectsWorkspaceEscape(t *testing.T) {

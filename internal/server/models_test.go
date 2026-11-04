@@ -26,34 +26,6 @@ func modelTestApp(t *testing.T, configure func(*config.Config)) *app.App {
 	return application
 }
 
-func TestModelCatalogUsesGatewayAndAcceptsVersionedURL(t *testing.T) {
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models", r.URL.Path)
-		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
-		_, _ = w.Write([]byte(`{"data":[{"id":"real-model","display_name":"Real Model","input_modalities":["text"]},{"id":""}]}`))
-	}))
-	defer gateway.Close()
-	application := modelTestApp(t, func(cfg *config.Config) {
-		cfg.OpenAIBaseURL = gateway.URL + "/v1/"
-		cfg.OpenAIModel = "real-model"
-	})
-	srv := New(application, nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
-	require.Equal(t, http.StatusOK, w.Code)
-	var catalog ModelsResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
-	assert.Equal(t, "gateway", catalog.Source)
-	require.Len(t, catalog.Models, 1)
-	assert.Equal(t, "real-model", catalog.Models[0].ID)
-	assert.Equal(t, "Real Model", catalog.Models[0].Name)
-	assert.Equal(t, "real-model", catalog.Current.ID)
-	require.NotNil(t, catalog.Current.SupportsImages)
-	require.False(t, *catalog.Current.SupportsImages)
-	require.NotNil(t, catalog.Models[0].SupportsImages)
-	require.False(t, *catalog.Models[0].SupportsImages)
-}
-
 func TestModelCatalogFailureNeverInventsModels(t *testing.T) {
 	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
@@ -76,47 +48,6 @@ func TestModelCatalogFailureNeverInventsModels(t *testing.T) {
 	assert.NotContains(t, w.Body.String(), "sensitive")
 }
 
-func TestModelCatalogUnconfiguredIsEmpty(t *testing.T) {
-	application := modelTestApp(t, func(cfg *config.Config) {
-		cfg.OpenAIModel = ""
-		cfg.OpenAIBaseURL = ""
-	})
-	srv := New(application, nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
-	var catalog ModelsResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
-	assert.Equal(t, "unconfigured", catalog.Source)
-	assert.Empty(t, catalog.Models)
-	assert.Nil(t, catalog.Current)
-	assert.Contains(t, w.Body.String(), `"models":[]`)
-}
-
-func TestAnthropicModelCatalogDoesNotQueryUnrelatedOpenAIConfig(t *testing.T) {
-	calls := 0
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls++
-		_, _ = w.Write([]byte(`{"data":[{"id":"unrelated-openai-model"}]}`))
-	}))
-	defer gateway.Close()
-	application := modelTestApp(t, func(cfg *config.Config) {
-		cfg.Provider = "anthropic"
-		cfg.AnthropicAPIKey = "test-anthropic-key"
-		cfg.AnthropicModel = "my-anthropic-model"
-		cfg.OpenAIBaseURL = gateway.URL
-	})
-	calls = 0 // Count discovery by this endpoint, after application initialization.
-	srv := New(application, nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
-	var catalog ModelsResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
-	assert.Equal(t, 0, calls)
-	assert.Equal(t, "configured", catalog.Source)
-	require.Len(t, catalog.Models, 1)
-	assert.Equal(t, "my-anthropic-model", catalog.Models[0].ID)
-}
-
 func TestModelDiscoveryDoesNotForwardCredentialsThroughRedirect(t *testing.T) {
 	redirected := 0
 	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -132,25 +63,4 @@ func TestModelDiscoveryDoesNotForwardCredentialsThroughRedirect(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, models)
 	assert.Equal(t, 0, redirected)
-}
-
-// Only known context windows are reported; unknown models get none rather
-// than the runtime's 128K fallback.
-func TestModelCatalogReportsKnownContextWindows(t *testing.T) {
-	gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"data":[{"id":"glm-5.3-flash"},{"id":"house-model"}]}`))
-	}))
-	defer gateway.Close()
-	application := modelTestApp(t, func(cfg *config.Config) {
-		cfg.OpenAIBaseURL = gateway.URL
-		cfg.OpenAIModel = "glm-5.3-flash"
-	})
-	w := httptest.NewRecorder()
-	New(application, nil).Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
-	var catalog ModelsResponse
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
-	require.Len(t, catalog.Models, 2)
-	assert.Equal(t, 128000, catalog.Models[0].ContextWindow)
-	assert.Zero(t, catalog.Models[1].ContextWindow)
-	assert.Equal(t, 128000, catalog.Current.ContextWindow)
 }

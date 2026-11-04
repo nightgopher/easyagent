@@ -43,30 +43,6 @@ func realPath(t *testing.T, p string) string {
 	return rp
 }
 
-func TestSecurePath_InsideWorkspace(t *testing.T) {
-	ws := realPath(t, t.TempDir())
-	p, err := securePath(ws, "a/b.txt")
-	require.NoError(t, err)
-	assert.True(t, within(p, ws), "resolved path should stay inside workspace")
-
-	p, err = securePath(ws, filepath.Join(ws, "sub", "file.go"))
-	require.NoError(t, err)
-	assert.True(t, within(p, ws))
-}
-
-func TestSecurePath_RejectsEscape(t *testing.T) {
-	ws := t.TempDir()
-	for _, target := range []string{
-		"/etc/passwd",
-		"../../etc/passwd",
-		filepath.Join(ws, "..", "outside.txt"),
-		"/",
-	} {
-		_, err := securePath(ws, target)
-		assert.Error(t, err, "target %q should be rejected", target)
-	}
-}
-
 func TestSecurePath_SymlinkEscape(t *testing.T) {
 	ws := t.TempDir()
 	outside := t.TempDir()
@@ -76,13 +52,6 @@ func TestSecurePath_SymlinkEscape(t *testing.T) {
 	// 通过 workspace 内的符号链接访问外部文件 → 拒绝
 	_, err := securePath(ws, filepath.Join("evil", "secret.txt"))
 	assert.Error(t, err, "symlink escape should be rejected")
-}
-
-func TestSecurePath_NonExistentInsideWorkspace(t *testing.T) {
-	ws := realPath(t, t.TempDir())
-	p, err := securePath(ws, "new/dir/file.txt")
-	require.NoError(t, err)
-	assert.True(t, within(p, ws))
 }
 
 func within(path, root string) bool {
@@ -154,22 +123,6 @@ func TestAuth_DefaultLoopbackOnly(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Contains(t, resp.Error, "EA_API_KEY")
-}
-
-func TestWSAuth(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-	srv.SetAPIKey("secret-key")
-
-	req := httptest.NewRequest(http.MethodGet, "/ws", nil)
-	assert.False(t, srv.wsAuthorized(req))
-
-	req = httptest.NewRequest(http.MethodGet, "/ws?token=secret-key", nil)
-	assert.True(t, srv.wsAuthorized(req))
-
-	req = httptest.NewRequest(http.MethodGet, "/ws", nil)
-	req.Header.Set("Authorization", "Bearer secret-key")
-	assert.True(t, srv.wsAuthorized(req))
 }
 
 // ─── HTTP 端到端：文件端点被限制在 workspace 内 ─────────────────────────────

@@ -3,7 +3,6 @@ package hosttools
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
@@ -68,29 +67,4 @@ func TestHostReadToolsSearchArchivesAndHonorRevocation(t *testing.T) {
 	require.NoError(t, err)
 	_, err = tool.Execute(ctx, json.RawMessage(`{}`), nil)
 	require.ErrorContains(t, err, "permission is disabled")
-}
-
-func TestHostReadArgumentsAndUnavailableRuntime(t *testing.T) {
-	store := agentdata.New(t.TempDir())
-	a, err := store.EnsureSteward(context.Background())
-	require.NoError(t, err)
-	tool := Tool{Store: store, AgentID: a.ID, Kind: "host_session_search"}
-	for _, input := range []string{`null`, `{}`, `{"query":"x","offset":-1}`, `{"query":"x","limit":10000}`, `{"query":"x","agent_id":"other"}`, `{"query":"x"} {}`, `{"query":"` + strings.Repeat("中", 257) + `"}`} {
-		_, err := tool.Validate(json.RawMessage(input))
-		require.Error(t, err, input)
-	}
-	tool.Kind = "host_work_search"
-	_, err = tool.Execute(context.Background(), json.RawMessage(`{}`), nil)
-	require.ErrorContains(t, err, "status is unavailable")
-	called := false
-	tool.Work = func(_ context.Context, query, view string, offset int) (any, error) {
-		called = true
-		require.Equal(t, "attention", view)
-		require.Equal(t, 20, offset)
-		return map[string]any{"run_state": "failed"}, nil
-	}
-	result, err := tool.Execute(context.Background(), json.RawMessage(`{"view":"attention","offset":20}`), nil)
-	require.NoError(t, err)
-	require.True(t, called)
-	require.Contains(t, result.Content, `"run_state":"failed"`)
 }

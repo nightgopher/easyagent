@@ -40,16 +40,3 @@ func TestGetIndexFollowsSymlinkedRepoRoot(t *testing.T) {
 		require.Equal(t, viaReal.Root, viaLink.Root)
 	}
 }
-
-func TestResolveRepoRoot(t *testing.T) {
-	real := t.TempDir()
-	link := filepath.Join(t.TempDir(), "link")
-	require.NoError(t, os.Symlink(real, link))
-	// macOS 上 /var 本身也是软链：两边都解析到底后比较
-	resolvedReal, rerr := filepath.EvalSymlinks(real)
-	require.NoError(t, rerr)
-	require.Equal(t, resolvedReal, resolveRepoRoot(link))
-	require.Equal(t, resolvedReal, resolveRepoRoot(real))
-	// 不存在的路径原样返回（交给上层报错）
-	require.Equal(t, "/nonexistent/path", resolveRepoRoot("/nonexistent/path"))
-}

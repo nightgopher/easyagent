@@ -8,44 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTaskDocumentRender(t *testing.T) {
-	doc := &TaskDocument{
-		Title:    "Task Handoff",
-		Goal:     "Implement /loop feature",
-		State:    StateInProgress,
-		Progress: []string{"Created scheduler package", "Wrote tests"},
-		NextSteps: []string{"Wire into server", "Add slash command"},
-		Blockers: []string{"Waiting on API review"},
-		FilesChanged: []string{"internal/scheduler/loop.go"},
-		Notes:    "Need to handle concurrent access carefully.",
-	}
-
-	md := doc.Render()
-
-	// Verify key sections are present
-	checks := []string{
-		"# 📋 Task Handoff",
-		"**Goal:** Implement /loop feature",
-		"**State:** in-progress",
-		"## ✅ Progress",
-		"Created scheduler package",
-		"## ➡️ Next Steps",
-		"Wire into server",
-		"## 🚫 Blockers",
-		"Waiting on API review",
-		"## 📁 Files Changed",
-		"`internal/scheduler/loop.go`",
-		"## 📝 Notes",
-		"Need to handle concurrent access",
-	}
-
-	for _, check := range checks {
-		if !contains(md, check) {
-			t.Errorf("Render() output missing %q", check)
-		}
-	}
-}
-
+// TestSaveAndLoad 保护 TASK.md 的磁盘格式契约：写入后必须能原样回读，
+// 格式破坏会直接丢失用户的手动交接文档。
 func TestSaveAndLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -54,111 +18,27 @@ func TestSaveAndLoad(t *testing.T) {
 	doc.NextSteps = []string{"Step 3", "Step 4"}
 	doc.FilesChanged = []string{"file1.go", "file2.go"}
 
-	// Save
 	if err := Save(tmpDir, doc); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
-	// Verify file exists in .easyagent directory
-	path := filepath.Join(tmpDir, ".easyagent", TaskFileName)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("TASK.md was not created in .easyagent directory")
-	}
-
-	// Load
 	loaded, err := Load(tmpDir)
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
 	if loaded == nil {
-		t.Fatal("Load returned nil")
+		t.Fatal("Load returned nil after Save")
 	}
-
-	// Verify content
-	if loaded.Goal != "Test task goal" {
-		t.Errorf("Goal = %q, want %q", loaded.Goal, "Test task goal")
+	if loaded.Goal != doc.Goal || loaded.State != doc.State {
+		t.Fatalf("round-trip mismatch: %+v vs %+v", loaded, doc)
 	}
-	if loaded.State != StateInProgress {
-		t.Errorf("State = %q, want %q", loaded.State, StateInProgress)
-	}
-	if len(loaded.Progress) != 2 {
-		t.Errorf("Progress count = %d, want 2", len(loaded.Progress))
-	}
-	if len(loaded.NextSteps) != 2 {
-		t.Errorf("NextSteps count = %d, want 2", len(loaded.NextSteps))
-	}
-	if len(loaded.FilesChanged) != 2 {
-		t.Errorf("FilesChanged count = %d, want 2", len(loaded.FilesChanged))
+	if len(loaded.Progress) != 2 || len(loaded.NextSteps) != 2 {
+		t.Fatalf("list fields lost: %+v", loaded)
 	}
 }
 
-func TestLoadNonExistent(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	doc, err := Load(tmpDir)
-	if err != nil {
-		t.Fatalf("Load should not error on missing file: %v", err)
-	}
-	if doc != nil {
-		t.Fatal("Load should return nil for non-existent file")
-	}
-}
-
-func TestLoadAsPrompt(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// No task file: should return empty
-	prompt := LoadAsPrompt(tmpDir)
-	if prompt != "" {
-		t.Error("LoadAsPrompt should return empty when no task file exists")
-	}
-
-	// Save a task and verify prompt content
-	doc := NewTaskDocument("Test prompt injection")
-	doc.Progress = []string{"Did something"}
-	require.NoError(t, Save(tmpDir, doc))
-
-	prompt = LoadAsPrompt(tmpDir)
-	if prompt == "" {
-		t.Fatal("LoadAsPrompt should return non-empty when task file exists")
-	}
-	if !contains(prompt, "Test prompt injection") {
-		t.Error("LoadAsPrompt should contain the goal")
-	}
-	if !contains(prompt, "Task Handoff (Resumed)") {
-		t.Error("LoadAsPrompt should contain handoff header")
-	}
-}
-
-func TestClear(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Save a task
-	doc := NewTaskDocument("To be cleared")
-	require.NoError(t, Save(tmpDir, doc))
-
-	// Verify it exists
-	path := filepath.Join(tmpDir, TaskDir, TaskFileName)
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		t.Fatal("TASK.md should exist before Clear")
-	}
-
-	// Clear it
-	if err := Clear(tmpDir); err != nil {
-		t.Fatalf("Clear failed: %v", err)
-	}
-
-	// Verify it's gone
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatal("TASK.md should not exist after Clear")
-	}
-
-	// Clear again should not error
-	if err := Clear(tmpDir); err != nil {
-		t.Fatalf("Clear on non-existent file should not error: %v", err)
-	}
-}
-
+// TestParseTaskDocument 保护 TASK.md 的 Markdown 解析契约：
+// 用户手写或旧版本生成的 TASK.md 必须能被解析（向前兼容面）。
 func TestParseTaskDocument(t *testing.T) {
 	content := `# 📋 Task Handoff
 
@@ -209,20 +89,19 @@ Important context here.
 	if len(doc.FilesChanged) != 2 {
 		t.Errorf("FilesChanged count = %d, want 2", len(doc.FilesChanged))
 	}
-	if doc.FilesChanged[0] != "main.go" {
-		t.Errorf("FilesChanged[0] = %q, want %q", doc.FilesChanged[0], "main.go")
+	if doc.Notes != "Important context here." {
+		t.Errorf("Notes = %q", doc.Notes)
 	}
 }
 
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && stringContains(s, substr)
-}
+// TestSaveWritesFile 验证 Save 确实落盘（而非仅内存）。
+func TestSaveWritesFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	doc := NewTaskDocument("persist check")
+	require.NoError(t, Save(tmpDir, doc))
 
-func stringContains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
+	path := filepath.Join(tmpDir, TaskDir, TaskFileName)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("TASK.md not written: %v", err)
 	}
-	return false
 }

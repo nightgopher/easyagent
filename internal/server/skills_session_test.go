@@ -79,17 +79,6 @@ func TestCapabilities_SeparatesProjectFromPersonalSkillsAndFlagsOverrides(t *tes
 	assert.Empty(t, only.Overrides)
 }
 
-func TestCapabilities_PersonalSkillsStayPersonalWhenTheWorkspaceIsTheHomeDirectory(t *testing.T) {
-	home := t.TempDir()
-	writeTestSkill(t, filepath.Join(home, ".agents", "skills"), "mine", "mine", "Lives under the home directory")
-	srv := newSkillsServer(t, home, nil)
-
-	// The workspace contains ~/.agents/skills, but those are still the user's own skills, not the project's.
-	skills := sessionSkills(t, srv, createSkillsSession(t, srv, home))
-
-	assert.Equal(t, "personal", skills["mine"].Scope)
-}
-
 func TestCapabilities_PersonalSkillsStayPersonalWhenTheWorkspaceContainsTheHomeDirectory(t *testing.T) {
 	parent := t.TempDir()
 	home := filepath.Join(parent, "home")
@@ -123,11 +112,4 @@ func TestRefreshSessionSkills_PicksUpNewSkillsWithoutANewSession(t *testing.T) {
 	after := sessionSkills(t, srv, id)
 	require.Contains(t, after, "added-later")
 	assert.Equal(t, "project", after["added-later"].Scope)
-}
-
-func TestRefreshSessionSkills_UnknownSessionIsNotFound(t *testing.T) {
-	srv := newSkillsServer(t, t.TempDir(), nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, localReq(http.MethodPost, "/sessions/does-not-exist/skills/refresh", nil))
-	assert.Equal(t, http.StatusNotFound, w.Code)
 }

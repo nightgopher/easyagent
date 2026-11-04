@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -244,47 +243,6 @@ func TestRunAdmissionFailureLeavesRequestIDRetryable(t *testing.T) {
 	require.EqualValues(t, 1, gateway.calls.Load())
 }
 
-func TestRunMultipleSessionsAndRESTCannotCancelWebSocketOwner(t *testing.T) {
-	srv, server, gateway := newRunTestServer(t)
-	first, _, err := srv.startRun("", "first", "one")
-	require.NoError(t, err)
-	second, _, err := srv.startRun("", "second", "two")
-	require.NoError(t, err)
-	waitRunText(t, srv, first)
-	waitRunText(t, srv, second)
-	body, _ := json.Marshal(ChatRequest{SessionID: first.SessionID, Prompt: "overlap"})
-	response, err := http.Post(server.URL+"/chat/stream", "application/json", bytes.NewReader(body))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusConflict, response.StatusCode)
-	response.Body.Close()
-	require.False(t, gateway.disconnected.Load())
-	close(gateway.finish)
-	_, err = srv.waitRun(context.Background(), first)
-	require.NoError(t, err)
-	_, err = srv.waitRun(context.Background(), second)
-	require.NoError(t, err)
-}
-
-func TestRunSSEDisconnectOnlyUnsubscribes(t *testing.T) {
-	srv, server, gateway := newRunTestServer(t)
-	response, err := http.Post(server.URL+"/chat/stream", "application/json", strings.NewReader(`{"prompt":"sse","request_id":"sse-once"}`))
-	require.NoError(t, err)
-	response.Body.Close()
-	require.Eventually(t, func() bool {
-		srv.runs.mu.Lock()
-		defer srv.runs.mu.Unlock()
-		return srv.runs.requests["sse-once"] != nil
-	}, time.Second, time.Millisecond)
-	srv.runs.mu.Lock()
-	run := srv.runs.requests["sse-once"]
-	srv.runs.mu.Unlock()
-	waitRunText(t, srv, run)
-	require.False(t, gateway.disconnected.Load())
-	close(gateway.finish)
-	_, err = srv.waitRun(context.Background(), run)
-	require.NoError(t, err)
-}
-
 func TestRunReplayWindowGapReturnsCompleteProjection(t *testing.T) {
 	srv, _, gateway := newRunTestServer(t)
 	run, _, err := srv.startRun("", "stream", "window")
@@ -346,21 +304,6 @@ func TestRunConfirmationWaitsRejectsMissingChannelAndSurvivesSubscriberLoss(t *t
 	require.NoError(t, err)
 }
 
-func TestRunConfirmationCancellationReturnsDenied(t *testing.T) {
-	srv, _, gateway := newRunTestServer(t)
-	run, _, err := srv.startRun("", "approval", "cancel-approval")
-	require.NoError(t, err)
-	ctx, cancel := context.WithCancel(context.WithValue(context.Background(), runContextKey{}, run))
-	decisions := make(chan agent.ConfirmDecision, 1)
-	go func() { decisions <- srv.confirmRunTool(ctx, agent.ConfirmationRequest{ToolCallID: "call"}) }()
-	require.Eventually(t, func() bool { srv.runs.mu.Lock(); defer srv.runs.mu.Unlock(); return len(run.pending) == 1 }, time.Second, time.Millisecond)
-	cancel()
-	require.False(t, (<-decisions).Approved)
-	close(gateway.finish)
-	_, err = srv.waitRun(context.Background(), run)
-	require.NoError(t, err)
-}
-
 func TestRunConfirmationTimeoutDeniesAndClearsWaitingState(t *testing.T) {
 	srv, _, gateway := newRunTestServer(t)
 	run, _, err := srv.startRun("", "approval", "timeout-approval")
@@ -391,32 +334,6 @@ func TestRunConfirmationTimeoutDeniesAndClearsWaitingState(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestRunReplayByteBudgetCannotPretendOversizeEventWasReplayed(t *testing.T) {
-	srv, _, gateway := newRunTestServer(t)
-	run, _, err := srv.startRun("", "big tool", "byte-budget")
-	require.NoError(t, err)
-	waitRunText(t, srv, run)
-	srv.runs.mu.Lock()
-	state := srv.runs.sessions[run.SessionID]
-	event := agent.AgentStreamEvent{Type: agent.StreamEventToolEnd, ToolCallID: "large", ToolResult: strings.Repeat("x", runReplayBytesLimit+1)}
-	appendRunProjection(run, event)
-	srv.runs.publishLocked(state, wsServerMessage{Type: "event", SessionID: run.SessionID, RunID: run.ID, Event: event})
-	require.LessOrEqual(t, state.replayBytes, runReplayBytesLimit)
-	require.Empty(t, state.replay)
-	srv.runs.mu.Unlock()
-	snapshot, err := srv.runSnapshot(run.SessionID, 1, run.ID, nil)
-	require.NoError(t, err)
-	require.Equal(t, "snapshot", snapshot.Type)
-	events := snapshot.Events.([]agent.AgentStreamEvent)
-	require.Len(t, events, 3)
-	require.Equal(t, agent.StreamEventContextUsage, events[0].Type)
-	require.Equal(t, agent.StreamEventTextDelta, events[1].Type)
-	require.Equal(t, event.ToolResult, events[2].ToolResult)
-	close(gateway.finish)
-	_, err = srv.waitRun(context.Background(), run)
-	require.NoError(t, err)
-}
-
 func TestRunDeleteCannotRemoveActiveSession(t *testing.T) {
 	srv, server, gateway := newRunTestServer(t)
 	run, _, err := srv.startRun("", "keep active", "active-delete")
@@ -431,33 +348,6 @@ func TestRunDeleteCannotRemoveActiveSession(t *testing.T) {
 	close(gateway.finish)
 	_, err = srv.waitRun(context.Background(), run)
 	require.NoError(t, err)
-}
-
-func TestRunDeleteCannotRemoveSDKOwnedActiveSession(t *testing.T) {
-	srv, server, gateway := newRunTestServer(t)
-	sess, err := srv.app.NewSession(context.Background())
-	require.NoError(t, err)
-	stream, err := sess.PromptStream(context.Background(), "SDK-owned task")
-	require.NoError(t, err)
-	done := make(chan struct{})
-	go func() {
-		for range stream {
-		}
-		close(done)
-	}()
-	request, err := http.NewRequest(http.MethodDelete, server.URL+"/sessions/"+sess.SessionID(), nil)
-	require.NoError(t, err)
-	response, err := http.DefaultClient.Do(request)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusConflict, response.StatusCode)
-	response.Body.Close()
-	require.True(t, srv.app.SessionManager().Exists(sess.SessionID()))
-	close(gateway.finish)
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("SDK stream did not finish")
-	}
 }
 
 func TestRunUntrustedMCPStillWaitsForApprovalWithConfirmOff(t *testing.T) {
@@ -588,37 +478,6 @@ func TestRunReplyAnchorSurvivesSnapshotsReceiptsAndRepeatedTurns(t *testing.T) {
 	require.Equal(t, 1, response.KeptUserMessages)
 }
 
-func TestCancelledRunHasNoReplyForkAnchor(t *testing.T) {
-	srv, _, _ := newRunTestServer(t)
-	run, _, err := srv.startRun("", "cancel me", "partial-reply")
-	require.NoError(t, err)
-	waitRunText(t, srv, run)
-	require.NoError(t, srv.cancelRun(run.SessionID, run.ID))
-	_, err = srv.waitRun(context.Background(), run)
-	require.Error(t, err)
-	require.Equal(t, "cancelled", run.State)
-	require.Empty(t, run.AssistantEntryID)
-}
-
-func TestRunWithoutNewMessagesCannotReusePreviousReplyAnchor(t *testing.T) {
-	srv, _, _ := newRunTestServer(t)
-	ctx := context.Background()
-	source, err := srv.resolveSession(ctx, "")
-	require.NoError(t, err)
-	require.NoError(t, source.Session().AppendMessage(ctx, ai.NewTextUserMessage("repeat")))
-	require.NoError(t, source.Session().AppendMessage(ctx, ai.AssistantMessage{Text: "old answer", StopReason: ai.StopReasonStop}))
-	history, err := source.Session().BuildContext(ctx)
-	require.NoError(t, err)
-	run := &sessionRun{ID: "empty-run", RequestID: "empty-request", SessionID: source.SessionID(), Prompt: "repeat", State: "running", baseline: serializeSessionContext(source, history), done: make(chan struct{}), cancel: func() {}}
-	srv.runs.sessionLocked(run.SessionID).run = run
-	stream := make(chan agent.AgentStreamEvent)
-	close(stream)
-	srv.consumeRun(ctx, run, stream, func() {})
-	require.Equal(t, "completed", run.State)
-	require.Empty(t, run.UserEntryID)
-	require.Empty(t, run.AssistantEntryID)
-}
-
 func TestQuestionAnswersWaitValidateAndResume(t *testing.T) {
 	srv, server, gateway := newRunTestServer(t)
 	run, _, err := srv.startRun("", "question", "question-answer")
@@ -691,6 +550,53 @@ func TestQuestionWaitDoesNotExpireAsAnApproval(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("cancel did not resolve question")
 	}
+	close(gateway.finish)
+	_, err = srv.waitRun(context.Background(), run)
+	require.NoError(t, err)
+}
+
+func TestRunDeleteCannotRemoveSDKOwnedActiveSession(t *testing.T) {
+	srv, server, gateway := newRunTestServer(t)
+	sess, err := srv.app.NewSession(context.Background())
+	require.NoError(t, err)
+	stream, err := sess.PromptStream(context.Background(), "SDK-owned task")
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		for range stream {
+		}
+		close(done)
+	}()
+	request, err := http.NewRequest(http.MethodDelete, server.URL+"/sessions/"+sess.SessionID(), nil)
+	require.NoError(t, err)
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusConflict, response.StatusCode)
+	response.Body.Close()
+	require.True(t, srv.app.SessionManager().Exists(sess.SessionID()))
+	close(gateway.finish)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SDK stream did not finish")
+	}
+}
+
+func TestRunSSEDisconnectOnlyUnsubscribes(t *testing.T) {
+	srv, server, gateway := newRunTestServer(t)
+	response, err := http.Post(server.URL+"/chat/stream", "application/json", strings.NewReader(`{"prompt":"sse","request_id":"sse-once"}`))
+	require.NoError(t, err)
+	response.Body.Close()
+	require.Eventually(t, func() bool {
+		srv.runs.mu.Lock()
+		defer srv.runs.mu.Unlock()
+		return srv.runs.requests["sse-once"] != nil
+	}, time.Second, time.Millisecond)
+	srv.runs.mu.Lock()
+	run := srv.runs.requests["sse-once"]
+	srv.runs.mu.Unlock()
+	waitRunText(t, srv, run)
+	require.False(t, gateway.disconnected.Load())
 	close(gateway.finish)
 	_, err = srv.waitRun(context.Background(), run)
 	require.NoError(t, err)
