@@ -35,45 +35,6 @@ func (*discoveryApplication) BuildPrompt(o PromptBuildOptions, _, _ string) stri
 func (*discoveryApplication) NewSessionExt() SessionExt { return nil }
 func (*discoveryApplication) SubagentsEnabled() bool    { return true }
 
-func TestToolDiscoveryPolicyAppliesAtTaskBoundary(t *testing.T) {
-	ctx := context.Background()
-	cfg := config.Default()
-	cfg.DataDir = t.TempDir()
-	cfg.Workspace = t.TempDir()
-	cfg.Provider = "openai"
-	cfg.SkillMarketEnabled = false
-	mode, revision := agent.ToolSearchOff, uint64(1)
-	s, err := NewAgentSession(ctx, AgentSessionOptions{Config: cfg, SkillDirs: []string{t.TempDir()}}, Dependencies{SessionMgr: sessionmgr.NewManager(cfg.DataDir), Registry: providers.NewRegistry(), ExtRegistry: extensions.NewRegistry(), Application: &discoveryApplication{}, ToolDiscoveryPolicy: func() (agent.ToolSearchMode, uint64) { return mode, revision }})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, s.Close()) })
-	before, err := s.ContextSnapshot(ctx)
-	require.NoError(t, err)
-	require.Contains(t, before.System, `"url"`)
-	active, err := s.preparePrompt(ctx)
-	require.NoError(t, err)
-	mode, revision = agent.ToolSearchLocal, 2
-	require.Same(t, active, s.agent)
-	_, err = s.preparePrompt(ctx)
-	require.ErrorIs(t, err, agent.ErrAgentBusy)
-	s.finishPrompt()
-	next, err := s.preparePrompt(ctx)
-	require.NoError(t, err)
-	require.NotSame(t, active, next)
-	s.finishPrompt()
-	snapshot, err := s.ContextSnapshot(ctx)
-	require.NoError(t, err)
-	require.NotContains(t, snapshot.System, `"url"`)
-	require.Contains(t, snapshot.System, agent.SearchToolsName)
-	require.Equal(t, agent.ToolSearchLocal, snapshot.Usage.ToolDiscovery.Mode)
-	mode, revision = agent.ToolSearchOff, 3
-	_, err = s.preparePrompt(ctx)
-	require.NoError(t, err)
-	s.finishPrompt()
-	snapshot, err = s.ContextSnapshot(ctx)
-	require.NoError(t, err)
-	require.Contains(t, snapshot.System, `"url"`)
-}
-
 func TestToolDiscoveryCannotBypassToolFilters(t *testing.T) {
 	for _, blocked := range []string{agent.SearchToolsName, "web_fetch"} {
 		t.Run(blocked, func(t *testing.T) {

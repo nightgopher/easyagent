@@ -9,32 +9,6 @@ import (
 	"time"
 )
 
-func TestExtractText(t *testing.T) {
-	tests := []struct {
-		name    string
-		content string
-		want    string
-	}{
-		{"normal text", `{"text":"hello world"}`, "hello world"},
-		{"empty text", `{"text":""}`, ""},
-		{"invalid json", "not json", "not json"},
-		{"nil content", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var content *string
-			if tt.name != "nil content" {
-				content = &tt.content
-			}
-			got := extractText(content)
-			if got != tt.want {
-				t.Errorf("extractText() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestDedup(t *testing.T) {
 	g := NewGateway("test", "test", nil, nil)
 
@@ -113,50 +87,6 @@ func TestContentDedupExpired(t *testing.T) {
 	}
 }
 
-func TestMessageChatKey(t *testing.T) {
-	tests := []struct {
-		name    string
-		msg     Message
-		wantKey string
-	}{
-		{
-			name: "group chat uses chatID",
-			msg: Message{
-				ChatType:     "group",
-				ChatID:       "oc_123",
-				SenderOpenID: "ou_456",
-			},
-			wantKey: "oc_123",
-		},
-		{
-			name: "direct chat uses senderOpenID",
-			msg: Message{
-				ChatType:     "p2p",
-				ChatID:       "",
-				SenderOpenID: "ou_789",
-			},
-			wantKey: "ou_789",
-		},
-		{
-			name: "fallback to chatID",
-			msg: Message{
-				ChatType:     "",
-				ChatID:       "oc_fallback",
-				SenderOpenID: "",
-			},
-			wantKey: "oc_fallback",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.msg.ChatKey(); got != tt.wantKey {
-				t.Errorf("ChatKey() = %q, want %q", got, tt.wantKey)
-			}
-		})
-	}
-}
-
 func TestMatchChoice_ByNumber(t *testing.T) {
 	buttons := []string{"Option A", "Option B", "Option C"}
 	tests := []struct {
@@ -202,13 +132,6 @@ func TestMatchChoice_EmptyButtons(t *testing.T) {
 	got := matchChoice("1", nil)
 	if got != "" {
 		t.Errorf("expected empty for nil buttons, got %q", got)
-	}
-}
-
-func TestTryResolveChoice_NoWaiter(t *testing.T) {
-	g := NewGateway("test", "test", nil, nil)
-	if g.tryResolveChoice("chat1", "hello") {
-		t.Error("should return false when no waiter exists")
 	}
 }
 

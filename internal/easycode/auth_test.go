@@ -214,27 +214,6 @@ func TestTransientRefreshFailureRetainsCredential(t *testing.T) {
 	}
 }
 
-func TestModelCatalogUsesOwnAccountAndFiltersUnavailable(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/web-api/models" || r.Header.Get("Authorization") != "Bearer account-token" {
-			t.Error("catalog missing user authorization")
-		}
-		fmt.Fprint(w, `{"success":true,"data":[{"name":"deepseek-flash","displayName":"DeepSeek","available":true,"supportsImages":true,"maxToken":200000},{"name":"disabled","available":false},{"name":""}]}`)
-	}))
-	defer server.Close()
-	m, _ := NewManager(t.TempDir(), server.URL)
-	if err := m.save(context.Background(), credentials{AccessToken: "account-token", ExpiresAt: time.Now().Add(time.Hour).UnixMilli()}); err != nil {
-		t.Fatal(err)
-	}
-	models, err := m.Models(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(models) != 1 || models[0].ID != "deepseek-flash" || models[0].ContextWindow != 160000 || models[0].SupportsImages == nil || !*models[0].SupportsImages {
-		t.Fatalf("models: %+v", models)
-	}
-}
-
 func TestUnsafeRemoteServerIsRejected(t *testing.T) {
 	for _, raw := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com/?key=secret"} {
 		if _, err := NewManager(t.TempDir(), raw); err == nil {

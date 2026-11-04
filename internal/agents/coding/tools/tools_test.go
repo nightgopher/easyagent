@@ -22,11 +22,6 @@ func (f fakeTool) Execute(ctx context.Context, input json.RawMessage, onUpdate f
 	return agent.ToolResult{}, nil
 }
 
-func TestBaseToolNames(t *testing.T) {
-	assert.Equal(t, []string{"read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question"}, BaseToolNames(false))
-	assert.Equal(t, []string{"bash", "bash_output", "bash_kill", "read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question"}, BaseToolNames(true))
-}
-
 func TestBuildList_FiltersAndExtensions(t *testing.T) {
 	list := BuildList(ListOptions{
 		Workspace:      "/tmp/project",

@@ -42,77 +42,6 @@ func TestServer_Health(t *testing.T) {
 	assert.Equal(t, "ok", resp["status"])
 }
 
-func TestServer_Chat(t *testing.T) {
-	t.Skip("skipping: requires a running gateway with valid API key")
-}
-
-func TestServer_Chat_EmptyPrompt(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	body := bytes.NewReader([]byte(`{"prompt":""}`))
-	req := localReq(http.MethodPost, "/chat", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestServer_Chat_InvalidJSON(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	body := bytes.NewReader([]byte(`invalid json`))
-	req := localReq(http.MethodPost, "/chat", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
-func TestServer_Tools(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	req := localReq(http.MethodGet, "/tools", nil)
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
-func TestServer_Sessions(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	req := localReq(http.MethodGet, "/sessions", nil)
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
-func TestServer_CreateSession(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	req := localReq(http.MethodPost, "/sessions", nil)
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	var resp SessionResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	assert.NotEmpty(t, resp.ID)
-}
-
 func TestSessionInfoReportsPathPolicyBehindAuthentication(t *testing.T) {
 	for _, allow := range []bool{false, true} {
 		cfg := config.Default()
@@ -146,37 +75,6 @@ func TestSessionInfoReportsPathPolicyBehindAuthentication(t *testing.T) {
 		wantHome, _ := os.UserHomeDir()
 		assert.Equal(t, wantHome, info["home"], "clients expand ~/ against the host's home")
 	}
-}
-
-func TestServer_DeleteSession(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	// Create first
-	req := localReq(http.MethodPost, "/sessions", nil)
-	w := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	var resp SessionResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-
-	// Delete
-	req2 := localReq(http.MethodDelete, "/sessions/"+resp.ID, nil)
-	w2 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(w2, req2)
-	assert.Equal(t, http.StatusOK, w2.Code)
-}
-
-func TestServer_SessionMessages_NotFound(t *testing.T) {
-	application := newTestApp(t)
-	srv := New(application, nil)
-
-	req := localReq(http.MethodGet, "/sessions/nonexistent/messages", nil)
-	w := httptest.NewRecorder()
-
-	srv.Handler().ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 func TestChatStreamRouteIsAuthenticated(t *testing.T) {

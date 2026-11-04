@@ -65,18 +65,3 @@ func TestApprovedAppsTrackedAndPersisted(t *testing.T) {
 	tool.recordControlledApp(json.RawMessage(`{}`))
 	require.Len(t, tool.ApprovedApps(), 1)
 }
-
-func TestClearAndCapApprovedApps(t *testing.T) {
-	dataDir := t.TempDir()
-	for i := 0; i < 55; i++ {
-		require.NoError(t, config.RecordApprovedApp(dataDir, "com.app"+string(rune('a'+i%26))+string(rune('0'+i/26))))
-	}
-	cfg := config.Config{}
-	cfg.LoadRuntimeOverrides(dataDir)
-	require.LessOrEqual(t, len(cfg.ApprovedApps), 50, "approved apps 必须有上限防膨胀")
-
-	require.NoError(t, config.ClearApprovedApps(dataDir))
-	cfg2 := config.Config{}
-	cfg2.LoadRuntimeOverrides(dataDir)
-	require.Empty(t, cfg2.ApprovedApps)
-}

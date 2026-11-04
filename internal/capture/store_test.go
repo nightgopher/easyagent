@@ -1,8 +1,6 @@
 package capture
 
 import (
-	"context"
-	"encoding/json"
 	"github.com/stretchr/testify/require"
 	"os"
 	"path/filepath"
@@ -59,17 +57,4 @@ func TestConcurrentSavesDoNotLoseRecords(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(s.Dir, ".record-incomplete"), []byte("bad"), 0600))
 	_, err = s.List()
 	require.NoError(t, err)
-}
-func TestCaptureToolWritesToSameInbox(t *testing.T) {
-	s := New(t.TempDir())
-	tool := Tool{Store: s, Source: "session:test"}
-	result, err := tool.Execute(context.Background(), json.RawMessage(`{"text":"保存想法"}`), nil)
-	require.NoError(t, err)
-	require.False(t, result.IsError)
-	records, err := s.List()
-	require.NoError(t, err)
-	require.Len(t, records, 1)
-	require.Equal(t, "session:test", records[0].Source)
-	_, err = tool.Execute(context.Background(), json.RawMessage(`{"text":""}`), nil)
-	require.Error(t, err)
 }

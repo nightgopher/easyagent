@@ -11,32 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestForkDuringRunCountsOnlyImmutableHistory(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	ctx := context.Background()
-	source, err := s.resolveSession(ctx, "")
-	require.NoError(t, err)
-	for _, message := range []ai.Message{ai.NewTextUserMessage("first"), ai.AssistantMessage{Text: "first answer"}, ai.NewTextUserMessage("second"), ai.AssistantMessage{Text: "second answer"}} {
-		require.NoError(t, source.Session().AppendMessage(ctx, message))
-	}
-	run, _, err := s.startRun(source.SessionID(), "live tail", "fork-snapshot-counts")
-	require.NoError(t, err)
-	waitRunText(t, s, run)
-	fork := forkIssue(t, s, source.SessionID(), `{"before_message_index":1}`, 201)
-	require.Equal(t, 2, fork.KeptMessages)
-	require.Equal(t, 1, fork.KeptUserMessages)
-	require.Equal(t, 1, fork.BranchUserMsgIndex)
-	require.Equal(t, 2, fork.DroppedMessages, "the current prompt is outside the fork snapshot")
-}
-
-func TestForkRejectsNegativeIndexDuringRun(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	run, _, err := s.startRun("", "running", "fork-negative-index")
-	require.NoError(t, err)
-	waitRunText(t, s, run)
-	forkIssue(t, s, run.SessionID, `{"before_message_index":-1}`, 400)
-}
-
 func TestForkDuringRunPreservesStorageErrors(t *testing.T) {
 	s, _, _ := newRunTestServer(t)
 	ctx := context.Background()

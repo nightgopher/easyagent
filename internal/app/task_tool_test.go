@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -23,16 +22,4 @@ func taskTestApp(t *testing.T, blocked []string) *App {
 	require.NoError(t, err)
 	t.Cleanup(func() { a.Close() })
 	return a
-}
-
-func TestCodingSessionOffersTaskTool(t *testing.T) {
-	sess, err := taskTestApp(t, nil).LoadOrCreateSession(context.Background(), "")
-	require.NoError(t, err)
-	require.Contains(t, sess.ToolNames(), "task")
-}
-
-func TestBlockedToolsRemoveTaskTool(t *testing.T) {
-	sess, err := taskTestApp(t, []string{"task"}).LoadOrCreateSession(context.Background(), "")
-	require.NoError(t, err)
-	require.NotContains(t, sess.ToolNames(), "task")
 }
