@@ -63,3 +63,11 @@ func TestForkUsesRuntimePrefixWithoutServerRun(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, history[:2], actual)
 }
+
+func TestForkRejectsNegativeIndexDuringRun(t *testing.T) {
+	s, _, _ := newRunTestServer(t)
+	run, _, err := s.startRun("", "running", "fork-negative-index")
+	require.NoError(t, err)
+	waitRunText(t, s, run)
+	forkIssue(t, s, run.SessionID, `{"before_message_index":-1}`, 400)
+}

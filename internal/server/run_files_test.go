@@ -152,3 +152,17 @@ func TestChangesExcludeSingleSideEntriesWhenSnapshotTruncated(t *testing.T) {
 	require.Equal(t, "kept.txt", changes[0].Path)
 	require.Equal(t, "modified", changes[0].Kind)
 }
+
+func TestSnapshotsExcludeServiceDataEvenInGitWorkspace(t *testing.T) {
+	s, _, _ := newFileRunTestServer(t, "", true)
+	root := s.app.Config().Workspace
+	require.NoError(t, os.MkdirAll(s.app.Config().DataDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(s.app.Config().DataDir, "private.json"), []byte("private"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "user.md"), []byte("user"), 0600))
+	cmd := exec.Command("git", "init")
+	cmd.Dir = root
+	require.NoError(t, cmd.Run())
+	states, _ := s.snapshotFiles(root)
+	require.Len(t, states, 1)
+	require.Contains(t, states, "user.md")
+}

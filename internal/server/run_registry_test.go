@@ -554,3 +554,50 @@ func TestQuestionWaitDoesNotExpireAsAnApproval(t *testing.T) {
 	_, err = srv.waitRun(context.Background(), run)
 	require.NoError(t, err)
 }
+
+func TestRunDeleteCannotRemoveSDKOwnedActiveSession(t *testing.T) {
+	srv, server, gateway := newRunTestServer(t)
+	sess, err := srv.app.NewSession(context.Background())
+	require.NoError(t, err)
+	stream, err := sess.PromptStream(context.Background(), "SDK-owned task")
+	require.NoError(t, err)
+	done := make(chan struct{})
+	go func() {
+		for range stream {
+		}
+		close(done)
+	}()
+	request, err := http.NewRequest(http.MethodDelete, server.URL+"/sessions/"+sess.SessionID(), nil)
+	require.NoError(t, err)
+	response, err := http.DefaultClient.Do(request)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusConflict, response.StatusCode)
+	response.Body.Close()
+	require.True(t, srv.app.SessionManager().Exists(sess.SessionID()))
+	close(gateway.finish)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SDK stream did not finish")
+	}
+}
+
+func TestRunSSEDisconnectOnlyUnsubscribes(t *testing.T) {
+	srv, server, gateway := newRunTestServer(t)
+	response, err := http.Post(server.URL+"/chat/stream", "application/json", strings.NewReader(`{"prompt":"sse","request_id":"sse-once"}`))
+	require.NoError(t, err)
+	response.Body.Close()
+	require.Eventually(t, func() bool {
+		srv.runs.mu.Lock()
+		defer srv.runs.mu.Unlock()
+		return srv.runs.requests["sse-once"] != nil
+	}, time.Second, time.Millisecond)
+	srv.runs.mu.Lock()
+	run := srv.runs.requests["sse-once"]
+	srv.runs.mu.Unlock()
+	waitRunText(t, srv, run)
+	require.False(t, gateway.disconnected.Load())
+	close(gateway.finish)
+	_, err = srv.waitRun(context.Background(), run)
+	require.NoError(t, err)
+}
