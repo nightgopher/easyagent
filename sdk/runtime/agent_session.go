@@ -643,6 +643,11 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		s.application = application
 	}
 	cfg := s.cfg
+	if configurable, ok := s.application.(interface {
+		WithRuntimeOverrides(config.Config) Application
+	}); ok {
+		s.application = configurable.WithRuntimeOverrides(cfg)
+	}
 	if err := config.ValidateToolSearch(cfg.ToolSearch); err != nil {
 		return nil, err
 	}
@@ -1029,7 +1034,7 @@ func (s *AgentSession) toolBuildOptions(cwd string) ToolBuildOptions {
 		FileOps:        ops.Files,
 		ExtensionTools: extTools,
 		AllowedTools:   cfg.AllowedTools,
-		BlockedTools:   cfg.BlockedTools,
+		BlockedTools:   cfg.EffectiveBlockedTools(),
 	}
 }
 

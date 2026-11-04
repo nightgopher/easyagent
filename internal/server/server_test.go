@@ -84,6 +84,12 @@ func TestServer_Tools(t *testing.T) {
 	srv.Handler().ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+	var response struct {
+		Tools []string `json:"tools"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+	assert.Contains(t, response.Tools, "web_search")
+	assert.Contains(t, response.Tools, "web_fetch")
 }
 
 func TestServer_Sessions(t *testing.T) {

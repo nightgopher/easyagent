@@ -26,6 +26,13 @@ type Application struct {
 	WorkReader hosttools.WorkReader
 }
 
+// Keep the host tool settings captured when the session was created, while
+// still allowing its saved business-agent definition to be refreshed.
+func (a Application) WithRuntimeOverrides(cfg config.Config) runtime.Application {
+	a.Config = cfg
+	return a
+}
+
 func (a Application) NewSessionExt() runtime.SessionExt { return nil }
 
 // Skills are explicit capabilities; host-global skills are not inherited.

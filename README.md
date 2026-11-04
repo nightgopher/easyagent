@@ -52,6 +52,8 @@ sudo systemctl enable --now easyagent-bridge   # 飞书桥接（配置后启用�
 
 登录凭据与 EasyCode 原客户端分开保存在本机用户私有目录（目录权限 `0700`、凭据文件 `0600`），访问凭据到期会自动续期。退出 EasyAgent 中的 EasyCode 账号会清除本机凭据并恢复之前的模型配置，不会退出其他 EasyCode 客户端。当前登录入口支持 macOS 和 Linux 原生桌面；远程主机使用该主机自身的模型配置。
 
+终端可运行 `easyagent easycode login` 使用飞书登录并启用账号模型，运行 `easyagent easycode models` 查看或 `easyagent easycode use <模型 ID>` 切换；远程 SSH 登录使用 `easyagent easycode login --no-browser` 并按提示转发本地端口。更多设置见[配置说明](docs/CONFIG.md)。
+
 ### 配置其他模型与网页
 
 当前环境变量使用 `EA_*`，旧的 `PI_GO_*` 配置需要迁移。OpenAI 兼容服务的最小配置：
@@ -84,6 +86,10 @@ EA_API_KEY=your-api-key
 ```
 
 TUI 中输入 `/help` 查看命令。`Enter` 发送，`Ctrl+J` 换行，`PgUp/PgDn` 翻页；鼠标拖选后松开复制，`F2` 复制最近回复，`F3` 复制完整对话及工具结果，`Esc` 清除选区。点击工具组或命令标题展开详情，`Ctrl+O` 切换最近工具组。`Ctrl+T` 进入工具浏览，`↑↓` 选择组或命令，`Enter` 展开/折叠，`F2` 复制选中工具的完整参数和结果，`Esc` 返回输入。`Ctrl+P` 或 `/models` 打开模型选择器，可直接输入搜索，`Ctrl+U` 清空搜索。使用 `--session <ID>` 或 `/switch` 恢复会话时会显示当前分支完整历史。等待、输出文字和工具执行分别显示状态与耗时；输入草稿非空时，空闲 `Ctrl+C` 会保留草稿。macOS 使用 `pbcopy`，Linux 使用 `wl-copy`、`xclip` 或 `xsel`；复制失败会显示提示。
+
+默认提供联网搜索和公开网页读取；已有配置中明确关闭时，可用 `--web=true --web-search=true` 为当前 CLI 进程开启。搜索依赖运行主机访问搜索服务，详见[工具配置](docs/CONFIG.md#工具和文件路径)。
+
+桌面「设置 → 工具权限」和网页设置可管理当前主机的内置工具开关，分别控制文件读写、终端命令、联网搜索和网页读取；保存后新会话生效。审批方式与工具开关分别设置。
 
 `Ctrl+R` 搜索当前会话的输入历史，`↑↓` 选择，`Enter` 回填完整输入供编辑，`Ctrl+Z` 撤销回填；不会自动发送。`Ctrl+G`、`/sessions` 或不带 ID 的 `/switch` 打开会话选择器，可按标题、ID、工作区搜索，查看消息数、最近活动和当前会话标记，`Enter` 恢复完整记录。搜索中 `Ctrl+U` 清空关键词，`Esc` 取消并保留草稿；运行任务时需要先取消才能切换会话。正文标题使用终端主题色，宽窗口中正文及表格最多占 96 列，缩小时自动换行。
 

@@ -168,8 +168,15 @@ func (a CodingApplication) ResolveModel(model ai.Model) ai.Model {
 func (CodingApplication) SubagentsEnabled() bool { return true }
 
 // ToolNames returns the canonical coding-agent tool names.
-func (CodingApplication) ToolNames(enableBash bool) []string {
-	return codingtools.BaseToolNames(enableBash)
+func (a CodingApplication) ToolNames(enableBash bool) []string {
+	names := codingtools.BaseToolNames(enableBash)
+	if a.Cfg.EnableWeb {
+		names = append(names, "web_fetch")
+	}
+	if a.Cfg.EnableWebSearch {
+		names = append(names, "web_search")
+	}
+	return names
 }
 
 // Verify interface compliance at compile time.
@@ -178,6 +185,9 @@ var _ runtime.Application = CodingApplication{}
 // WithRuntimeOverrides captures settings for a new session without replacing
 // application-specific boot configuration or rediscovering gateway models.
 func (a CodingApplication) WithRuntimeOverrides(cfg config.Config) runtime.Application {
+	a.Cfg.EnableBash = cfg.EnableBash
+	a.Cfg.EnableWeb = cfg.EnableWeb
+	a.Cfg.EnableWebSearch = cfg.EnableWebSearch
 	a.Cfg.EnableComputerUse = cfg.EnableComputerUse
 	a.Cfg.ComputerApprovalPolicy = cfg.ComputerApprovalPolicy
 	a.Cfg.ApprovedApps = append([]string(nil), cfg.ApprovedApps...)

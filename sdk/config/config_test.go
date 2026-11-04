@@ -18,6 +18,32 @@ func TestDefault(t *testing.T) {
 	assert.Equal(t, 200, cfg.MaxTurns)
 }
 
+func TestWebToolsDefaultOnAndRespectExplicitOverrides(t *testing.T) {
+	t.Setenv("EA_ENABLE_WEB", "")
+	t.Setenv("EA_ENABLE_WEB_SEARCH", "")
+	cfg := Default()
+	require.True(t, cfg.EnableWeb)
+	require.True(t, cfg.EnableWebSearch)
+
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("enable_web: false\nenable_web_search: false\n"), 0o600))
+	require.NoError(t, cfg.LoadFromYAML(path))
+	require.False(t, cfg.EnableWeb)
+	require.False(t, cfg.EnableWebSearch)
+
+	t.Setenv("EA_ENABLE_WEB", "true")
+	t.Setenv("EA_ENABLE_WEB_SEARCH", "true")
+	cfg.LoadFromEnv()
+	require.True(t, cfg.EnableWeb)
+	require.True(t, cfg.EnableWebSearch)
+
+	t.Setenv("EA_ENABLE_WEB", "false")
+	t.Setenv("EA_ENABLE_WEB_SEARCH", "0")
+	cfg.LoadFromEnv()
+	require.False(t, cfg.EnableWeb)
+	require.False(t, cfg.EnableWebSearch)
+}
+
 func TestLoadFromEnv(t *testing.T) {
 	cfg := Default()
 
