@@ -113,8 +113,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           DMG="native-dist/easyagent-native-darwin-arm64.dmg"
-          xcrun notarytool store-credentials "easyagent-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
-          xcrun notarytool submit "$DMG" --keychain-profile "easyagent-notary" --wait
+          # Keyless submission: notarytool store-credentials needs a writable
+          # default keychain, which is locked on self-hosted runner sessions.
+          # Explicit credentials avoid the keychain entirely; GitHub masks
+          # the secret values in logs.
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
           # Retry only transient ticket-download errors after Apple accepted
           # the submission; rejection, signing and validation failures stop.
           for attempt in 1 2 3; do
