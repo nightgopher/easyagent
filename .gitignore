@@ -26,6 +26,7 @@ docs/reviews/
 data/
 *.log
 bin/
+.test-output/
 .easyagent/mcp.json
 .easyagent/mcp-auth.json
 .easyagent/mcp.json.trust.json
