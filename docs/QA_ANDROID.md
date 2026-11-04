@@ -2,6 +2,13 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.39.1 发布候选
+
+本轮仅修复发布流水线在自托管 macOS 签名机上的钥匙串解析顺序，`mobile-native/` 源码与 v0.39.0 相同。候选版本为 `0.39.1`，versionCode 为 `3901300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
+
+- v0.39.0 的候选 SHA 因 tag 不可变规则无法携带签名修复，该 tag 保留且不发布 Release；本轮对同一份 Android 源码按 v0.39.1 重新走发布流水线，结果以对应的 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)为准。
+- 本轮未执行实体手机、实体相机、蜂窝网络或正式 APK 跨版本覆盖安装验收；此前版本的验收记录不计为本轮通过。
+
 ## v0.39.0 发布候选
 
 本轮下线内置音乐功能并裁剪测试套件，`mobile-native/` 源码与 v0.38.0 相同。候选版本为 `0.39.0`，versionCode 为 `3900300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
