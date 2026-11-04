@@ -7,21 +7,15 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/nightgopher/easyagent/internal/agents/coding"
 	"github.com/nightgopher/easyagent/internal/agents/coding/commands"
 	kbapp "github.com/nightgopher/easyagent/internal/agents/kb"
-	musicapp "github.com/nightgopher/easyagent/internal/agents/music"
 	"github.com/nightgopher/easyagent/internal/app"
 	"github.com/nightgopher/easyagent/internal/mode"
-	music "github.com/nightgopher/easyagent/internal/music"
-	"github.com/nightgopher/easyagent/internal/music/bilibili"
-	"github.com/nightgopher/easyagent/internal/music/netease"
 	userprofile "github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
 	"github.com/nightgopher/easyagent/internal/tui"
@@ -114,13 +108,6 @@ func main() {
 	}
 	flag.Parse()
 
-	// Sync the actual listen port back to config so MusicApplication
-	// generates correct audio proxy URLs (the desktop app uses random ports).
-	if _, portStr, err := net.SplitHostPort(*listen); err == nil {
-		if p, err := strconv.Atoi(portStr); err == nil {
-			cfg.Port = p
-		}
-	}
 	if host, _, err := net.SplitHostPort(*listen); err == nil && host != "" {
 		cfg.Host = host
 	}
@@ -143,15 +130,6 @@ func main() {
 	// Propagate version to mode package
 	mode.SetVersion(version)
 
-	// Create music dependencies
-	neClient := netease.NewClient()
-	biliClient := bilibili.NewClient()
-	musicCache := music.NewCache()
-	musicRouter := music.NewSourceRouter(music.SourceNetease,
-		music.NewNetEaseAdapter(neClient),
-		music.NewBilibiliAdapter(biliClient),
-	)
-
 	// Create unified user profile (shared across agents — but each agent only
 	// sees categories relevant to its domain via SummaryForCategories)
 	profilePath := filepath.Join(cfg.DataDir, "user_profile.json")
@@ -164,9 +142,8 @@ func main() {
 		kbRepoPath = homeDir + "/agent-lessons"
 	}
 
-	// Create App (thin assembly layer) with coding, music, and kb applications.
+	// Create App (thin assembly layer) with coding and kb applications.
 	// Coding agent does NOT receive the profile (it relies on .llm-wiki + project context).
-	// Music agent receives music + general categories only.
 	// KB agent receives the full profile (it's the second brain).
 	application, err := app.New(app.AppOptions{
 		Config:      cfg,
@@ -175,7 +152,6 @@ func main() {
 		Profile:     userProfile,
 		Applications: map[string]runtime.Application{
 			"coding": coding.NewCodingApplication(cfg),
-			"music":  musicapp.NewMusicApplication(cfg, musicRouter, musicCache, userProfile),
 			"kb":     kbapp.NewKBApplicationWithProfile(cfg, kbRepoPath, userProfile),
 		},
 	})
@@ -205,12 +181,7 @@ func main() {
 
 	case "serve":
 		cmds := buildSlashRegistry(application.LoopManager())
-		// Music audio proxy routes
-		musicHandler := music.NewHandler(musicRouter, musicCache)
-		extraMux := http.NewServeMux()
-		musicHandler.RegisterRoutes(extraMux)
 		srv := mode.NewServeMode(application, cmds)
-		srv.SetExtraRoutes(extraMux)
 		slog.Info("starting easyagent server", "listen", *listen)
 		if err := srv.Run(*listen); err != nil {
 			slog.Error("server failed", "error", err)

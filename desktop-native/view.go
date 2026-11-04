@@ -125,9 +125,6 @@ func (a *preview) View(c *ui.Context) {
 					a.workbench(c)
 				}
 			})
-			if a.Live != nil {
-				a.musicBar(c)
-			}
 		})
 	})
 	if a.Live != nil {
@@ -397,9 +394,6 @@ func (a *preview) tool(c *ui.Context, m *message) {
 		label := "展开工具结果"
 		if m.Expanded {
 			label = "收起工具结果"
-		}
-		if a.Live != nil {
-			a.musicCard(c, m)
 		}
 		e := ui.ButtonBase(c).Label(label).Justify(ui.Start).Gap(7).Padding(7, 9).Radius(6).TextColor(c.Theme().TextMuted).Background(c.Theme().Surface).FontSize(12).OnClick(func() { m.Expanded = !m.Expanded })
 		e.Children(func() {

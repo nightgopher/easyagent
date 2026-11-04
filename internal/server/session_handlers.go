@@ -55,7 +55,7 @@ type CreateSessionRequest struct {
 	AgentID     string `json:"agent_id,omitempty"`
 	Cwd         string `json:"cwd,omitempty"`
 	Model       string `json:"model,omitempty"`
-	Application string `json:"application,omitempty"` // e.g. "coding", "music"
+	Application string `json:"application,omitempty"` // e.g. "coding", "kb"
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {

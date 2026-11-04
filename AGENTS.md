@@ -32,6 +32,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 - 长期只保留 `main`，开发分支仅用于当前任务，不积累已完成的分支。
 - 历史保留分支例外：`archive/workflow` 保存 2026-10-17 下线的 workflow 功能完整代码（PR #170 移除前的 main 快照，含动态工作流与 YAML 流水线）。它仅作历史恢复用途，不维护、不合并、不参与例行分支清理；`chore/release-0.15.11`（被 `release/v0.15.11` 取代的发布草稿，末端提交 d98f7c1）同日删除，恢复需要时从该 SHA 的 reflog 或备份找回。
+- 历史保留分支例外：`archive/music` 保存下线前的音乐功能完整代码（main 快照 `90d7229b`，含音乐 Application、工具、双音源与桌面播放器）。规则同 `archive/workflow`：仅作历史恢复，不维护、不合并、不参与例行分支清理。
 - PR 合并后，切回 `main` 并同步远端，删除对应的本地和远端开发分支，再运行 `git fetch --prune origin` 清理失效引用；这属于任务收尾，不能留给用户手动处理。
 - 删除前确认提交已进入 `main`。未合并的提交、未提交的改动和仍在使用的 worktree 必须先核实并保留，不用强制删除来凑成“只剩 main”。
 - 汇报完成前检查本地、远端分支；如仍有未合并或正在使用的分支，说明原因。
@@ -74,7 +75,7 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 ```
 cmd/easyagent  cmd/easyagent-bridge     ← 入口
-internal/agents/ music/ feishu/ tui/…  ← 应用层（领域应用，不属于 SDK）
+internal/agents/ feishu/ tui/…  ← 应用层（领域应用，不属于 SDK）
 sdk/runtime/                           ← 平台层（AgentSession、Application 接口）
 sdk/agent/ sdk/ai/ sdk/session/ …      ← 核心层（零领域知识）
 ```
@@ -83,7 +84,7 @@ sdk/agent/ sdk/ai/ sdk/session/ …      ← 核心层（零领域知识）
 
 **SDK 边界**：`sdk/` 是可被外部 Go 模块 import 的公共 API 面（EasyAgent 的"原子能力"）；
 `internal/` 是 EasyAgent 自身的应用与入口。**sdk/ 不得 import internal/ 的任何包**，
-由 `sdk/arch_test.go` 强制。给 sdk/ 加代码必须保持零领域知识（音乐/飞书等永远不进 SDK）。
+由 `sdk/arch_test.go` 强制。给 sdk/ 加代码必须保持零领域知识（飞书等领域能力永远不进 SDK）。
 
 ## 核心接口
 

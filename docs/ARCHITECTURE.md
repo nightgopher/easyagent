@@ -13,7 +13,7 @@ EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、And
 | 平台 | `sdk/runtime` | AgentSession、Application 注册、会话配置、命令与扩展 |
 | 核心 | `sdk/agent`、`sdk/ai`、`sdk/session`、`sdk/tools`、`sdk/mcp`、`sdk/operations` | Agent 循环、模型流、工具执行、MCP、历史和执行后端 |
 
-`sdk/` 是外部 Go 模块可导入的公共能力，不能依赖 `internal/`，由 [架构测试](../sdk/arch_test.go) 检查。音乐、飞书等领域逻辑属于应用层。
+`sdk/` 是外部 Go 模块可导入的公共能力，不能依赖 `internal/`，由 [架构测试](../sdk/arch_test.go) 检查。飞书等领域逻辑属于应用层。
 
 ## 客户端与构建单元
 
@@ -42,7 +42,7 @@ EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、And
 
 ## Application 扩展
 
-[runtime.Application](../sdk/runtime/application.go) 提供 `BuildTools`、`BuildPrompt` 和 `NewSessionExt`。入口目前注册 coding、music、kb；它们复用运行时，并分别提供领域能力。Skills 是任务方法和提示资源，不替代工具权限与 Application 的状态管理。
+[runtime.Application](../sdk/runtime/application.go) 提供 `BuildTools`、`BuildPrompt` 和 `NewSessionExt`。入口目前注册 coding、kb；它们复用运行时，并分别提供领域能力。Skills 是任务方法和提示资源，不替代工具权限与 Application 的状态管理。
 
 ## 权限与部署边界
 

@@ -85,7 +85,6 @@ type liveState struct {
 	ImageTitle                                                             string
 	ImageZoom                                                              float32
 	Images                                                                 map[string]ui.ImageSource
-	Music                                                                  nativeMusic
 	WorkspacePath, WorkspaceHost                                           string
 	FolderButton                                                           ui.Handle
 	PickDirectory                                                          func(mygo.OpenDialogOptions) ([]string, error)
@@ -382,10 +381,6 @@ func (a *preview) connectLive() {
 		l.streamCancel()
 	}
 	l.Workbench.close()
-	if l.Music.Player != nil {
-		l.Music.Player.Close()
-		l.Music.Player = nil
-	}
 	if l.Voice != nil {
 		voice := l.Voice
 		l.Voice = nil
@@ -992,10 +987,6 @@ func (a *preview) closeLive() {
 	}
 	l.Workbench.close()
 	l.Core.close()
-	if l.Music.Player != nil {
-		l.Music.Player.Close()
-		l.Music.Player = nil
-	}
 	for {
 		select {
 		case r := <-l.results:

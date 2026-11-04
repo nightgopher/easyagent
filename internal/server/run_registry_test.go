@@ -15,10 +15,12 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	kbapp "github.com/nightgopher/easyagent/internal/agents/kb"
 	"github.com/nightgopher/easyagent/internal/app"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,7 +92,7 @@ func newFileRunTestServer(t *testing.T, toolFile string, dataInside ...bool) (*S
 	cfg.AutoApprove = toolFile != ""
 	cfg.MCPConfigPath = filepath.Join(cfg.DataDir, "mcp.json")
 	cfg.Provider, cfg.OpenAIAPIKey, cfg.OpenAIBaseURL = "openai", "test-key", provider.URL
-	application, err := app.New(app.AppOptions{Config: cfg})
+	application, err := app.New(app.AppOptions{Config: cfg, Applications: map[string]runtime.Application{"kb": kbapp.NewKBApplication(cfg, t.TempDir())}})
 	require.NoError(t, err)
 	srv := New(application, nil)
 	httpServer := httptest.NewServer(srv.Handler())

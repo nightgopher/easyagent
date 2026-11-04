@@ -157,10 +157,10 @@ func TestNativeNewSessionModeKeepsCurrentProject(t *testing.T) {
 	a, requests := workspacePickerFixture(t)
 	tt := ui.NewTester(a.View, 1240, 820)
 	click(t, tt, "选择模式")
-	click(t, tt, "音乐")
+	click(t, tt, "知识库")
 	waitNative(t, a, func() bool { return a.current().RemoteID == "chosen-project" })
 	body := <-requests
-	if str(body["application"]) != "music" || str(body["cwd"]) != "/demo/easyagent" {
+	if str(body["application"]) != "kb" || str(body["cwd"]) != "/demo/easyagent" {
 		t.Fatalf("mode changed current project: %v", body)
 	}
 }
