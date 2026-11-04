@@ -52,7 +52,12 @@ def search_list(keychain, recovery=None):
         recovery.chmod(0o600)
     try:
         if keychain not in previous:
-            run(["security", "list-keychains", "-d", "user", "-s", *previous, keychain])
+            # Prepend so codesign resolves the signing identity from this
+            # keychain first; a machine-wide copy of the same certificate
+            # (e.g. a login keychain without codesign partition access on a
+            # self-hosted runner) would otherwise be picked and fail with
+            # errSecInternalComponent in headless sessions.
+            run(["security", "list-keychains", "-d", "user", "-s", keychain, *previous])
         yield
     finally:
         if keychain not in previous:
