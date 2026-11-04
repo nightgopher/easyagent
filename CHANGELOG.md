@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [v0.39.2] - 2026-11-04
+
+### Development
+- macOS 公证改用免钥匙串的 `notarytool submit` 显式凭据模式：自托管 runner 会话的默认钥匙串处于锁定状态时，`store-credentials` 无法写入导致发布中断。凭据仍来自仓库 secrets 并由日志打码。应用代码与 v0.39.0 相同；v0.39.0 / v0.39.1 tag 均因不可变规则保留，不发布 Release。
+
 ## [v0.39.1] - 2026-11-04
 
 ### Development
