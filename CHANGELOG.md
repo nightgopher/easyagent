@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+## [v0.39.1] - 2026-11-04
+
+### Development
+- 修复自托管 macOS 签名机登录钥匙串持有同一 Developer ID 证书时，发布构建的 codesign 解析到无授权副本而失败（errSecInternalComponent）的问题；签名钥匙串现在前置到钥匙串搜索列表。应用代码与 v0.39.0 相同；v0.39.0 tag 因不可变规则保留，不发布 Release。
+
 ## [v0.39.0] - 2026-11-04
 
 ### Removed
