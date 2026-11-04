@@ -25,7 +25,7 @@
 - [核心机制](INTERNALS.md)：工具生命周期、确认门、循环检测、双层压缩与事件流。
 - [贡献指南](CONTRIBUTING.md)：本地验证、PR、合并及分支清理。
 - [Worktree 开发指南](WORKTREES.md)：并行任务隔离、会话提交纪律与收尾清理。
-- [SDK 边界](decisions/sdk-extraction.md)、[Skills 与 Application](decisions/skills-vs-application.md)、[移除 LSP 工具](decisions/remove-lsp-tools.md)：仍适用的设计取舍。工作流引擎的取舍记录见 decisions/workflow-engine.md（功能已于 2026-10 下线）。
+- [SDK 边界](decisions/sdk-extraction.md)、[Skills 与 Application](decisions/skills-vs-application.md)、[移除 LSP 工具](decisions/remove-lsp-tools.md)、[下线音乐应用](decisions/remove-music-application.md)：仍适用的设计取舍。工作流引擎的取舍记录见 decisions/workflow-engine.md（功能已于 2026-10 下线）。
 
 ## 历史调研
 

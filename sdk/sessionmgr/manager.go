@@ -33,7 +33,7 @@ type SessionInfo struct {
 	Workspace    string `json:"workspace,omitempty"`
 	Title        string `json:"title,omitempty"`
 	AgentID      string `json:"agent_id,omitempty"`
-	Application  string `json:"application,omitempty"` // e.g. "coding", "music", "kb"
+	Application  string `json:"application,omitempty"` // e.g. "coding", "kb"
 	Pinned       bool   `json:"pinned"`
 	Archived     bool   `json:"archived"`
 	ForkedFrom   string `json:"forked_from,omitempty"` // source session id when this session is a fork

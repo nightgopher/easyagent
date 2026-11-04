@@ -47,7 +47,6 @@ type Server struct {
 	slashCmds         *slashcmd.Registry
 	externalTools     []agent.ExternalToolDef
 	toolMu            sync.Mutex
-	extraRoutes       *http.ServeMux // optional extra routes (e.g. music audio proxy)
 	apiKey            string         // if non-empty, requires Bearer token auth on all endpoints
 	terminalEnabled   bool
 	terminalSlots     chan struct{}
@@ -58,11 +57,6 @@ type Server struct {
 	authFails      authLimiter // 错误令牌按来源 IP 限流
 	allowNoAuth    bool        // EA_ALLOW_NO_AUTH=1：未配 key 时完全开放（调试用）
 	allowedOrigins []string    // EA_ALLOWED_ORIGINS：显式 CORS 白名单；空 = 不返回 CORS 头
-}
-
-// SetExtraRoutes sets an additional ServeMux to be merged into the server's routes.
-func (s *Server) SetExtraRoutes(mux *http.ServeMux) {
-	s.extraRoutes = mux
 }
 
 // SetAPIKey enables Bearer token authentication on all REST endpoints.
@@ -344,11 +338,6 @@ func (s *Server) Handler() http.Handler {
 
 	// Register web UI routes (serves embedded static files at /)
 	web.RegisterRoutes(topMux)
-
-	// Merge extra routes (e.g. music audio proxy) if set
-	if s.extraRoutes != nil {
-		topMux.Handle("/music/", s.extraRoutes)
-	}
 
 	return topMux
 }

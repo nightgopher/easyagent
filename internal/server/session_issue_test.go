@@ -76,7 +76,50 @@ func TestHistoricalForkDuringRunAndApplicationChoice(t *testing.T) {
 		t.Fatal("source run was interrupted")
 	}
 	forkIssue(t, s, source.SessionID(), `{"application":"unknown"}`, 400)
+	forkIssue(t, s, source.SessionID(), `{"application":"music"}`, 400)
+	for _, application := range []string{"music", "unknown"} {
+		create := httptest.NewRecorder()
+		s.createSession(create, httptest.NewRequest("POST", "/sessions", bytes.NewBufferString(fmt.Sprintf(`{"application":%q}`, application))))
+		require.Equal(t, 400, create.Code)
+	}
 }
+func TestRetiredMusicSessionContinuesWithToolHistory(t *testing.T) {
+	s, _, gateway := newRunTestServer(t)
+	ctx := context.Background()
+	source, err := s.resolveSession(ctx, "")
+	require.NoError(t, err)
+	call := ai.ToolCall{ID: "play-1", Name: "music_play"}
+	for _, m := range []ai.Message{
+		ai.NewTextUserMessage("play"),
+		ai.AssistantMessage{ToolCalls: []ai.ToolCall{call}},
+		ai.ToolResultMessage{ToolCallID: call.ID, Content: "playing"},
+		ai.AssistantMessage{Text: "playing now"},
+	} {
+		require.NoError(t, source.Session().AppendMessage(ctx, m))
+	}
+	id := source.SessionID()
+	require.NoError(t, s.app.SessionManager().SaveMeta(id, source.Workspace(), "music"))
+	require.NoError(t, s.app.SessionStore().Delete(id))
+
+	run, _, err := s.startRun(id, "what did we play?", "retired-music")
+	require.NoError(t, err)
+	body := <-gateway.requests
+	names := []string{}
+	for _, item := range body["tools"].([]any) {
+		names = append(names, item.(map[string]any)["function"].(map[string]any)["name"].(string))
+	}
+	require.Contains(t, names, "music_play")
+	require.NotContains(t, names, "bash")
+	require.NotContains(t, names, "read")
+	require.Contains(t, fmt.Sprint(body["messages"]), "play-1")
+	close(gateway.finish)
+	select {
+	case <-run.done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("retired session run did not finish")
+	}
+}
+
 func TestForkIncludesCompleteToolResultsAndPartialAnswer(t *testing.T) {
 	s, _, _ := newRunTestServer(t)
 	ctx := context.Background()

@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+### Removed
+- 下线内置音乐功能：音乐应用与 `music_*` 工具、网易云和 B 站音源、`/music/` 音频代理及桌面端播放器。需要音乐能力时可使用网易云官方 `ncm-cli` 与 Agent Skills。已有音乐会话仍可打开查看，`music_pref.json` 保留但不再读写。
+
+### Changed
+- 创建会话时传入未注册的 `application` 现在返回 400，不再回退为编程 Agent。
+
 ## [v0.38.0] - 2026-11-03
 
 ### Added

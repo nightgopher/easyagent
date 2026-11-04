@@ -1,4 +1,4 @@
-.PHONY: build build-agent install run chat serve test vet clean tidy help desktop
+.PHONY: build build-agent install run chat serve test vet clean tidy help desktop smoke-ui
 
 # ── Binary names ──
 BINARY   = easyagent
@@ -71,3 +71,8 @@ tidy:
 # ── Native desktop ──
 desktop:
 	bash scripts/build-native.sh darwin-arm64
+
+# ── Desktop UI Smoke Testing (E2E) ──
+smoke-ui:
+	node scripts/desktop-ui-smoke.mjs
+
