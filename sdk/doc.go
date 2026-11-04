@@ -1,7 +1,7 @@
 // Package sdk 是 easyagent 的库入口：Agent 框架的原子能力集合。
 //
 // easyagent 由两部分组成：本目录（可被外部 Go 模块 import 的 SDK）与
-// internal/（easyagent 自身的 Application 与入口，如 coding/music agent、
+// internal/（easyagent 自身的 Application 与入口，如 coding/kb agent、
 // TUI、飞书、server）。
 //
 // # 能力地图
@@ -19,7 +19,7 @@
 // # 架构约束
 //
 // sdk/ 下的包不得 import easyagent/internal/ 的任何包（有测试强制）。
-// 领域能力（音乐、飞书等）属于应用层，永远不进 SDK。
+// 领域能力（飞书等）属于应用层，永远不进 SDK。
 //
 // # 稳定性
 //

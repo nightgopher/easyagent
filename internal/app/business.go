@@ -44,6 +44,9 @@ func (a *App) SessionSetup(ctx context.Context, application, agentID string, cfg
 		if application == "business" {
 			return cfg, deps, fmt.Errorf("business sessions require agent_id")
 		}
+		if _, ok := a.applications[application]; application != "" && !ok {
+			return cfg, deps, fmt.Errorf("unknown application %q", application)
+		}
 		return cfg, deps, nil
 	}
 	if application != "" && application != "business" {

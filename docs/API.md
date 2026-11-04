@@ -98,7 +98,7 @@ Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话
 会话列表和 `/sessions/{id}/info` 返回 `agent_id`。分叉默认保留归属，显式切换到旧应用时清除归属。
 模型选择保存在会话中；角色说明、技能和工具权限在下次执行前重新读取。
 修改工作目录后需要新建会话。设 `disabled: true` 停止后续执行和新会话创建。
-旧会话没有 `agent_id` 时沿用原来的 Coding/Music/KB 行为。
+旧会话没有 `agent_id` 时沿用原来的 Coding/KB 行为；音乐功能下线前的 `application=music` 会话仍可打开，音乐工具只返回已下线提示。创建会话时传未注册的 `application` 返回 400。
 
 
 ## 可绑定知识库

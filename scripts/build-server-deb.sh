@@ -74,7 +74,7 @@ Homepage: https://github.com/hwj123hwj/easyagent
 Description: EasyAgent core server and Feishu bridge
  Personal AI agent server: 'easyagent serve' exposes the HTTP/WebSocket
  API consumed by the EasyAgent desktop, web and mobile clients, with
- coding, music and knowledge-base agents on top of the EasyAgent SDK.
+ coding and knowledge-base agents on top of the EasyAgent SDK.
  Includes the optional Feishu (Lark) bridge binary and systemd units;
  the core service runs as the dedicated "easyagent" user.
 EOF

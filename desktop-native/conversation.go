@@ -386,9 +386,6 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			}
 			ui.Text(c, m.Status).FontSize(10).TextColor(color)
 		})
-		if m.Status == "完成" {
-			a.musicCard(c, m)
-		}
 		if !m.Expanded {
 			return
 		}
