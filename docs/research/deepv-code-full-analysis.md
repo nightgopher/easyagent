@@ -3,7 +3,7 @@
 # DeepV Code 调研报告 — 全面分析
 
 > 调研日期：2026-05-24
-> 来源：本地源码 `/Users/weijian/Desktop/develop/test/pi/DeepVcodeClient`，GitHub: `OrionStarAI/DeepVCode`
+> 来源：本地源码 `/Users/weijian/Projects/company/fossil-develop-work/DeepVcodeClient`，GitHub: `OrionStarAI/DeepVCode`
 > 调研目标：全面分析 DeepV Code 的架构、功能、与 EasyAgent 的对比，提取可借鉴的设计
 > 版本：v1.0.319
 
@@ -328,6 +328,6 @@ export const BUILT_IN_AGENT_TYPES = [
 - 项目 GitHub: [OrionStarAI/DeepVCode](https://github.com/OrionStarAI/DeepVCode)
 - Google Gemini CLI（上游）: [google-gemini/gemini-cli](https://github.com/google-gemini/gemini-cli)
 - Ink (React for CLI): [vadimdemedes/ink](https://github.com/vadimdemedes/ink)
-- DeepV 白皮书: `/Users/weijian/Desktop/develop/test/pi/DeepVcodeClient/DeepV_Code_Whitepaper.md`
-- 项目总结: `/Users/weijian/Desktop/develop/test/pi/DeepVcodeClient/PROJECT_SUMMARY.md`
-- 实施总结: `/Users/weijian/Desktop/develop/test/pi/DeepVcodeClient/IMPLEMENTATION_SUMMARY.md`
+- DeepV 白皮书: `/Users/weijian/Projects/company/fossil-develop-work/DeepVcodeClient/DeepV_Code_Whitepaper.md`
+- 项目总结: `/Users/weijian/Projects/company/fossil-develop-work/DeepVcodeClient/PROJECT_SUMMARY.md`
+- 实施总结: `/Users/weijian/Projects/company/fossil-develop-work/DeepVcodeClient/IMPLEMENTATION_SUMMARY.md`
