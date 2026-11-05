@@ -39,7 +39,7 @@ func TestConcurrentClientsDoNotOverwriteOrRemoveWinner(t *testing.T) {
 	if err != nil || len(list) != 1 {
 		t.Fatalf("winner lost: %v %v", list, err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "hello-skill", "hello-skill", "SKILL.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "hello-skill", "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
 	entries, _ := os.ReadDir(dir)
