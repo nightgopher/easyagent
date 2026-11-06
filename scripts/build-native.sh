@@ -135,7 +135,9 @@ fi
 # WebView previews that need an unattended GUI session; it gates PRs on hosted
 # runners (see #81) and times out on the shared-desktop self-hosted machine
 # regardless of display state.
-EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test -count=1 -run '^TestPackagedCoreSmoke$' .
+# Core startup on a shared desktop can exceed the default 15s readiness
+# budget without the bundle being broken; 60s still catches real breakage.
+EASYAGENT_CORE_READY_SECONDS=60 EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test -count=1 -run '^TestPackagedCoreSmoke$' .
 EASYAGENT_NATIVE_KEYCHAIN_TEST=1 go test -count=1 ./tools/...
 
 if [[ -n "$DIST" ]]; then

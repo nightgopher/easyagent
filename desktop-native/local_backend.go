@@ -250,7 +250,16 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 		}
 	}()
 	client, _ := newBackendClient("http://"+address, token)
-	deadline := time.NewTimer(15 * time.Second)
+	// The packaged-bundle smoke test stretches this budget: core startup on a
+	// busy shared desktop can exceed 15s without being broken. Real breakage
+	// never answers at all, so a longer ceiling keeps that guarantee.
+	readyBudget := 15 * time.Second
+	if v := os.Getenv("EA_CORE_READY_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 5 && n <= 300 {
+			readyBudget = time.Duration(n) * time.Second
+		}
+	}
+	deadline := time.NewTimer(readyBudget)
 	defer deadline.Stop()
 	tick := time.NewTicker(150 * time.Millisecond)
 	defer tick.Stop()

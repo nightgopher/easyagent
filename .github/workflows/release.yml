@@ -88,6 +88,10 @@ jobs:
     # cross builds from Linux skip the installer, so this job must be a
     # Windows host. Git Bash provides the POSIX shell the script needs.
     runs-on: windows-2025
+    env:
+      # Python file reads default to the locale codec (cp1252) on Windows;
+      # repo JSON and release notes are UTF-8 with Chinese content.
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v7
         with:
