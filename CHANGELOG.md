@@ -4,6 +4,23 @@
 
 ## [Unreleased]
 
+## [v0.40.0] - 2026-11-06
+
+### Added
+- 企业微信智能机器人扫码连接：`/wecom setup` 在终端渲染二维码并轮询确认（3 秒间隔、5 分钟上限），机器人凭据保存至 `~/.easyagent/wecom-credentials.json`；`/wecom status` / `/wecom logout` 管理连接。协议对齐公开参考客户端 WecomTeam/wecom-cli；开放能力的工具化接入留待后续。(#83)
+- 工具权限管理：桌面「设置 → 工具权限」与网页设置可按运行主机配置文件读取/修改、终端命令、联网搜索、网页读取的允许与禁用名单，并展示配置来源；保存后新建或重新加载的会话生效。(#70)
+- Windows 发布产物：每版新增 `windows-amd64` 核心与 bridge 可执行文件，以及 MyGo NSIS 每用户安装器（`easyagent-native-windows-amd64-setup.exe`，暂无签名自动更新通道）。(#82)
+- CLI 飞书登录成功后可选择账号可用模型、切换模型并支持关闭 CLI 模式；SSH 远程登录提供回环端口转发指引。(#70)
+
+### Changed
+- 默认启用联网搜索与网页读取；DuckDuckGo 不可用时回退 Bing RSS；显式配置 SearXNG 时不向其他服务泄露查询。(#70)
+- 发布流水线新增 `windows/amd64` 核心矩阵与 `native-windows` job（windows-2025），发布入口等待其通过；`release.py` 的资产清单与门控同步扩展。(#82)
+- macOS native 发布 job 关闭 setup-go 缓存：自建 runner 上缓存的回拉/回传各自占用约 20 分钟家宽带宽且曾因 cache 服务鉴权失败中断，重下工具链反而更快。
+
+### Development
+- C 级迁移路径引用同步（Desktop→Projects）。(#77)
+
+
 ### Added
 - Windows 成为正式发版平台：核心 `easyagent-windows-amd64(.exe)` / `easyagent-bridge-windows-amd64(.exe)` 进入全部发行（v0.39.4-alpha.1 起），原生桌面客户端新增 NSIS 每用户安装包 `easyagent-native-windows-amd64-setup.exe`（Windows runner 构建，暂无签名自动更新清单）；发版脚本与 CI 矩阵同步支持 windows/amd64。
 
