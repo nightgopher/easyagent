@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- Windows 成为正式发版平台：核心 `easyagent-windows-amd64(.exe)` / `easyagent-bridge-windows-amd64(.exe)` 进入全部发行（v0.39.4-alpha.1 起），原生桌面客户端新增 NSIS 每用户安装包 `easyagent-native-windows-amd64-setup.exe`（Windows runner 构建，暂无签名自动更新清单）；发版脚本与 CI 矩阵同步支持 windows/amd64。
+
 ## [v0.39.3] - 2026-11-05
 
 ### Fixed
