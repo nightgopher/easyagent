@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [v0.40.2] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码与 v0.40.0/v0.40.1 相同；v0.40.0 / v0.40.1 tag 因不可变规则保留，不发布 Release）：
+  - native-windows job 设置 `PYTHONUTF8=1`：Windows 上 Python 文件读取默认按 locale（cp1252）解码，仓库内 UTF-8 中文内容会让 `python3 -c` 的 JSON 读取崩溃（上一轮只修了 release.py 的 subprocess 解码，遗漏了这一处）。
+  - 打包冒烟的就绪预算支持 `EA_CORE_READY_SECONDS` 覆盖（默认仍为 15s，clamp 5–300），native 发布链路放宽到 60s：共享桌面机器上核心启动应答有数十秒级方差，真实坏包永不就绪，保障语义不变。
+
+
 ## [v0.40.1] - 2026-11-06
 
 ### Development
