@@ -339,6 +339,7 @@ func (a *preview) transcript(c *ui.Context) {
 	scroll := ui.Scroll(c.Key(s.ID)).Grow(1).MinHeight(0).TrackScroll(&s.Scroll)
 	scroll.Children(func() {
 		ui.Column(c).FillWidth().MaxWidth(816).MinWidth(0).Margin(0, ui.Auto).Padding(28, 20, 12, 20).Gap(24).Selectable().Children(func() {
+			a.teamRoster(c, s)
 			if len(s.Messages) == 0 {
 				ui.Column(c).Padding(80, 0).Gap(12).Children(func() {
 					size := float32(38)

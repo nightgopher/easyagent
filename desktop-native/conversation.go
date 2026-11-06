@@ -322,7 +322,7 @@ func toolSummary(m *message) string {
 			return fmt.Sprintf("已加载 %d 个工具", len(list(details["selected"])))
 		}
 	}
-	if m.Tool == "task" {
+	if m.Tool == "task" || m.Tool == "team_delegate" {
 		if n := len(m.Steps); n > 0 {
 			return fmt.Sprintf("%d 步", n)
 		}
@@ -376,6 +376,9 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 			if m.Tool == "task" {
 				name = "子任务"
 			}
+			if m.Tool == "team_delegate" {
+				name = "成员：" + str(object(m.Args)["member"])
+			}
 			if m.Tool == "search_tools" {
 				name = a.tr("查找工具")
 			}
@@ -410,7 +413,7 @@ func (a *preview) nativeTool(c *ui.Context, m *message) {
 				a.renderSessionMarkdown(c, &m.Markdown, m.Text, a.current(), "", false)
 				return
 			}
-			if m.Tool == "task" {
+			if m.Tool == "task" || m.Tool == "team_delegate" {
 				a.subagentDetail(c, m)
 				return
 			}

@@ -34,6 +34,8 @@ type SessionInfo struct {
 	Title        string `json:"title,omitempty"`
 	AgentID      string `json:"agent_id,omitempty"`
 	Application  string `json:"application,omitempty"` // e.g. "coding", "kb"
+	TeamID       string `json:"team_id,omitempty"`     // set when the session runs a team
+	TeamName     string `json:"team_name,omitempty"`
 	Pinned       bool   `json:"pinned"`
 	Archived     bool   `json:"archived"`
 	ForkedFrom   string `json:"forked_from,omitempty"` // source session id when this session is a fork
@@ -345,6 +347,8 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			_ = meta.decodeField("workspace", &info.Workspace)
 			_ = meta.decodeField("application", &info.Application)
 			_ = meta.decodeField("agent_id", &info.AgentID)
+			_ = meta.decodeField("team_id", &info.TeamID)
+			_ = meta.decodeField("team_name", &info.TeamName)
 			var title string
 			_ = meta.decodeField("title", &title)
 			if title != "" {
@@ -518,6 +522,30 @@ func forkCut(entries []session.Entry, target string) (int, error) {
 // SaveAgentMeta persists session identity together with its application and workspace.
 func (m *Manager) SaveAgentMeta(id, workspace, agentID string) error {
 	return m.updateMeta(id, map[string]any{"workspace": workspace, "application": "business", "agent_id": agentID})
+}
+
+// SaveTeamSession persists a team session identity plus the frozen team
+// snapshot the session keeps running with. The snapshot value is stored as
+// JSON; callers own its shape.
+func (m *Manager) SaveTeamSession(id, workspace, agentID, teamID, teamName string, snapshot any) error {
+	return m.updateMeta(id, map[string]any{
+		"workspace": workspace, "application": "business", "agent_id": agentID,
+		"team_id": teamID, "team_name": teamName, "team_snapshot": snapshot,
+	})
+}
+
+// TeamSessionMeta decodes the frozen team snapshot of a session into dst.
+func (m *Manager) TeamSessionMeta(id string, dst any) error {
+	m.metaMu.Lock()
+	defer m.metaMu.Unlock()
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\`) {
+		return fmt.Errorf("invalid session id")
+	}
+	meta, err := readMetadata(filepath.Join(m.SessionsDir(), id))
+	if err != nil {
+		return err
+	}
+	return meta.decodeField("team_snapshot", dst)
 }
 
 // AgentID fails closed when metadata is unreadable instead of selecting a more privileged default.

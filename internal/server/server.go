@@ -47,7 +47,7 @@ type Server struct {
 	slashCmds         *slashcmd.Registry
 	externalTools     []agent.ExternalToolDef
 	toolMu            sync.Mutex
-	apiKey            string         // if non-empty, requires Bearer token auth on all endpoints
+	apiKey            string // if non-empty, requires Bearer token auth on all endpoints
 	terminalEnabled   bool
 	terminalSlots     chan struct{}
 	baseURL           string                                          // 本机自呼地址（ListenAndServe 时归一化），进程内飞书桥接回调核心 API 用
@@ -244,6 +244,10 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /agents/steward", s.ensureSteward)
 	restMux.HandleFunc("GET /agents/{agent}", s.businessAgents)
 	restMux.HandleFunc("PUT /agents/{agent}", s.businessAgents)
+	restMux.HandleFunc("GET /teams", s.businessTeams)
+	restMux.HandleFunc("POST /teams", s.businessTeams)
+	restMux.HandleFunc("GET /teams/{team}", s.businessTeams)
+	restMux.HandleFunc("PUT /teams/{team}", s.businessTeams)
 	restMux.HandleFunc("POST /sessions/{id}/compact", s.compactSession)
 	restMux.HandleFunc("GET /sessions/{id}/context", s.getContextSnapshot)
 	restMux.HandleFunc("POST /sessions/{id}/command", s.executeCommand)
@@ -324,6 +328,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/work/", restHandler)
 	topMux.Handle("/agents", restHandler)
 	topMux.Handle("/agents/", restHandler)
+	topMux.Handle("/teams", restHandler)
+	topMux.Handle("/teams/", restHandler)
 	topMux.Handle("/knowledge/", restHandler)
 	topMux.Handle("/workspace/", restHandler)
 	topMux.Handle("/kb/", restHandler)

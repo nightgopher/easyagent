@@ -186,7 +186,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 					})
 					a.note(c, page.Description)
-					if page.ID == "agents" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
+					if page.ID == "agents" || page.ID == "teams" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
 							kind := "laptop"
 							if !s.host().Local {
@@ -219,6 +219,8 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "连接此 Mac 的本地核心后，可生成手机配对二维码并管理设备。")
 					case "agents":
 						a.businessSettings(c)
+					case "teams":
+						a.teamSettings(c)
 					case "memory-knowledge":
 						a.memoryKnowledgeSettings(c)
 					case "general":
