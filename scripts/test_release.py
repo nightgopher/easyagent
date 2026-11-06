@@ -118,7 +118,7 @@ class AssetsTest(unittest.TestCase):
         with self.assertRaises(ValueError): release.manifest(self.directory, self.tag, self.sha)
 
     def test_desktop_assets_required_from_first_desktop_version(self):
-        self.assertEqual(len(release.ASSETS), 8)
+        self.assertEqual(len(release.ASSETS), 10)
         self.assertEqual(release.required_assets('v0.1.0'), release.ASSETS)
         for tag in ('v0.2.0-alpha.1', 'v0.2.0-beta.1', 'v0.2.0-rc.1', 'v0.2.0'):
             with self.subTest(tag=tag):
@@ -148,9 +148,26 @@ class AssetsTest(unittest.TestCase):
                     self.assertIn(f'easyagent-{tag[1:]}-linux-{arch}.tar.gz', assets)
                     self.assertIn(f'update-linux-{arch}.json', assets)
                     self.assertIn(f'easyagent-server_{tag[1:]}-1_{arch}.deb', assets)
-        # The server debs ride with the core build's partial manifest.
+                # The server debs ride with the core build's partial manifest.
         self.assertEqual(release.server_assets('v0.20.0'), ())
         self.assertEqual(len(release.server_assets('v0.21.0')), 2)
+
+    def test_windows_core_and_native_assets_start_at_v0_39_4(self):
+        # The core binaries join ASSETS unconditionally (cross-compiled for
+        # every release); only the native installer has a version gate. The
+        # Windows executables carry the .exe suffix in the release manifest.
+        self.assertIn('easyagent-windows-amd64.exe', release.required_assets('v0.1.0'))
+        self.assertIn('easyagent-bridge-windows-amd64.exe', release.required_assets('v0.1.0'))
+        self.assertNotIn('easyagent-native-windows-amd64-setup.exe', release.required_assets('v0.39.3'))
+        for tag in ('v0.39.4-alpha.1', 'v0.39.4-beta.1', 'v0.39.4-rc.1', 'v0.39.4'):
+            with self.subTest(tag=tag):
+                assets = release.required_assets(tag)
+                self.assertIn('easyagent-windows-amd64.exe', assets)
+                self.assertIn('easyagent-bridge-windows-amd64.exe', assets)
+                self.assertIn('easyagent-native-windows-amd64-setup.exe', assets)
+        # The Windows installer is the only native asset without a signed
+        # update manifest: it must not invent update-windows-amd64.json.
+        self.assertNotIn('update-windows-amd64.json', release.required_assets('v0.39.4'))
 
     def test_electron_retirement_preserves_historical_manifests(self):
         self.assertEqual(release.desktop_assets('v0.15.12'), ('EasyAgent-0.15.12-arm64.dmg',))

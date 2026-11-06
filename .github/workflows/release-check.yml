@@ -39,6 +39,8 @@ jobs:
             artifact: darwin-amd64
           - target: darwin/arm64
             artifact: darwin-arm64
+          - target: windows/amd64
+            artifact: windows-amd64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -71,7 +73,8 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/core-dist
       - run: |
-          chmod +x "$RUNNER_TEMP"/core-dist/easyagent-{linux,darwin}-* "$RUNNER_TEMP"/core-dist/easyagent-bridge-*
+          chmod +x "$RUNNER_TEMP"/core-dist/easyagent-{linux,darwin}-* "$RUNNER_TEMP"/core-dist/easyagent-bridge-* \
+            "$RUNNER_TEMP"/core-dist/easyagent-windows-amd64.exe "$RUNNER_TEMP"/core-dist/easyagent-bridge-windows-amd64.exe
           bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'

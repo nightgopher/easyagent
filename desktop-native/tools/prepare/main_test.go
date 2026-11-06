@@ -3,11 +3,15 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
 
 func TestComputerHelperCacheInvalidatesSourceAndToolchain(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the computer helper cache is a macOS-only build step (xcrun/swiftc)")
+	}
 	root := t.TempDir()
 	cwd := filepath.Join(root, "desktop-native")
 	source := filepath.Join(root, "native/computer-use/main.swift")
