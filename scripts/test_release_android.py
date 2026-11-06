@@ -25,17 +25,21 @@ class AndroidPolicyTest(unittest.TestCase):
     def test_apk_is_mandatory_only_from_android_release_onward(self):
         for tag in ['v0.18.0', 'v0.18.1']:
             self.assertEqual(release.android_assets(tag), ())
-            self.assertEqual(len(release.required_assets(tag)) + 2, 13)
+            self.assertEqual(len(release.required_assets(tag)) + 2, 15)
         for tag in ['v0.19.0-alpha.1', 'v0.19.0', 'v0.19.1']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk',))
-            self.assertEqual(len(release.required_assets(tag)) + 2, 14)
+            self.assertEqual(len(release.required_assets(tag)) + 2, 16)
         for tag in ['v0.19.2-alpha.1', 'v0.19.2']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
-            self.assertEqual(len(release.required_assets(tag)) + 2, 15)
-        # Linux desktop/server packaging joined the release manifest at v0.21.0.
-        for tag in ['v0.21.0-alpha.1', 'v1.0.0']:
+            self.assertEqual(len(release.required_assets(tag)) + 2, 17)
+        # Linux desktop/server packaging joined the release manifest at v0.21.0;
+        # the Windows native installer joined at v0.39.4.
+        for tag in ['v0.21.0-alpha.1']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
-            self.assertEqual(len(release.required_assets(tag)) + 2, 25)
+            self.assertEqual(len(release.required_assets(tag)) + 2, 27)
+        for tag in ['v1.0.0']:
+            self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
+            self.assertEqual(len(release.required_assets(tag)) + 2, 28)
 
 
 class AndroidArchiveTest(unittest.TestCase):
