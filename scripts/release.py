@@ -11,7 +11,11 @@ import zipfile
 
 TAG_RE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(alpha|beta|rc)\.([1-9][0-9]*))?\Z")
 TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
-ASSETS = tuple(f"{name}-{target}" for target in TARGETS for name in ("easyagent", "easyagent-bridge"))
+# Windows release artifacts carry the .exe suffix the OS requires for exec.
+ASSETS = tuple(
+    f"{name}-{target}{'.exe' if target.startswith('windows') else ''}"
+    for target in TARGETS for name in ("easyagent", "easyagent-bridge")
+)
 
 
 def git(*args):

@@ -154,15 +154,16 @@ class AssetsTest(unittest.TestCase):
 
     def test_windows_core_and_native_assets_start_at_v0_39_4(self):
         # The core binaries join ASSETS unconditionally (cross-compiled for
-        # every release); only the native installer has a version gate.
-        self.assertIn('easyagent-windows-amd64', release.required_assets('v0.1.0'))
-        self.assertIn('easyagent-bridge-windows-amd64', release.required_assets('v0.1.0'))
+        # every release); only the native installer has a version gate. The
+        # Windows executables carry the .exe suffix in the release manifest.
+        self.assertIn('easyagent-windows-amd64.exe', release.required_assets('v0.1.0'))
+        self.assertIn('easyagent-bridge-windows-amd64.exe', release.required_assets('v0.1.0'))
         self.assertNotIn('easyagent-native-windows-amd64-setup.exe', release.required_assets('v0.39.3'))
         for tag in ('v0.39.4-alpha.1', 'v0.39.4-beta.1', 'v0.39.4-rc.1', 'v0.39.4'):
             with self.subTest(tag=tag):
                 assets = release.required_assets(tag)
-                self.assertIn('easyagent-windows-amd64', assets)
-                self.assertIn('easyagent-bridge-windows-amd64', assets)
+                self.assertIn('easyagent-windows-amd64.exe', assets)
+                self.assertIn('easyagent-bridge-windows-amd64.exe', assets)
                 self.assertIn('easyagent-native-windows-amd64-setup.exe', assets)
         # The Windows installer is the only native asset without a signed
         # update manifest: it must not invent update-windows-amd64.json.
