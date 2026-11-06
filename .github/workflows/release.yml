@@ -125,9 +125,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: desktop-native/go.mod
-          cache-dependency-path: |
-            go.sum
-            desktop-native/go.sum
+          # No Go cache here: the self-hosted runner sits on home broadband,
+          # and restoring/saving the multi-GB module+build cache costs about
+          # 20 minutes each way (and once failed on a cache-service auth
+          # error). A cold toolchain download plus a fresh build is faster.
+          cache: false
       - name: Build and validate the MyGo native installer
         env:
           TAG: ${{ needs.validate.outputs.version }}
