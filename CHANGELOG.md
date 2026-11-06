@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v0.39.3] - 2026-11-05
+
+### Fixed
+- 市场安装技能不再多套一层目录：store 包（如 GitHub "Download ZIP" 归档）自带顶层 `<name>/` 目录时，安装结果原本是 `skills/<name>/<name>/SKILL.md`，市场清单滞留在顶层。现在解压后由 `normalizeExtractedLayout` 拍平为 `skills/<name>/SKILL.md`（忽略 `__MACOSX` / `.DS_Store` 等 zip 副产物，受 `maxLiftDepth` 限制，歧义布局原样发布）。
+
+
 ## [v0.39.2] - 2026-11-04
 
 ### Development
