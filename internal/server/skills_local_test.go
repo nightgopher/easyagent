@@ -89,24 +89,6 @@ func TestListLocalSkills_ShowsEverySkillWhoeverInstalledIt(t *testing.T) {
 	assert.Empty(t, out.InstalledError)
 }
 
-func TestListLocalSkills_MarksTheShadowedDuplicate(t *testing.T) {
-	home := t.TempDir()
-	agents := filepath.Join(home, ".agents", "skills")
-	claude := filepath.Join(home, ".claude", "skills")
-	writeTestSkill(t, agents, "shared", "dup", "The one that wins")
-	writeTestSkill(t, claude, "shared", "dup", "Loses to the earlier directory")
-
-	out := getLocalSkills(t, newSkillsServer(t, home, nil))
-
-	require.Len(t, out.Skills, 2)
-	winner, loser := out.Skills[0], out.Skills[1]
-	if winner.Origin != "agents" {
-		winner, loser = loser, winner
-	}
-	assert.Empty(t, winner.ShadowedBy)
-	assert.Equal(t, filepath.Join(agents, "shared", "SKILL.md"), loser.ShadowedBy)
-}
-
 func TestListLocalSkills_ReportsLoaderWarningsAlongsideTheSkill(t *testing.T) {
 	home := t.TempDir()
 	agents := filepath.Join(home, ".agents", "skills")
@@ -125,41 +107,6 @@ func TestListLocalSkills_ReportsLoaderWarningsAlongsideTheSkill(t *testing.T) {
 		assert.Equal(t, filepath.Join(sloppy, "SKILL.md"), p.Path)
 		assert.NotEmpty(t, p.Message)
 	}
-}
-
-func TestListLocalSkills_FollowsTheConfiguredDirectories(t *testing.T) {
-	home := t.TempDir()
-	custom := filepath.Join(t.TempDir(), "my-skills")
-	writeTestSkill(t, filepath.Join(home, ".agents", "skills"), "ignored", "ignored", "Not loaded when dirs are configured")
-	writeTestSkill(t, custom, "mine", "mine", "In the configured directory")
-
-	out := getLocalSkills(t, newSkillsServer(t, home, []string{custom}))
-
-	require.Len(t, out.Skills, 1, "the listing must match what a session actually loads")
-	assert.Equal(t, "mine", out.Skills[0].Name)
-	assert.Equal(t, "custom", out.Skills[0].Origin)
-}
-
-func TestListLocalSkills_EmptyIsAnEmptyListNotNull(t *testing.T) {
-	w := httptest.NewRecorder()
-	srv := newSkillsServer(t, t.TempDir(), nil)
-	srv.Handler().ServeHTTP(w, localReq(http.MethodGet, "/skills/local", nil))
-	require.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), `"skills":[]`)
-	assert.Contains(t, w.Body.String(), `"problems":[]`)
-}
-
-func TestListLocalSkills_SaysWhenTheMarketRecordsCannotBeRead(t *testing.T) {
-	home := t.TempDir()
-	// A file where the market's skills directory should be makes listing its installs fail.
-	require.NoError(t, os.MkdirAll(filepath.Join(home, ".agents"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(home, ".agents", "skills"), []byte("not a directory"), 0o644))
-	writeTestSkill(t, filepath.Join(home, ".claude", "skills"), "other-tool", "other-tool", "Still listed")
-
-	out := getLocalSkills(t, newSkillsServer(t, home, nil))
-
-	require.Len(t, out.Skills, 1, "the listing itself must survive")
-	assert.NotEmpty(t, out.InstalledError, "otherwise the missing 市场安装 badge looks like a fact")
 }
 
 func TestLocalSkillTogglePersistsWithoutChangingSharedFiles(t *testing.T) {

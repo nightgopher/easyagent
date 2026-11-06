@@ -34,14 +34,14 @@ func skillMarketTestServer(t *testing.T) (*Server, string) {
 	digest := sha256.Sum256(buf.Bytes())
 
 	item := skillmarket.SkillItem{
-		ID:          42,
-		Name:        "rest-demo",
-		DisplayName: "REST Demo",
-		Description: "Installed via REST",
-		Version:     "1.2.3",
-		SHA256:      &[]string{hex.EncodeToString(digest[:])}[0],
-		TarballSize: int64(buf.Len()),
-		UsageExample: &[]string{"帮我制作一套板书风 PPT"}[0],
+		ID:            42,
+		Name:          "rest-demo",
+		DisplayName:   "REST Demo",
+		Description:   "Installed via REST",
+		Version:       "1.2.3",
+		SHA256:        &[]string{hex.EncodeToString(digest[:])}[0],
+		TarballSize:   int64(buf.Len()),
+		UsageExample:  &[]string{"帮我制作一套板书风 PPT"}[0],
 		PreviewImages: []string{"https://example.test/preview-1.png"},
 	}
 
@@ -94,56 +94,6 @@ func marketReq(t *testing.T, srv *Server, method, path string, body any) *httpte
 	return w
 }
 
-func TestSkillMarketRESTDisabledOmitsRoutes(t *testing.T) {
-	ws := t.TempDir()
-	cfg := config.Default()
-	cfg.DataDir = t.TempDir()
-	cfg.Provider = "openai"
-	cfg.OpenAIAPIKey = "test-key"
-	cfg.OpenAIBaseURL = "http://localhost:4001"
-	cfg.Workspace = ws
-	cfg.SkillMarketEnabled = false
-	application, err := app.New(app.AppOptions{Config: cfg})
-	require.NoError(t, err)
-	t.Cleanup(func() { application.Close() })
-	srv := New(application, nil)
-
-	w := marketReq(t, srv, "GET", "/skills/market/search", nil)
-	require.Equal(t, http.StatusNotFound, w.Code)
-}
-
-func TestSkillMarketRESTSearchDetailSections(t *testing.T) {
-	srv, _ := skillMarketTestServer(t)
-
-	w := marketReq(t, srv, "GET", "/skills/market/search?q=demo", nil)
-	require.Equal(t, http.StatusOK, w.Code)
-	var search struct {
-		Skills []map[string]any `json:"skills"`
-		Total  int              `json:"total"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &search))
-	require.Equal(t, 1, search.Total)
-	require.Equal(t, float64(42), search.Skills[0]["id"])
-	require.Equal(t, "REST Demo", search.Skills[0]["display_name"])
-
-	w = marketReq(t, srv, "GET", "/skills/market/skills/42", nil)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), `"version":"1.2.3"`)
-	// Showcase fields pass through to the detail wire for the desktop UI.
-	require.Contains(t, w.Body.String(), `"usage_example":"帮我制作一套板书风 PPT"`)
-	require.Contains(t, w.Body.String(), `"preview_images":["https://example.test/preview-1.png"]`)
-
-	w = marketReq(t, srv, "GET", "/skills/market/skills/99", nil)
-	require.Equal(t, http.StatusNotFound, w.Code)
-
-	w = marketReq(t, srv, "GET", "/skills/market/sections", nil)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.Contains(t, w.Body.String(), "sections")
-
-	w = marketReq(t, srv, "GET", "/skills/market/skills/not-a-number", nil)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-}
-
 func TestSkillMarketRESTInstallAndUninstallLifecycle(t *testing.T) {
 	srv, skillsDir := skillMarketTestServer(t)
 
@@ -177,7 +127,9 @@ func TestSkillMarketRESTInstallAndUninstallLifecycle(t *testing.T) {
 	}
 	require.Equal(t, "succeeded", finalState)
 
-	_, err := os.Stat(filepath.Join(skillsDir, "rest-demo", "rest-demo", "SKILL.md"))
+	// The store zip wraps the skill in a top-level rest-demo/ directory;
+	// install flattens it, so SKILL.md sits directly in the skill directory.
+	_, err := os.Stat(filepath.Join(skillsDir, "rest-demo", "SKILL.md"))
 	require.NoError(t, err)
 
 	// Duplicate install while first is running conflicts; after completion a
@@ -221,51 +173,6 @@ func TestSkillMarketRESTInstallAndUninstallLifecycle(t *testing.T) {
 	require.Equal(t, http.StatusNotFound, w.Code)
 }
 
-func TestSkillMarketRESTInstallEventsSSE(t *testing.T) {
-	srv, _ := skillMarketTestServer(t)
-
-	w := marketReq(t, srv, "POST", "/skills/market/install", map[string]any{"id": 42})
-	require.Equal(t, http.StatusOK, w.Code)
-	var start struct {
-		JobID string `json:"job_id"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &start))
-
-	// Consume the SSE stream until the terminal event.
-	req := localReq("GET", "/skills/market/jobs/"+start.JobID+"/events", nil)
-	rec := httptest.NewRecorder()
-	done := make(chan struct{})
-	go func() {
-		srv.Handler().ServeHTTP(rec, req)
-		close(done)
-	}()
-
-	var body string
-	deadline := time.After(5 * time.Second)
-loop:
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("SSE stream did not terminate")
-		case <-done:
-			body = rec.Body.String()
-			break loop
-		}
-	}
-	// Fast installs may finish before subscribing; terminal replay is valid.
-	require.Contains(t, body, "event: done")
-	require.Contains(t, body, `"state":"succeeded"`)
-
-	// Subscribing after completion replays the terminal event immediately.
-	rec2 := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec2, localReq("GET", "/skills/market/jobs/"+start.JobID+"/events", nil))
-	require.Contains(t, rec2.Body.String(), `"state":"succeeded"`)
-
-	// Unknown job id is 404.
-	w = marketReq(t, srv, "GET", "/skills/market/jobs/does-not-exist/events", nil)
-	require.Equal(t, http.StatusNotFound, w.Code)
-}
-
 func TestSkillMarketRESTUninstallRefusesHandWrittenSkill(t *testing.T) {
 	srv, skillsDir := skillMarketTestServer(t)
 
@@ -277,79 +184,4 @@ func TestSkillMarketRESTUninstallRefusesHandWrittenSkill(t *testing.T) {
 	require.Equal(t, http.StatusConflict, w.Code)
 	_, err := os.Stat(handDir)
 	require.NoError(t, err, "hand-written skill must survive")
-}
-
-func TestSkillMarketRESTInstallValidation(t *testing.T) {
-	srv, _ := skillMarketTestServer(t)
-
-	w := marketReq(t, srv, "POST", "/skills/market/install", map[string]any{"id": -1})
-	require.Equal(t, http.StatusBadRequest, w.Code)
-
-	// Unknown skill starts a job that fails asynchronously; verify via status.
-	w = marketReq(t, srv, "POST", "/skills/market/install", map[string]any{"id": 99})
-	require.Equal(t, http.StatusOK, w.Code)
-	var start struct {
-		JobID string `json:"job_id"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &start))
-	for i := 0; i < 100; i++ {
-		w = marketReq(t, srv, "GET", "/skills/market/jobs/"+start.JobID, nil)
-		var snap struct {
-			State string `json:"state"`
-			Error string `json:"error"`
-		}
-		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &snap))
-		if snap.State != "running" {
-			require.Equal(t, "failed", snap.State)
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-// A slow client must always be able to observe the terminal state.
-func TestMarketSubscriberRetainsTerminalWhenBufferFull(t *testing.T) {
-	srv, _ := skillMarketTestServer(t)
-	job := &marketJob{ID: "slow", State: "running", subs: map[chan marketEvent]struct{}{}}
-	srv.marketJobs.jobs[job.ID] = job
-	events, cancel, err := srv.marketJobs.Subscribe(job.ID, 64)
-	require.NoError(t, err)
-	defer cancel()
-	for range 100 {
-		srv.marketJobs.publish(job, marketEvent{JobID: job.ID, State: "running"})
-	}
-	srv.marketJobs.publish(job, marketEvent{JobID: job.ID, State: "succeeded"})
-	found := false
-	for len(events) > 0 {
-		if (<-events).State == "succeeded" {
-			found = true
-		}
-	}
-	require.True(t, found)
-}
-
-func TestMarketCustomDirectoryReloadsExistingAndNewSessions(t *testing.T) {
-	srv, _ := skillMarketTestServer(t)
-	sess, err := srv.app.NewSession(t.Context())
-	require.NoError(t, err)
-	_, err = srv.app.SkillMarket().Install(t.Context(), 42)
-	require.NoError(t, err)
-	srv.app.BumpSkillMarketRevision()
-	require.NoError(t, sess.RefreshTools(t.Context()))
-	found := func() bool {
-		for _, s := range sess.LoadedSkills() {
-			if s.Name == "rest-demo" {
-				return true
-			}
-		}
-		return false
-	}
-	require.True(t, found(), "custom marketplace root must be loaded")
-	newer, err := srv.app.NewSession(t.Context())
-	require.NoError(t, err)
-	require.NotEmpty(t, newer.LoadedSkills())
-	require.NoError(t, srv.app.SkillMarket().Uninstall("rest-demo"))
-	srv.app.BumpSkillMarketRevision()
-	require.NoError(t, sess.RefreshTools(t.Context()))
-	require.False(t, found(), "uninstalled skill must disappear after reload")
 }

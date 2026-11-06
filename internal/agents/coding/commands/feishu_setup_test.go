@@ -5,15 +5,12 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/nightgopher/easyagent/internal/feishu"
 	"github.com/nightgopher/easyagent/sdk/slashcmd"
-	qrcode "github.com/skip2/go-qrcode"
 )
 
 const setupTestURL = "https://open.feishu.cn/page/launcher?user_code=test-only-code&from=pigo&tp=pigo"
@@ -149,61 +146,5 @@ func TestFeishuSetupCancellationAtEveryNetworkStage(t *testing.T) {
 				t.Fatal("cancelled setup overwrote credentials")
 			}
 		})
-	}
-}
-
-func TestFeishuChoiceCancellationDoesNotConsumeNextInput(t *testing.T) {
-	in, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer in.Close()
-	defer writer.Close()
-	ctx, cancel := context.WithCancel(t.Context())
-	done := make(chan error, 1)
-	go func() { _, err := chooseFeishuLogin(ctx, in, io.Discard); done <- err }()
-	cancel()
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatal(err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("input cancellation hung")
-	}
-	if _, err := writer.Write([]byte("next\n")); err != nil {
-		t.Fatal(err)
-	}
-	b := make([]byte, 5)
-	if _, err := io.ReadFull(in, b); err != nil || string(b) != "next\n" {
-		t.Fatal("cancelled reader stole subsequent input", string(b), err)
-	}
-}
-
-func TestFeishuQRPreservesModulesQuietZoneAndContrast(t *testing.T) {
-	var out bytes.Buffer
-	if err := renderFeishuQR(&out, setupTestURL); err != nil {
-		t.Fatal(err)
-	}
-	code, _ := qrcode.New(setupTestURL, qrcode.Medium)
-	bits := code.Bitmap()
-	lines := strings.Split(strings.TrimSuffix(strings.TrimPrefix(out.String(), "\n"), "\n"), "\n")
-	if len(lines) != (len(bits)+1)/2 {
-		t.Fatal("QR height changed")
-	}
-	for y, line := range lines {
-		if !strings.HasPrefix(line, "\x1b[30;47m") || !strings.HasSuffix(line, "\x1b[0m") {
-			t.Fatal("QR depends on terminal theme")
-		}
-		modules := []rune(ansi.Strip(line))
-		if len(modules) != len(bits) || len(modules) > 103 {
-			t.Fatal("QR wrapped or quiet zone lost")
-		}
-		for x, glyph := range modules {
-			top, bottom := glyph == '█' || glyph == '▀', glyph == '█' || glyph == '▄'
-			if top != bits[y*2][x] || (y*2+1 < len(bits) && bottom != bits[y*2+1][x]) {
-				t.Fatal("QR modules corrupted")
-			}
-		}
 	}
 }

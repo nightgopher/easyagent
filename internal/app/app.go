@@ -51,7 +51,7 @@ type AppOptions struct {
 	Application runtime.Application // inject a concrete Application; defaults to CodingApplication
 
 	// Applications is a named map of available applications.
-	// Keys are application names (e.g. "coding", "music") that the frontend
+	// Keys are application names (e.g. "coding", "kb") that the frontend
 	// can use to select which application a session should use.
 	// If empty, falls back to Application (or CodingApplication).
 	Applications map[string]runtime.Application
@@ -187,6 +187,11 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 	agentID, err := a.sessionMgr.AgentID(sessionID)
 	if err != nil {
 		return nil, err
+	}
+	if application == retiredMusicApplication && agentID == "" {
+		deps := a.deps()
+		deps.Application = retiredMusicApp{}
+		return a.sessionStore.Load(ctx, sessionID, opts, deps)
 	}
 	cfg, deps, err := a.SessionSetup(ctx, application, agentID, opts.Config)
 	opts.Config = cfg

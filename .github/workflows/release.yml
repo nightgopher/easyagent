@@ -82,7 +82,10 @@ jobs:
           compression-level: 0
   native:
     needs: validate
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
+    # Hosted Apple Silicon labels keep their semantics; any other non-empty
+    # value is used verbatim as a runner label (e.g. a self-hosted Mac).
+    # Empty falls back to the hosted default, macos-26.
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-26' && 'macos-26' || (vars.EASYAGENT_MACOS_ARM_RUNNER != '' && vars.EASYAGENT_MACOS_ARM_RUNNER || 'macos-26') }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,8 +113,11 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           DMG="native-dist/easyagent-native-darwin-arm64.dmg"
-          xcrun notarytool store-credentials "easyagent-notary" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID"
-          xcrun notarytool submit "$DMG" --keychain-profile "easyagent-notary" --wait
+          # Keyless submission: notarytool store-credentials needs a writable
+          # default keychain, which is locked on self-hosted runner sessions.
+          # Explicit credentials avoid the keychain entirely; GitHub masks
+          # the secret values in logs.
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
           # Retry only transient ticket-download errors after Apple accepted
           # the submission; rejection, signing and validation failures stop.
           for attempt in 1 2 3; do

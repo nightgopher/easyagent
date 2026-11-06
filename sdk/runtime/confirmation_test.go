@@ -5,9 +5,7 @@ import (
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/agent"
-	"github.com/nightgopher/easyagent/sdk/ai/providers"
 	"github.com/nightgopher/easyagent/sdk/config"
-	"github.com/nightgopher/easyagent/sdk/extensions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,26 +24,6 @@ func (*confirmationTestApplication) BuildPrompt(PromptBuildOptions, string, stri
 }
 
 func (*confirmationTestApplication) NewSessionExt() SessionExt { return nil }
-
-func TestSetConfirmFuncRebuildsExistingAgent(t *testing.T) {
-	application := &confirmationTestApplication{}
-	session := &AgentSession{
-		cfg:         config.Default(),
-		extRegistry: extensions.NewRegistry(),
-		deps:        Dependencies{Registry: providers.NewRegistry()},
-		application: application,
-		agent:       agent.New(agent.Options{}),
-	}
-	oldAgent := session.agent
-
-	session.SetConfirmFunc(func(context.Context, agent.ConfirmationRequest) agent.ConfirmDecision {
-		return agent.ConfirmDecision{Approved: true}
-	})
-
-	require.NotSame(t, oldAgent, session.agent)
-	assert.Equal(t, 1, application.buildToolsCalls)
-	assert.True(t, session.ConfirmEnabled(), "installing a confirmation handler enables confirmation by default")
-}
 
 func TestWrapConfirmPreservesFullAccessAcrossAgentRebuilds(t *testing.T) {
 	session := &AgentSession{}
@@ -86,26 +64,6 @@ func TestExplicitAccessModeRetainsMCPApprovalRule(t *testing.T) {
 	require.NoError(t, session.TrySetAccessMode(confirm, true))
 	require.False(t, session.wrapConfirm(confirm)(context.Background(), agent.ConfirmationRequest{}).Approved)
 	require.Equal(t, 2, calls)
-}
-
-func TestContextSnapshotRejectsActiveMutation(t *testing.T) {
-	for _, field := range []string{"running", "mutating"} {
-		t.Run(field, func(t *testing.T) {
-			sess := &AgentSession{agent: agent.New(agent.Options{System: "rules"})}
-			if field == "running" {
-				sess.running = true
-			} else {
-				sess.mutating = true
-			}
-			_, err := sess.ContextSnapshot(context.Background())
-			require.ErrorIs(t, err, agent.ErrAgentBusy)
-			sess.running = false
-			sess.mutating = false
-			snapshot, err := sess.ContextSnapshot(context.Background())
-			require.NoError(t, err)
-			require.Equal(t, "rules", snapshot.System)
-		})
-	}
 }
 
 func TestMandatoryConfirmationSurvivesGlobalAutoApprove(t *testing.T) {

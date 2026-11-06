@@ -147,8 +147,10 @@ func TestInstallDownloadVerifyExtractManifest(t *testing.T) {
 		t.Fatalf("expected exactly one download, got %d", store.downloads.Load())
 	}
 
-	// Extracted content exists and manifest records the install.
-	skillMD := filepath.Join(client.SkillsDir(), "hello-skill", "hello-skill", "SKILL.md")
+	// Extracted content exists and manifest records the install. The store
+	// zip wraps the skill in a top-level hello-skill/ directory; install must
+	// flatten it so SKILL.md sits at the published directory's root.
+	skillMD := filepath.Join(client.SkillsDir(), "hello-skill", "SKILL.md")
 	if _, err := os.Stat(skillMD); err != nil {
 		t.Fatalf("SKILL.md not extracted: %v", err)
 	}

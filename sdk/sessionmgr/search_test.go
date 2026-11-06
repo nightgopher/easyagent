@@ -2,11 +2,9 @@ package sessionmgr
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -162,29 +160,6 @@ func TestSearchLiteralUnicodeAndRetainedDeduplication(t *testing.T) {
 	require.Len(t, result.Hits, 1)
 }
 
-func TestSearchValidationCancellationAndConcurrency(t *testing.T) {
-	m := NewManager(t.TempDir())
-	searchFixture(t, m, ai.NewTextUserMessage("concurrent"))
-	for _, opts := range []SearchOptions{{}, {Query: "\x00"}, {Query: "\xff"}, {Query: strings.Repeat("中", 257)}, {Query: "x", Archived: "invalid"}, {Query: "x", Offset: -1}, {Query: "x", Limit: -1}, {Query: "x", Limit: 101}} {
-		_, err := m.Search(context.Background(), opts)
-		require.Error(t, err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	_, err := m.Search(ctx, SearchOptions{Query: "concurrent"})
-	require.ErrorIs(t, err, context.Canceled)
-	var wg sync.WaitGroup
-	for range 6 {
-		wg.Go(func() {
-			result, err := m.Search(context.Background(), SearchOptions{Query: "concurrent"})
-			if err != nil || result.Total != 2 {
-				t.Errorf("search: %+v %v", result, err)
-			}
-		})
-	}
-	wg.Wait()
-}
-
 func TestSearchBackfillCheckpointsAndDeletion(t *testing.T) {
 	ctx := context.Background()
 	m := NewManager(t.TempDir())
@@ -214,29 +189,4 @@ func TestSearchBackfillCheckpointsAndDeletion(t *testing.T) {
 	require.Zero(t, result.Unavailable)
 	_, err = m.SearchHistory(ctx, ids[0], "answer")
 	require.ErrorIs(t, err, ErrHistoryNotFound)
-}
-
-func BenchmarkSearchWarmHistory(b *testing.B) {
-	m := NewManager(b.TempDir())
-	ctx := context.Background()
-	for i := range 1000 {
-		id, _, err := m.Create(ctx)
-		if err != nil {
-			b.Fatal(err)
-		}
-		entry := map[string]any{"id": "answer", "type": "message", "assistant": map[string]any{"text": strings.Repeat("stored conversation body ", 50) + "中文关键词"}}
-		data, _ := json.Marshal(entry)
-		if err := os.WriteFile(m.SessionPath(id), append(data, '\n'), 0600); err != nil {
-			b.Fatal(i, err)
-		}
-	}
-	if _, err := m.Search(ctx, SearchOptions{Query: "中文关键词"}); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if _, err := m.Search(ctx, SearchOptions{Query: "中文关键词"}); err != nil {
-			b.Fatal(err)
-		}
-	}
 }

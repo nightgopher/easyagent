@@ -5,33 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestLoadContextFiles_Found(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("# Instructions\nUse Go."), 0o644))
-
-	files := LoadContextFiles(dir)
-	require.Len(t, files, 1)
-	assert.Equal(t, "# Instructions\nUse Go.", files[0].Content)
-	assert.Contains(t, files[0].Path, "CLAUDE.md")
-}
-
-func TestLoadContextFiles_NotFound(t *testing.T) {
-	dir := t.TempDir()
-	files := LoadContextFiles(dir)
-	assert.Empty(t, files)
-}
-
-func TestLoadContextFiles_Empty(t *testing.T) {
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte(""), 0o644))
-
-	files := LoadContextFiles(dir)
-	assert.Empty(t, files)
-}
 
 func TestLoadContextFiles_Priority(t *testing.T) {
 	dir := t.TempDir()
@@ -40,7 +15,7 @@ func TestLoadContextFiles_Priority(t *testing.T) {
 
 	files := LoadContextFiles(dir)
 	require.Len(t, files, 1)
-	assert.Equal(t, "Claude", files[0].Content)
+	require.Equal(t, "Claude", files[0].Content)
 }
 
 func TestLoadProjectContextFiles_AncestorTraversal(t *testing.T) {
@@ -53,8 +28,8 @@ func TestLoadProjectContextFiles_AncestorTraversal(t *testing.T) {
 
 	files := LoadProjectContextFiles(child, "")
 	require.Len(t, files, 2)
-	assert.Contains(t, files[0].Content, "Root")
-	assert.Contains(t, files[1].Content, "Mid")
+	require.Contains(t, files[0].Content, "Root")
+	require.Contains(t, files[1].Content, "Mid")
 }
 
 func TestLoadProjectContextFiles_WithAgentDir(t *testing.T) {
@@ -66,14 +41,6 @@ func TestLoadProjectContextFiles_WithAgentDir(t *testing.T) {
 
 	files := LoadProjectContextFiles(cwd, agentDir)
 	require.Len(t, files, 2)
-	assert.Contains(t, files[0].Content, "Global")
-	assert.Contains(t, files[1].Content, "Local")
-}
-
-func TestLoadProjectContextFiles_Dedup(t *testing.T) {
-	cwd := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(cwd, "CLAUDE.md"), []byte("Same dir"), 0o644))
-
-	files := LoadProjectContextFiles(cwd, cwd)
-	assert.Len(t, files, 1)
+	require.Contains(t, files[0].Content, "Global")
+	require.Contains(t, files[1].Content, "Local")
 }

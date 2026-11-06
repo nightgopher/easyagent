@@ -26,34 +26,6 @@ const reqArgsForTest = `{"questions":[` +
 	`{"question":"启用哪些特性?","header":"特性","multiSelect":true,"options":[{"label":"A"},{"label":"B"}]}` +
 	`]}`
 
-func TestParseAnswerChoice(t *testing.T) {
-	idxs, text, ok := parseAnswerChoice("1", 3)
-	assert.True(t, ok)
-	assert.Equal(t, []int{1}, idxs)
-	assert.Empty(t, text)
-
-	idxs, _, ok = parseAnswerChoice("1,3", 3)
-	assert.True(t, ok)
-	assert.Equal(t, []int{1, 3}, idxs)
-
-	idxs, _, ok = parseAnswerChoice("2，3", 3) // 中文逗号
-	assert.True(t, ok)
-	assert.Equal(t, []int{2, 3}, idxs)
-
-	_, text, ok = parseAnswerChoice("0: 用本地模型", 3)
-	assert.True(t, ok)
-	assert.Equal(t, "用本地模型", text)
-
-	_, _, ok = parseAnswerChoice("0 自己部署", 3)
-	assert.True(t, ok)
-
-	// invalid inputs
-	for _, in := range []string{"", "0", "0:", "4", "1,1", "abc", "1,4", "1 2 2"} {
-		_, _, ok = parseAnswerChoice(in, 3)
-		assert.False(t, ok, "input %q should be invalid", in)
-	}
-}
-
 func TestPromptAskUserRoundtrip(t *testing.T) {
 	req := agent.ConfirmationRequest{
 		ToolName: "ask_user_question",

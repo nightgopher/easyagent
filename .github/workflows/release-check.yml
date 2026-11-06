@@ -75,8 +75,14 @@ jobs:
           bash scripts/check-release-build.sh --assemble "$RUNNER_TEMP/core-dist"
   native-build:
     if: github.event_name == 'pull_request'
-    # Standard Apple Silicon runners only; keep 26 as the default.
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
+    # This job runs the full desktop-native UI preview suite, which spawns
+    # many concurrent WKWebView instances. That needs an unattended GUI
+    # session: on a self-hosted runner sharing the maintainer's active login
+    # session the preview windows contend with real use and time out, so this
+    # job always stays on hosted Apple Silicon regardless of
+    # EASYAGENT_MACOS_ARM_RUNNER (release.yml native keeps using that var; it
+    # builds, signs and smoke-checks one bundle without the UI suite).
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
         with:
@@ -110,7 +116,7 @@ jobs:
         run: python3 scripts/build-android.py build dist --test-signing
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
-    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-26' && 'macos-26' || (vars.EASYAGENT_MACOS_ARM_RUNNER != '' && vars.EASYAGENT_MACOS_ARM_RUNNER || 'macos-26') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

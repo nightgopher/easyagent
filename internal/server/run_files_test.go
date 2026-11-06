@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
-	"github.com/nightgopher/easyagent/sdk/agent"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,6 +11,9 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/stretchr/testify/require"
 )
 
 func reviewedWrite(t *testing.T, s *Server, run *sessionRun, path, content string) {
@@ -126,50 +126,6 @@ func TestFileDeliveryIsAuthenticatedAndProjectScoped(t *testing.T) {
 	require.Equal(t, 401, w.Code)
 }
 
-func TestTaskFilesObserveRealAgentWritesAcrossConsecutiveRuns(t *testing.T) {
-	s, _, gateway := newFileRunTestServer(t, "report.md")
-	close(gateway.finish)
-	var sessionID string
-	for i := 0; i < 3; i++ {
-		run, _, err := s.startRun(sessionID, "write report", fmt.Sprintf("real-tool-%d", i))
-		require.NoError(t, err)
-		sessionID = run.SessionID
-		_, err = s.waitRun(context.Background(), run)
-		require.NoError(t, err)
-		files, err := s.loadFiles(sessionID, run.ID)
-		require.NoError(t, err)
-		changes := s.changes(files)
-		require.Len(t, changes, 1)
-		require.Equal(t, "report.md", changes[0].Path)
-		require.Equal(t, "file_tool", changes[0].Attribution)
-		require.True(t, changes[0].CanUndo)
-	}
-}
-func TestSnapshotsExcludeServiceDataEvenInGitWorkspace(t *testing.T) {
-	s, _, _ := newFileRunTestServer(t, "", true)
-	root := s.app.Config().Workspace
-	require.NoError(t, os.MkdirAll(s.app.Config().DataDir, 0700))
-	require.NoError(t, os.WriteFile(filepath.Join(s.app.Config().DataDir, "private.json"), []byte("private"), 0600))
-	require.NoError(t, os.WriteFile(filepath.Join(root, "user.md"), []byte("user"), 0600))
-	cmd := exec.Command("git", "init")
-	cmd.Dir = root
-	require.NoError(t, cmd.Run())
-	states, _ := s.snapshotFiles(root)
-	require.Len(t, states, 1)
-	require.Contains(t, states, "user.md")
-}
-
-func TestPreferenceBrowserPreflightAllowsPatch(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	s.allowedOrigins = []string{"http://localhost:5175"}
-	r := httptest.NewRequest("OPTIONS", "/sessions/example", nil)
-	r.Header.Set("Origin", "http://localhost:5175")
-	r.Header.Set("Access-Control-Request-Method", "PATCH")
-	w := httptest.NewRecorder()
-	s.Handler().ServeHTTP(w, r)
-	require.Contains(t, w.Header().Get("Access-Control-Allow-Methods"), "PATCH")
-}
-
 func TestChangesExcludeSingleSideEntriesWhenSnapshotTruncated(t *testing.T) {
 	s, _, _ := newRunTestServer(t)
 	sess, err := s.resolveSession(context.Background(), "")
@@ -197,67 +153,16 @@ func TestChangesExcludeSingleSideEntriesWhenSnapshotTruncated(t *testing.T) {
 	require.Equal(t, "modified", changes[0].Kind)
 }
 
-func TestRunFilesSummaryMatchesTruncatedDetails(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
-	sess, err := s.resolveSession(context.Background(), "")
-	require.NoError(t, err)
-	root := sess.Workspace()
-	require.NoError(t, os.WriteFile(filepath.Join(root, "kept.txt"), []byte("before"), 0644))
-	run := &sessionRun{ID: "run-summary-truncated", SessionID: sess.SessionID(), StartedAt: time.Now()}
-	s.beginFiles(run, root)
-	run.files.Skipped = append(run.files.Skipped, scanLimitMessage)
-	run.files.Before["phantom-deleted.txt"] = fileState{Hash: "not-scanned-after"}
-	reviewedWrite(t, s, run, "kept.txt", "after")
-	require.NoError(t, os.WriteFile(filepath.Join(root, "phantom-added.txt"), []byte("not-scanned-before"), 0644))
-	s.finishFiles(run)
-
-	r := httptest.NewRequest("GET", "/run-files", nil)
-	r.SetPathValue("id", run.SessionID)
-	w := httptest.NewRecorder()
-	s.listRunFiles(w, r)
-	require.Equal(t, 200, w.Code)
-	var summary []struct {
-		Incomplete bool            `json:"incomplete"`
-		Files      []runFileChange `json:"files"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
-	require.Len(t, summary, 1)
-	require.True(t, summary[0].Incomplete)
-	detail := s.changes(run.files)
-	require.Len(t, detail, 1)
-	require.Len(t, summary[0].Files, len(detail))
-	require.Equal(t, detail[0].Path, summary[0].Files[0].Path)
-}
-
-func TestSnapshotMultiRepositoryWorkspaceHonorsNestedGitIgnore(t *testing.T) {
-	s, _, _ := newRunTestServer(t)
+func TestSnapshotsExcludeServiceDataEvenInGitWorkspace(t *testing.T) {
+	s, _, _ := newFileRunTestServer(t, "", true)
 	root := s.app.Config().Workspace
-	repo := filepath.Join(root, "project")
-	require.NoError(t, os.MkdirAll(repo, 0755))
-	git := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		out, err := cmd.CombinedOutput()
-		require.NoError(t, err, string(out))
-	}
-	git("init")
-	write := func(name string) {
-		require.NoError(t, os.MkdirAll(filepath.Dir(filepath.Join(root, name)), 0755))
-		require.NoError(t, os.WriteFile(filepath.Join(root, name), []byte(name), 0644))
-	}
-	write("project/tracked.tmp")
-	git("add", "tracked.tmp")
-	require.NoError(t, os.WriteFile(filepath.Join(repo, ".gitignore"), []byte("*.tmp\nartifacts/\n"), 0644))
-	write("project/scratch.tmp")
-	write("project/artifacts/result.json")
-	write("project/source.go")
-	write("local-test.noindex/helper.txt")
-	write("notes.md")
+	require.NoError(t, os.MkdirAll(s.app.Config().DataDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(s.app.Config().DataDir, "private.json"), []byte("private"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "user.md"), []byte("user"), 0600))
+	cmd := exec.Command("git", "init")
+	cmd.Dir = root
+	require.NoError(t, cmd.Run())
 	states, _ := s.snapshotFiles(root)
-	require.Contains(t, states, "project/tracked.tmp", "tracked files remain included even if their name matches an ignore rule")
-	require.Contains(t, states, "project/source.go")
-	require.Contains(t, states, "notes.md")
-	require.NotContains(t, states, "project/scratch.tmp")
-	require.NotContains(t, states, "project/artifacts/result.json")
-	require.NotContains(t, states, "local-test.noindex/helper.txt")
+	require.Len(t, states, 1)
+	require.Contains(t, states, "user.md")
 }

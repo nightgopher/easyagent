@@ -4,6 +4,34 @@
 
 ## [Unreleased]
 
+## [v0.39.3] - 2026-11-05
+
+### Fixed
+- 市场安装技能不再多套一层目录：store 包（如 GitHub "Download ZIP" 归档）自带顶层 `<name>/` 目录时，安装结果原本是 `skills/<name>/<name>/SKILL.md`，市场清单滞留在顶层。现在解压后由 `normalizeExtractedLayout` 拍平为 `skills/<name>/SKILL.md`（忽略 `__MACOSX` / `.DS_Store` 等 zip 副产物，受 `maxLiftDepth` 限制，歧义布局原样发布）。
+
+
+## [v0.39.2] - 2026-11-04
+
+### Development
+- macOS 公证改用免钥匙串的 `notarytool submit` 显式凭据模式：自托管 runner 会话的默认钥匙串处于锁定状态时，`store-credentials` 无法写入导致发布中断。凭据仍来自仓库 secrets 并由日志打码。应用代码与 v0.39.0 相同；v0.39.0 / v0.39.1 tag 均因不可变规则保留，不发布 Release。
+
+## [v0.39.1] - 2026-11-04
+
+### Development
+- 修复自托管 macOS 签名机登录钥匙串持有同一 Developer ID 证书时，发布构建的 codesign 解析到无授权副本而失败（errSecInternalComponent）的问题；签名钥匙串现在前置到钥匙串搜索列表。应用代码与 v0.39.0 相同；v0.39.0 tag 因不可变规则保留，不发布 Release。
+
+## [v0.39.0] - 2026-11-04
+
+### Removed
+- 下线内置音乐功能：音乐应用与 `music_*` 工具、网易云和 B 站音源、`/music/` 音频代理及桌面端播放器。需要音乐能力时可使用网易云官方 `ncm-cli` 与 Agent Skills。已有音乐会话仍可打开查看，`music_pref.json` 保留但不再读写。
+
+### Changed
+- 创建会话时传入未注册的 `application` 现在返回 400，不再回退为编程 Agent。
+
+### Development
+- 按「只保留证明产品假设和发版保障的测试」裁剪测试套件：删除约 290 个实现细节和重复用例，并以故障注入对照补回 10 项保障（运行中会话不可删除、SSE 断开不取消任务、快照排除服务数据、SSH 引号转义、电脑控制参数校验、分叉负索引、禁用名单约束 task、Agent 空权限与工作区校验）。覆盖率门槛由 74% 调整为 68%。
+- 新增基于 agent-desktop 的桌面界面冒烟脚本 `make smoke-ui`，仅供本机手动运行，不属于发布包，也未接入 CI。
+
 ## [v0.38.0] - 2026-11-03
 
 ### Added
