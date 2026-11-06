@@ -19,7 +19,7 @@ ASSETS = tuple(
 
 
 def git(*args):
-    return subprocess.check_output(["git", *args], text=True, stderr=subprocess.PIPE).strip()
+    return subprocess.check_output(["git", *args], encoding="utf-8", errors="replace", stderr=subprocess.PIPE).strip()
 
 
 def version_key(tag):

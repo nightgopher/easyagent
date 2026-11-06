@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v0.40.1] - 2026-11-06
+
+### Development
+- 发布工程修复：`release.py` 的 git 输出显式按 UTF-8 解码（Windows runner 默认 cp1252，CHANGELOG 的中文内容曾令 native-windows 的 validate 崩溃）；native 打包链路的测试收敛为打包保障（`TestPackagedCoreSmoke` + tools 子包），完整 desktop-native 套件继续在 PR 门禁的 hosted runner 上运行。应用代码与 v0.40.0 相同；v0.40.0 tag 因不可变规则保留，不发布 Release。
+
+
 ## [v0.40.0] - 2026-11-06
 
 ### Added
