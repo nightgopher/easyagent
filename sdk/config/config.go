@@ -99,8 +99,11 @@ type Config struct {
 	SynopsisThreshold int
 
 	// Tool filtering
-	AllowedTools []string
-	BlockedTools []string
+	AllowedTools         []string
+	BlockedTools         []string
+	builtinTools         map[string]bool
+	builtinCommandLine   map[string]bool
+	builtinStartupSource map[string]string
 
 	// Prompt
 	PromptTemplate string
@@ -150,9 +153,9 @@ func Default() Config {
 
 		Workspace:              "", // empty = use cwd
 		EnableBash:             false,
-		EnableWeb:              false,
+		EnableWeb:              true,
 		WebTimeoutSeconds:      30,
-		EnableWebSearch:        false,
+		EnableWebSearch:        true,
 		EnableComputerUse:      false, // opt-in experimental
 		ComputerApprovalPolicy: "ask",
 
@@ -236,14 +239,23 @@ func (c *Config) LoadFromEnv() {
 		c.MCPConfigPath = v
 	}
 	c.EnableBash = getEnvBool("EA_ENABLE_BASH", c.EnableBash)
+	if Env("EA_ENABLE_BASH") != "" {
+		c.markBuiltinStartupSource("bash", "environment")
+	}
 	c.AutoApprove = getEnvBool("EA_AUTO_APPROVE", c.AutoApprove)
 	if mode := getEnv("EA_DEFAULT_ACCESS_MODE", ""); ValidAccessMode(mode) {
 		c.DefaultAccessMode = mode
 	}
 	c.AllowOutsideWorkspace = getEnvBool("EA_ALLOW_OUTSIDE_WORKSPACE", c.AllowOutsideWorkspace)
 	c.EnableWeb = getEnvBool("EA_ENABLE_WEB", c.EnableWeb)
+	if Env("EA_ENABLE_WEB") != "" {
+		c.markBuiltinStartupSource("web_fetch", "environment")
+	}
 	c.WebTimeoutSeconds = getEnvInt("EA_WEB_TIMEOUT_SECONDS", c.WebTimeoutSeconds)
 	c.EnableWebSearch = getEnvBool("EA_ENABLE_WEB_SEARCH", c.EnableWebSearch)
+	if Env("EA_ENABLE_WEB_SEARCH") != "" {
+		c.markBuiltinStartupSource("web_search", "environment")
+	}
 	c.EnableComputerUse = getEnvBool("EA_ENABLE_COMPUTER_USE", c.EnableComputerUse)
 	if p := os.Getenv("EA_COMPUTER_APPROVAL_POLICY"); p == "auto" || p == "ask" {
 		c.ComputerApprovalPolicy = p
@@ -431,13 +443,13 @@ type yamlConfig struct {
 
 	Workspace          string            `yaml:"workspace,omitempty"`
 	MCPConfigPath      string            `yaml:"mcp_config,omitempty"`
-	EnableBash         bool              `yaml:"enable_bash,omitempty"`
+	EnableBash         *bool             `yaml:"enable_bash,omitempty"`
 	AutoApprove        bool              `yaml:"auto_approve,omitempty"`
 	DefaultAccessMode  string            `yaml:"default_access_mode,omitempty"`
 	ChannelAccessModes map[string]string `yaml:"channel_access_modes,omitempty"`
-	EnableWeb          bool              `yaml:"enable_web,omitempty"`
+	EnableWeb          *bool             `yaml:"enable_web,omitempty"`
 	WebTimeoutSeconds  int               `yaml:"web_timeout_seconds,omitempty"`
-	EnableWebSearch    bool              `yaml:"enable_web_search,omitempty"`
+	EnableWebSearch    *bool             `yaml:"enable_web_search,omitempty"`
 
 	ExecutionMode string `yaml:"execution_mode,omitempty"`
 	SSHHost       string `yaml:"ssh_host,omitempty"`
@@ -532,8 +544,9 @@ func (c *Config) LoadFromYAML(path string) error {
 	if yc.MCPConfigPath != "" {
 		c.MCPConfigPath = yc.MCPConfigPath
 	}
-	if yc.EnableBash {
-		c.EnableBash = true
+	if yc.EnableBash != nil {
+		c.EnableBash = *yc.EnableBash
+		c.markBuiltinStartupSource("bash", "yaml")
 	}
 	if yc.AllowOutsideWorkspace {
 		c.AllowOutsideWorkspace = true
@@ -555,14 +568,16 @@ func (c *Config) LoadFromYAML(path string) error {
 	if yc.ChannelAccessModes != nil {
 		c.ChannelAccessModes = yc.ChannelAccessModes
 	}
-	if yc.EnableWeb {
-		c.EnableWeb = true
+	if yc.EnableWeb != nil {
+		c.EnableWeb = *yc.EnableWeb
+		c.markBuiltinStartupSource("web_fetch", "yaml")
 	}
 	if yc.WebTimeoutSeconds > 0 {
 		c.WebTimeoutSeconds = yc.WebTimeoutSeconds
 	}
-	if yc.EnableWebSearch {
-		c.EnableWebSearch = true
+	if yc.EnableWebSearch != nil {
+		c.EnableWebSearch = *yc.EnableWebSearch
+		c.markBuiltinStartupSource("web_search", "yaml")
 	}
 	if yc.ExecutionMode != "" {
 		c.ExecutionMode = yc.ExecutionMode
@@ -649,6 +664,7 @@ type runtimeOverrides struct {
 	DefaultModel           *string           `json:"default_model,omitempty"`
 	DefaultProvider        *string           `json:"default_provider,omitempty"`
 	EasyCodeDefaultModel   *string           `json:"easycode_default_model,omitempty"`
+	BuiltinTools           map[string]bool   `json:"builtin_tools,omitempty"`
 }
 
 // LoadRuntimeOverrides applies <dataDir>/settings.json on top of c. Missing
@@ -680,6 +696,7 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 	if o.ToolSearchMode != nil {
 		c.ToolSearch = *o.ToolSearchMode
 	}
+	c.applyBuiltinToolOverrides(o.BuiltinTools)
 	if o.EnableComputerUse != nil {
 		c.EnableComputerUse = *o.EnableComputerUse
 	}
@@ -796,7 +813,7 @@ func mutateRuntimeOverrides(dataDir string, mutate func(o *runtimeOverrides)) er
 	if err := json.Unmarshal(known, &fields); err != nil {
 		return err
 	}
-	for _, key := range []string{"default_access_mode", "channel_access_modes", "enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "easycode_default_model", "disabled_skills", "tool_search_mode"} {
+	for _, key := range []string{"default_access_mode", "channel_access_modes", "enable_computer_use", "computer_approval_policy", "approved_apps", "default_model", "default_provider", "easycode_default_model", "disabled_skills", "tool_search_mode", "builtin_tools"} {
 		delete(raw, key)
 	}
 	for key, value := range fields {

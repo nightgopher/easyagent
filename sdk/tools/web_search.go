@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,8 +19,8 @@ import (
 // ─── SearXNG-based Web Search ──────────────────────────────────────────────
 //
 // Uses a self-hostable SearXNG instance as the search backend (no API key
-// required, unlike Tavily/Brave). Falls back to DuckDuckGo HTML if no SearXNG
-// endpoint is configured.
+// required, unlike Tavily/Brave). Without an explicit SearXNG endpoint, use
+// DuckDuckGo with Bing RSS as a fallback when the first provider is blocked.
 //
 // Env vars:
 //   SEARXNG_URL  — base URL of the SearXNG instance (e.g. http://localhost:8080)
@@ -64,7 +66,11 @@ func NewWebSearchTool() *WebSearchTool {
 	if searxngURL := strings.TrimSpace(os.Getenv("SEARXNG_URL")); searxngURL != "" {
 		engine = newSearXNGEngine(searxngURL, timeout)
 	} else {
-		engine = newDuckDuckGoEngine(timeout)
+		engine = &fallbackSearchEngine{
+			primary:        newDuckDuckGoEngine(timeout),
+			fallback:       newBingEngine(timeout),
+			primaryTimeout: timeout / 2,
+		}
 	}
 
 	return &WebSearchTool{
@@ -164,6 +170,104 @@ func (t *WebSearchTool) Execute(ctx context.Context, raw json.RawMessage, _ func
 // IsConcurrencySafe 允许 web_search 进入并行批次和 readonly 子代理工具集：
 // 结构体字段与搜索引擎实现（baseURL + http.Client）构造后只读，无共享可变状态。
 func (t *WebSearchTool) IsConcurrencySafe(_ json.RawMessage) bool { return true }
+
+// Explicitly configured search servers are never passed to this fallback: a
+// private query must not silently leave the configured search service.
+type fallbackSearchEngine struct {
+	primary        searchEngine
+	fallback       searchEngine
+	primaryTimeout time.Duration
+}
+
+func (e *fallbackSearchEngine) search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	primaryCtx, cancel := context.WithTimeout(ctx, e.primaryTimeout)
+	results, primaryErr := e.primary.search(primaryCtx, query, maxResults)
+	cancel()
+	if primaryErr == nil {
+		return results, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	results, fallbackErr := e.fallback.search(ctx, query, maxResults)
+	if fallbackErr == nil {
+		return results, nil
+	}
+	return nil, fmt.Errorf("all search providers failed: %w", errors.Join(primaryErr, fallbackErr))
+}
+
+// ─── Bing RSS Engine (fallback, no API key) ────────────────────────────────
+
+type bingEngine struct {
+	baseURL string
+	client  *http.Client
+}
+
+func newBingEngine(timeout time.Duration) *bingEngine {
+	return &bingEngine{baseURL: "https://www.bing.com/search", client: &http.Client{
+		Timeout: timeout,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if isPrivateHost(req.URL.Hostname()) {
+				return fmt.Errorf("redirect to private host blocked")
+			}
+			return nil
+		},
+	}}
+}
+
+func (e *bingEngine) search(ctx context.Context, query string, maxResults int) ([]SearchResult, error) {
+	u, err := url.Parse(e.baseURL)
+	if err != nil {
+		return nil, err
+	}
+	q := u.Query()
+	q.Set("q", query)
+	q.Set("format", "rss")
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; EasyAgent/1.0)")
+	req.Header.Set("Accept", "application/rss+xml, application/xml, text/xml")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("bing request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("bing returned HTTP %d", resp.StatusCode)
+	}
+	var feed struct {
+		XMLName xml.Name `xml:"rss"`
+		Channel struct {
+			Items []struct {
+				Title       string `xml:"title"`
+				Link        string `xml:"link"`
+				Description string `xml:"description"`
+			} `xml:"item"`
+		} `xml:"channel"`
+	}
+	if err := xml.NewDecoder(io.LimitReader(resp.Body, maxHTTPContentLength)).Decode(&feed); err != nil {
+		return nil, fmt.Errorf("parse bing RSS: %w", err)
+	}
+	results := make([]SearchResult, 0, min(maxResults, len(feed.Channel.Items)))
+	for _, item := range feed.Channel.Items {
+		link, err := url.Parse(strings.TrimSpace(item.Link))
+		if err != nil || link.Hostname() == "" || link.User != nil || (link.Scheme != "http" && link.Scheme != "https") {
+			continue
+		}
+		title := strings.TrimSpace(cleanHTMLText(item.Title))
+		if title == "" {
+			continue
+		}
+		results = append(results, SearchResult{Title: title, URL: link.String(), Snippet: truncateSnippet(cleanHTMLText(item.Description), 200)})
+		if len(results) >= maxResults {
+			break
+		}
+	}
+	return results, nil
+}
 
 // ─── SearXNG Engine ────────────────────────────────────────────────────────
 
@@ -283,9 +387,17 @@ func (e *duckduckgoEngine) search(ctx context.Context, query string, maxResults 
 	if err != nil {
 		return nil, fmt.Errorf("read duckduckgo response: %w", err)
 	}
+	lower := strings.ToLower(string(body))
+	if strings.Contains(lower, "anomaly-modal") || strings.Contains(lower, `id="challenge-form"`) {
+		return nil, fmt.Errorf("duckduckgo requested human verification")
+	}
 
 	// Parse DuckDuckGo HTML results
-	return parseDuckDuckGoHTML(string(body), maxResults), nil
+	results := parseDuckDuckGoHTML(string(body), maxResults)
+	if len(results) == 0 && !strings.Contains(lower, "no results") && !strings.Contains(lower, "no-results") {
+		return nil, fmt.Errorf("duckduckgo returned an unrecognized results page")
+	}
+	return results, nil
 }
 
 // parseDuckDuckGoHTML extracts search results from DuckDuckGo HTML response.

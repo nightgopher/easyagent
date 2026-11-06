@@ -315,3 +315,33 @@ Markdown 正文|Markdown content
 管理业务 Agent|Manage business agents
 阅读原文|Read document
 关闭原文|Close document
+管理内置工具和默认审批权限。|Manage built-in tools and default approvals.
+内置工具|Built-in tools
+设置保存到当前运行主机，新会话生效；正在运行的任务保持原有设置。|Saved on the current host for new conversations; running tasks keep their current settings.
+读取文件|Read files
+读取、查找和搜索工作区文件。|Read, find and search workspace files.
+修改文件|Modify files
+创建、修改和删除工作区文件。|Create, edit and delete workspace files.
+终端命令|Terminal commands
+执行命令，命令也可能访问文件和网络。|Run commands, which may also access files and the network.
+联网搜索|Web search
+搜索公开网页，查询会发送到搜索服务。|Search the public web; queries are sent to the search provider.
+读取网页|Read web pages
+读取公开网页的内容。|Read content from public web pages.
+来源：启动配置|Source: startup configuration
+来源：YAML 配置|Source: YAML configuration
+来源：环境变量|Source: environment
+来源：主机设置|Source: host settings
+来源：启动参数|Source: startup argument
+允许工具名单|allowed tools list
+禁用工具名单|blocked tools list
+已关闭|Off
+已启用|On
+部分可用：受工具过滤配置限制|Partially available: limited by tool filters
+不可用：受工具过滤配置限制|Unavailable: limited by tool filters
+正在读取工具设置…|Loading tool settings…
+无法读取工具设置；请连接支持此功能的运行主机。|Tool settings are unavailable; connect to a host that supports them.
+重试读取工具设置|Retry tool settings
+关闭内置工具不会限制终端命令或其他已授权工具的能力。|Disabling built-in tools does not restrict terminal commands or other authorized tools.
+运行主机未返回有效的工具设置，请刷新后重试。|The host returned invalid tool settings; refresh and try again.
+工具设置已保存，新会话生效。|Tool settings saved for new conversations.
