@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,7 +56,16 @@ func TestPackagedCoreSmoke(t *testing.T) {
 	}
 	backend := &localBackend{}
 	defer backend.close()
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	// Keep the whole run above the core's readiness budget: when the smoke
+	// budget stretches for slow shared-desktop starts, the run context must
+	// stretch with it, or the 20s ceiling cuts the wait short first.
+	ctxBudget := 20 * time.Second
+	if v := os.Getenv("EASYAGENT_CORE_READY_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 5 {
+			ctxBudget = time.Duration(n)*time.Second + 15*time.Second
+		}
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), ctxBudget)
 	defer cancel()
 	model := modelConfig{Mode: "override", Provider: "openai", BaseURL: provider.URL, Model: "smoke-only"}
 	client, err := backend.start(ctx, dir, model, &memorySecrets{values: map[string]string{"model": "smoke-only"}})

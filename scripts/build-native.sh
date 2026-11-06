@@ -137,7 +137,7 @@ fi
 # regardless of display state.
 # Core startup on a shared desktop can exceed the default 15s readiness
 # budget without the bundle being broken; 60s still catches real breakage.
-EA_CORE_READY_SECONDS=60 EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test -count=1 -run '^TestPackagedCoreSmoke$' .
+EASYAGENT_CORE_READY_SECONDS=60 EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test -count=1 -run '^TestPackagedCoreSmoke$' .
 EASYAGENT_NATIVE_KEYCHAIN_TEST=1 go test -count=1 ./tools/...
 
 if [[ -n "$DIST" ]]; then
