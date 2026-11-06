@@ -10,7 +10,7 @@ import sys
 import zipfile
 
 TAG_RE = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(alpha|beta|rc)\.([1-9][0-9]*))?\Z")
-TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64")
+TARGETS = ("linux-amd64", "linux-arm64", "darwin-amd64", "darwin-arm64", "windows-amd64")
 ASSETS = tuple(f"{name}-{target}" for target in TARGETS for name in ("easyagent", "easyagent-bridge"))
 
 
@@ -50,9 +50,14 @@ def native_assets(tag):
             f"easyagent-{tag[1:]}-linux-amd64.tar.gz",
             f"easyagent-{tag[1:]}-linux-arm64.tar.gz",
         )
+    # Windows desktop packaging joins the same release from v0.39.4:
+    # an NSIS per-user installer built by MyGo (no signed update manifest yet).
+    windows = ()
+    if version_key(tag) >= version_key("v0.39.4-alpha.1"):
+        windows = ("easyagent-native-windows-amd64-setup.exe",)
     # Signed archives and their manifests are mandatory for the native-only release.
     if version_key(tag) >= version_key("v0.16.0-alpha.1"):
-        return ("easyagent-native-darwin-arm64.dmg", "update-darwin-arm64.json", f"easyagent-{tag[1:]}-darwin-arm64.tar.gz") + linux
+        return ("easyagent-native-darwin-arm64.dmg", "update-darwin-arm64.json", f"easyagent-{tag[1:]}-darwin-arm64.tar.gz") + linux + windows
     # MyGo native client ships an Apple Silicon DMG with the promoted release.
     if version_key(tag) >= version_key("v0.15.12"):
         return ("easyagent-native-darwin-arm64.dmg",)

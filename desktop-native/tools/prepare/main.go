@@ -137,9 +137,14 @@ func main() {
 	// deb/tar.gz 布局核心与 UI 同目录，而 MyGo 打包的 UI 可执行就叫 easyagent，
 	// 同名会被 MyGo 拒绝（resource would replace the app's own easyagent），
 	// 因此 Linux 核心叫 easyagent-core，与 local_backend.go 的查找保持一致。
+	// Windows 同理（UI 是 EasyAgent.exe，NTFS 大小写不敏感，同名更会冲突），
+	// 且 Windows 可执行必须有 .exe 扩展名才能被 exec.Command 启动。
 	coreName := "easyagent"
 	if goos == "linux" {
 		coreName = "easyagent-core"
+	}
+	if goos == "windows" {
+		coreName = "easyagent-core.exe"
 	}
 	cross := []string{}
 	if goos != runtime.GOOS || goarch != runtime.GOARCH {

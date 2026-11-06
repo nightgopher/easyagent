@@ -61,6 +61,8 @@ jobs:
             artifact: darwin-amd64
           - target: darwin/arm64
             artifact: darwin-arm64
+          - target: windows/amd64
+            artifact: windows-amd64
     steps:
       - uses: actions/checkout@v7
         with:
@@ -80,6 +82,35 @@ jobs:
           if-no-files-found: error
           retention-days: 3
           compression-level: 0
+  native-windows:
+    needs: validate
+    # The NSIS installer is built on Windows only (MyGo downloads NSIS there);
+    # cross builds from Linux skip the installer, so this job must be a
+    # Windows host. Git Bash provides the POSIX shell the script needs.
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop-native/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop-native/go.sum
+      - name: Build and validate the Windows native installer
+        shell: bash
+        env:
+          TAG: ${{ needs.validate.outputs.version }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+        run: bash scripts/build-native.sh windows-amd64 native-dist "$TAG"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-native-windows
+          path: native-dist/*
+          if-no-files-found: error
+          retention-days: 3
   native:
     needs: validate
     # Hosted Apple Silicon labels keep their semantics; any other non-empty
@@ -204,7 +235,7 @@ jobs:
   publish:
     # Builds share only the validated revision, not each other's outputs.
     # The publication barrier still requires every test and functional check.
-    needs: [validate, verify, android-ui, core, native, native-linux, android]
+    needs: [validate, verify, android-ui, core, native, native-linux, native-windows, android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -111,6 +111,7 @@ func coreBinaryAt(exe string) (string, error) {
 	for _, candidate := range []string{
 		filepath.Clean(filepath.Join(dir, "../Resources/easyagent")), // macOS .app bundle 布局
 		filepath.Join(dir, "easyagent-core"),                         // deb / tar.gz 布局：核心与 UI 同目录（UI 可执行占用了 easyagent 名）
+		filepath.Join(dir, "easyagent-core.exe"),                     // Windows 安装布局：核心与 UI 同目录，必须有 .exe 才能被 exec 启动
 	} {
 		if isCore(candidate) {
 			return candidate, nil
