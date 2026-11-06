@@ -131,7 +131,12 @@ fi
 
 # Exercise bundle discovery AND the actual local-backend launcher with isolated
 # configuration. A healthy Resources binary alone does not catch UI recursion.
-EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test ./... -count=1
+# Scope to the packaging guarantees: the full desktop-native suite spawns
+# WebView previews that need an unattended GUI session; it gates PRs on hosted
+# runners (see #81) and times out on the shared-desktop self-hosted machine
+# regardless of display state.
+EASYAGENT_NATIVE_KEYCHAIN_TEST=1 EASYAGENT_TEST_BUNDLE="$PWD/$APP" go test -count=1 -run '^TestPackagedCoreSmoke$' .
+EASYAGENT_NATIVE_KEYCHAIN_TEST=1 go test -count=1 ./tools/...
 
 if [[ -n "$DIST" ]]; then
   mkdir -p "$DIST"
