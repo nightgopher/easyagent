@@ -428,6 +428,13 @@ func (c *Client) InstallWithProgress(ctx context.Context, id int, progress Progr
 		prog(PhaseExtracting, item, err)
 		return SkillItem{}, err
 	}
+	// Store packages often wrap the skill in a top-level directory
+	// (GitHub-style "Download ZIP" layout). Flatten it so SKILL.md lands
+	// directly in the published skill directory.
+	if err := normalizeExtractedLayout(stage); err != nil {
+		prog(PhaseExtracting, item, err)
+		return SkillItem{}, err
+	}
 
 	record := InstallRecord{
 		ID:          item.ID,
@@ -637,6 +644,75 @@ func (r *contextReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	return r.reader.Read(p)
+}
+
+// skillMarkdown is the entrypoint file that must sit at a published skill
+// directory's root.
+const skillMarkdown = "SKILL.md"
+
+// maxLiftDepth caps layout normalization so a pathological package cannot
+// make the lift loop unbounded.
+const maxLiftDepth = 5
+
+// normalizeExtractedLayout flattens store packages that wrap the skill in
+// one or more top-level directories (e.g. GitHub-style "Download ZIP"
+// archives). While the stage lacks SKILL.md at its root and holds exactly
+// one subdirectory — ignoring macOS zip artifacts such as __MACOSX and
+// .DS_Store — that directory's contents are lifted one level. Any other
+// layout (a root-level file, several directories, an empty stage) is left
+// exactly as extracted, matching the behavior for non-wrapped packages.
+func normalizeExtractedLayout(stage string) error {
+	for range maxLiftDepth {
+		// macOS Finder zips sprinkle these next to the real payload; they
+		// must not count as stage content or survive as root clutter.
+		_ = os.RemoveAll(filepath.Join(stage, "__MACOSX"))
+		_ = os.Remove(filepath.Join(stage, ".DS_Store"))
+
+		if _, err := os.Lstat(filepath.Join(stage, skillMarkdown)); err == nil {
+			return nil
+		}
+
+		entries, err := os.ReadDir(stage)
+		if err != nil {
+			return err
+		}
+		var wrapped string
+		for _, entry := range entries {
+			switch {
+			case entry.IsDir():
+				if wrapped != "" {
+					return nil // several top-level dirs: ambiguous, keep as-is
+				}
+				wrapped = entry.Name()
+			default:
+				return nil // a root-level file: keep the layout as extracted
+			}
+		}
+		if wrapped == "" {
+			return nil // nothing left to lift
+		}
+		nested := filepath.Join(stage, wrapped)
+		// Move the wrapped directory aside before lifting: one of its
+		// children may carry the same name (double-wrapped packages), and
+		// renaming onto the still-present parent would fail.
+		aside := nested + ".lift"
+		if err := os.Rename(nested, aside); err != nil {
+			return err
+		}
+		children, err := os.ReadDir(aside)
+		if err != nil {
+			return err
+		}
+		for _, child := range children {
+			if err := os.Rename(filepath.Join(aside, child.Name()), filepath.Join(stage, child.Name())); err != nil {
+				return fmt.Errorf("skillmarket: lift packaged skill directory: %w", err)
+			}
+		}
+		if err := os.Remove(aside); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func writeManifest(dir string, record InstallRecord) error {

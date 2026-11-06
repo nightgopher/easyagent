@@ -127,7 +127,9 @@ func TestSkillMarketRESTInstallAndUninstallLifecycle(t *testing.T) {
 	}
 	require.Equal(t, "succeeded", finalState)
 
-	_, err := os.Stat(filepath.Join(skillsDir, "rest-demo", "rest-demo", "SKILL.md"))
+	// The store zip wraps the skill in a top-level rest-demo/ directory;
+	// install flattens it, so SKILL.md sits directly in the skill directory.
+	_, err := os.Stat(filepath.Join(skillsDir, "rest-demo", "SKILL.md"))
 	require.NoError(t, err)
 
 	// Duplicate install while first is running conflicts; after completion a
