@@ -234,6 +234,7 @@ func buildSlashRegistry(loopMgr *scheduler.LoopManager) *slashcmd.Registry {
 	commands.RegisterTaskCommands(registry)
 	commands.RegisterUndoCommands(registry)
 	commands.RegisterFeishuCommands(registry)
+	commands.RegisterWecomCommands(registry)
 	return registry
 }
 
