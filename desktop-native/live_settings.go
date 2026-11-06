@@ -75,6 +75,9 @@ func (a *preview) loadSettingsPage() {
 		}
 	case "permissions":
 		a.resource("permissions", "/settings/permissions")
+		if !l.Loading["builtin-tools-save"] {
+			a.resource("builtin-tools", "/settings/builtin-tools")
+		}
 	case "agents", "memory-knowledge":
 		a.refreshBusiness()
 		if s.Business.Tab == "memories" {
@@ -139,6 +142,7 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.memoryKnowledgeSettings(c)
 	case "permissions":
 		a.livePermissionSettings(c)
+		a.liveBuiltinToolSettings(c)
 	case "general":
 		a.generalSettings(c)
 		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型 API Key 与主机密钥保存在 macOS 钥匙串；EasyCode 登录凭据保存在仅当前用户可访问的目录。")

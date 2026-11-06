@@ -383,7 +383,13 @@ func (a *App) ToolNames() []string {
 		ToolNames(enableBash bool) []string
 	}
 	var baseNames []string
-	if tn, ok := a.application.(toolNamer); ok {
+	application := a.application
+	if configurable, ok := application.(interface {
+		WithRuntimeOverrides(config.Config) runtime.Application
+	}); ok {
+		application = configurable.WithRuntimeOverrides(cfg)
+	}
+	if tn, ok := application.(toolNamer); ok {
 		baseNames = tn.ToolNames(cfg.EnableBash)
 	} else {
 		baseNames = coding.BaseToolNames(cfg.EnableBash)
@@ -408,7 +414,8 @@ func (a *App) ToolNames() []string {
 		baseNames = append(baseNames, tool.Name())
 	}
 	// Apply filtering
-	if len(cfg.AllowedTools) == 0 && len(cfg.BlockedTools) == 0 {
+	blockedTools := cfg.EffectiveBlockedTools()
+	if len(cfg.AllowedTools) == 0 && len(blockedTools) == 0 {
 		return baseNames
 	}
 
@@ -416,8 +423,8 @@ func (a *App) ToolNames() []string {
 	for _, name := range cfg.AllowedTools {
 		allowedSet[name] = true
 	}
-	blockedSet := make(map[string]bool, len(cfg.BlockedTools))
-	for _, name := range cfg.BlockedTools {
+	blockedSet := make(map[string]bool, len(blockedTools))
+	for _, name := range blockedTools {
 		blockedSet[name] = true
 	}
 

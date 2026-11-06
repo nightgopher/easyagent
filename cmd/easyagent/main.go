@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/nightgopher/easyagent/internal/agents/coding"
@@ -28,18 +29,24 @@ import (
 var version = "dev"
 
 func main() {
-	if len(os.Args) >= 2 && os.Args[1] == "easycode" {
-		if err := runEasyCodeCommand(context.Background(), os.Args[2:], config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"), os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-		return
-	}
 	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
 		fmt.Printf("easyagent %s\n", version)
 		return
 	}
+	// Desktop's machine helper is deliberately isolated from project dotenv
+	// files; its caller explicitly supplies the account home and service URL.
+	if len(os.Args) >= 3 && os.Args[1] == "easycode" && slices.Contains(os.Args[2:], "--machine") {
+		runEasyCodeCLI(os.Args[2:])
+		return
+	}
 	cfg := config.Default()
+	// A provider explicitly supplied by the invoking shell wins over the saved
+	// CLI selection. Values loaded from .env remain the fallback configuration.
+	explicitProvider := strings.TrimSpace(os.Getenv("EA_PROVIDER"))
+	explicitModel := strings.TrimSpace(os.Getenv("EA_MODEL"))
+	if explicitModel == "" {
+		explicitModel = strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
+	}
 
 	// Version flag (injectable via -ldflags "-X main.version=...")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
@@ -58,6 +65,10 @@ func main() {
 		_ = config.LoadDotEnv(".env.local")
 		_ = config.LoadDotEnv(filepath.Join(config.HomeDir(), ".env"))
 		_ = config.LoadDotEnv(filepath.Join(config.HomeDir(), ".env.local"))
+	}
+	if len(os.Args) >= 2 && os.Args[1] == "easycode" {
+		runEasyCodeCLI(os.Args[2:])
+		return
 	}
 
 	// Load YAML config first (lowest priority), then env vars override
@@ -102,11 +113,25 @@ func main() {
 	flag.BoolVar(&cfg.AllowOutsideWorkspace, "allow-outside-workspace", cfg.AllowOutsideWorkspace, "Allow file tools outside workspace (independent of -y; OS permissions still apply)")
 	flag.StringVar(&cfg.MCPConfigPath, "mcp-config", cfg.MCPConfigPath, "MCP user config path (default ~/.easyagent/mcp.json)")
 	flag.StringVar(&cfg.ToolSearch, "tool-search", cfg.ToolSearch, "tool definitions: off (all) or local (on-demand)")
+	flag.BoolVar(&cfg.EnableWeb, "web", cfg.EnableWeb, "Enable web page fetching (use --web=false to disable)")
+	flag.BoolVar(&cfg.EnableWebSearch, "web-search", cfg.EnableWebSearch, "Enable web search (use --web-search=false to disable)")
 	yolo := flag.Bool("y", false, "全权模式：初始跳过危险工具确认（会话内 /confirm on|off 随时切换）")
 	if mode := modeForSubcommand(args); mode != "" {
 		os.Args = append([]string{os.Args[0], "--mode", mode}, args[1:]...)
 	}
 	flag.Parse()
+	flag.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "web":
+			cfg.MarkBuiltinToolCommandLine("web_fetch")
+		case "web-search":
+			cfg.MarkBuiltinToolCommandLine("web_search")
+		}
+	})
+	if err := applyEasyCodeCLISelection(context.Background(), &cfg, config.HomeDir(), *modeFlag, explicitProvider, explicitModel); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	if host, _, err := net.SplitHostPort(*listen); err == nil && host != "" {
 		cfg.Host = host
@@ -191,6 +216,13 @@ func main() {
 	default:
 		fmt.Fprintf(os.Stderr, "unknown mode %q\n", *modeFlag)
 		os.Exit(2)
+	}
+}
+
+func runEasyCodeCLI(args []string) {
+	if err := runEasyCodeCommand(context.Background(), args, config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"), os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 

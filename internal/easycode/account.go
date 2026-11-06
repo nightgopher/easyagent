@@ -177,11 +177,12 @@ func (m *Manager) Status(ctx context.Context) (User, bool, error) {
 
 func (m *Manager) Logout(ctx context.Context) error {
 	return m.locked(ctx, func() error {
-		err := os.Remove(filepath.Join(m.dir, "credentials.json"))
-		if os.IsNotExist(err) {
-			return nil
+		for _, name := range []string{"credentials.json", cliSelectionFile} {
+			if err := os.Remove(filepath.Join(m.dir, name)); err != nil && !os.IsNotExist(err) {
+				return err
+			}
 		}
-		return err
+		return nil
 	})
 }
 
