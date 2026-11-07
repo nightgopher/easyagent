@@ -16,6 +16,7 @@ import (
 	"github.com/nightgopher/easyagent/internal/agents/coding/commands"
 	kbapp "github.com/nightgopher/easyagent/internal/agents/kb"
 	"github.com/nightgopher/easyagent/internal/app"
+	"github.com/nightgopher/easyagent/internal/command"
 	"github.com/nightgopher/easyagent/internal/mode"
 	userprofile "github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
@@ -160,6 +161,9 @@ func main() {
 	profilePath := filepath.Join(cfg.DataDir, "user_profile.json")
 	userProfile := userprofile.NewStore(profilePath)
 
+	// Personal command center (spaces/goals/results), state under DataDir.
+	commandStore := command.NewStore(cfg.DataDir)
+
 	// Resolve KB repo path from config (default: ~/agent-lessons)
 	kbRepoPath := cfg.KBRepoPath
 	if kbRepoPath == "" {
@@ -175,6 +179,7 @@ func main() {
 		SkillDirs:   skillDirs(*skillDir),
 		Application: coding.NewCodingApplication(cfg),
 		Profile:     userProfile,
+		Command:     commandStore,
 		Applications: map[string]runtime.Application{
 			"coding": coding.NewCodingApplication(cfg),
 			"kb":     kbapp.NewKBApplicationWithProfile(cfg, kbRepoPath, userProfile),
@@ -205,6 +210,14 @@ func main() {
 		must(mode.NewPrintMode(sess).Run(ctx, input))
 
 	case "serve":
+		// Personal command center: background discovery loop + desktop
+		// notification on new inbox items. Process-lifetime goroutines.
+		if cs := application.Command(); cs != nil {
+			if hook := command.DesktopNotifier(); hook != nil {
+				cs.SetInboxHook(hook)
+			}
+			command.StartAutoScan(context.Background(), cs, command.ScanIntervalFromEnv(), command.ExecGit)
+		}
 		cmds := buildSlashRegistry(application.LoopManager())
 		srv := mode.NewServeMode(application, cmds)
 		slog.Info("starting easyagent server", "listen", *listen)

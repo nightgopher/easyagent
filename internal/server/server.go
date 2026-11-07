@@ -282,6 +282,9 @@ func (s *Server) Handler() http.Handler {
 	// User profile endpoints
 	s.registerProfileRoutes(restMux)
 
+	// Personal command center endpoints (spaces/goals/results/inbox)
+	s.registerCommandRoutes(restMux)
+
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
 
@@ -319,6 +322,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/tools", restHandler)
 	topMux.Handle("/tools/", restHandler)
 	topMux.Handle("/commands", restHandler)
+	topMux.Handle("/command", restHandler)
+	topMux.Handle("/command/", restHandler)
 	topMux.Handle("/mcp", restHandler)
 	topMux.Handle("/mcp/", restHandler)
 	topMux.Handle("/applications", restHandler)
