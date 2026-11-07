@@ -77,6 +77,7 @@ fun SessionsScreen(
     onToggleKeepAlive: (Boolean) -> Unit,
     onShares: () -> Unit = {},
     pendingShares: Int = 0,
+    onCommand: () -> Unit = {},
 ) {
     val hosts by connections.state.collectAsStateWithLifecycle()
     val taskStates by client.taskStates.collectAsStateWithLifecycle()
@@ -156,6 +157,7 @@ fun SessionsScreen(
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         DropdownMenuItem(text = { Text("收件箱") }, onClick = { menuOpen = false; inbox = true })
+                        DropdownMenuItem(text = { Text("指挥台") }, onClick = { menuOpen = false; onCommand() })
                         if (pendingShares > 0) DropdownMenuItem(text = { Text("待处理分享（$pendingShares）") }, onClick = { menuOpen = false; onShares() })
                         DropdownMenuItem(
                             text = { Text(if (showArchived) "隐藏已归档" else "显示已归档（${archived.size}）") },
