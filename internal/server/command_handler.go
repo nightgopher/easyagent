@@ -295,7 +295,7 @@ func (s *Server) commandDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// 派发成功：后台每 20s 扫一次仓库，持续 15 分钟，结果自动进收件箱
-	go func() {
+	go func() { //nolint:gosec // 有意脱离请求生命周期：扫描在派发返回后继续 15 分钟
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		defer cancel()
 		ticker := time.NewTicker(20 * time.Second)

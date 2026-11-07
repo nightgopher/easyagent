@@ -17,7 +17,7 @@ type GitRunner func(ctx context.Context, repoPath string, args ...string) (strin
 // ExecGit runs git in repoPath via os/exec.
 func ExecGit(ctx context.Context, repoPath string, args ...string) (string, error) {
 	full := append([]string{"-C", repoPath}, args...)
-	cmd := exec.CommandContext(ctx, "git", full...)
+	cmd := exec.CommandContext(ctx, "git", full...) //nolint:gosec // 子命令全部来自内部调用点，repoPath 已由调用方校验
 	out, err := cmd.Output()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {

@@ -23,7 +23,7 @@ func DesktopNotifier() InboxHook {
 		body = strings.ReplaceAll(body, "\\", "")
 		body = strings.ReplaceAll(body, `"`, "'")
 		script := fmt.Sprintf(`display notification "%s" with title "%s" sound name "Glass"`, body, title)
-		_ = exec.Command("osascript", "-e", script).Start()
+		_ = exec.Command("osascript", "-e", script).Start() //nolint:gosec // 文案经转义清洗，仅本机通知
 	}
 }
 

@@ -72,18 +72,19 @@ func cdpPageWS(ctx context.Context) (string, error) {
 func cdpEvaluate(ctx context.Context, wsURL, expr string) (string, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	conn, _, err := websocket.DefaultDialer.DialContext(dialCtx, wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.DialContext(dialCtx, wsURL, nil)
 	if err != nil {
 		return "", err
 	}
 	defer conn.Close()
+	defer func() { _ = resp.Body.Close() }() // 升级响应体按 bodyclose 要求关闭
 	_ = conn.WriteJSON(map[string]any{
 		"id":     1,
 		"method": "Runtime.evaluate",
 		"params": map[string]any{
-			"expression":   expr,
+			"expression":    expr,
 			"returnByValue": true,
-			"awaitPromise": true,
+			"awaitPromise":  true,
 		},
 	})
 	deadline := time.Now().Add(15 * time.Second)
@@ -119,7 +120,7 @@ func cdpEvaluate(ctx context.Context, wsURL, expr string) (string, error) {
 
 // codexTaskRunning 通过 AX 检查 Codex 是否有任务在跑（运行中界面有 Stop 按钮）。
 func codexTaskRunning(bin, app string) bool {
-	out, err := exec.Command(bin, "snapshot", "--app", app, "-i", "--compact", "--max-depth", "18").Output()
+	out, err := exec.Command(bin, "snapshot", "--app", app, "-i", "--compact", "--max-depth", "18").Output() //nolint:gosec // bin 与参数均来自本机装配，非外部输入
 	if err != nil {
 		return false
 	}
@@ -134,13 +135,13 @@ func (d *Dispatcher) ensureCDP(ctx context.Context) (string, bool, error) {
 		return ws, false, nil
 	}
 	if codexTaskRunning(d.Bin, d.App) {
-		return "", false, fmt.Errorf("Codex 桌面版有任务正在执行，不能带调试端口重启；等它完成后再派发")
+		return "", false, fmt.Errorf("有 Codex 任务正在执行，不能带调试端口重启；等它完成后再派发")
 	}
 	if err := exec.Command("osascript", "-e", `tell application "`+cdpAppLong+`" to quit`).Run(); err != nil {
 		return "", false, fmt.Errorf("退出 %s: %v", cdpAppLong, err)
 	}
 	time.Sleep(2500 * time.Millisecond)
-	if err := exec.Command("open", "-a", cdpAppLong, "--args",
+	if err := exec.Command("open", "-a", cdpAppLong, "--args", //nolint:gosec // cdpAppLong 是编译期常量
 		"--remote-debugging-port", strconv.Itoa(cdpFlagPort)).Run(); err != nil {
 		return "", false, fmt.Errorf("带调试端口启动 %s: %v", cdpAppLong, err)
 	}

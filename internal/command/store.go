@@ -54,7 +54,7 @@ func (s *Store) load() {
 
 // save persists atomically: write temp file, then rename over the target.
 func (s *Store) save() error {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o750); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(s.state, "", "  ")

@@ -162,7 +162,7 @@ type adNode struct {
 func (d *Dispatcher) ad(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dialTO)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, d.Bin, args...)
+	cmd := exec.CommandContext(ctx, d.Bin, args...) //nolint:gosec // Bin 装配自本机安装路径，参数为固定 CLI 序列
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
