@@ -20,6 +20,38 @@ func TestEstimateTokens(t *testing.T) {
 	assert.Less(t, tokens, 100)
 }
 
+func TestEstimateTokensForModelMatchesProviderThinkingRepresentation(t *testing.T) {
+	thinking := strings.Repeat("r", 4000)
+	msg := ai.AssistantMessage{
+		Text: "answer", Thinking: thinking,
+		ThinkingBlocks: []ai.ThinkingBlock{{Type: "thinking", Thinking: thinking, Signature: "signature"}},
+	}
+	openai := EstimateTokensForModel([]ai.Message{msg}, ai.Model{Provider: "openai"})
+	anthropic := EstimateTokensForModel([]ai.Message{msg}, ai.Model{Provider: "anthropic"})
+	deepv := EstimateTokensForModel([]ai.Message{msg}, ai.Model{Provider: "deepv"})
+	assert.Less(t, openai, 10, "OpenAI does not serialize stored thinking")
+	assert.InDelta(t, 1000, anthropic, 10, "Anthropic serializes the block, not both copies")
+	assert.InDelta(t, 1000, deepv, 10, "DeepV serializes the reasoning block")
+
+	msg.ThinkingBlocks = nil
+	assert.Less(t, EstimateTokensForModel([]ai.Message{msg}, ai.Model{Provider: "anthropic"}), 10,
+		"Anthropic does not serialize an aggregate without a block")
+	assert.InDelta(t, 1000, EstimateTokensForModel([]ai.Message{msg}, ai.Model{Provider: "deepv"}), 10,
+		"DeepV converts an aggregate to a block")
+}
+
+func TestSplitMessagesForModelDoesNotEvictOpenAIReasoningOnly(t *testing.T) {
+	msgs := []ai.Message{
+		ai.NewTextUserMessage("old task"),
+		ai.AssistantMessage{Text: "previous answer"},
+		ai.NewTextUserMessage("current task"),
+		ai.AssistantMessage{Text: "current answer", Thinking: strings.Repeat("r", 4000)},
+	}
+	history, recent := SplitMessagesForModel(msgs, 20, ai.Model{Provider: "openai"})
+	assert.Empty(t, history)
+	assert.Equal(t, msgs, recent, "unsent reasoning should not evict recent messages")
+}
+
 func TestShouldCompact(t *testing.T) {
 	settings := DefaultSettings()
 
@@ -76,6 +108,9 @@ func TestSummarizePrompt(t *testing.T) {
 	assert.Contains(t, prompt, "Build a web server")
 	assert.Contains(t, prompt, "I'll create a web server")
 	assert.Contains(t, prompt, "Goal")
+	assert.Contains(t, prompt, "acceptance criteria")
+	assert.Contains(t, prompt, "verified results")
+	assert.Contains(t, prompt, "Do not invent missing source details")
 }
 
 func TestSummarizePrompt_WithCustomInstructions(t *testing.T) {

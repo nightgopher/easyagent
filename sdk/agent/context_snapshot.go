@@ -58,7 +58,7 @@ func (a *Agent) ContextSnapshot(ctx context.Context) (ContextSnapshot, error) {
 	return ContextSnapshot{Model: req.Model, System: req.System, Messages: messages, Tools: tools, Usage: usage, Compactions: records}, nil
 }
 
-func compactionInfo(trigger, instructions string, history []ai.Message, summary string, recent []ai.Message) *session.CompactionInfo {
+func compactionInfo(trigger, instructions string, history []ai.Message, summary string, recent []ai.Message, model ai.Model) *session.CompactionInfo {
 	after := append([]ai.Message{ai.NewTextUserMessage("Context summary from previous conversation:\n\n" + summary)}, recent...)
-	return &session.CompactionInfo{Trigger: trigger, Instructions: instructions, MessagesBefore: len(history), MessagesAfter: len(after), TokensBefore: compaction.EstimateTokens(history), TokensAfter: compaction.EstimateTokens(after)}
+	return &session.CompactionInfo{Trigger: trigger, Instructions: instructions, MessagesBefore: len(history), MessagesAfter: len(after), TokensBefore: compaction.EstimateTokensForModel(history, model), TokensAfter: compaction.EstimateTokensForModel(after, model)}
 }

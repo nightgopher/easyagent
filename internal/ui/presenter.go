@@ -97,6 +97,7 @@ func convertEvent(event agent.AgentStreamEvent) DisplayEvent {
 			Type:    DisplayLoopDetected,
 			Tool:    event.ToolName,
 			Content: fmt.Sprintf("%d", event.RepeatCount),
+			Detail:  event.LoopKind,
 		}
 
 	case agent.StreamEventMicroCompacted:
@@ -158,7 +159,11 @@ func (p *Presenter) render(de DisplayEvent) {
 		}
 
 	case DisplayLoopDetected:
-		fmt.Fprintf(p.w, "  ⚠ 检测到循环：%s 连续重复 %s 次\n", de.Tool, de.Content)
+		if de.Detail == agent.LoopDetectionExploration {
+			fmt.Fprintf(p.w, "  ⚠ 连续 %s 次只读探索中存在重复读取，将提示 Agent 检查下一步\n", de.Content)
+		} else {
+			fmt.Fprintf(p.w, "  ⚠ 检测到循环：%s 连续重复 %s 次\n", de.Tool, de.Content)
+		}
 
 	case DisplayMicroCompacted:
 		fmt.Fprintf(p.w, "  ↘ 已清理 %s 个旧工具结果以节省上下文\n", de.Content)

@@ -10,14 +10,25 @@ import (
 // 不要求精确（不需要完整 tokenizer），按 4 字符 ≈ 1 token 估算。
 // 用于触发 ShouldCompact 前的快速判断。
 func EstimateTokens(msgs []ai.Message) int {
+	return estimateTokens(msgs, "")
+}
+
+// EstimateTokensForModel estimates the messages actually serialized by the
+// selected provider. In particular, OpenAI-compatible requests do not send
+// stored reasoning, whereas Anthropic and DeepV send thinking blocks.
+func EstimateTokensForModel(msgs []ai.Message, model ai.Model) int {
+	return estimateTokens(msgs, model.Provider)
+}
+
+func estimateTokens(msgs []ai.Message, provider string) int {
 	total := 0
 	for _, msg := range msgs {
-		total += estimateMessageTokens(msg)
+		total += estimateMessageTokensForProvider(msg, provider)
 	}
 	return total
 }
 
-func estimateMessageTokens(msg ai.Message) int {
+func estimateMessageTokensForProvider(msg ai.Message, provider string) int {
 	var text string
 	imageTokens := 0
 	switch m := msg.(type) {
@@ -32,7 +43,28 @@ func estimateMessageTokens(msg ai.Message) int {
 		}
 	case ai.AssistantMessage:
 		text = m.Text
-		if m.Thinking != "" {
+		switch provider {
+		case "openai":
+			// buildOpenAIRequest serializes only Text and ToolCalls.
+		case "anthropic":
+			for _, block := range m.ThinkingBlocks {
+				text += block.Thinking + block.Signature + block.Data
+			}
+		case "deepv":
+			// DeepV drops assistant messages with no text or tool calls.
+			if m.Text != "" || len(m.ToolCalls) > 0 {
+				if len(m.ThinkingBlocks) == 0 {
+					text += m.Thinking
+				} else {
+					for _, block := range m.ThinkingBlocks {
+						if block.Type == "thinking" {
+							text += block.Thinking
+						}
+					}
+				}
+			}
+		default:
+			// Preserve the conservative legacy estimate for custom providers.
 			text += m.Thinking
 		}
 		for _, tc := range m.ToolCalls {
@@ -62,6 +94,16 @@ func EstimateTextTokens(text string) int {
 //
 // 注意：assistant 带 tool_call 时不算安全边界（它的 tool_result 还在后面）。
 func SplitMessages(msgs []ai.Message, keepRecentTokens int) (history []ai.Message, recent []ai.Message) {
+	return splitMessages(msgs, keepRecentTokens, "")
+}
+
+// SplitMessagesForModel uses the same provider-aware estimate as the request
+// budget, while preserving complete assistant/tool-result boundaries.
+func SplitMessagesForModel(msgs []ai.Message, keepRecentTokens int, model ai.Model) (history []ai.Message, recent []ai.Message) {
+	return splitMessages(msgs, keepRecentTokens, model.Provider)
+}
+
+func splitMessages(msgs []ai.Message, keepRecentTokens int, provider string) (history []ai.Message, recent []ai.Message) {
 	if len(msgs) == 0 {
 		return nil, nil
 	}
@@ -71,7 +113,7 @@ func SplitMessages(msgs []ai.Message, keepRecentTokens int) (history []ai.Messag
 	cutIndex := len(msgs)
 
 	for i := len(msgs) - 1; i >= 0; i-- {
-		msgTokens := estimateMessageTokens(msgs[i])
+		msgTokens := estimateMessageTokensForProvider(msgs[i], provider)
 		if recentTokens+msgTokens > keepRecentTokens {
 			break
 		}
@@ -118,11 +160,11 @@ func SummarizePrompt(history []ai.Message, customInstructions string) string {
 	var b strings.Builder
 	b.WriteString("Summarize the following conversation history. ")
 	b.WriteString("Focus on:\n")
-	b.WriteString("1. Goal: What was the user trying to accomplish?\n")
-	b.WriteString("2. Progress: What has been done so far?\n")
-	b.WriteString("3. Key Decisions: Any important choices made?\n")
-	b.WriteString("4. Next Steps: What remains to be done?\n")
-	b.WriteString("5. Critical Context: Any important details that must be preserved?\n")
+	b.WriteString("1. Goal: Preserve the user's current goal, explicit acceptance criteria, constraints, and later corrections.\n")
+	b.WriteString("2. Progress: Separate actual changes and verified results from plans, unfinished work, and unverified checks.\n")
+	b.WriteString("3. Key Decisions: Preserve important choices and unresolved questions.\n")
+	b.WriteString("4. Next Steps: State the next concrete action and any blocker.\n")
+	b.WriteString("5. Critical Context: Preserve relevant file paths and available function signatures. Do not invent missing source details; identify what must be reread.\n")
 	if customInstructions != "" {
 		b.WriteString("\nAdditional instructions from user:\n")
 		b.WriteString(customInstructions)

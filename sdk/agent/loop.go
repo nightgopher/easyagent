@@ -44,6 +44,7 @@ type turnResult struct {
 	assistant ai.AssistantMessage
 	action    turnAction
 	followUp  []ai.Message // action == actionFollowUp 时有值
+	reminders []ai.Message // injected after tool results and before the next request
 	goalDone  bool         // true = Agent 明确表示目标已完成
 }
 
@@ -117,6 +118,9 @@ func runAgentLoop(ctx context.Context, a *Agent, provider interface {
 		if effectiveMaxTurns > 0 && turns >= effectiveMaxTurns {
 			return lastAssistant, nil
 		}
+		// Steering received during a tool or model call takes effect at the next
+		// complete tool-result boundary, after any internal reminder.
+		pending = append(pending, a.steeringQueue.Drain()...)
 		turns++
 		a.emit(ctx, EventTurnStart{})
 
@@ -136,10 +140,17 @@ func runAgentLoop(ctx context.Context, a *Agent, provider interface {
 		switch result.action {
 		case actionContinue:
 			// 内层循环继续（tool call 后继续）
+			pending = result.reminders
 		case actionFollowUp:
 			pending = result.followUp
 		// 外层循环继续
 		case actionDone:
+			// A user may have steered while the final model response was streaming.
+			// Give that message a turn instead of leaving it for a later prompt.
+			if steering := a.steeringQueue.Drain(); len(steering) > 0 {
+				pending = steering
+				continue
+			}
 			// Goal-driven loop：如果有活跃目标且未被标记完成，注入 follow-up 继续
 			goalLog("[goal-debug] actionDone: goal=%q goalDone=%v turns=%d\n", a.goal, result.goalDone, turns)
 			if a.goal != "" && !result.goalDone {
@@ -277,15 +288,25 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 		return turnResult{assistant: message}, history, err
 	}
 
-	// 循环检测：遍历本轮 tool calls 更新检测器，命中则发事件 + 注入提醒（柔性，不中断）。
+	// Evaluate every call, including calls after the first detected repeat in a
+	// parallel batch. Deliver a single soft reminder after all results are closed.
+	var reminders []ai.Message
 	if a.loopDetectSettings.Enabled && len(message.ToolCalls) > 0 {
 		for _, tc := range message.ToolCalls {
-			if a.loopDetect.observe(a.loopDetectSettings.Threshold, tc.Name, tc.Args) {
-				a.emit(ctx, EventLoopDetected{ToolName: tc.Name, RepeatCount: a.loopDetect.repeatCount})
+			exact := a.loopDetect.observe(a.loopDetectSettings.Threshold, tc.Name, tc.Args)
+			exploration := a.loopDetect.observeExploration(tc.Name, tc.Args)
+			if len(reminders) > 0 {
+				continue
+			}
+			if exact && a.loopDetect.repeatCount%a.loopDetectSettings.Threshold == 0 {
+				a.emit(ctx, EventLoopDetected{ToolName: tc.Name, RepeatCount: a.loopDetect.repeatCount, Kind: LoopDetectionExact})
 				reminder := renderReminder(a.loopDetectSettings.ReminderTemplate, tc.Name, tc.Args, a.loopDetect.repeatCount)
-				a.followUpQueue.Enqueue(ai.NewTextUserMessage(reminder))
+				reminders = append(reminders, ai.NewTextUserMessage(reminder))
 				slog.Info("loop detected", "tool", tc.Name, "repeat", a.loopDetect.repeatCount)
-				break // 一轮内只注入一次提醒
+			} else if exploration {
+				a.emit(ctx, EventLoopDetected{ToolName: tc.Name, RepeatCount: a.loopDetect.readOnlyCalls, Kind: LoopDetectionExploration})
+				reminders = append(reminders, ai.NewTextUserMessage("Several recent file reads overlap and no other action has occurred. Check what specific information is still missing. If the user's task calls for changes and the next step is clear, proceed with that change; otherwise continue the necessary investigation or explain the blocker."))
+				slog.Info("repeated exploration detected", "calls", a.loopDetect.readOnlyCalls)
 			}
 		}
 	}
@@ -321,7 +342,7 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 		if err := ctx.Err(); err != nil {
 			return turnResult{assistant: message}, history, err
 		}
-		return turnResult{assistant: message, action: actionContinue}, history, nil
+		return turnResult{assistant: message, action: actionContinue, reminders: reminders}, history, nil
 	}
 	a.emit(ctx, EventTurnEnd{Message: message, ToolResults: toolResults})
 
@@ -361,7 +382,6 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 	// 与桌面上下文用量使用同一估算，包含系统提示词和工具定义。
 	requestUsage := estimateContext(a.llmRequest(history), ai.Usage{})
 	contextTokens := requestUsage.EstimatedTokens
-	messageTokens := requestUsage.Messages
 	contextWindow := a.model.ContextWindow
 	if contextWindow <= 0 {
 		contextWindow = 128000
@@ -373,9 +393,10 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 	// 一旦到达高水位，微压缩不得用少量节省延后深度压缩。
 	fullCompact := a.summarizeFunc != nil && compaction.ShouldCompact(contextTokens, contextWindow, a.compactionSettings)
 	if !fullCompact && compaction.ShouldMicroCompact(contextTokens, contextWindow, a.compactionSettings) {
-		newHistory, cleared := compaction.MicroCompact(append([]ai.Message(nil), history...), a.compactionSettings.MicroKeepRecent)
+		keepTokens := min(a.compactionSettings.MicroKeepTokens, contextWindow/4)
+		newHistory, cleared := compaction.MicroCompactWithBudget(append([]ai.Message(nil), history...), a.compactionSettings.MicroKeepRecent, keepTokens)
 		if cleared > 0 {
-			tokensAfter := contextTokens - messageTokens + compaction.EstimateTokens(newHistory)
+			tokensAfter := estimateContext(a.llmRequest(newHistory), ai.Usage{}).EstimatedTokens
 			savings := contextTokens - tokensAfter
 			minSavings := a.compactionSettings.MinSavingsTokens
 			if minSavings <= 0 {
@@ -390,7 +411,18 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 						return history
 					}
 				}
-				a.emit(ctx, EventMicroCompacted{ClearedResults: cleared, TokensBefore: contextTokens, TokensAfter: tokensAfter})
+				clearedIDs := make([]string, 0, cleared)
+				for i, before := range history {
+					old, ok := before.(ai.ToolResultMessage)
+					if !ok {
+						continue
+					}
+					after := newHistory[i].(ai.ToolResultMessage)
+					if old.Content != after.Content || len(old.Images) != len(after.Images) {
+						clearedIDs = append(clearedIDs, old.ToolCallID)
+					}
+				}
+				a.emit(ctx, EventMicroCompacted{ClearedResults: cleared, TokensBefore: contextTokens, TokensAfter: tokensAfter, ClearedToolCallIDs: clearedIDs})
 				history = newHistory
 				contextTokens = tokensAfter // 重算：Micro 后可能降到全量阈值以下
 			}
@@ -403,7 +435,7 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 	}
 
 	// 执行压缩
-	historyPart, recentPart := compaction.SplitMessages(history, a.compactionSettings.KeepRecentTokens)
+	historyPart, recentPart := compaction.SplitMessagesForModel(history, a.compactionSettings.KeepRecentTokens, a.model)
 	if len(historyPart) == 0 {
 		return history
 	}
@@ -422,7 +454,7 @@ func (a *Agent) maybeCompact(ctx context.Context, history []ai.Message) []ai.Mes
 		return history
 	}
 
-	info := compactionInfo("automatic", "", history, summary, recentPart)
+	info := compactionInfo("automatic", "", history, summary, recentPart, a.model)
 	// Persist compaction entry to session storage so it survives across prompts.
 	if a.session != nil {
 		if pErr := a.session.AppendCompactionKeeping(ctx, summary, recentPart, info); pErr != nil {

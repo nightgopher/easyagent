@@ -550,7 +550,7 @@ func (m *TuiModel) startAgentStream(parent context.Context, input string, result
 				msg = CompactionMsg{Kind: "micro", Summary: fmt.Sprintf("微压缩：清理 %d 个旧工具输出；消息估算 %d → %d tokens（后续请求沿用清理结果）", event.ClearedCount, event.TokensBefore, event.TokensAfter)}
 
 			case agent.StreamEventLoopDetected:
-				msg = LoopDetectedMsg{Tool: event.ToolName, Count: event.RepeatCount}
+				msg = LoopDetectedMsg{Tool: event.ToolName, Count: event.RepeatCount, Kind: event.LoopKind}
 
 			case agent.StreamEventError:
 				runErr = fmt.Errorf("%s", event.Error)

@@ -34,7 +34,7 @@ func estimateContext(req ai.StreamRequest, usage ai.Usage) ContextUsage {
 	if req.System != "" {
 		system = compaction.EstimateTextTokens(req.System)
 	}
-	messages := compaction.EstimateTokens(req.Messages)
+	messages := compaction.EstimateTokensForModel(req.Messages, req.Model)
 	_, known := models.LookupContextWindow(req.Model.ID)
 	if req.Model.ContextWindow <= 0 {
 		req.Model.ContextWindow = models.ContextWindow(req.Model.ID)

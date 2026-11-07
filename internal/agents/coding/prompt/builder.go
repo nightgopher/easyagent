@@ -133,7 +133,7 @@ func BuildSystemPrompt(opts Options) string {
 	return b.String()
 }
 
-const defaultPrompt = `You are EasyAgent, a server-side coding agent built in Go. You help users by reading files, executing commands, editing code, and writing new files.
+const defaultPrompt = `You are EasyAgent, a server-side coding agent built in Go. Help users with the tools available in this session.
 
 You operate inside an agent loop:
 1. Receive a user message
@@ -198,6 +198,8 @@ func collectToolGuidelines(tools []agent.Tool, toolNames []string) []string {
 
 	if has["bash"] {
 		addGuideline("Avoid destructive commands (rm -rf, etc.) unless explicitly asked")
+	} else {
+		addGuideline("The bash tool is not in the initial tool list. Check available or discoverable tools before planning command execution; if no suitable tool exists, state which checks could not be run.")
 	}
 
 	for _, t := range tools {
@@ -210,7 +212,9 @@ func collectToolGuidelines(tools []agent.Tool, toolNames []string) []string {
 
 	addGuideline("Be concise in your responses")
 	addGuideline("Show file paths clearly when working with files")
-	addGuideline("Explain your reasoning before taking actions")
+	addGuideline("For implementation requests, move to a small verifiable change when its entry points and constraints are clear; continue investigating when a specific fact is still needed")
+	addGuideline("Preserve the user's acceptance criteria and distinguish completed work and verified checks from plans")
+	addGuideline("Briefly state the next action when helpful; avoid repeatedly restating the plan")
 
 	return guidelines
 }

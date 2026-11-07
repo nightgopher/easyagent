@@ -579,7 +579,14 @@ func convertToAnthropicMessages(msgs []ai.Message) []anthropicMessage {
 			if len(blocks) == 0 {
 				blocks = append(blocks, anthropicContentBlock{Type: "text", Text: "..."})
 			}
-			result = append(result, anthropicMessage{Role: "user", Content: blocks})
+			// A steering message can follow tool results immediately. Keep all
+			// consecutive user blocks in the same turn so tool results remain
+			// paired with the preceding assistant tool calls.
+			if len(result) > 0 && result[len(result)-1].Role == "user" {
+				result[len(result)-1].Content = append(result[len(result)-1].Content, blocks...)
+			} else {
+				result = append(result, anthropicMessage{Role: "user", Content: blocks})
+			}
 
 		case ai.AssistantMessage:
 			var blocks []anthropicContentBlock

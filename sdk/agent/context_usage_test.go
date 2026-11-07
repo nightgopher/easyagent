@@ -2,12 +2,18 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/compaction"
 	"github.com/nightgopher/easyagent/sdk/session"
 	"github.com/stretchr/testify/require"
 )
@@ -17,6 +23,52 @@ type gatedThinkingProvider struct{ finish chan struct{} }
 func (*gatedThinkingProvider) Name() string { return "gated-thinking" }
 func (p *gatedThinkingProvider) StreamSimple(ctx context.Context, req ai.SimpleStreamRequest) (*ai.EventStream, error) {
 	return p.Stream(ctx, ai.StreamRequest{Model: req.Model, Messages: req.Messages})
+}
+
+func TestOpenAIUnsentThinkingDoesNotTriggerCompaction(t *testing.T) {
+	var body []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
+		fmt.Fprint(w, "data: {\"id\":\"1\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	ctx := context.Background()
+	storage := session.NewJSONLStorage(filepath.Join(t.TempDir(), "session.jsonl"))
+	require.NoError(t, storage.Init())
+	defer storage.Close()
+	sess := session.New(storage)
+	require.NoError(t, sess.AppendMessage(ctx, ai.NewTextUserMessage("implement task")))
+	require.NoError(t, sess.AppendMessage(ctx, ai.AssistantMessage{Text: "planning", Thinking: "REASONING_MARKER_" + strings.Repeat("x", 300000)}))
+	for i := 0; i < 7; i++ {
+		id := fmt.Sprintf("read-%d", i)
+		require.NoError(t, sess.AppendMessage(ctx, ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: id, Name: "read", Args: `{}`}}}))
+		size := 100
+		if i < 2 {
+			size = 10000
+		}
+		require.NoError(t, sess.AppendMessage(ctx, ai.ToolResultMessage{ToolCallID: id, Content: fmt.Sprintf("SOURCE_%d_", i) + strings.Repeat("y", size)}))
+	}
+	reg := providers.NewRegistry()
+	reg.Register(providers.NewOpenAIProvider("test-key", server.URL))
+	ag := New(Options{Registry: reg, Model: ai.Model{ID: "test", Provider: "openai", ContextWindow: 128000}, Session: sess, CompactionSettings: compaction.DefaultSettings()})
+	usage, err := ag.ContextUsage(ctx)
+	require.NoError(t, err)
+	require.Less(t, usage.EstimatedTokens, 20000, "the estimate must exclude the unsent reasoning")
+	micro := 0
+	ag.Subscribe(func(_ context.Context, event AgentEvent) {
+		if _, ok := event.(EventMicroCompacted); ok {
+			micro++
+		}
+	})
+	_, err = ag.Prompt(ctx, ai.NewTextUserMessage("continue"))
+	require.NoError(t, err)
+	require.Zero(t, micro, "reasoning omitted from the wire must not evict source")
+	require.NotContains(t, string(body), "REASONING_MARKER_")
+	require.Contains(t, string(body), "SOURCE_0_")
 }
 func (p *gatedThinkingProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error) {
 	stream := ai.NewEventStream(8)

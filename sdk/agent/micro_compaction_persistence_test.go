@@ -55,6 +55,7 @@ func TestMicroCompactionSurvivesNextPromptAndRestart(t *testing.T) {
 			if event.Type == StreamEventMicroCompacted {
 				micro++
 				require.Equal(t, wantCleared, event.ClearedCount)
+				require.Len(t, event.ClearedToolCallIDs, wantCleared)
 			}
 			if event.Type == StreamEventDone {
 				done = true

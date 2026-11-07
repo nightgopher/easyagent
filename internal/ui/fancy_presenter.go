@@ -145,7 +145,11 @@ func (p *FancyPresenter) Present(event agent.AgentStreamEvent) {
 		}
 
 	case agent.StreamEventLoopDetected:
-		fmt.Fprintln(p.w, fancyStyleWarn.Render(fmt.Sprintf("  ⚠ 检测到循环：%s 连续重复 %d 次", event.ToolName, event.RepeatCount)))
+		if event.LoopKind == agent.LoopDetectionExploration {
+			fmt.Fprintln(p.w, fancyStyleWarn.Render(fmt.Sprintf("  ⚠ 连续 %d 次只读探索中存在重复读取", event.RepeatCount)))
+		} else {
+			fmt.Fprintln(p.w, fancyStyleWarn.Render(fmt.Sprintf("  ⚠ 检测到循环：%s 连续重复 %d 次", event.ToolName, event.RepeatCount)))
+		}
 
 	case agent.StreamEventMicroCompacted:
 		fmt.Fprintln(p.w, fancyStyleDim.Render(fmt.Sprintf("  ↘ 已清理 %d 个旧工具结果以节省上下文", event.ClearedCount)))

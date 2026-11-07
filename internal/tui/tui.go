@@ -452,9 +452,13 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case LoopDetectedMsg:
+		content := fmt.Sprintf("⚠️ Loop detected: %s (%d repeats)", msg.Tool, msg.Count)
+		if msg.Kind == agent.LoopDetectionExploration {
+			content = fmt.Sprintf("⚠️ Repeated reads during %d read-only tool calls; checking next step", msg.Count)
+		}
 		m.messages = append(m.messages, ChatMessage{
 			Role:      "system",
-			Content:   fmt.Sprintf("⚠️ Loop detected: %s (%d repeats)", msg.Tool, msg.Count),
+			Content:   content,
 			Timestamp: time.Now(),
 		})
 		m.viewport.SetMessages(m.messages)
