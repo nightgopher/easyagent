@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.ui.ChatScreen
+import com.hwj.easyagent.mobile.ui.CommandScreen
 import com.hwj.easyagent.mobile.ui.ConnectionScreen
 import com.hwj.easyagent.mobile.ui.EasyAgentTheme
 import com.hwj.easyagent.mobile.ui.EmptyHomeScreen
@@ -160,6 +161,10 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
         else -> key(current) {
             val client = requireNotNull(current)
             var chatId by rememberSaveable { mutableStateOf("") }
+            var commanding by rememberSaveable { mutableStateOf(false) }
+            if (commanding) {
+                CommandScreen(client = client.api, onBack = { commanding = false })
+            } else {
             LaunchedEffect(pendingOpen) {
                 val request = pendingOpen ?: return@LaunchedEffect
                 if (request.host == client.config.id) {
@@ -195,7 +200,9 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                     },
                     onShares = { dismissedShares = emptyList() },
                     pendingShares = shares.size,
+                    onCommand = { commanding = true },
                 )
+            }
             }
         }
     }
