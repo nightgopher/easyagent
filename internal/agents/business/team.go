@@ -99,7 +99,7 @@ var _ runtime.Application = TeamApplication{}
 // Override the promoted Application method so rebuilding a team session keeps
 // the team roster and delegation tool instead of returning a plain application.
 func (a TeamApplication) WithRuntimeOverrides(cfg config.Config) runtime.Application {
-	a.Application.Config = cfg
+	a.Config = cfg
 	return a
 }
 
