@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/nightgopher/easyagent/sdk/sessionmgr"
 	"github.com/nightgopher/easyagent/sdk/slashcmd"
@@ -53,6 +54,7 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 type CreateSessionRequest struct {
 	Channel     string `json:"channel,omitempty"`
 	AgentID     string `json:"agent_id,omitempty"`
+	TeamID      string `json:"team_id,omitempty"`
 	Cwd         string `json:"cwd,omitempty"`
 	Model       string `json:"model,omitempty"`
 	Application string `json:"application,omitempty"` // e.g. "coding", "kb"
@@ -93,6 +95,11 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.TeamID != "" {
+		s.createTeamSession(w, r, req, cfg)
+		return
+	}
+
 	cfg, deps, err := s.app.SessionSetup(r.Context(), req.Application, req.AgentID, cfg)
 	if err != nil {
 		agentDataError(w, err)
@@ -131,6 +138,47 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(SessionResponse{
+		ID:        sess.SessionID(),
+		CreatedAt: time.Now().Unix(),
+	})
+}
+
+// createTeamSession starts a session where the team's leader agent coordinates
+// its members. The team structure is frozen into the session metadata.
+func (s *Server) createTeamSession(w http.ResponseWriter, r *http.Request, req CreateSessionRequest, cfg config.Config) {
+	if req.AgentID != "" || (req.Application != "" && req.Application != "business") {
+		writeError(w, 400, "team_id cannot be combined with agent_id or another application")
+		return
+	}
+	cfg, deps, snapshot, err := s.app.TeamSessionSetup(r.Context(), req.TeamID, cfg)
+	if err != nil {
+		agentDataError(w, err)
+		return
+	}
+	if req.Cwd != "" && req.Cwd != cfg.Workspace {
+		writeError(w, 400, "use the team leader workspace or edit its configuration first")
+		return
+	}
+	// An explicit session model overrides the leader default.
+	if req.Model != "" {
+		if cfg.Provider == "anthropic" {
+			cfg.AnthropicModel = req.Model
+		} else {
+			cfg.OpenAIModel = req.Model
+		}
+	}
+	sess, err := s.app.SessionStore().Create(r.Context(), runtime.AgentSessionOptions{Config: cfg}, deps)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := s.app.SessionManager().SaveTeamSession(sess.SessionID(), sess.Workspace(), snapshot.LeaderID, snapshot.ID, snapshot.Name, snapshot); err != nil {
+		_ = s.app.SessionStore().Delete(sess.SessionID())
+		writeError(w, http.StatusInternalServerError, "cannot save session metadata")
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(SessionResponse{
 		ID:        sess.SessionID(),

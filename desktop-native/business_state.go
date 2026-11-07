@@ -324,6 +324,12 @@ func (a *preview) publishAgentMemory() {
 }
 
 func (a *preview) sessionApplicationLabel(s *session) string {
+	if s.TeamID != "" {
+		if s.TeamName != "" {
+			return "团队：" + s.TeamName
+		}
+		return "团队会话"
+	}
 	if s.AgentID != "" {
 		return a.businessAgentName(s.AgentID)
 	}

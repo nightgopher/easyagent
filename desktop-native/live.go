@@ -605,6 +605,8 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			s.Project = filepath.Base(s.Workspace)
 			s.Application = str(m["application"])
 			s.AgentID = str(m["agent_id"])
+			s.TeamID = str(m["team_id"])
+			s.TeamName = str(m["team_name"])
 			s.Archived = boolean(m["archived"])
 			s.Pinned = boolean(m["pinned"])
 			next = append(next, s)
@@ -661,6 +663,10 @@ func (a *preview) loadSession(s *session) {
 	id := s.RemoteID
 	a.refreshRunResults(s)
 	a.loadBackgroundTasks(s)
+	if s.TeamID != "" {
+		// Team roster for the session panel; delegation states come from events.
+		a.resource("business-teams", "/teams")
+	}
 	a.call("GET", sessionPath(id)+"/run", nil, func(v any) {
 		data, _ := json.Marshal(v)
 		var e envelope

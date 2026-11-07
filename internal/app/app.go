@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/nightgopher/easyagent/internal/agents/business"
 	"github.com/nightgopher/easyagent/internal/agents/coding"
 	"github.com/nightgopher/easyagent/internal/command"
 	"github.com/nightgopher/easyagent/internal/easycode"
@@ -201,6 +202,20 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 	if err != nil {
 		return nil, err
 	}
+	// Team sessions reload from the snapshot frozen at creation, so later team
+	// edits never change what an existing session runs with.
+	var teamSnapshot business.TeamSnapshot
+	if err := a.sessionMgr.TeamSessionMeta(sessionID, &teamSnapshot); err == nil && teamSnapshot.ID != "" && teamSnapshot.LeaderID == agentID {
+		cfg, deps, err := a.TeamSessionSetupFromSnapshot(ctx, teamSnapshot, opts.Config)
+		opts.Config = cfg
+		if err != nil {
+			return nil, err
+		}
+		if workspace != "" && opts.Config.Workspace != workspace {
+			return nil, fmt.Errorf("agent workspace changed; start a new session")
+		}
+		return a.sessionStore.Load(ctx, sessionID, opts, deps)
+	}
 	if application == retiredMusicApplication && agentID == "" {
 		deps := a.deps()
 		deps.Application = retiredMusicApp{}
@@ -334,6 +349,12 @@ func (a *App) Close() error {
 // SetExternalTools stores externally registered tool definitions (e.g. from bridge).
 func (a *App) SetExternalTools(tools []agent.ExternalToolDef) {
 	a.extraTools = tools
+}
+
+// RegisterProvider adds or replaces a provider in the app registry. Aimed at
+// tests and embedders that supply their own in-process transport.
+func (a *App) RegisterProvider(p providers.Provider) {
+	a.registry.Register(p)
 }
 
 // deps constructs the Dependencies struct for AgentSession creation.

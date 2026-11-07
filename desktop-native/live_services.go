@@ -624,6 +624,9 @@ func (a *preview) settingsFormDirty() bool {
 	if a.Settings.Business.dirty() {
 		return true
 	}
+	if a.Settings.Teams.dirty() {
+		return true
+	}
 	s, l := &a.Settings, a.Live
 	switch s.Tab {
 	case "models":
@@ -669,6 +672,7 @@ func (a *preview) settingsFormDirty() bool {
 func (a *preview) discardSettingsForms() {
 	s, l := &a.Settings, a.Live
 	s.Business.closeEditors()
+	s.Teams.closeEditors()
 	if s.Tab == "models" && (s.modelForm != l.SavedModelForm || s.APIKey != "") {
 		a.clearModelCheck()
 	}

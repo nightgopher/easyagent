@@ -83,6 +83,8 @@ func (a *preview) loadSettingsPage() {
 		if s.Business.Tab == "memories" {
 			a.loadAgentMemories()
 		}
+	case "teams":
+		a.refreshTeams()
 	case "models":
 		a.refreshModels()
 		if !l.Loading["tool-discovery-save"] {
@@ -126,7 +128,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "permissions" && tab != "agents" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
+	if tab != "permissions" && tab != "agents" && tab != "teams" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -138,6 +140,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.liveRemoteAccessSettings(c)
 	case "agents":
 		a.businessSettings(c)
+	case "teams":
+		a.teamSettings(c)
 	case "memory-knowledge":
 		a.memoryKnowledgeSettings(c)
 	case "permissions":
