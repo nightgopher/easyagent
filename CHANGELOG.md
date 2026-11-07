@@ -4,6 +4,18 @@
 
 ## [Unreleased]
 
+## [v0.40.4] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码不变；v0.40.0–v0.40.3 tag 因不可变规则保留，均不发布 Release）：打包冒烟的就绪预算环境变量改用 `EASYAGENT_CORE_READY_SECONDS`（smoke 测试会清洗所有环境中的 `EA_*` 变量，EA_ 前缀永远到不了读取点）；同时让冒烟用例的运行上下文上限从同一变量推导（预算 + 15s），否则 20s 的 ctx 先到点，放宽预算无效。
+
+
+## [v0.40.3] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码不变；v0.40.0–v0.40.2 tag 因不可变规则保留，均不发布 Release）：v0.40.2 引入的打包冒烟就绪预算环境变量在 build-native.sh 中写成了 `EASYAGENT_CORE_READY_SECONDS`，与实际读取的 `EA_CORE_READY_SECONDS` 不一致，预算未生效。对齐命名。
+
+
 ## [v0.40.2] - 2026-11-06
 
 ### Development

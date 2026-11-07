@@ -254,7 +254,7 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	// busy shared desktop can exceed 15s without being broken. Real breakage
 	// never answers at all, so a longer ceiling keeps that guarantee.
 	readyBudget := 15 * time.Second
-	if v := os.Getenv("EA_CORE_READY_SECONDS"); v != "" {
+	if v := os.Getenv("EASYAGENT_CORE_READY_SECONDS"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 5 && n <= 300 {
 			readyBudget = time.Duration(n) * time.Second
 		}
