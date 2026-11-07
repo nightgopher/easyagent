@@ -4,6 +4,39 @@ import { renderMarkdown } from '../internal/web/static/js/markdown.js';
 import { filterModels, modelKey } from '../internal/web/static/js/model-picker.js';
 import { ToolDiscoverySettings } from '../internal/web/static/js/tool-discovery.js';
 import { PermissionSettings } from '../internal/web/static/js/permission-settings.js';
+import { BuiltinToolSettings } from '../internal/web/static/js/builtin-tools.js';
+
+test('built-in tool switches show effective restrictions and roll back a failed save', async () => {
+  const { api } = await import('../internal/web/static/js/api.js');
+  const original = {get:api.get, post:api.post};
+  const ids = ['file_read','file_write','bash','web_search','web_fetch'];
+  const items = ids.map(id => ({id, enabled:true, effective:'enabled', source:'startup', editable:true}));
+  items[1].effective = 'partial'; items[1].restricted_by = ['blocked_tools'];
+  items[4].source = 'command'; items[4].source_detail = '--web'; items[4].editable = false;
+  const panel = Object.create(BuiltinToolSettings.prototype);
+  const controls = Object.fromEntries(ids.map(id => [id,{input:{checked:false,disabled:true},status:{textContent:''}}]));
+  Object.assign(panel,{controls,refresh:{},status:{textContent:'',classList:{add(){},remove(){}}},pending:false,current:null});
+  try {
+    api.get = async () => ({tools:items});
+    await panel.update();
+    assert.equal(controls.web_search.input.checked,true);
+    assert.match(controls.file_write.status.textContent,/部分可用/);
+    assert.match(controls.file_write.status.textContent,/禁用工具名单/);
+    assert.equal(controls.web_fetch.input.disabled,true);
+    assert.match(controls.web_fetch.status.textContent,/--web/);
+    controls.web_search.input.checked = false;
+    api.post = async (path, body) => {assert.equal(path,'/settings/builtin-tools');assert.deepEqual(body,{tool:'web_search',enabled:false});throw Error('disk failed');};
+    await panel.update({tool:'web_search',enabled:false});
+    assert.equal(controls.web_search.input.checked,true);
+    assert.match(panel.status.textContent,/失败/);
+    api.get = async () => '<html>old host</html>';
+    await panel.update(); assert.match(panel.status.textContent,/未返回有效/);
+    api.post = async () => ({tools:items.map(item => item.id === 'web_search' ? {...item,enabled:false,effective:'disabled',source:'saved'} : item)});
+    await panel.update({tool:'web_search',enabled:false});
+    assert.equal(controls.web_search.input.checked,false);
+    assert.match(panel.status.textContent,/新会话生效/);
+  } finally {api.get=original.get;api.post=original.post;}
+});
 
 test('permission defaults save both channels and do not acknowledge failed or unsupported settings', async () => {
   const { api } = await import('../internal/web/static/js/api.js');

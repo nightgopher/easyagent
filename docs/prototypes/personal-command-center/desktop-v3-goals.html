@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyAgent · 目标与结果 原型 v3</title>
+<style>
+:root{
+  --bg:#131718;--elev:#181d1f;--raised:#1e2426;--sunken:#0e1112;
+  --ink:#edf2f0;--muted:#9aa8a3;--dim:#6b7a75;--accent:#4ecdc4;--accent-ink:#081a17;
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
+  --warn:#f0b95a;--danger:#ef7d7d;--ok:#6ee7b7;--violet:#a99cf5;--blue:#7cb7f0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.55 -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.grow{flex:1}
+/* titlebar */
+.titlebar{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--elev)}
+.lights{display:flex;gap:7px;margin-right:6px}.lights i{width:11px;height:11px;border-radius:50%;background:#3a4244}
+.brandmark{color:var(--accent);font-size:20px;font-weight:600;line-height:1}
+.vsep{width:1px;height:16px;background:var(--line2);margin:0 4px}
+.crumb{color:var(--muted);display:flex;align-items:center;gap:6px}.crumb b{color:var(--ink);font-weight:500}
+.hostpill{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:3px 9px;border:1px solid var(--line);border-radius:12px}
+/* layout */
+.body{flex:1;display:grid;grid-template-columns:250px 1fr;overflow:hidden}
+.side{background:var(--elev);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.sidescroll{flex:1;overflow:auto;padding:10px 8px}
+.nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--muted);width:100%;text-align:left;min-width:0}
+.nav:hover{background:var(--raised);color:var(--ink)}
+.nav.on{background:var(--raised);color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}
+.nav .ic{width:16px;text-align:center;flex:none}
+.nav .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .badge{font-size:11px;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:0 6px;font-weight:600}
+.nav .meta{font-size:11px;color:var(--dim);flex:none}
+.nav.child{padding-left:26px;font-size:12.5px}
+.sec{font-size:11px;color:var(--dim);padding:14px 8px 4px;display:flex;justify-content:space-between;align-items:center}
+.sec button{color:var(--dim);font-size:14px}.sec button:hover{color:var(--ink)}
+.caret{width:12px;color:var(--dim);font-size:9px;flex:none;transition:transform .15s;display:inline-block}
+.caret.open{transform:rotate(90deg)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+.ring{width:9px;height:9px;border-radius:50%;border:1.5px solid;display:inline-block;flex:none}
+.sidefoot{padding:10px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)}
+.sidefoot .srcs{display:flex;gap:10px;flex-wrap:wrap;margin-top:4px}
+.sidefoot .srcs span{display:inline-flex;gap:4px;align-items:center}
+/* main */
+.main{display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.scroll{flex:1;overflow:auto}
+.wrap{max-width:860px;margin:0 auto;padding:22px 26px 40px}
+.pagehead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.pagehead h1{font-size:19px;font-weight:600}
+.sub{color:var(--muted);font-size:12px}
+.btn{padding:6px 12px;border-radius:7px;background:var(--raised);border:1px solid var(--line);font-size:12px;white-space:nowrap}
+.btn:hover{border-color:var(--line2)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.ghost{background:none;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);background:var(--raised)}
+.btn.sm{padding:3px 9px}
+.tag{font-size:11px;padding:1px 7px;border-radius:4px;font-weight:500;white-space:nowrap}
+.t-result{background:rgba(124,183,240,.14);color:var(--blue)}
+.t-close{background:rgba(110,231,183,.14);color:var(--ok)}
+.t-orphan{background:rgba(169,156,245,.14);color:var(--violet)}
+.t-stuck{background:rgba(239,125,125,.14);color:var(--danger)}
+.t-approve{background:rgba(240,185,90,.14);color:var(--warn)}
+.t-suggest{background:rgba(78,205,196,.14);color:var(--accent)}
+.t-stale{background:rgba(255,255,255,.06);color:var(--muted)}
+.tool{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);background:var(--raised);border-radius:4px;padding:1px 6px;white-space:nowrap}
+.spl{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap}
+.status{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:2px 9px;border-radius:10px;white-space:nowrap}
+.s-todo{background:rgba(255,255,255,.06);color:var(--muted)}
+.s-active{background:rgba(78,205,196,.12);color:var(--accent)}
+.s-review{background:rgba(124,183,240,.14);color:var(--blue)}
+.s-stuck{background:rgba(239,125,125,.14);color:var(--danger)}
+.s-done{background:rgba(110,231,183,.12);color:var(--ok)}
+.brief{background:linear-gradient(135deg,rgba(78,205,196,.10),rgba(78,205,196,.02));border:1px solid rgba(78,205,196,.22);border-radius:12px;padding:14px 18px;margin:14px 0 18px}
+.brief .h{font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+.brief .h span{font-size:11px;color:var(--muted);font-weight:400}
+.brief li{list-style:none;color:var(--muted)}.brief b{color:var(--ink);font-weight:500}
+.card{background:var(--elev);border:1px solid var(--line);border-radius:10px;padding:13px 16px;margin-bottom:10px;transition:opacity .25s,transform .25s}
+.card:hover{border-color:var(--line2)}
+.card.out{opacity:0;transform:translateX(30px)}
+.card.new{animation:pop .6s}
+@keyframes pop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.card .r1{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.card .time{margin-left:auto;font-size:11px;color:var(--dim)}
+.card .title{font-size:14px;font-weight:500;margin-bottom:3px}
+.card .goalref{font-size:12px;color:var(--muted);margin-bottom:6px;cursor:pointer}
+.card .goalref:hover{color:var(--accent)}
+.card .desc{color:var(--muted);margin-bottom:10px}
+.card .acts{display:flex;gap:6px;flex-wrap:wrap}
+.empty{text-align:center;color:var(--dim);padding:50px 0}
+.lbl{font-size:11px;color:var(--dim);margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.lbl .r{margin-left:auto}
+.panel{background:var(--elev);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:none}
+.row.click{cursor:pointer}.row.click:hover{background:var(--raised)}
+.row .tt{flex:1;min-width:0}.row .a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.row .b{font-size:11px;color:var(--dim)}
+.row.hl{background:rgba(124,183,240,.06);box-shadow:inset 2px 0 0 var(--blue)}
+.kind{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;flex:none;font-size:12px;background:var(--raised)}
+/* goal page */
+.goalgrid{display:grid;grid-template-columns:1fr 250px;gap:22px;max-width:1080px;margin:0 auto;padding:22px 26px 40px}
+.what{color:var(--muted);line-height:1.8;margin-top:10px}
+.crit{display:flex;align-items:flex-start;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.crit:last-child{border-bottom:none}
+.box{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line2);flex:none;margin-top:2px;display:grid;place-items:center;font-size:10px;cursor:pointer}
+.box.on{background:var(--ok);border-color:var(--ok);color:var(--accent-ink)}
+.crit .by{font-size:11px;color:var(--dim)}
+.crit.just{animation:flash 1.4s}
+@keyframes flash{0%{background:rgba(110,231,183,.25)}100%{background:none}}
+.procs{display:none}
+.procs.open{display:block}
+.side2 .blk{background:var(--elev);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.side2 .blk h4{font-size:11px;color:var(--dim);font-weight:400;margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:2px 0}
+.kv b{color:var(--ink);font-weight:500}
+.tl{font-size:12px;color:var(--muted);border-left:1px solid var(--line2);margin-left:4px;padding-left:12px}
+.tl div{position:relative;padding:3px 0}
+.tl div::before{content:'';position:absolute;left:-16px;top:10px;width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.tl div.k::before{background:var(--accent)}
+.tl span{color:var(--dim);font-size:11px;margin-right:6px}
+.prog{height:5px;background:var(--sunken);border-radius:3px;overflow:hidden;margin:6px 0 2px}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .6s}
+/* board */
+.board{display:grid;grid-template-columns:repeat(5,minmax(180px,1fr));gap:12px;padding:20px 22px;min-width:960px}
+.col h3{font-size:12px;color:var(--muted);font-weight:500;margin-bottom:8px;display:flex;gap:6px;align-items:center}
+.gcard{background:var(--elev);border:1px solid var(--line);border-radius:9px;padding:10px 11px;margin-bottom:8px;cursor:pointer}
+.gcard:hover{border-color:var(--line2)}
+.gcard .gt{font-size:13px;margin-bottom:6px}
+.gcard .gm{display:flex;gap:8px;font-size:11px;color:var(--dim);align-items:center}
+/* chat */
+.chathead{flex:none;padding:10px 26px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px}
+.msgs{max-width:760px;margin:0 auto;padding:20px 26px}
+.m{margin-bottom:16px}
+.m.user{display:flex;justify-content:flex-end}
+.m.user .bub{background:var(--raised);border:1px solid var(--line);padding:9px 13px;border-radius:12px 12px 4px 12px;max-width:80%}
+.m.ai .who{color:var(--accent);font-weight:600;font-size:15px;margin-bottom:3px}
+.m.ai p{line-height:1.75;margin-bottom:6px}
+.m.ai ul{margin:0 0 6px 20px}
+.composer{max-width:760px;margin:0 auto 16px;background:var(--raised);border:1px solid rgba(78,205,196,.32);border-radius:12px;padding:10px 13px 8px;width:calc(100% - 52px)}
+.composer textarea{width:100%;background:none;border:none;outline:none;resize:none;font-size:14px;min-height:40px}
+.cbar{display:flex;align-items:center;gap:6px}
+.send{width:30px;height:30px;border-radius:8px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+.notice{max-width:760px;margin:0 auto 10px;width:calc(100% - 52px);border:1px dashed rgba(78,205,196,.4);border-radius:9px;padding:9px 12px;font-size:12px;color:var(--muted);display:flex;gap:10px;align-items:center;background:rgba(78,205,196,.04)}
+/* modal */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:6}
+.scrim.on{opacity:1;pointer-events:auto}
+.modal{position:fixed;left:50%;top:9vh;transform:translate(-50%,-10px);width:640px;max-height:82vh;overflow:auto;background:var(--elev);border:1px solid var(--line2);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:7}
+.modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.modal .mb{padding:18px 20px}
+.modal .mf{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--line);align-items:center}
+.pack{background:var(--sunken);border:1px solid var(--line);border-radius:9px;padding:12px 14px;font:12px/1.75 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--muted);max-height:260px;overflow:auto}
+.pack b{color:var(--ink)}
+.tools4{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.tb4{border:1px solid var(--line);border-radius:9px;padding:9px 6px;text-align:center;background:var(--raised);font-size:12px}
+.tb4.on{border-color:var(--accent);background:rgba(78,205,196,.07)}
+.tb4 .i{font-size:16px;font-weight:600;display:block}
+.inp{width:100%;background:var(--sunken);border:1px solid var(--line);border-radius:8px;outline:none;padding:8px 11px}
+.menu{position:absolute;background:var(--elev);border:1px solid var(--line2);border-radius:9px;box-shadow:0 14px 40px rgba(0,0,0,.45);padding:5px;z-index:8;min-width:240px}
+.menu button{display:flex;width:100%;gap:8px;align-items:center;padding:7px 9px;border-radius:6px;text-align:left}
+.menu button:hover{background:var(--raised)}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--raised);border:1px solid var(--line2);border-radius:9px;padding:9px 16px;opacity:0;transition:.25s;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.legend{position:fixed;right:14px;bottom:14px;width:260px;background:rgba(14,17,18,.96);border:1px solid var(--line2);border-radius:10px;padding:10px 12px;font-size:11.5px;color:var(--muted);z-index:5;line-height:1.75}
+.legend b{color:var(--ink)}
+.legend .x{float:right;color:var(--dim);cursor:pointer}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <div class="lights"><i></i><i></i><i></i></div>
+  <span class="brandmark">ea·</span><b>EasyAgent</b><span class="vsep"></span>
+  <div class="crumb" id="crumb"></div><span class="grow"></span>
+  <span class="hostpill"><span class="dot" style="background:var(--ok)"></span>迷你主机</span>
+</div>
+<div class="body">
+  <aside class="side">
+    <div class="sidescroll" id="sideNav"></div>
+    <div class="sidefoot">结果来源（只读监听）
+      <div class="srcs" id="srcs"></div></div>
+  </aside>
+  <main class="main" id="main"></main>
+</div>
+<div class="legend" id="legend"><span class="x" onclick="this.remove()">✕</span>
+<b>v3：目标 → 结果，过程不管</b><br>
+· <b>目标</b> ≈ issue，<b>结果</b> ≈ PR/交付物<br>
+· 你在哪个工具里写都行，结果靠 git 等来源<b>自动挂上来</b><br>
+· 「开工」= 把目标打包，带进任意工具<br>
+· 等几秒，会有一个新结果进收件箱，验收它试试</div>
+<div class="scrim" id="scrim" onclick="closeAll()"></div>
+<div class="modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TOOLS={
+  codex:{n:'Codex',i:'⌘',c:'#7cb7f0'},claude:{n:'Claude Code',i:'✳',c:'#e8a27c'},zcode:{n:'zcode',i:'Z',c:'#9bd36a'},
+  ea:{n:'EasyAgent',i:'ea·',c:'#4ecdc4'},gpt:{n:'GPT 调研',i:'◈',c:'#a99cf5'},me:{n:'你',i:'✎',c:'#9aa8a3'},
+};
+const SP={
+  easyagent:{n:'easyagent',c:'#4ecdc4',k:'代码项目',repo:'hwj123hwj/easyagent',note:'定位：个人指挥台。通用 agent 继续维护。'},
+  job:{n:'求职',c:'#f0b95a',k:'个人事务',note:'12 月前拿到 2 个 agent 方向 offer。'},
+  rust:{n:'学 Rust',c:'#ef7d7d',k:'学习',note:'读 codex-rs，顺带学 Rust。'},
+};
+const ST={todo:['待开始','s-todo','#9aa8a3'],active:['进行中','s-active','#4ecdc4'],review:['待验收','s-review','#7cb7f0'],stuck:['卡住','s-stuck','#ef7d7d'],done:['已完成','s-done','#6ee7b7']};
+const RK={pr:'⎇',branch:'⑂',doc:'📄',report:'◈',decision:'◆',ci:'⚙',file:'📎',mail:'✉'};
+let goals=[
+  {id:12,sp:'easyagent',t:'Android 端收件箱',st:'active',due:'11-15',
+   what:'手机上能看到所有需要我处理的事（待审批、完成、失败），并且能直接处理，不用再开电脑。',
+   crit:[{t:'列表显示待审批 / 完成 / 失败',ok:true,by:'PR #216 合并时自动勾选'},{t:'能在手机上直接批准工具调用',ok:false},{t:'随 v0.19 发布',ok:false}],
+   res:[{k:'pr',t:'PR #216 收件箱列表页',tool:'claude',s:'已合并',sc:'var(--ok)',when:'11-04'},
+        {k:'branch',t:'goal/12-mobile-approve',tool:'codex',s:'2 个提交 · 未开 PR',sc:'var(--warn)',when:'今天 10:12'},
+        {k:'doc',t:'交互方案.md',tool:'ea',s:'已确认',sc:'var(--muted)',when:'11-03'}],
+   procs:[['codex','实现审批按钮与 API 调用','今天'],['codex','修 Compose 预览崩溃','昨天'],['claude','收件箱列表页 + 测试','11-04'],['claude','梳理现有 mobile-native 结构','11-03'],['ea','讨论手机端交互方案','11-03']],
+   tl:[['今天','Codex 推送 goal/12-mobile-approve（2 个提交）',1],['11-04','PR #216 合并，自动勾选标准 1',1],['11-03','你创建目标',0]]},
+  {id:11,sp:'easyagent',t:'API 限流与常量时间比较',st:'review',due:'',
+   what:'服务端令牌比较改为常量时间，连续失败要节流，防止暴力尝试。',
+   crit:[{t:'令牌比较常量时间',ok:true,by:'PR #215 · 测试覆盖'},{t:'连续失败触发节流',ok:true,by:'PR #215 · 测试覆盖'},{t:'合并到 main',ok:false}],
+   res:[{k:'pr',t:'PR #215 fix(server): constant-time compare + throttle',tool:'codex',s:'CI 通过 · 待合并',sc:'var(--blue)',when:'昨晚',hl:true}],
+   procs:[['codex','实现限流与常量时间比较','昨晚']],tl:[['昨晚','PR #215 开启，CI 通过',1],['昨天','你创建目标',0]]},
+  {id:13,sp:'easyagent',t:'产品定位：个人指挥台',st:'active',due:'',
+   what:'想清楚 EasyAgent 接下来的产品形态：通用 agent 之上加什么。',
+   crit:[{t:'调研同类产品',ok:true,by:'调研报告'},{t:'做出可点击原型',ok:true,by:'原型 v1 / v3'},{t:'确定第一阶段范围',ok:false}],
+   res:[{k:'report',t:'调研：个人 agent 产品形态（14 个来源）',tool:'gpt',s:'已读',sc:'var(--muted)',when:'今早'},
+        {k:'decision',t:'目标→结果模型，会话只是过程',tool:'ea',s:'你已确认',sc:'var(--ok)',when:'刚刚'},
+        {k:'file',t:'easyagent-prototype/index.html（v3）',tool:'ea',s:'原型',sc:'var(--muted)',when:'刚刚'}],
+   procs:[['ea','个人 agent 产品形态讨论','今天'],['claude','做原型 v1 / v3','今天']],tl:[['刚刚','你确认决策：目标→结果',1],['今早','调研报告完成',1]]},
+  {id:10,sp:'easyagent',t:'夜间测试稳定',st:'stuck',due:'',
+   what:'全量测试连续 7 天不出现偶发失败。',crit:[{t:'定位 sdk/mcp 重连超时',ok:false},{t:'连续 7 天全绿',ok:false}],
+   res:[{k:'ci',t:'夜间测试 #388 失败：TestStreamableHTTPReconnect',tool:'ea',s:'失败',sc:'var(--danger)',when:'02:14'}],procs:[],tl:[['02:14','夜间测试失败',1]]},
+  {id:14,sp:'easyagent',t:'发布 v0.19',st:'todo',due:'11-20',what:'包含 Android 收件箱与限流。',crit:[{t:'#11、#12 完成',ok:false},{t:'CHANGELOG',ok:false}],res:[],procs:[],tl:[]},
+  {id:9,sp:'easyagent',t:'Android 原生客户端 v1',st:'done',due:'',what:'',crit:[{t:'发布 APK',ok:true}],res:[{k:'pr',t:'PR #206',tool:'claude',s:'已合并',sc:'var(--ok)',when:'10-30'}],procs:[],tl:[]},
+  {id:21,sp:'job',t:'B 公司：Agent 平台工程师',st:'active',due:'周五',
+   what:'拿到 B 公司二面机会。',crit:[{t:'定制简历',ok:true,by:'简历-B.md'},{t:'跟进 HR',ok:false},{t:'完成笔试',ok:false}],
+   res:[{k:'doc',t:'简历-B.md',tool:'ea',s:'已确认',sc:'var(--ok)',when:'今天'},{k:'mail',t:'跟进邮件草稿',tool:'ea',s:'等你批准发送',sc:'var(--warn)',when:'5 分钟前',hl:true}],
+   procs:[['ea','按 3 份 JD 定制简历','今天']],tl:[['5 分钟前','EasyAgent 起草跟进邮件',1]]},
+  {id:22,sp:'job',t:'准备：上下文压缩面试题',st:'todo',due:'',what:'',crit:[{t:'整理 5 道题及答案',ok:false}],res:[],procs:[],tl:[]},
+  {id:31,sp:'rust',t:'读完 codex-rs exec 模块',st:'active',due:'',what:'理解沙箱和进程管理。',crit:[{t:'沙箱章节笔记',ok:false},{t:'写一个最小复刻',ok:false}],
+   res:[{k:'doc',t:'笔记：所有权与生命周期',tool:'me',s:'',sc:'var(--muted)',when:'10-28'}],procs:[['claude','讲解 exec 沙箱实现','11-04']],tl:[['10-28','最近一次活动',0]]},
+];
+let inbox=[
+  {id:'a',type:'result',g:11,tt:'待验收',title:'PR #215 CI 通过，可以合并',desc:'Codex 产出 · 4 个文件 +186 −23。合并后目标的最后一条标准会自动勾上。',time:'昨晚',acts:[['看 PR','goal'],['合并','merge11',1]]},
+  {id:'b',type:'approve',g:21,tt:'待批准',title:'发送跟进邮件给 B 公司 HR',desc:'EasyAgent 起草，外发需要你确认。',time:'5 分钟前',acts:[['看草稿','goal'],['允许发送','mail',1],['拒绝','drop:已拒绝']]},
+  {id:'c',type:'orphan',tt:'未归属的结果',title:'分支 feat/log-sampling（3 个提交）不属于任何目标',desc:'在 easyagent 仓库发现，看起来是 Claude Code 的会话产出的。挂到某个目标，或者顺手建一个。',time:'1 小时前',acts:[['挂到目标 ▾','attach'],['新建目标','newgoal',1],['忽略','drop:已忽略，不再提示这个分支']]},
+  {id:'d',type:'stuck',g:10,tt:'卡住',title:'夜间测试失败，目标「夜间测试稳定」标为卡住',desc:'TestStreamableHTTPReconnect 超时 30s，前 6 次均通过。',time:'02:14',acts:[['开工修它','start',1],['标记偶发','drop:已标记']]},
+  {id:'e',type:'suggest',tt:'建议',title:'你在随手聊里 3 次聊到「docker 镜像瘦身」',desc:'要不要建成一个目标？之前聊出来的结论会作为初始结果挂上去。',time:'今早',acts:[['建成目标','sug',1],['不用','drop:好的']]},
+  {id:'f',type:'stale',g:31,tt:'没动静',title:'「读完 codex-rs exec 模块」9 天没有新结果',desc:'要不要推迟，或者先暂停？',time:'今早',acts:[['推到周六','drop:已推到周六'],['暂停','drop:已暂停']]},
+];
+const chats=[{id:1,t:'docker 镜像怎么瘦身',time:'今天'},{id:2,t:'翻译一段英文合同',time:'昨天'},{id:3,t:'周末去哪玩',time:'11-03'}];
+let view={k:'inbox'},openSp={easyagent:true,job:true,rust:false},showDone=false,nextG=40,startTool='codex';
+const $=id=>document.getElementById(id);
+const G=id=>goals.find(g=>g.id===id);
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2400)}
+const toolB=k=>`<span class="tool"><span style="color:${TOOLS[k].c};font-weight:600">${TOOLS[k].i}</span>${TOOLS[k].n}</span>`;
+const spL=k=>`<span class="spl"><span class="dot" style="background:${SP[k].c}"></span>${SP[k].n}</span>`;
+const stB=s=>`<span class="status ${ST[s][1]}">${ST[s][0]}</span>`;
+const ringFor=g=>`<span class="ring" style="border-color:${ST[g.st][2]};${g.st==='done'?'background:'+ST.done[2]:''}"></span>`;
+const pct=g=>Math.round(g.crit.filter(c=>c.ok).length/g.crit.length*100);
+
+function renderSide(){
+  const on=(k,id)=>view.k===k&&(id===undefined||view.id===id);
+  let h=`<button class="nav ${on('inbox')?'on':''}" onclick="go({k:'inbox'})"><span class="ic">◎</span><span class="t">收件箱</span>${inbox.length?`<span class="badge">${inbox.length}</span>`:''}</button>
+  <button class="nav ${on('board')?'on':''}" onclick="go({k:'board'})"><span class="ic">▦</span><span class="t">所有目标</span><span class="meta">${goals.filter(g=>g.st!=='done').length}</span></button>
+  <div class="sec">空间<button onclick="toast('新建空间')">＋</button></div>`;
+  for(const [k,s] of Object.entries(SP)){
+    const l=goals.filter(g=>g.sp===k&&g.st!=='done');
+    h+=`<button class="nav ${on('space',k)?'on':''}" onclick="openSp['${k}']=true;go({k:'space',id:'${k}'})"><span class="caret ${openSp[k]?'open':''}" onclick="event.stopPropagation();openSp['${k}']=!openSp['${k}'];renderSide()">▶</span><span class="dot" style="background:${s.c}"></span><span class="t">${s.n}</span><span class="meta">${l.length}</span></button>`;
+    if(openSp[k])h+=l.map(g=>`<button class="nav child ${on('goal',g.id)?'on':''}" onclick="go({k:'goal',id:${g.id}})">${ringFor(g)}<span class="t">${g.t}</span>${g.st==='review'||g.st==='stuck'?`<span class="meta" style="color:${ST[g.st][2]}">${ST[g.st][0]}</span>`:''}</button>`).join('');
+  }
+  h+=`<div class="sec">随手聊<button onclick="go({k:'chat',id:0})" title="新会话">＋</button></div>`+chats.map(c=>`<button class="nav ${on('chat',c.id)?'on':''}" onclick="go({k:'chat',id:${c.id}})"><span class="ic" style="color:var(--dim)">💬</span><span class="t">${c.t}</span></button>`).join('');
+  $('sideNav').innerHTML=h;
+  $('srcs').innerHTML=[['⎇','git / GitHub'],['⌘','Codex'],['✳','Claude Code'],['Z','zcode']].map(([i,n])=>`<span><span class="dot" style="background:var(--ok);width:5px;height:5px"></span>${i} ${n}</span>`).join('');
+}
+function crumb(){
+  let c={inbox:'<b>收件箱</b>',board:'<b>所有目标</b>'}[view.k];
+  if(view.k==='space')c=`<span class="dot" style="background:${SP[view.id].c}"></span><b>${SP[view.id].n}</b>`;
+  if(view.k==='goal'){const g=G(view.id);c=`<span class="dot" style="background:${SP[g.sp].c}"></span>${SP[g.sp].n} <span style="color:var(--dim)">/</span> <b>#${g.id} ${g.t}</b>`}
+  if(view.k==='chat')c=`随手聊 <span style="color:var(--dim)">/</span> <b>${(chats.find(x=>x.id===view.id)||{t:'新会话'}).t}</b>`;
+  $('crumb').innerHTML=c;
+}
+function go(v){view=v;render();$('main').querySelector('.scroll')?.scrollTo(0,0)}
+function render(){
+  renderSide();crumb();
+  $('main').innerHTML={inbox:vInbox,board:vBoard,space:vSpace,goal:vGoal,chat:vChat}[view.k]();
+}
+
+/* ---------- 收件箱 ---------- */
+function card(n){
+  const g=n.g?G(n.g):null;
+  return `<div class="card" id="c-${n.id}"><div class="r1"><span class="tag t-${n.type}">${n.tt}</span>${g?spL(g.sp):''}<span class="time">${n.time}</span></div>
+  <div class="title">${n.title}</div>
+  ${g?`<div class="goalref" onclick="go({k:'goal',id:${g.id}})">${ringFor(g)} 目标 #${g.id} ${g.t} · ${pct(g)}%</div>`:''}
+  <div class="desc">${n.desc}</div>
+  <div class="acts">${n.acts.map(([l,a,p])=>`<button class="btn sm ${p?'pri':''}" onclick="act(event,'${n.id}','${a}')">${l}</button>`).join('')}</div></div>`;
+}
+function vInbox(){
+  const act=goals.filter(g=>g.st==='active').length;
+  return `<div class="scroll"><div class="wrap">
+  <div class="pagehead"><h1>收件箱</h1><span class="sub">只有两类事：<b style="color:var(--ink)">验收结果</b>、<b style="color:var(--ink)">推动目标</b></span><span class="grow"></span><button class="btn pri" onclick="newGoal()">＋ 新目标</button></div>
+  <div class="brief"><div class="h">☀ 早上好<span>每日简报 · 已推送飞书</span></div>
+    <li>· ${act} 个目标在推进，<b>1 个待验收</b>，<b>1 个卡住</b></li>
+    <li>· 昨天产出 <b>3 个结果</b>：PR #215、分支 goal/12-mobile-approve、简历-B.md</li>
+    <li>· 今天最要紧：<b>B 公司</b>周五截止</li></div>
+  ${inbox.length?inbox.map(card).join(''):'<div class="empty">✓ 都处理完了</div>'}
+  </div></div>`;
+}
+function rm(id,msg){const el=$('c-'+id);if(el)el.classList.add('out');setTimeout(()=>{inbox=inbox.filter(x=>x.id!==id);render()},250);if(msg)toast(msg)}
+function act(e,id,a){
+  const n=inbox.find(x=>x.id===id);
+  if(a==='goal')return go({k:'goal',id:n.g});
+  if(a.startsWith('drop:'))return rm(id,a.slice(5));
+  if(a==='merge11'){merge11();return rm(id)}
+  if(a==='mail'){const g=G(21);g.res[1].s='已发送';g.res[1].sc='var(--ok)';g.res[1].hl=false;checkCrit(g,1,'邮件发送后自动勾选');g.tl.unshift(['刚刚','跟进邮件已发送',1]);return rm(id,'邮件已发送，「跟进 HR」自动勾上')}
+  if(a==='start')return openStart(n.g);
+  if(a==='newgoal'){rm(id);const g=mkGoal('easyagent','请求日志采样','');g.res.push({k:'branch',t:'feat/log-sampling',tool:'claude',s:'3 个提交 · 未开 PR',sc:'var(--warn)',when:'1 小时前'});g.st='active';go({k:'goal',id:g.id});toast('已建目标，分支作为第一个结果挂上');return}
+  if(a==='sug'){rm(id);const g=mkGoal('easyagent','Docker 镜像瘦身','把运行镜像压到 30MB 以内。');g.res.push({k:'doc',t:'随手聊结论：多阶段构建 + distroless',tool:'ea',s:'来自随手聊',sc:'var(--muted)',when:'今天'});go({k:'goal',id:g.id});toast('已建目标，随手聊的结论挂成初始结果');return}
+  if(a==='attach'){popMenu(e,goals.filter(g=>g.sp==='easyagent'&&g.st!=='done').map(g=>`<button onclick="attachOrphan(${g.id})">${ringFor(g)} #${g.id} ${g.t}</button>`).join(''))}
+}
+function attachOrphan(gid){closeMenu();const g=G(gid);g.res.push({k:'branch',t:'feat/log-sampling',tool:'claude',s:'3 个提交 · 未开 PR',sc:'var(--warn)',when:'1 小时前'});g.tl.unshift(['刚刚','你把 feat/log-sampling 挂到这里',1]);rm('c',`已挂到 #${gid}，以后这个分支的动态都会归到这里`)}
+function merge11(){const g=G(11);g.res[0].s='已合并';g.res[0].sc='var(--ok)';g.res[0].hl=false;checkCrit(g,2,'PR #215 合并时自动勾选');g.tl.unshift(['刚刚','PR #215 合并',1]);toast('PR #215 已合并 · 标准全部满足，目标自动关闭')}
+function checkCrit(g,ix,by){g.crit[ix].ok=true;g.crit[ix].by=by;g.crit[ix].just=true;
+  if(g.crit.every(c=>c.ok)){g.st='done';g.tl.unshift(['刚刚','标准全部满足，目标完成',1])}
+  else if(g.st==='review'||g.st==='todo')g.st='active';}
+
+/* ---------- 看板 ---------- */
+function vBoard(){
+  const cols=['todo','active','review','stuck','done'];
+  return `<div class="scroll"><div class="board">${cols.map(s=>{const l=goals.filter(g=>g.st===s);return `<div class="col"><h3>${stB(s)}<span style="color:var(--dim)">${l.length}</span></h3>${l.map(g=>`<div class="gcard" onclick="go({k:'goal',id:${g.id}})"><div class="gt">${g.t}</div><div class="prog"><i style="width:${pct(g)}%;background:${ST[g.st][2]}"></i></div><div class="gm">${spL(g.sp)}<span class="grow"></span><span>${g.res.length} 个结果</span>${g.due?`<span style="color:var(--warn)">${g.due}</span>`:''}</div></div>`).join('')}</div>`}).join('')}</div></div>`;
+}
+/* ---------- 空间 ---------- */
+function vSpace(){
+  const s=SP[view.id],l=goals.filter(g=>g.sp===view.id);
+  const sect=(t,arr)=>arr.length?`<div class="lbl">${t} · ${arr.length}</div><div class="panel">${arr.map(gRow).join('')}</div>`:'';
+  return `<div class="scroll"><div class="wrap">
+  <div class="pagehead"><span class="dot" style="background:${s.c};width:11px;height:11px"></span><h1>${s.n}</h1><span class="sub">${s.k}${s.repo?' · '+s.repo:''}</span><span class="grow"></span><button class="btn pri" onclick="newGoal('${view.id}')">＋ 新目标</button></div>
+  <div class="sub" style="margin:2px 0 6px">${s.note}</div>
+  ${sect('需要你',l.filter(g=>g.st==='review'||g.st==='stuck'))}${sect('进行中',l.filter(g=>g.st==='active'))}${sect('待开始',l.filter(g=>g.st==='todo'))}
+  <div class="lbl"><button class="btn sm ghost" onclick="showDone=!showDone;render()">${showDone?'▾':'▸'} 已完成 ${l.filter(g=>g.st==='done').length}</button></div>
+  ${showDone?`<div class="panel">${l.filter(g=>g.st==='done').map(gRow).join('')}</div>`:''}
+  </div></div>`;
+}
+function gRow(g){return `<div class="row click" onclick="go({k:'goal',id:${g.id}})">${ringFor(g)}<div class="tt"><div class="a">#${g.id} ${g.t}</div><div class="b">${g.crit.filter(c=>c.ok).length}/${g.crit.length} 标准 · ${g.res.length} 个结果${g.procs.length?' · '+g.procs.length+' 个会话':''}</div></div>${g.due?`<span class="sub" style="color:var(--warn)">${g.due}</span>`:''}${stB(g.st)}</div>`}
+
+/* ---------- 目标页 ---------- */
+function vGoal(){
+  const g=G(view.id);
+  const procCount={};g.procs.forEach(p=>procCount[p[0]]=(procCount[p[0]]||0)+1);
+  const res=g.res.map((r,ix)=>`<div class="row ${r.hl?'hl':''}"><span class="kind">${RK[r.k]}</span><div class="tt"><div class="a">${r.t}</div><div class="b">由 ${TOOLS[r.tool].n} 产出 · ${r.when}</div></div><span style="font-size:12px;color:${r.sc}">${r.s}</span>${resActs(g,r,ix)}</div>`).join('')||`<div class="row"><span class="sub">还没有结果。点「开工」，在你喜欢的工具里干活，结果会自动挂上来。</span></div>`;
+  return `<div class="scroll"><div class="goalgrid"><div>
+    <div class="pagehead"><span class="sub mono">#${g.id}</span><h1>${g.t}</h1></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px">${stB(g.st)}${spL(g.sp)}${g.due?`<span class="sub" style="color:var(--warn)">截止 ${g.due}</span>`:''}<span class="grow"></span>${g.st!=='done'?`<button class="btn pri" onclick="openStart(${g.id})">▶ 开工</button>`:''}</div>
+    ${g.what?`<div class="what">${g.what}</div>`:''}
+    <div class="lbl">完成标准 · ${g.crit.filter(c=>c.ok).length}/${g.crit.length}<span class="r">结果满足标准时自动勾选，你也可以手动勾</span></div>
+    <div class="panel">${g.crit.map((c,ix)=>`<div class="crit ${c.just?'just':''}"><span class="box ${c.ok?'on':''}" onclick="toggleCrit(${g.id},${ix})">${c.ok?'✓':''}</span><div><div>${c.t}</div>${c.by&&c.ok?`<div class="by">${c.by}</div>`:''}</div></div>`).join('')}</div>
+    <div class="lbl">结果 · ${g.res.length}<span class="r"><button class="btn sm ghost" onclick="toast('拖入文件、粘贴链接，或在任意会话里说「这是 #${g.id} 的结果」')">＋ 手动添加</button></span></div>
+    <div class="panel">${res}</div>
+    <div class="lbl"><button class="btn sm ghost" style="padding-left:0" onclick="this.closest('.lbl').nextElementSibling.classList.toggle('open');this.firstChild.textContent=this.firstChild.textContent==='▸ '?'▾ ':'▸ '">▸ </button>过程 · ${g.procs.length} 个会话 ${Object.entries(procCount).map(([k,n])=>`<span style="color:${TOOLS[k].c}">${TOOLS[k].i}×${n}</span>`).join(' ')}<span class="r">按仓库 + 分支自动关联 · 只读 · 不需要你维护</span></div>
+    <div class="procs"><div class="panel">${g.procs.map(p=>`<div class="row click" onclick="toast('在 ${TOOLS[p[0]].n} 中打开这个会话')"><span style="color:${TOOLS[p[0]].c};width:24px;text-align:center;font-weight:600">${TOOLS[p[0]].i}</span><div class="tt"><div class="a">${p[1]}</div><div class="b">${TOOLS[p[0]].n} · ${p[2]}</div></div><span class="sub">打开 ↗</span></div>`).join('')||'<div class="row sub">没有关联的会话</div>'}</div></div>
+  </div>
+  <div class="side2">
+    <div class="blk"><h4>进度</h4><div style="font-size:22px;font-weight:600">${pct(g)}%</div><div class="prog"><i style="width:${pct(g)}%"></i></div></div>
+    <div class="blk"><h4>开工时会带上</h4><div class="kv"><span>目标 + 完成标准</span><b>✓</b></div><div class="kv"><span>已有结果摘要</span><b>${g.res.length}</b></div><div class="kv"><span>空间笔记</span><b>✓</b></div><div class="kv"><span>历史会话</span><b style="color:var(--dim)">不带</b></div></div>
+    <div class="blk"><h4>动态</h4><div class="tl">${g.tl.map(([w,t,k])=>`<div class="${k?'k':''}"><span>${w}</span>${t}</div>`).join('')||'<span class="sub">暂无</span>'}</div></div>
+  </div></div></div>`;
+}
+function resActs(g,r,ix){
+  if(r.k==='pr'&&r.s.includes('待合并'))return `<button class="btn sm pri" onclick="merge11();inbox=inbox.filter(x=>x.id!=='a');render()">合并</button>`;
+  if(r.k==='branch'&&r.s.includes('未开 PR'))return `<button class="btn sm" onclick="openPR(${g.id},${ix})">开 PR</button>`;
+  if(r.k==='mail'&&r.s.includes('等你'))return `<button class="btn sm pri" onclick="act(event,'b','mail')">允许发送</button>`;
+  return '';
+}
+function openPR(gid,ix){const g=G(gid),r=g.res[ix];r.k='pr';r.t='PR #218 '+r.t.replace('goal/12-','');r.s='CI 运行中';r.sc='var(--accent)';g.tl.unshift(['刚刚','开启 PR #218',1]);render();toast('已开 PR，描述里自动写了 Closes #'+gid);
+  setTimeout(()=>{r.s='CI 通过 · 待合并';r.sc='var(--blue)';r.hl=true;g.st='review';inbox.unshift({id:'pr'+gid,type:'result',g:gid,tt:'待验收',title:'PR #218 CI 通过，可以合并',desc:'合并后「能在手机上直接批准」会自动勾上。',time:'刚刚',acts:[['看','goal'],['合并','drop:已合并',1]]});render();toast('PR #218 CI 通过 → 进收件箱')},2500)}
+function toggleCrit(gid,ix){const g=G(gid);g.crit[ix].ok=!g.crit[ix].ok;g.crit[ix].by=g.crit[ix].ok?'你手动勾选':'';if(g.crit.every(c=>c.ok)){g.st='done';toast('标准全部满足，目标完成')}else if(g.st==='done')g.st='active';render()}
+
+/* ---------- 开工包 ---------- */
+function openStart(gid){
+  const g=G(gid);
+  const branch=`goal/${gid}-${g.t.replace(/[^a-zA-Z0-9]+/g,'-').toLowerCase().replace(/^-|-$/g,'')||'work'}`;
+  const pack=()=>`<b># 目标 #${g.id}：${g.t}</b>
+${g.what||''}
+
+<b>## 完成标准</b>
+${g.crit.map(c=>(c.ok?'- [x] ':'- [ ] ')+c.t).join('\n')}
+
+<b>## 已有结果</b>
+${g.res.map(r=>'- '+r.t+'（'+r.s+'）').join('\n')||'- 暂无'}
+
+<b>## 约定</b>
+- 在分支 ${branch} 上工作，PR 描述写 Closes #${g.id}
+- 空间笔记：${SP[g.sp].note}`;
+  $('modal').innerHTML=`<div class="mb"><div style="font-weight:600;font-size:15px">开工：#${g.id} ${g.t}</div>
+    <div class="sub" style="margin:4px 0 14px">EasyAgent 不管你用什么工具，只负责把目标打包带过去，再把结果收回来。</div>
+    <div class="tools4">${['codex','claude','zcode','ea','gpt'].map(k=>`<button class="tb4 ${startTool===k?'on':''}" onclick="startTool='${k}';openStart(${gid})"><span class="i" style="color:${TOOLS[k].c}">${TOOLS[k].i}</span>${TOOLS[k].n}</button>`).join('')}</div>
+    <div class="lbl">开工包（会作为第一条消息或 AGENTS 片段带进去）</div>
+    <div class="pack">${pack()}</div></div>
+    <div class="mf"><span class="sub">${startTool==='ea'?'直接在 EasyAgent 里开一个会话':startTool==='gpt'?'复制开工包到 GPT 网页':'在 '+TOOLS[startTool].n+' 中打开工作区 + 分支，并附上开工包'}</span><span class="grow"></span><button class="btn ghost" onclick="closeAll()">取消</button><button class="btn" onclick="closeAll();toast('开工包已复制')">只复制</button><button class="btn pri" onclick="doStart(${gid},'${branch}')">打开 ${TOOLS[startTool].n} ↗</button></div>`;
+  $('modal').classList.add('on');$('scrim').classList.add('on');
+}
+function doStart(gid,branch){closeAll();const g=G(gid);g.procs.unshift([startTool,'开工：'+g.t,'刚刚']);g.tl.unshift(['刚刚',`在 ${TOOLS[startTool].n} 开工`,0]);if(g.st==='todo'||g.st==='stuck')g.st='active';render();toast(`已在 ${TOOLS[startTool].n} 打开 · 分支 ${branch}，之后的提交会自动挂到 #${gid}`)}
+
+/* ---------- 新目标 ---------- */
+function mkGoal(sp,t,what){const g={id:nextG++,sp,t,st:'todo',due:'',what,crit:[{t:'（agent 起草）'+t+' 可用并有测试',ok:false}],res:[],procs:[],tl:[['刚刚','创建目标',0]]};goals.push(g);openSp[sp]=true;return g}
+function newGoal(sp){
+  sp=sp||'easyagent';
+  $('modal').innerHTML=`<div class="mb"><div style="font-weight:600;font-size:15px;margin-bottom:12px">新目标</div>
+  <input class="inp" id="gt" placeholder="想要什么结果？例如：Android 端支持离线查看" style="font-size:14px">
+  <div class="lbl">空间</div><select class="inp" id="gsp">${Object.entries(SP).map(([k,s])=>`<option value="${k}" ${k===sp?'selected':''}>${s.n}</option>`).join('')}</select>
+  <div class="lbl">完成标准（EasyAgent 会根据标题起草，你改）</div>
+  <div class="pack" id="gc" style="font-family:inherit">输入标题后自动起草…</div></div>
+  <div class="mf"><span class="grow"></span><button class="btn ghost" onclick="closeAll()">取消</button><button class="btn pri" onclick="submitGoal()">创建</button></div>`;
+  $('modal').classList.add('on');$('scrim').classList.add('on');$('gt').focus();
+  $('gt').oninput=()=>{const v=$('gt').value.trim();$('gc').innerHTML=v?`☐ ${v} 的核心功能可用<br>☐ 有测试覆盖<br>☐ 文档 / CHANGELOG 已更新`:'输入标题后自动起草…'};
+}
+function submitGoal(){const t=$('gt').value.trim()||'Android 端支持离线查看';const g=mkGoal($('gsp').value,t,'');g.crit=[{t:t+' 的核心功能可用',ok:false},{t:'有测试覆盖',ok:false},{t:'文档 / CHANGELOG 已更新',ok:false}];closeAll();go({k:'goal',id:g.id})}
+
+/* ---------- 随手聊 ---------- */
+function vChat(){
+  const c=chats.find(x=>x.id===view.id);
+  const body=c&&c.id===1?`<div class="m user"><div class="bub">docker 镜像怎么瘦身</div></div><div class="m ai"><div class="who">ea·</div><p>常用几招：</p><ul><li>多阶段构建，最终镜像只拷二进制</li><li>Go 用 CGO_ENABLED=0 + distroless</li><li>合并 RUN、清理包缓存</li></ul></div>`
+    :c?`<div class="m user"><div class="bub">${c.t}</div></div><div class="m ai"><div class="who">ea·</div><p>（现有对话界面，不变）</p></div>`:`<div class="empty">新会话 · 和现在的 EasyAgent 对话完全一样</div>`;
+  return `<div class="chathead"><b>${c?c.t:'新会话'}</b><span class="grow"></span><span class="sub">coding · claude-opus-5-5</span></div>
+  <div class="scroll"><div class="msgs">${body}</div></div>
+  ${c&&c.id===1?`<div class="notice">💡 这个话题聊过 3 次了。<span class="grow"></span><button class="btn sm pri" onclick="act(event,'e','sug')">建成目标</button><button class="btn sm" onclick="toast('选择目标后，本次结论作为结果挂上去')">作为结果挂到目标 ▾</button></div>`:''}
+  <div class="composer"><textarea placeholder="发送消息，输入 / 查看命令…"></textarea><div class="cbar"><span class="sub">随手聊不属于任何目标，用法和现在一样</span><span class="grow"></span><button class="send" onclick="toast('（现有流式对话）')">↑</button></div></div>`;
+}
+
+/* ---------- misc ---------- */
+function popMenu(e,html){closeMenu();const m=document.createElement('div');m.className='menu';m.id='menu';m.innerHTML=html;document.body.appendChild(m);const r=e.currentTarget.getBoundingClientRect();m.style.left=Math.min(r.left,innerWidth-260)+'px';m.style.top=(r.bottom+6)+'px';e.stopPropagation()}
+function closeMenu(){$('menu')?.remove()}
+document.addEventListener('click',closeMenu);
+function closeAll(){['modal','scrim'].forEach(i=>$(i).classList.remove('on'))}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeAll();closeMenu()}});
+// 演示：几秒后，Codex 在别处推送了新提交，被 git 来源发现并挂到目标 #12
+setTimeout(()=>{
+  const g=G(12);g.res[1].s='4 个提交 · 未开 PR';g.res[1].when='刚刚';g.tl.unshift(['刚刚','Codex 推送 2 个新提交（你在 Codex 里干的活，被 git 发现）',1]);
+  inbox.unshift({id:'live',type:'result',g:12,tt:'新结果',title:'goal/12-mobile-approve 有 2 个新提交',desc:'来自你在 Codex 里的会话（EasyAgent 只是从 git 发现了它）。测试通过，可以开 PR 了。',time:'刚刚',acts:[['去看看','goal',1],['稍后','drop:好的']]});
+  render();document.querySelector('#c-live')?.classList.add('new');toast('⎇ 发现新结果：goal/12-mobile-approve +2 提交');
+},7000);
+render();
+</script>
+</body>
+</html>

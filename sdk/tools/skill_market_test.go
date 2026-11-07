@@ -158,7 +158,9 @@ func TestSkillMarketToolInstallUninstallWithMutationCallback(t *testing.T) {
 	if mutations != 1 {
 		t.Fatalf("expected 1 mutation callback, got %d", mutations)
 	}
-	if _, err := os.Stat(filepath.Join(skillsDir, "demo-skill", "demo-skill", "SKILL.md")); err != nil {
+	// Store zips that wrap the skill in a top-level directory are flattened:
+	// SKILL.md lands directly in the skill directory (see sdk/skillmarket).
+	if _, err := os.Stat(filepath.Join(skillsDir, "demo-skill", "SKILL.md")); err != nil {
 		t.Fatalf("skill not installed: %v", err)
 	}
 

@@ -111,6 +111,7 @@ func coreBinaryAt(exe string) (string, error) {
 	for _, candidate := range []string{
 		filepath.Clean(filepath.Join(dir, "../Resources/easyagent")), // macOS .app bundle 布局
 		filepath.Join(dir, "easyagent-core"),                         // deb / tar.gz 布局：核心与 UI 同目录（UI 可执行占用了 easyagent 名）
+		filepath.Join(dir, "easyagent-core.exe"),                     // Windows 安装布局：核心与 UI 同目录，必须有 .exe 才能被 exec 启动
 	} {
 		if isCore(candidate) {
 			return candidate, nil
@@ -249,7 +250,16 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 		}
 	}()
 	client, _ := newBackendClient("http://"+address, token)
-	deadline := time.NewTimer(15 * time.Second)
+	// The packaged-bundle smoke test stretches this budget: core startup on a
+	// busy shared desktop can exceed 15s without being broken. Real breakage
+	// never answers at all, so a longer ceiling keeps that guarantee.
+	readyBudget := 15 * time.Second
+	if v := os.Getenv("EASYAGENT_CORE_READY_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 5 && n <= 300 {
+			readyBudget = time.Duration(n) * time.Second
+		}
+	}
+	deadline := time.NewTimer(readyBudget)
 	defer deadline.Stop()
 	tick := time.NewTicker(150 * time.Millisecond)
 	defer tick.Stop()

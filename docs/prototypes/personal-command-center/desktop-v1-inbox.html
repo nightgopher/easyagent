@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyAgent · 个人指挥台 原型</title>
+<style>
+:root{
+  --bg:#131718;--elev:#181d1f;--raised:#1e2426;--sunken:#0e1112;
+  --ink:#edf2f0;--muted:#9aa8a3;--dim:#6b7a75;--accent:#4ecdc4;--accent-ink:#081a17;
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
+  --warn:#f0b95a;--danger:#ef7d7d;--ok:#6ee7b7;--violet:#a99cf5;--blue:#7cb7f0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.55 -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;height:100vh;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+.app{display:grid;grid-template-columns:220px 1fr;height:100vh}
+/* sidebar */
+.side{background:var(--elev);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:14px 10px;gap:2px;overflow:auto}
+.brand{display:flex;align-items:center;gap:8px;padding:4px 8px 14px;font-weight:600}
+.brand .logo{width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,var(--accent),#2a8f88);display:grid;place-items:center;color:var(--accent-ink);font-size:12px;font-weight:700}
+.sec{font-size:11px;color:var(--dim);padding:14px 8px 4px;display:flex;justify-content:space-between;align-items:center}
+.sec button{color:var(--dim);font-size:14px;line-height:1}
+.sec button:hover{color:var(--ink)}
+.nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--muted);width:100%;text-align:left}
+.nav:hover{background:var(--raised);color:var(--ink)}
+.nav.on{background:var(--raised);color:var(--ink)}
+.nav .ic{width:16px;text-align:center;opacity:.9}
+.nav .badge{margin-left:auto;font-size:11px;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:0 6px;font-weight:600}
+.nav .meta{margin-left:auto;font-size:11px;color:var(--dim)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+.side .foot{margin-top:auto;padding:10px 8px 0;border-top:1px solid var(--line);font-size:11px;color:var(--dim);display:flex;gap:6px;align-items:center}
+/* main */
+.main{display:flex;flex-direction:column;overflow:hidden}
+.top{height:52px;border-bottom:1px solid var(--line);display:flex;align-items:center;padding:0 22px;gap:12px;flex:none}
+.top h1{font-size:15px;font-weight:600}
+.top .sub{color:var(--muted);font-size:12px}
+.top .grow{flex:1}
+.btn{padding:6px 12px;border-radius:7px;background:var(--raised);border:1px solid var(--line);color:var(--ink);font-size:12px}
+.btn:hover{border-color:var(--line2)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.pri:hover{filter:brightness(1.08)}
+.btn.ghost{background:none;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);background:var(--raised)}
+.btn.sm{padding:3px 9px;font-size:12px}
+.content{flex:1;overflow:auto;padding:22px}
+.kbd{font-size:11px;color:var(--dim);border:1px solid var(--line2);border-radius:4px;padding:0 5px}
+/* inbox */
+.wrap{max-width:860px;margin:0 auto}
+.brief{background:linear-gradient(135deg,rgba(78,205,196,.10),rgba(78,205,196,.02));border:1px solid rgba(78,205,196,.22);border-radius:12px;padding:16px 18px;margin-bottom:20px}
+.brief .h{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px}
+.brief .h .t{font-size:11px;color:var(--muted);font-weight:400}
+.brief ul{list-style:none;display:grid;gap:4px;color:var(--muted)}
+.brief b{color:var(--ink);font-weight:500}
+.filters{display:flex;gap:6px;margin-bottom:12px;align-items:center}
+.chip{padding:3px 10px;border-radius:12px;border:1px solid var(--line);color:var(--muted);font-size:12px}
+.chip.on{border-color:var(--accent);color:var(--accent);background:rgba(78,205,196,.08)}
+.chip:hover{color:var(--ink)}
+.card{background:var(--elev);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px;transition:opacity .25s,transform .25s}
+.card:hover{border-color:var(--line2)}
+.card.out{opacity:0;transform:translateX(30px)}
+.card.new{animation:pop .5s}
+@keyframes pop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.card .row1{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.tag{font-size:11px;padding:1px 7px;border-radius:4px;font-weight:500}
+.tag.review{background:rgba(124,183,240,.14);color:var(--blue)}
+.tag.report{background:rgba(169,156,245,.14);color:var(--violet)}
+.tag.propose{background:rgba(78,205,196,.14);color:var(--accent)}
+.tag.approve{background:rgba(240,185,90,.14);color:var(--warn)}
+.tag.nudge{background:rgba(255,255,255,.06);color:var(--muted)}
+.tag.fail{background:rgba(239,125,125,.14);color:var(--danger)}
+.card .space{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.card .time{margin-left:auto;font-size:11px;color:var(--dim)}
+.card .title{font-size:14px;font-weight:500;margin-bottom:4px}
+.card .desc{color:var(--muted);margin-bottom:10px}
+.card .actions{display:flex;gap:6px;flex-wrap:wrap}
+.exec{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);background:var(--raised);border-radius:4px;padding:1px 6px}
+.diff{background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:8px 10px;font:12px/1.6 ui-monospace,Menlo,monospace;margin-bottom:10px;white-space:pre-wrap}
+.diff .del{color:var(--danger);text-decoration:line-through;opacity:.8}
+.diff .add{color:var(--ok)}
+.empty{text-align:center;color:var(--dim);padding:60px 0}
+.empty .big{font-size:28px;margin-bottom:8px}
+/* space */
+.sgrid{display:grid;grid-template-columns:260px 1fr;gap:18px;max-width:1180px;margin:0 auto}
+.panel{background:var(--elev);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.panel .ph{padding:10px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.panel .ph .r{margin-left:auto}
+.doc{padding:9px 14px;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:flex-start;cursor:pointer}
+.doc:last-child{border-bottom:none}
+.doc:hover{background:var(--raised)}
+.doc .n{font-size:13px}
+.doc .s{font-size:11px;color:var(--dim)}
+.pin{color:var(--accent);font-size:11px}
+.note{padding:12px 14px;font-size:12px;color:var(--muted);line-height:1.7}
+.composer{background:var(--elev);border:1px solid var(--line2);border-radius:12px;padding:12px 14px;margin-bottom:18px}
+.composer textarea{width:100%;background:none;border:none;outline:none;color:var(--ink);font:inherit;font-size:14px;resize:none;min-height:44px}
+.composer .bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ctx{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 8px;border-radius:10px;border:1px dashed var(--line2);color:var(--muted)}
+.ctx.on{border-style:solid;border-color:rgba(78,205,196,.4);color:var(--accent);background:rgba(78,205,196,.06)}
+.sel{background:var(--raised);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:5px 8px;font:inherit;font-size:12px}
+.task{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.task:last-child{border-bottom:none}
+.task:hover{background:var(--raised)}
+.task .tt{flex:1;min-width:0}
+.task .tt .a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.task .tt .b{font-size:11px;color:var(--dim)}
+.prog{width:90px;height:4px;background:var(--sunken);border-radius:2px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .5s}
+.st{font-size:11px;min-width:54px;text-align:right}
+.spin{display:inline-block;width:10px;height:10px;border:2px solid var(--accent);border-right-color:transparent;border-radius:50%;animation:sp 1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.routine{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:12px}
+.routine:last-child{border-bottom:none}
+.routine .w{color:var(--dim);margin-left:auto;font-size:11px}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:.2s}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:560px;background:var(--elev);border-left:1px solid var(--line2);transform:translateX(100%);transition:.25s;display:flex;flex-direction:column;z-index:5}
+.drawer.on{transform:none}
+.drawer .dh{padding:16px 20px;border-bottom:1px solid var(--line)}
+.drawer .db{flex:1;overflow:auto;padding:16px 20px}
+.drawer .df{padding:12px 20px;border-top:1px solid var(--line);display:flex;gap:8px}
+.lbl{font-size:11px;color:var(--dim);margin:14px 0 6px}
+.lbl:first-child{margin-top:0}
+.log{font:12px/1.8 ui-monospace,Menlo,monospace;color:var(--muted);background:var(--sunken);border-radius:7px;padding:10px 12px}
+.log .ok{color:var(--ok)}
+.msg{padding:10px 12px;border-radius:9px;margin-bottom:8px;max-width:92%}
+.msg.me{background:rgba(78,205,196,.1);margin-left:auto}
+.msg.ag{background:var(--raised)}
+.msg .who{font-size:11px;color:var(--dim);margin-bottom:2px}
+.rpt{background:var(--raised);border-radius:8px;padding:12px 14px;line-height:1.75}
+.rpt h4{font-size:13px;margin:8px 0 4px}
+.rpt h4:first-child{margin-top:0}
+.rpt li{margin-left:18px;color:var(--muted)}
+/* modal */
+.modal{position:fixed;left:50%;top:12vh;transform:translate(-50%,-10px);width:620px;background:var(--elev);border:1px solid var(--line2);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:6}
+.modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.modal .mb{padding:18px 20px}
+.modal textarea{width:100%;background:var(--sunken);border:1px solid var(--line);border-radius:9px;outline:none;color:var(--ink);font:inherit;font-size:14px;padding:10px 12px;resize:none;height:76px}
+.execs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.ex{border:1px solid var(--line);border-radius:9px;padding:9px 10px;text-align:left;background:var(--raised)}
+.ex:hover{border-color:var(--line2)}
+.ex.on{border-color:var(--accent);background:rgba(78,205,196,.07)}
+.ex .en{font-size:12px;font-weight:600;display:flex;align-items:center;gap:5px}
+.ex .ed{font-size:11px;color:var(--dim);margin-top:2px}
+.ex .rec{font-size:10px;color:var(--accent);margin-left:auto}
+.when{display:flex;gap:6px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--raised);border:1px solid var(--line2);border-radius:9px;padding:9px 16px;opacity:0;transition:.25s;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.hint{position:fixed;right:14px;bottom:12px;font-size:11px;color:var(--dim)}
+/* phone */
+.phone{width:340px;height:680px;border-radius:38px;border:10px solid #050707;background:var(--bg);margin:0 auto;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.phone .pt{padding:14px 16px 8px;font-weight:600;font-size:15px;display:flex;justify-content:space-between}
+.phone .pc{flex:1;overflow:auto;padding:0 12px}
+.phone .card{padding:12px;font-size:12px}
+.phone .card .title{font-size:13px}
+.phone .pi{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:6px}
+.phone .pi input{flex:1;background:var(--raised);border:1px solid var(--line);border-radius:18px;padding:7px 12px;color:var(--ink);font:inherit;outline:none}
+.pwrap{display:grid;grid-template-columns:340px 1fr;gap:40px;max-width:900px;margin:0 auto;align-items:center}
+.pnote h3{font-size:15px;margin-bottom:10px}
+.pnote p{color:var(--muted);margin-bottom:10px;line-height:1.8}
+.feishu{background:#fff;color:#1f2329;border-radius:10px;padding:12px;margin-top:16px;font-size:12px}
+.feishu .fh{font-weight:600;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.feishu .fb{display:flex;gap:6px;margin-top:8px}
+.feishu .fb span{border:1px solid #d0d3d6;border-radius:5px;padding:2px 10px}
+.feishu .fb span.p{background:#3370ff;color:#fff;border-color:#3370ff}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand"><div class="logo">E</div>EasyAgent</div>
+    <button class="nav" data-view="inbox"><span class="ic">◎</span>收件箱<span class="badge" id="inboxCount"></span></button>
+    <button class="nav" data-view="running"><span class="ic">◷</span>进行中<span class="meta" id="runCount"></span></button>
+    <button class="nav" data-view="phone"><span class="ic">▯</span>手机 / 飞书视图</button>
+    <div class="sec">空间 <button title="新建空间" onclick="toast('agent 会根据最近的对话提议新空间，你确认即可')">＋</button></div>
+    <div id="spaceNav"></div>
+    <div class="sec">执行者</div>
+    <div id="execNav"></div>
+    <div class="foot"><span class="dot" style="background:var(--ok)"></span>迷你主机在线 · 常驻 41 天</div>
+  </aside>
+  <main class="main">
+    <div class="top" id="top"></div>
+    <div class="content" id="content"></div>
+  </main>
+</div>
+
+<div class="scrim" id="scrim" onclick="closeAll()"></div>
+<div class="drawer" id="drawer"></div>
+<div class="modal" id="modal"></div>
+<div class="toast" id="toast"></div>
+<div class="hint">原型 · 演示数据 · 按 <span class="kbd">N</span> 新建任务</div>
+
+<script>
+const EXECS = {
+  ea:     {name:'EasyAgent', color:'#4ecdc4', desc:'通用：整理、查资料、跑脚本', ic:'E'},
+  codex:  {name:'Codex', color:'#7cb7f0', desc:'编程：改代码、开 PR', ic:'⌘'},
+  claude: {name:'Claude Code', color:'#e8a27c', desc:'编程：重构、长任务', ic:'✳'},
+  gpt:    {name:'GPT 深度调研', color:'#a99cf5', desc:'调研：长报告、多来源', ic:'◈'},
+};
+const SPACES = {
+  easyagent:{name:'easyagent', color:'#4ecdc4', kind:'代码项目', desc:'Go 个人 Agent 工作台，正在从"通用 agent"转向"个人指挥台"。',
+    docs:[
+      {n:'定位：调度方 + 工作台', s:'决策 · 你确认于 11-06', pin:true},
+      {n:'README.md', s:'仓库文件 · 自动同步', pin:true},
+      {n:'docs/ARCHITECTURE.md', s:'仓库文件 · 自动同步', pin:false},
+      {n:'近期发布节奏', s:'笔记 · v0.18.1 已发布', pin:false},
+    ],
+    routines:[{n:'每晚跑全量测试，失败进收件箱', w:'每天 02:00', e:'ea'},{n:'每周汇总 PR 与 issue', w:'周一 09:00', e:'ea'}]},
+  job:{name:'求职', color:'#f0b95a', kind:'个人事务', desc:'目标：12 月前拿到 2 个 agent 方向 offer。',
+    docs:[
+      {n:'简历 v3.pdf', s:'文件 · 10-28 更新', pin:true},
+      {n:'投递进度表', s:'表格 · 6 家进行中', pin:true},
+      {n:'面试复盘：某大厂二面', s:'笔记 · 11-02', pin:false},
+    ],
+    routines:[{n:'每天扫一遍 JD 并匹配简历', w:'每天 08:30', e:'ea'}]},
+  rust:{name:'学 Rust', color:'#ef7d7d', kind:'学习', desc:'读 codex-rs 源码，顺带学 Rust。',
+    docs:[{n:'学习路线', s:'笔记', pin:true},{n:'codex-rs 读书笔记', s:'笔记 · 12 篇', pin:false}],
+    routines:[{n:'每周出 3 道练习题', w:'周六 10:00', e:'ea'}]},
+  life:{name:'生活杂事', color:'#a99cf5', kind:'生活', desc:'报销、账单、家里的事。',
+    docs:[{n:'常用地址与证件', s:'私密 · 仅本机', pin:true}],
+    routines:[{n:'月初整理上月账单', w:'每月 1 日', e:'ea'}]},
+};
+let tasks = [
+  {id:1, space:'easyagent', title:'server 增加 API 限流与常量时间比较', exec:'codex', state:'done', ago:'昨晚 23:40', progress:100},
+  {id:2, space:'easyagent', title:'调研：个人 agent 产品形态（OpenClaw / Muse / ChatGPT Projects）', exec:'gpt', state:'done', ago:'今早 07:10', progress:100},
+  {id:3, space:'easyagent', title:'Android 端收件箱页面', exec:'claude', state:'run', ago:'开始于 40 分钟前', progress:62},
+  {id:4, space:'job', title:'按 3 份新 JD 定制简历版本', exec:'ea', state:'run', ago:'开始于 12 分钟前', progress:35},
+  {id:5, space:'rust', title:'讲解 codex-rs 的 exec 沙箱实现', exec:'claude', state:'done', ago:'11-04', progress:100},
+];
+let inbox = [
+  {id:'a', type:'review', space:'easyagent', task:1, title:'Codex 完成：server 增加 API 限流与常量时间比较', desc:'改动 4 个文件，+186 −23，测试全部通过。分支 fix/auth-constant-time-throttle。', time:'昨晚 23:40',
+    actions:[['看 diff','open'],['合并','done:已合并到 main，分支已清理'],['打回','redo']]},
+  {id:'b', type:'report', space:'easyagent', task:2, title:'调研完成：个人 agent 产品形态', desc:'结论：纯记忆型产品普遍出现记忆腐化；"项目空间 + 可见状态"更可持续。共 14 个来源。', time:'今早 07:10',
+    actions:[['读报告','open'],['存入空间资料','done:已存入 easyagent 资料'],['忽略','done:已忽略']]},
+  {id:'c', type:'propose', space:'easyagent', title:'提议更新资料：「定位」', desc:'来自刚才的对话。只有你确认后才会写入，之后所有任务都会带上这份资料。', time:'刚刚',
+    diff:'<span class="del">定位：通用编程 agent，对标 Codex</span>\n<span class="add">定位：个人指挥台。编程交给 Codex/Claude Code，</span>\n<span class="add">EasyAgent 负责空间、调度与收件箱。</span>',
+    actions:[['确认','done:资料已更新'],['改一下','done:已打开编辑'],['忽略','done:已忽略']]},
+  {id:'d', type:'approve', space:'job', task:4, title:'等你批准：发送邮件给 HR（某创业公司）', desc:'EasyAgent 起草了跟进邮件，正在等待发送许可。外发操作默认都需要你确认。', time:'5 分钟前',
+    actions:[['看草稿','open'],['允许发送','done:邮件已发送'],['拒绝','done:已拒绝']]},
+  {id:'e', type:'fail', space:'easyagent', title:'夜间测试失败：sdk/mcp 1 个用例超时', desc:'TestStreamableHTTPReconnect 超时 30s，前 6 次均通过，疑似偶发。', time:'今早 02:14',
+    actions:[['交给 Codex 修','fix'],['重跑一次','done:已加入队列'],['标记偶发','done:已标记']]},
+  {id:'f', type:'nudge', space:'rust', title:'「学 Rust」已经 9 天没有动静', desc:'上次停在 codex-rs 的沙箱章节。要不要把这周的练习题推到周末？', time:'今早',
+    actions:[['推到周六','done:已安排到周六 10:00'],['暂停这个空间','done:空间已暂停，不再提醒'],['忽略','done:已忽略']]},
+];
+const TYPE = {review:'待 review', report:'报告', propose:'资料提议', approve:'待批准', nudge:'提醒', fail:'失败'};
+let view = 'inbox', filter = 'all', curSpace = null, nextId = 10, newExec = 'codex', newWhen = '现在';
+
+const $ = id => document.getElementById(id);
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2200)}
+function spaceLabel(k){const s=SPACES[k];return `<span class="space"><span class="dot" style="background:${s.color}"></span>${s.name}</span>`}
+function execBadge(k){const e=EXECS[k];return `<span class="exec"><span style="color:${e.color}">${e.ic}</span>${e.name}</span>`}
+
+function renderSide(){
+  $('inboxCount').textContent = inbox.length || '';
+  const run = tasks.filter(t=>t.state==='run').length;
+  $('runCount').textContent = run ? run+' 个' : '';
+  $('spaceNav').innerHTML = Object.entries(SPACES).map(([k,s])=>{
+    const r = tasks.filter(t=>t.space===k&&t.state==='run').length;
+    const n = inbox.filter(i=>i.space===k).length;
+    return `<button class="nav ${view==='space'&&curSpace===k?'on':''}" onclick="go('space','${k}')"><span class="dot" style="background:${s.color}"></span>${s.name}<span class="meta">${r?'<span class="spin" style="width:8px;height:8px;border-width:1.5px"></span> ':''}${n?n:''}</span></button>`}).join('');
+  $('execNav').innerHTML = Object.entries(EXECS).map(([k,e])=>`<div class="nav" style="cursor:default"><span class="ic" style="color:${e.color}">${e.ic}</span>${e.name}<span class="meta"><span class="dot" style="background:var(--ok)"></span></span></div>`).join('');
+  document.querySelectorAll('.nav[data-view]').forEach(b=>b.classList.toggle('on', b.dataset.view===view));
+}
+
+function go(v, s){view=v; if(s)curSpace=s; render()}
+document.querySelectorAll('.nav[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
+
+function cardHTML(i, compact){
+  return `<div class="card" id="c-${i.id}">
+    <div class="row1"><span class="tag ${i.type}">${TYPE[i.type]}</span>${spaceLabel(i.space)}${i.task?execBadge(tasks.find(t=>t.id===i.task)?.exec||'ea'):''}<span class="time">${i.time}</span></div>
+    <div class="title">${i.title}</div>
+    ${compact?'':`<div class="desc">${i.desc}</div>`}
+    ${i.diff&&!compact?`<div class="diff">${i.diff}</div>`:''}
+    <div class="actions">${i.actions.map(([l,a],idx)=>`<button class="btn sm ${idx===(i.type==='review'||i.type==='approve'?1:0)?'pri':''}" onclick="act('${i.id}','${a}')">${l}</button>`).join('')}</div>
+  </div>`;
+}
+
+function renderInbox(){
+  $('top').innerHTML = `<h1>收件箱</h1><span class="sub">只放需要你处理的事，处理完就消失</span><span class="grow"></span><button class="btn pri" onclick="openNew()">＋ 新任务</button>`;
+  const list = inbox.filter(i=>filter==='all'||i.type===filter);
+  const types = ['all',...new Set(inbox.map(i=>i.type))];
+  $('content').innerHTML = `<div class="wrap">
+    <div class="brief"><div class="h">☀ 早上好 <span class="t">每日简报 · 08:00 已同步到飞书</span></div>
+      <ul>
+        <li>· 夜里完成 <b>2 个任务</b>，1 个失败；<b>${tasks.filter(t=>t.state==='run').length} 个</b>还在跑</li>
+        <li>· 今天最重要：<b>求职</b>（某创业公司周五前要回复）</li>
+        <li>· 「学 Rust」停了 9 天，已经帮你拟好了调整方案</li>
+      </ul></div>
+    <div class="filters">${types.map(t=>`<button class="chip ${filter===t?'on':''}" onclick="filter='${t}';render()">${t==='all'?'全部 '+inbox.length:TYPE[t]}</button>`).join('')}</div>
+    ${list.length?list.map(i=>cardHTML(i)).join(''):`<div class="empty"><div class="big">✓</div>都处理完了。后台还有 ${tasks.filter(t=>t.state==='run').length} 个任务在跑，完成后会出现在这里。</div>`}
+  </div>`;
+}
+
+function taskRow(t){
+  return `<div class="task" onclick="openTask(${t.id})">
+    <span style="color:${EXECS[t.exec].color};width:16px;text-align:center">${EXECS[t.exec].ic}</span>
+    <div class="tt"><div class="a">${t.title}</div><div class="b">${EXECS[t.exec].name} · ${t.ago}</div></div>
+    ${t.state==='run'?`<div class="prog"><i style="width:${t.progress}%"></i></div><span class="st" style="color:var(--accent)"><span class="spin"></span> ${t.progress}%</span>`
+      :t.state==='queued'?`<span class="st" style="color:var(--dim)">${t.when}</span>`
+      :`<span class="st" style="color:var(--ok)">✓ 完成</span>`}
+  </div>`;
+}
+
+function renderSpace(){
+  const s = SPACES[curSpace], k = curSpace;
+  $('top').innerHTML = `<span class="dot" style="background:${s.color};width:10px;height:10px"></span><h1>${s.name}</h1><span class="sub">${s.kind}</span><span class="grow"></span><button class="btn ghost" onclick="toast('空间暂停后不再提醒，资料保留')">暂停</button>`;
+  const st = tasks.filter(t=>t.space===k);
+  const pend = inbox.filter(i=>i.space===k);
+  $('content').innerHTML = `<div class="sgrid">
+    <div>
+      <div class="panel" style="margin-bottom:14px"><div class="ph">关于这个空间</div><div class="note">${s.desc}</div></div>
+      <div class="panel" style="margin-bottom:14px"><div class="ph">资料 <span class="r" style="font-size:11px">📌 置顶的会自动带入任务</span></div>
+        ${s.docs.map(d=>`<div class="doc" onclick="toast('打开资料：${d.n}（可直接编辑）')"><span class="pin">${d.pin?'📌':'　'}</span><div><div class="n">${d.n}</div><div class="s">${d.s}</div></div></div>`).join('')}
+        <div class="note" style="border-top:1px solid var(--line);color:var(--dim)">这里就是「记忆」：看得见、能改、能删。agent 只能提议修改，不能偷偷写入。</div>
+      </div>
+      <div class="panel"><div class="ph">定时</div>
+        ${s.routines.map(r=>`<div class="routine"><span style="color:${EXECS[r.e].color}">${EXECS[r.e].ic}</span>${r.n}<span class="w">${r.w}</span></div>`).join('')}
+      </div>
+    </div>
+    <div>
+      <div class="composer">
+        <textarea id="qin" placeholder="在「${s.name}」里派一个任务…  例如：给 Android 端加离线缓存"></textarea>
+        <div class="bar">
+          ${s.docs.filter(d=>d.pin).map(d=>`<span class="ctx on">📎 ${d.n}</span>`).join('')}
+          <span class="ctx" onclick="this.classList.toggle('on')">＋ 上下文</span>
+          <span class="grow" style="flex:1"></span>
+          <select class="sel" id="qex">${Object.entries(EXECS).map(([ek,e])=>`<option value="${ek}" ${ek===(s.kind==='代码项目'?'codex':'ea')?'selected':''}>${e.ic} ${e.name}</option>`).join('')}</select>
+          <button class="btn pri" onclick="quickSend()">派出 ↵</button>
+        </div>
+      </div>
+      ${pend.length?`<div class="lbl">待你处理 · ${pend.length}</div>${pend.map(i=>cardHTML(i,true)).join('')}`:''}
+      <div class="cols" style="margin-top:6px">
+        <div class="panel"><div class="ph">进行中 / 排队</div>${st.filter(t=>t.state!=='done').map(taskRow).join('')||'<div class="note">没有进行中的任务</div>'}</div>
+        <div class="panel"><div class="ph">已完成</div>${st.filter(t=>t.state==='done').map(taskRow).join('')||'<div class="note">暂无</div>'}</div>
+      </div>
+    </div>
+  </div>`;
+  $('qin').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();quickSend()}});
+}
+
+function renderRunning(){
+  $('top').innerHTML = `<h1>进行中</h1><span class="sub">所有空间、所有执行者的任务都在这里</span><span class="grow"></span><button class="btn pri" onclick="openNew()">＋ 新任务</button>`;
+  const run = tasks.filter(t=>t.state!=='done');
+  $('content').innerHTML = `<div class="wrap">${Object.keys(SPACES).map(k=>{
+    const l = run.filter(t=>t.space===k); if(!l.length) return '';
+    return `<div class="lbl">${spaceLabel(k)}</div><div class="panel" style="margin-bottom:8px">${l.map(taskRow).join('')}</div>`}).join('')||'<div class="empty"><div class="big">◷</div>没有进行中的任务</div>'}</div>`;
+}
+
+function renderPhone(){
+  $('top').innerHTML = `<h1>手机 / 飞书</h1><span class="sub">同一个收件箱，只是换了个入口</span>`;
+  $('content').innerHTML = `<div class="pwrap">
+    <div class="phone"><div class="pt"><span>收件箱</span><span style="color:var(--accent)">${inbox.length}</span></div>
+      <div class="pc">${inbox.slice(0,4).map(i=>cardHTML(i,true)).join('')}</div>
+      <div class="pi"><input placeholder="记一笔 / 派个活…"><button class="btn pri sm">↑</button></div></div>
+    <div class="pnote">
+      <h3>移动端只做三件事</h3>
+      <p>1. <b>处理</b>：审批、合并、确认资料，单手就能完成。</p>
+      <p>2. <b>记一笔</b>：随手输入的内容会自动归到合适的空间，或者变成一个任务。</p>
+      <p>3. <b>被通知</b>：只推送真正需要你的事，比如待批准和失败。</p>
+      <p style="color:var(--dim)">飞书<b>不承担记忆</b>。它只是收件箱的一个推送出口，在里面聊不会让上下文越变越长。</p>
+      <div class="feishu"><div class="fh"><span style="color:#3370ff">●</span>EasyAgent · 待批准</div>
+        <div>求职 · 发送邮件给 HR（某创业公司）</div><div style="color:#646a73;margin-top:2px">EasyAgent 已起草跟进邮件</div>
+        <div class="fb"><span class="p">允许发送</span><span>看草稿</span><span>拒绝</span></div></div>
+    </div></div>`;
+}
+
+function render(){
+  renderSide();
+  if(view==='inbox')renderInbox();
+  else if(view==='space')renderSpace();
+  else if(view==='running')renderRunning();
+  else renderPhone();
+}
+
+function removeCard(id, msg){
+  const el=$('c-'+id); if(el)el.classList.add('out');
+  setTimeout(()=>{inbox=inbox.filter(i=>i.id!==id);render()},250);
+  if(msg)toast(msg);
+}
+function act(id, a){
+  const it = inbox.find(i=>i.id===id);
+  if(a.startsWith('done:')) return removeCard(id, a.slice(5));
+  if(a==='open') return it.task?openTask(it.task, it):openItem(it);
+  if(a==='redo'){removeCard(id,'已打回，附上你的意见后重新派给 Codex');return}
+  if(a==='fix'){removeCard(id);spawn('easyagent','修复偶发超时：TestStreamableHTTPReconnect','codex');toast('已派给 Codex，附带失败日志');}
+}
+function openItem(it){
+  $('drawer').innerHTML = `<div class="dh"><div class="row1" style="display:flex;gap:8px;align-items:center"><span class="tag ${it.type}">${TYPE[it.type]}</span>${spaceLabel(it.space)}</div><div style="font-size:15px;font-weight:600;margin-top:6px">${it.title}</div></div>
+  <div class="db"><div class="rpt">${it.desc}</div></div><div class="df"><button class="btn" onclick="closeAll()">关闭</button></div>`;
+  $('drawer').classList.add('on');$('scrim').classList.add('on');
+}
+
+function openTask(id, item){
+  const t = tasks.find(x=>x.id===id), e = EXECS[t.exec], s = SPACES[t.space];
+  let body='';
+  if(t.exec==='gpt' && t.state==='done'){
+    body = `<div class="lbl">报告</div><div class="rpt">
+      <h4>结论</h4><ul><li>以「记住一切」为卖点的 IM 型 agent，3～6 个月后普遍出现记忆腐化和上下文膨胀。</li><li>能长期用下去的产品都把状态放到了用户<b>看得见的对象</b>上（项目、文件、看板）。</li></ul>
+      <h4>对 EasyAgent 的建议</h4><ul><li>以空间为单位管理记忆，修改都需要用户确认</li><li>不和单点工具比能力，做它们的调度方</li></ul>
+      <h4>来源</h4><ul><li>14 个来源 · 点击展开</li></ul></div>`;
+  } else if(t.state==='done' && t.exec==='codex'){
+    body = `<div class="lbl">结果</div><div class="diff"> internal/server/auth.go       <span class="add">+92</span> <span class="del">−18</span>
+ internal/server/ratelimit.go  <span class="add">+71</span>
+ internal/server/auth_test.go  <span class="add">+21</span> <span class="del">−5</span>
+ docs/CONFIG.md                <span class="add">+2</span></div>
+     <div class="lbl">执行记录（Codex 原始输出，已折叠 412 行）</div><div class="log">$ go test ./internal/server/...<br><span class="ok">ok</span>  internal/server  3.21s<br>$ git push origin fix/auth-constant-time-throttle<br><span class="ok">✓</span> PR #215 已创建</div>`;
+  } else {
+    body = `<div class="lbl">对话</div>
+      <div class="msg me"><div class="who">你</div>${t.title}</div>
+      <div class="msg ag"><div class="who">${e.name}</div>${t.state==='run'?'正在处理… 我先看了空间资料和相关代码，接下来会先写测试。':t.state==='queued'?'已排队，会在 '+t.when+' 开始。':'已完成，结果见上方。'}</div>
+      <div class="lbl">执行记录</div><div class="log">▸ 读取空间资料 ${s.docs.filter(d=>d.pin).length} 份<br>▸ 启动 ${e.name}（迷你主机 · 独立 worktree）<br>${t.state==='run'?'▸ 进行中 '+t.progress+'% <span class="spin"></span>':'<span class="ok">✓</span> 完成'}</div>`;
+  }
+  $('drawer').innerHTML = `
+    <div class="dh">
+      <div style="display:flex;gap:8px;align-items:center">${spaceLabel(t.space)}${execBadge(t.exec)}<span class="time" style="margin-left:auto;font-size:11px;color:var(--dim)">${t.ago}</span></div>
+      <div style="font-size:15px;font-weight:600;margin-top:6px">${t.title}</div>
+    </div>
+    <div class="db">
+      <div class="lbl">这个任务带了哪些上下文（只有这些，不多也不少）</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${s.docs.filter(d=>d.pin).map(d=>`<span class="ctx on">📎 ${d.n}</span>`).join('')}<span class="ctx on">📝 任务描述</span></div>
+      ${body}
+    </div>
+    <div class="df">
+      ${t.state==='done'?`<button class="btn pri" onclick="closeAll();toast('结论已提议写入「${s.name}」资料，等待你确认')">把结论存入空间资料</button><button class="btn" onclick="closeAll();toast('已基于这个结果开始追问')">继续追问</button>`
+        :`<button class="btn" onclick="closeAll();toast('已停止')">停止</button><button class="btn" onclick="closeAll();toast('已接管：打开 ${e.name} 原生界面')">在 ${e.name} 中打开</button>`}
+      <span style="flex:1"></span><button class="btn ghost" onclick="closeAll()">关闭</button>
+    </div>`;
+  $('drawer').classList.add('on');$('scrim').classList.add('on');
+}
+
+function openNew(){
+  const sk = curSpace || 'easyagent';
+  $('modal').innerHTML = `<div class="mb">
+    <div style="font-weight:600;font-size:15px;margin-bottom:12px">新任务</div>
+    <textarea id="nin" placeholder="要做什么？例如：调研一下 Linear 的收件箱设计，给我一页总结"></textarea>
+    <div class="lbl">放在哪个空间（决定自动带上哪些资料）</div>
+    <select class="sel" id="nsp" onchange="renderCtx()">${Object.entries(SPACES).map(([k,s])=>`<option value="${k}" ${k===sk?'selected':''}>${s.name} · ${s.kind}</option>`).join('')}</select>
+    <div id="nctx" style="display:inline-flex;gap:6px;margin-left:8px;flex-wrap:wrap"></div>
+    <div class="lbl">交给谁</div>
+    <div class="execs" id="nex"></div>
+    <div class="lbl">什么时候</div>
+    <div class="when" id="nwhen"></div>
+  </div>
+  <div class="df" style="display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--line)"><span style="color:var(--dim);font-size:11px;align-self:center">完成后会进入收件箱，也会推送到飞书</span><span style="flex:1"></span><button class="btn ghost" onclick="closeAll()">取消</button><button class="btn pri" onclick="submitNew()">派出</button></div>`;
+  $('modal').classList.add('on');$('scrim').classList.add('on');
+  renderCtx();renderEx();renderWhen();
+  const ni=$('nin');ni.focus();
+  ni.oninput=()=>{const v=ni.value;const r=/调研|对比|竞品|总结|报告/.test(v)?'gpt':/代码|bug|修|实现|重构|PR|测试/.test(v)?'codex':newExec;if(r!==newExec){newExec=r;renderEx()}};
+}
+function renderCtx(){const s=SPACES[$('nsp').value];$('nctx').innerHTML=s.docs.filter(d=>d.pin).map(d=>`<span class="ctx on">📎 ${d.n}</span>`).join('')}
+function renderEx(){$('nex').innerHTML=Object.entries(EXECS).map(([k,e])=>`<button class="ex ${newExec===k?'on':''}" onclick="newExec='${k}';renderEx()"><div class="en"><span style="color:${e.color}">${e.ic}</span>${e.name}${newExec===k?'<span class="rec">推荐</span>':''}</div><div class="ed">${e.desc}</div></button>`).join('')}
+function renderWhen(){$('nwhen').innerHTML=['现在','今晚空闲时','每天 08:00'].map(w=>`<button class="chip ${newWhen===w?'on':''}" onclick="newWhen='${w}';renderWhen()">${w}</button>`).join('')}
+function submitNew(){
+  const v=$('nin').value.trim()||'调研一下 Linear 的收件箱设计，给我一页总结';
+  const sp=$('nsp').value; closeAll();
+  if(newWhen!=='现在'){tasks.push({id:nextId++,space:sp,title:v,exec:newExec,state:'queued',when:newWhen,ago:'已排队',progress:0});render();toast('已安排：'+newWhen);return}
+  spawn(sp,v,newExec);toast('已派给 '+EXECS[newExec].name+'，完成后进入收件箱');
+}
+function quickSend(){const v=$('qin').value.trim();if(!v)return;spawn(curSpace,v,$('qex').value);toast('已派给 '+EXECS[$('qex').value].name)}
+
+function spawn(space,title,exec){
+  const t={id:nextId++,space,title,exec,state:'run',ago:'刚刚开始',progress:5};
+  tasks.push(t);render();
+  const iv=setInterval(()=>{
+    t.progress=Math.min(100,t.progress+Math.round(12+Math.random()*18));
+    if(t.progress>=100){
+      clearInterval(iv);t.state='done';t.ago='刚刚';
+      const type=exec==='gpt'?'report':(exec==='codex'||exec==='claude')?'review':'report';
+      inbox.unshift({id:'n'+t.id,type,space,task:t.id,title:`${EXECS[exec].name} 完成：${title}`,desc:type==='review'?'改动已在独立 worktree 中完成，测试通过，等你 review。':'结果已整理好，可以直接存入空间资料。',time:'刚刚',
+        actions:type==='review'?[['看结果','open'],['合并','done:已合并'],['打回','redo']]:[['读结果','open'],['存入空间资料','done:已提议写入资料'],['忽略','done:已忽略']]});
+      toast('✓ '+EXECS[exec].name+' 完成了一个任务，已进入收件箱');
+      render(); const c=document.querySelector('#c-n'+t.id); if(c)c.classList.add('new');
+    } else if(!$('drawer').classList.contains('on')&&!$('modal').classList.contains('on')&&document.activeElement.tagName!=='TEXTAREA') render();
+  },1100);
+}
+// keep existing running tasks alive
+setInterval(()=>{tasks.filter(t=>t.state==='run'&&t.id<10).forEach(t=>{t.progress=Math.min(95,t.progress+1)});if(view!=='inbox'&&view!=='phone'&&!$('drawer').classList.contains('on')&&!$('modal').classList.contains('on')&&document.activeElement.tagName!=='TEXTAREA')render()},4000);
+
+function closeAll(){['drawer','modal','scrim'].forEach(i=>$(i).classList.remove('on'))}
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeAll();
+  if((e.key==='n'||e.key==='N')&&!/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)){e.preventDefault();openNew()}
+});
+render();
+</script>
+</body>
+</html>

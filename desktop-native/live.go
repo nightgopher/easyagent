@@ -391,6 +391,9 @@ func (a *preview) connectLive() {
 	l.NextSessionRefresh = time.Time{}
 	delete(l.Data, "permissions")
 	delete(l.ResourceErrors, "permissions")
+	delete(l.Data, "builtin-tools")
+	delete(l.ResourceErrors, "builtin-tools")
+	delete(l.ResourceErrors, "builtin-tools-save")
 	for key := range l.Data {
 		if strings.HasPrefix(key, "business-") || strings.HasPrefix(key, "knowledge-") || key == "agent-memories" {
 			delete(l.Data, key)

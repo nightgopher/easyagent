@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EasyAgent · 指挥台</title>
+<style>
+:root{
+  --bg:#131718;--elev:#181d1f;--raised:#1e2426;--sunken:#0e1112;
+  --ink:#edf2f0;--muted:#9aa8a3;--dim:#6b7a75;--accent:#4ecdc4;--accent-ink:#081a17;
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
+  --warn:#f0b95a;--danger:#ef7d7d;--ok:#6ee7b7;--violet:#a99cf5;--blue:#7cb7f0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:13px/1.55 -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,textarea,select{font:inherit;color:inherit}
+.mono{font-family:ui-monospace,Menlo,monospace}
+.grow{flex:1}
+.titlebar{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--elev)}
+.brandmark{color:var(--accent);font-size:20px;font-weight:600;line-height:1}
+.vsep{width:1px;height:16px;background:var(--line2);margin:0 4px}
+.crumb{color:var(--muted);display:flex;align-items:center;gap:6px}.crumb b{color:var(--ink);font-weight:500}
+.body{flex:1;display:grid;grid-template-columns:250px 1fr;overflow:hidden}
+.side{background:var(--elev);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+.sidescroll{flex:1;overflow:auto;padding:10px 8px}
+.nav{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;color:var(--muted);width:100%;text-align:left;min-width:0}
+.nav:hover{background:var(--raised);color:var(--ink)}
+.nav.on{background:var(--raised);color:var(--ink);box-shadow:inset 2px 0 0 var(--accent)}
+.nav .ic{width:16px;text-align:center;flex:none}
+.nav .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .badge{font-size:11px;background:var(--accent);color:var(--accent-ink);border-radius:9px;padding:0 6px;font-weight:600}
+.nav.child{padding-left:26px;font-size:12.5px}
+.nav.child.closed{opacity:.55;text-decoration:line-through;text-decoration-color:var(--dim)}
+.sec{font-size:11px;color:var(--dim);padding:14px 8px 4px;display:flex;justify-content:space-between;align-items:center}
+.sec button{color:var(--dim);font-size:14px}.sec button:hover{color:var(--ink)}
+.sidefoot{padding:10px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)}
+.main{display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.scroll{flex:1;overflow:auto}
+.wrap{max-width:860px;margin:0 auto;padding:22px 26px 40px}
+.pagehead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.pagehead h1{font-size:19px;font-weight:600}
+.sub{color:var(--muted);font-size:12px}
+.btn{padding:6px 12px;border-radius:7px;background:var(--raised);border:1px solid var(--line);font-size:12px;white-space:nowrap}
+.btn:hover{border-color:var(--line2)}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.ghost{background:none;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{color:var(--ink);background:var(--raised)}
+.btn.sm{padding:3px 9px}
+.tag{font-size:11px;padding:1px 7px;border-radius:4px;font-weight:500;white-space:nowrap}
+.t-result{background:rgba(124,183,240,.14);color:var(--blue)}
+.t-close{background:rgba(110,231,183,.14);color:var(--ok)}
+.t-orphan{background:rgba(169,156,245,.14);color:var(--violet)}
+.t-approve{background:rgba(240,185,90,.14);color:var(--warn)}
+.card{background:var(--elev);border:1px solid var(--line);border-radius:10px;padding:13px 16px;margin-bottom:10px}
+.card:hover{border-color:var(--line2)}
+.card.new{animation:pop .6s}
+@keyframes pop{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+.card .r1{display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.card .time{margin-left:auto;font-size:11px;color:var(--dim)}
+.card .title{font-size:14px;font-weight:500;margin-bottom:3px}
+.card .goalref{font-size:12px;color:var(--muted);margin-bottom:6px;cursor:pointer}
+.card .goalref:hover{color:var(--accent)}
+.card .desc{color:var(--muted);margin-bottom:10px;word-break:break-all}
+.card .acts{display:flex;gap:6px;flex-wrap:wrap}
+.empty{text-align:center;color:var(--dim);padding:50px 0}
+.lbl{font-size:11px;color:var(--dim);margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.goalgrid{display:grid;grid-template-columns:1fr 250px;gap:22px;max-width:1080px;margin:0 auto;padding:22px 26px 40px}
+.what{color:var(--muted);line-height:1.8;margin-top:10px;white-space:pre-wrap}
+.panel{background:var(--elev);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.crit{display:flex;align-items:flex-start;gap:9px;padding:8px 14px;border-bottom:1px solid var(--line)}
+.crit:last-child{border-bottom:none}
+.box{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line2);flex:none;margin-top:2px;display:grid;place-items:center;font-size:10px;cursor:pointer;color:transparent}
+.box.on{background:var(--ok);border-color:var(--ok);color:var(--accent-ink)}
+.crit .tx{flex:1;color:var(--muted)}
+.crit .tx.on{color:var(--dim);text-decoration:line-through}
+.side2 .blk{background:var(--elev);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.side2 .blk h4{font-size:11px;color:var(--dim);font-weight:400;margin-bottom:8px}
+.kv{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);padding:2px 0}
+.kv b{color:var(--ink);font-weight:500}
+.resrow{display:flex;gap:8px;align-items:center;padding:7px 14px;border-bottom:1px solid var(--line);font-size:12.5px}
+.resrow:last-child{border-bottom:none}
+.resrow .mono{color:var(--muted);word-break:break-all}
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:6}
+.scrim.on{opacity:1;pointer-events:auto}
+.modal{position:fixed;left:50%;top:9vh;transform:translate(-50%,-10px);width:640px;max-height:82vh;overflow:auto;background:var(--elev);border:1px solid var(--line2);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:7}
+.modal.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+.modal .mb{padding:18px 20px}
+.modal .mf{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--line);align-items:center}
+.modal h3{font-size:15px;margin-bottom:12px}
+.pack{background:var(--sunken);border:1px solid var(--line);border-radius:9px;padding:12px 14px;font:12px/1.75 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--muted);max-height:260px;overflow:auto}
+.inp{width:100%;background:var(--sunken);border:1px solid var(--line);border-radius:8px;outline:none;padding:8px 11px;margin-bottom:10px}
+.inp:focus{border-color:var(--accent)}
+select.inp{margin-bottom:10px}
+.toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);background:var(--raised);border:1px solid var(--line2);border-radius:9px;padding:9px 16px;opacity:0;transition:.25s;z-index:9;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+<div class="titlebar">
+  <span class="brandmark">ea·</span><b>EasyAgent</b><span class="vsep"></span>
+  <div class="crumb"><span>指挥台</span><span id="crumb-where"></span></div>
+  <span class="grow"></span>
+  <button class="btn sm" id="btn-scan">扫描仓库</button>
+  <a class="btn sm ghost" href="/">返回会话</a>
+</div>
+<div class="body">
+  <div class="side">
+    <div class="sidescroll">
+      <button class="nav" id="nav-inbox"><span class="ic">📥</span><span class="t">收件箱</span><span class="badge" id="inbox-badge" style="display:none">0</span></button>
+      <div class="sec">空间<button id="btn-newspace" title="新建空间">＋</button></div>
+      <div id="space-tree"></div>
+    </div>
+    <div class="sidefoot">
+      目标由结果自动关闭前的最后一道确认在这里发生。<br>
+      git 分支约定 <span class="mono">goal/N-*</span>
+    </div>
+  </div>
+  <div class="main"><div class="scroll" id="main-scroll"></div></div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="modal" id="modal-kickoff">
+  <div class="mb"><h3 id="ko-title">开工包</h3><div class="pack" id="ko-text"></div>
+    <div id="ko-dispatch" style="display:none;margin-top:10px">
+      <div class="pack mono" id="ko-log" style="max-height:180px"></div>
+    </div>
+  </div>
+  <div class="mf">
+    <span class="sub" style="flex:1">自动驱动 Codex 桌面版，或手动复制给任意工具</span>
+    <button class="btn pri" id="ko-dispatch-btn">⚡ 派发给 Codex</button>
+    <button class="btn" id="ko-copy">复制</button>
+    <button class="btn ghost" id="ko-close2">关闭</button>
+  </div>
+</div>
+<div class="modal" id="modal-goal">
+  <div class="mb">
+    <h3>新建目标</h3>
+    <select class="inp" id="g-space"></select>
+    <input class="inp" id="g-title" placeholder="要什么结果？一句话标题">
+    <textarea class="inp" id="g-desc" rows="2" placeholder="背景与补充（可空）"></textarea>
+    <textarea class="inp" id="g-done" rows="4" placeholder="完成标准，每行一条"></textarea>
+  </div>
+  <div class="mf"><span class="grow"></span><button class="btn" id="g-cancel">取消</button><button class="btn pri" id="g-save">创建</button></div>
+</div>
+<div class="modal" id="modal-space">
+  <div class="mb">
+    <h3>新建空间</h3>
+    <input class="inp" id="s-name" placeholder="空间名（如 easyagent、求职、学英语）">
+    <input class="inp mono" id="s-repo" placeholder="关联仓库绝对路径（可空，用于发现结果）">
+  </div>
+  <div class="mf"><span class="grow"></span><button class="btn" id="s-cancel">取消</button><button class="btn pri" id="s-save">创建</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { authFetch } from './js/api.js';
+
+const $ = (id) => document.getElementById(id);
+let state = { spaces: [], goals: [], inbox: [] };
+let view = { kind: 'inbox' };   // {kind:'inbox'} | {kind:'goal', n}
+let pollTimer = null;
+
+// ── data ──────────────────────────────────────────────────────────────
+async function refresh() {
+  try {
+    const r = await authFetch('/command/state');
+    if (!r.ok) return;
+    state = await r.json();
+    render();
+  } catch { /* server unreachable; keep last state */ }
+}
+async function act(path, body, method = 'POST') {
+  const r = await authFetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) { toast(data.error || ('HTTP ' + r.status)); return null; }
+  return data;
+}
+function toast(msg) {
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+// ── render ────────────────────────────────────────────────────────────
+function render() {
+  renderSidebar();
+  $('inbox-badge').style.display = state.inbox.length ? '' : 'none';
+  $('inbox-badge').textContent = state.inbox.length;
+  if (view.kind === 'inbox') renderInbox(); else renderGoal(view.n);
+}
+function renderSidebar() {
+  const tree = $('space-tree'); tree.innerHTML = '';
+  for (const sp of state.spaces) {
+    const wrap = document.createElement('div');
+    const head = document.createElement('button');
+    head.className = 'nav'; head.innerHTML = `<span class="ic">📁</span><span class="t"></span>`;
+    head.querySelector('.t').textContent = sp.name;
+    head.onclick = () => openModalGoal(sp.id);
+    wrap.appendChild(head);
+    for (const g of state.goals.filter(g => g.space_id === sp.id)) {
+      const b = document.createElement('button');
+      b.className = 'nav child' + (g.status === 'closed' ? ' closed' : '') + (view.kind === 'goal' && view.n === g.number ? ' on' : '');
+      const t = document.createElement('span'); t.className = 't';
+      t.textContent = `#${g.number} ${g.title}`;
+      b.appendChild(t);
+      b.onclick = () => { view = { kind: 'goal', n: g.number }; render(); };
+      wrap.appendChild(b);
+    }
+    tree.appendChild(wrap);
+  }
+  if (!state.spaces.length) tree.innerHTML = '<div style="padding:8px;color:var(--dim);font-size:12px">还没有空间。点上方 ＋ 新建一个，关联仓库后 git 里 goal/N-* 分支会自动变成结果。</div>';
+}
+function timeAgo(iso) {
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return '刚刚';
+  if (s < 3600) return Math.floor(s / 60) + ' 分钟前';
+  if (s < 86400) return Math.floor(s / 3600) + ' 小时前';
+  return Math.floor(s / 86400) + ' 天前';
+}
+function renderInbox() {
+  $('crumb-where').innerHTML = '· <b>收件箱</b>';
+  const m = $('main-scroll');
+  if (!state.inbox.length) {
+    m.innerHTML = '<div class="wrap"><div class="empty">收件箱空着。<br>派出去的目标出了结果、或 git 里出现未归属的 goal/N 分支时，会出现在这里。<br><button class="btn" style="margin-top:12px" onclick="document.getElementById(\'btn-newspace\').click()">从一个空间开始</button></div></div>';
+    return;
+  }
+  m.innerHTML = '<div class="wrap" id="inbox-wrap"></div>';
+  const wrap = $('inbox-wrap');
+  for (const it of state.inbox) {
+    const card = document.createElement('div');
+    card.className = 'card new';
+    const tag = it.kind === 'unassigned'
+      ? '<span class="tag t-orphan">未归属的结果</span>'
+      : '<span class="tag t-result">新结果</span>';
+    card.innerHTML = `
+      <div class="r1">${tag}<span class="time">${timeAgo(it.created_at)}</span></div>
+      <div class="title"></div>
+      <div class="desc mono"></div>
+      <div class="acts"></div>`;
+    card.querySelector('.title').textContent = it.title;
+    card.querySelector('.desc').textContent = it.body || '';
+    const acts = card.querySelector('.acts');
+    if (it.kind === 'unassigned') {
+      const sel = document.createElement('select');
+      sel.className = 'inp'; sel.style.cssText = 'width:auto;margin:0;padding:4px 8px;display:inline-block';
+      sel.innerHTML = '<option value="0">→ 新建目标</option>' +
+        state.goals.filter(g => g.status === 'open')
+          .map(g => `<option value="${g.number}">→ 目标 #${g.number} ${g.title.slice(0, 18)}</option>`).join('');
+      acts.appendChild(sel);
+      const ok = document.createElement('button');
+      ok.className = 'btn sm pri'; ok.textContent = '挂到目标';
+      ok.onclick = async () => {
+        const d = await act(`/command/inbox/${it.id}/assign`, { goal_number: parseInt(sel.value, 10) });
+        if (d) { toast(`已挂到目标 #${d.goal_number}`); view = { kind: 'goal', n: d.goal_number }; refresh(); }
+      };
+      acts.appendChild(ok);
+    }
+    const skip = document.createElement('button');
+    skip.className = 'btn sm ghost'; skip.textContent = '知道了';
+    skip.onclick = async () => { if (await act(`/command/inbox/${it.id}/done`, {})) refresh(); };
+    acts.appendChild(skip);
+    wrap.appendChild(card);
+  }
+}
+function renderGoal(n) {
+  const g = state.goals.find(x => x.number === n);
+  if (!g) { view = { kind: 'inbox' }; render(); return; }
+  const sp = state.spaces.find(s => s.id === g.space_id);
+  $('crumb-where').innerHTML = `· ${sp ? sp.name : ''} / <b>目标 #${g.number}</b>`;
+  const done = g.done || [];
+  const doneN = done.filter(d => d.check).length;
+  const prog = done.length ? Math.round(doneN / done.length * 100) : 0;
+  const m = $('main-scroll');
+  m.innerHTML = `
+  <div class="goalgrid">
+    <div>
+      <div class="pagehead">
+        <h1>#${g.number} ${g.title}</h1>
+        ${g.status === 'open' ? '<span class="tag t-approve">进行中</span>' : '<span class="tag t-close">已关闭</span>'}
+      </div>
+      <div class="sub">创建于 ${timeAgo(g.created_at)} · 空间：${sp ? sp.name : '—'} · 仓库 <span class="mono" id="repo-path"></span> <button class="btn sm ghost" id="btn-editrepo" style="padding:1px 6px">改</button></div>
+      <div class="what">${g.description || ''}</div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn pri" id="btn-kickoff">开工</button>
+        <button class="btn" id="btn-addresult">＋手动结果</button>
+        <button class="btn ghost" id="btn-close">${g.status === 'open' ? '关闭目标' : '重新打开'}</button>
+      </div>
+      <div class="lbl">完成标准 <span style="margin-left:auto;font-size:11px">${doneN}/${done.length}</span></div>
+      <div class="panel" id="done-list"></div>
+    </div>
+    <div class="side2">
+      <div class="blk"><h4>进度</h4>
+        <div class="prog"><i style="width:${prog}%"></i></div>
+        <div class="kv" style="margin-top:6px"><span>完成标准</span><b>${doneN}/${done.length}</b></div>
+      </div>
+      <div class="blk"><h4>结果（git 发现 + 手动登记）</h4><div class="panel" id="res-list"></div></div>
+    </div>
+  </div>`;
+  const dl = $('done-list');
+  if (!done.length) dl.innerHTML = '<div class="crit"><span class="tx">未填写完成标准</span></div>';
+  done.forEach((d, i) => {
+    const row = document.createElement('div');
+    row.className = 'crit';
+    row.innerHTML = `<div class="box ${d.check ? 'on' : ''}">✓</div><span class="tx ${d.check ? 'on' : ''}"></span>`;
+    row.querySelector('.tx').textContent = d.text;
+    row.querySelector('.box').onclick = async () => {
+      await act(`/command/goals/${g.number}/done`, { index: i, check: !d.check }); refresh();
+    };
+    dl.appendChild(row);
+  });
+  const rp = $('repo-path');
+  rp.textContent = sp && sp.repo_path ? sp.repo_path : '（未关联）';
+  rp.style.color = sp && sp.repo_path ? '' : 'var(--warn)';
+  $('btn-editrepo').onclick = async () => {
+    const p = prompt('空间关联的仓库绝对路径（结果发现靠它）：', (sp && sp.repo_path) || '');
+    if (p === null) return;
+    const d = await act(`/command/spaces/${g.space_id}`, { repo_path: p }, 'PUT');
+    if (d) { toast('仓库已更新'); refresh(); }
+  };
+  // /command/state 只带 spaces/goals/inbox；目标详情的结果单独拉取
+  loadResults(g);
+  $('btn-kickoff').onclick = async () => {
+    const r = await authFetch(`/command/goals/${g.number}/kickoff`);
+    const d = r.ok ? await r.json() : null;
+    if (d && d.text) {
+      $('ko-title').textContent = `开工包 · 目标 #${g.number}`;
+      $('ko-text').textContent = d.text;
+      openModal('modal-kickoff');
+    }
+  };
+  $('ko-dispatch-btn').onclick = async () => {
+    const btn = $('ko-dispatch-btn');
+    btn.disabled = true; btn.textContent = '⏳ 正在驱动 Codex…';
+    $('ko-dispatch').style.display = ''; $('ko-log').textContent = '';
+    const r = await authFetch(`/command/goals/${g.number}/dispatch`, { method: 'POST' });
+    const d = await r.json().catch(() => ({}));
+    const lines = (d.logs || []).map(l => `${l.ok ? '✓' : '✗'} ${l.step}${l.note ? ' · ' + l.note : ''}`);
+    lines.push(d.ok ? '✓ 已发送。回到这里等结果：派发后会自动扫描 15 分钟，goal/N-* 分支一出现就进收件箱。'
+                    : '✗ 派发失败：' + (d.error || '未知错误') + '。可以手动复制开工包。');
+    $('ko-log').textContent = lines.join('\n');
+    btn.disabled = false; btn.textContent = '⚡ 派发给 Codex';
+    if (d.ok) toast('已派发，执行中…');
+  };
+  $('ko-copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('ko-text').textContent); toast('已复制，去粘贴吧'); }
+    catch { toast('复制失败，请手动选择文本'); }
+  };
+  $('ko-close2').onclick = closeModal;
+  $('btn-addresult').onclick = async () => {
+    const ref = prompt('结果是什么？分支名 / 链接 / 文件路径');
+    if (!ref) return;
+    const d = await act('/command/results', { space_id: g.space_id, goal_number: g.number, ref, title: '手动登记' });
+    if (d) { toast('已登记'); refresh(); loadResults(g); }
+  };
+  $('btn-close').onclick = async () => {
+    const next = g.status === 'open' ? 'closed' : 'open';
+    if (await act(`/command/goals/${g.number}/status`, { status: next })) refresh();
+  };
+}
+let resGoal = 0;
+async function loadResults(g) {
+  resGoal = g.number;
+  const r = await authFetch('/command/results?space_id=' + encodeURIComponent(g.space_id) + '&goal_number=' + g.number);
+  if (!r.ok || resGoal !== g.number) return;
+  const list = await r.json();
+  const box = $('res-list');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!list.length) { box.innerHTML = '<div class="resrow"><span style="color:var(--dim)">还没有结果。开工后，goal/' + g.number + '-* 分支会被自动发现。</span></div>'; return; }
+  for (const res of list) {
+    const row = document.createElement('div');
+    row.className = 'resrow';
+    row.innerHTML = `<span class="tag ${res.kind === 'branch' ? 't-result' : res.kind === 'commit' ? 't-close' : 't-orphan'}">${res.kind}</span><span class="mono"></span>`;
+    row.querySelector('.mono').textContent = res.ref;
+    box.appendChild(row);
+  }
+}
+
+// ── modals ────────────────────────────────────────────────────────────
+function openModal(id) { $('scrim').classList.add('on'); $(id).classList.add('on'); }
+function closeModal() {
+  $('scrim').classList.remove('on');
+  for (const id of ['modal-kickoff', 'modal-goal', 'modal-space']) $(id).classList.remove('on');
+}
+$('scrim').onclick = closeModal;
+function openModalGoal(spaceID) {
+  $('g-space').innerHTML = state.spaces.map(s =>
+    `<option value="${s.id}" ${s.id === spaceID ? 'selected' : ''}>${s.name}</option>`).join('');
+  $('g-title').value = ''; $('g-desc').value = ''; $('g-done').value = '';
+  openModal('modal-goal');
+}
+$('btn-newspace').onclick = () => { $('s-name').value = ''; $('s-repo').value = ''; openModal('modal-space'); };
+$('s-cancel').onclick = closeModal;
+$('s-save').onclick = async () => {
+  const d = await act('/command/spaces', { name: $('s-name').value, repo_path: $('s-repo').value });
+  if (d) { toast('空间已创建'); closeModal(); refresh(); }
+};
+$('g-cancel').onclick = closeModal;
+$('g-save').onclick = async () => {
+  const done = $('g-done').value.split('\n').map(s => s.trim()).filter(Boolean);
+  const d = await act('/command/goals', {
+    space_id: $('g-space').value, title: $('g-title').value,
+    description: $('g-desc').value, done,
+  });
+  if (d) { toast(`目标 #${d.number} 已创建`); closeModal(); view = { kind: 'goal', n: d.number }; refresh(); }
+};
+$('nav-inbox').onclick = () => { view = { kind: 'inbox' }; render(); };
+$('btn-scan').onclick = async () => {
+  const d = await act('/command/scan', {});
+  if (d) toast(`扫描完成：新结果 ${d.new_results} 条，收件箱 +${d.new_inbox}`), refresh();
+};
+
+// ── boot: load → scan once → poll every 30s ───────────────────────────
+refresh().then(() => act('/command/scan', {}).then(refresh));
+pollTimer = setInterval(refresh, 30000);
+</script>
+</body>
+</html>

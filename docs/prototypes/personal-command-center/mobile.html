@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyAgent · 手机端原型</title>
+<style>
+:root{
+  --bg:#131718;--elev:#181d1f;--raised:#1e2426;--sunken:#0e1112;
+  --ink:#edf2f0;--muted:#9aa8a3;--dim:#6b7a75;--accent:#4ecdc4;--accent-ink:#081a17;
+  --line:rgba(255,255,255,.08);--line2:rgba(255,255,255,.14);
+  --warn:#f0b95a;--danger:#ef7d7d;--ok:#6ee7b7;--violet:#a99cf5;--blue:#7cb7f0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0c0d;color:var(--ink);font:13px/1.55 -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;gap:56px;padding:24px}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+.grow{flex:1}
+/* phone */
+.phone{width:380px;height:800px;border-radius:44px;border:11px solid #000;background:var(--bg);position:relative;overflow:hidden;box-shadow:0 40px 100px rgba(0,0,0,.6),0 0 0 1px #2a2f31;flex:none;display:flex;flex-direction:column}
+.statusbar{height:34px;flex:none;display:flex;align-items:center;padding:0 22px;font-size:12px;font-weight:600}
+.statusbar .cam{position:absolute;left:50%;top:9px;width:12px;height:12px;border-radius:50%;background:#000;transform:translateX(-50%)}
+.topbar{flex:none;padding:6px 18px 10px;display:flex;align-items:center;gap:10px}
+.topbar h1{font-size:22px;font-weight:600}
+.topbar .back{font-size:20px;color:var(--muted);padding-right:4px}
+.hub{font-size:11px;color:var(--muted);display:flex;gap:5px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:2px 8px}
+.screen{flex:1;overflow:auto;padding:0 14px 90px}
+.screen::-webkit-scrollbar{display:none}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex:none}
+.ring{width:9px;height:9px;border-radius:50%;border:1.5px solid;display:inline-block;flex:none}
+/* nav */
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:72px;background:rgba(24,29,31,.97);border-top:1px solid var(--line);display:flex;padding:6px 6px 14px;backdrop-filter:blur(8px)}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:var(--dim);position:relative}
+.tab .i{font-size:19px;line-height:1.2;padding:2px 16px;border-radius:14px}
+.tab.on{color:var(--ink)}
+.tab.on .i{background:rgba(78,205,196,.16);color:var(--accent)}
+.tab .bd{position:absolute;top:0;left:56%;background:var(--danger);color:#fff;font-size:10px;border-radius:8px;padding:0 5px;font-weight:600}
+.fab{position:absolute;right:18px;bottom:88px;width:54px;height:54px;border-radius:16px;background:var(--accent);color:var(--accent-ink);font-size:26px;font-weight:500;box-shadow:0 8px 24px rgba(78,205,196,.3);z-index:3}
+/* cards */
+.brief{background:linear-gradient(135deg,rgba(78,205,196,.12),rgba(78,205,196,.02));border:1px solid rgba(78,205,196,.22);border-radius:14px;padding:11px 13px;margin-bottom:12px;font-size:12px;color:var(--muted)}
+.brief b{color:var(--ink);font-weight:500}
+.card{background:var(--elev);border:1px solid var(--line);border-radius:14px;padding:12px 13px;margin-bottom:9px;transition:opacity .25s,transform .25s}
+.card.out{opacity:0;transform:translateX(60px)}
+.card.new{animation:pop .6s}
+@keyframes pop{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
+.card .r1{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px;color:var(--dim)}
+.card .title{font-size:14px;font-weight:500;line-height:1.45;margin-bottom:3px}
+.card .gref{font-size:11.5px;color:var(--muted);margin-bottom:9px;display:flex;gap:5px;align-items:center}
+.card .acts{display:flex;gap:7px}
+.btn{flex:1;padding:9px 0;border-radius:10px;background:var(--raised);border:1px solid var(--line);font-size:13px;text-align:center}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.btn.sm{flex:none;padding:6px 12px;font-size:12px}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:4px;font-weight:500}
+.t-result{background:rgba(124,183,240,.14);color:var(--blue)}
+.t-approve{background:rgba(240,185,90,.14);color:var(--warn)}
+.t-handoff{background:rgba(78,205,196,.14);color:var(--accent)}
+.t-stuck{background:rgba(239,125,125,.14);color:var(--danger)}
+.t-server{background:rgba(169,156,245,.14);color:var(--violet)}
+.devb{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--muted);border:1px solid var(--line2);border-radius:4px;padding:0 5px}
+.sec{font-size:11px;color:var(--dim);margin:14px 4px 6px}
+.row{display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--elev);border:1px solid var(--line);border-radius:12px;margin-bottom:7px;cursor:pointer}
+.row .tt{flex:1;min-width:0}.row .a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}.row .b{font-size:11px;color:var(--dim)}
+.prog{height:4px;background:var(--sunken);border-radius:2px;overflow:hidden;margin-top:5px}
+.prog i{display:block;height:100%;background:var(--accent)}
+.chev{color:var(--dim)}
+/* goal detail */
+.gh{padding:2px 4px 10px}
+.gh .t{font-size:19px;font-weight:600;line-height:1.35}
+.gh .m{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+.st{font-size:11px;padding:1px 8px;border-radius:9px;background:rgba(78,205,196,.12);color:var(--accent)}
+.blk{background:var(--elev);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.li{display:flex;gap:9px;align-items:flex-start;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13px}
+.li:last-child{border-bottom:none}
+.box{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--line2);flex:none;margin-top:2px;display:grid;place-items:center;font-size:10px}
+.box.on{background:var(--ok);border-color:var(--ok);color:var(--accent-ink)}
+.need{font-size:10px;color:var(--warn);border:1px solid rgba(240,185,90,.35);border-radius:4px;padding:0 4px;margin-left:4px}
+.li .s{margin-left:auto;font-size:11px;white-space:nowrap}
+.li .sub{font-size:11px;color:var(--dim)}
+.actbar{display:flex;gap:8px;margin:12px 0}
+/* devices */
+.dv{background:var(--elev);border:1px solid var(--line);border-radius:12px;padding:11px 13px;margin-bottom:8px}
+.dv.hubc{border-color:rgba(78,205,196,.4)}
+.dv .h{display:flex;align-items:center;gap:8px}
+.dv .n{font-weight:600}
+.dv .os{font-size:11px;color:var(--dim)}
+.dv .now{font-size:12px;color:var(--muted);margin-top:7px;background:var(--raised);border-radius:8px;padding:6px 9px}
+/* sheet */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s;z-index:5}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--elev);border-radius:22px 22px 0 0;border-top:1px solid var(--line2);transform:translateY(100%);transition:.28s cubic-bezier(.2,.8,.2,1);z-index:6;padding:8px 16px 22px;max-height:88%;overflow:auto}
+.sheet.on{transform:none}
+.sheet .grab{width:36px;height:4px;border-radius:2px;background:var(--line2);margin:0 auto 12px}
+.sheet h3{font-size:16px;margin-bottom:4px}
+.sheet .hint{font-size:12px;color:var(--muted);margin-bottom:10px}
+.pick{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.pk{border:1px solid var(--line);border-radius:11px;padding:8px 10px;text-align:left;background:var(--raised);font-size:12.5px}
+.pk.on{border-color:var(--accent);background:rgba(78,205,196,.08)}
+.pk.off{opacity:.4}
+.pk .w{font-size:10.5px;color:var(--dim)}
+.lbl{font-size:11px;color:var(--dim);margin:12px 0 6px}
+.mode{font-size:11px;color:var(--muted);background:var(--raised);border-radius:8px;padding:7px 9px;margin-top:10px;line-height:1.6}
+.diff{background:var(--sunken);border-radius:9px;padding:8px 10px;font:11.5px/1.65 ui-monospace,Menlo,monospace;color:var(--muted);white-space:pre-wrap;margin:8px 0}
+.add{color:var(--ok)}.del{color:var(--danger)}
+.inp{width:100%;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:11px 12px;outline:none;font-size:14px;resize:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:5px 11px;border-radius:14px;border:1px solid var(--line);font-size:12px;color:var(--muted)}
+.chip.on{border-color:var(--accent);color:var(--accent);background:rgba(78,205,196,.08)}
+/* notification */
+.notif{position:absolute;left:10px;right:10px;top:40px;background:rgba(40,46,48,.98);border-radius:18px;padding:11px 13px;z-index:9;transform:translateY(-220%);transition:.35s cubic-bezier(.2,.8,.2,1);box-shadow:0 10px 30px rgba(0,0,0,.5);cursor:pointer}
+.notif.on{transform:none}
+.notif .nh{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--muted);margin-bottom:3px}
+.notif .nh b{color:var(--accent)}
+.notif .nt{font-size:13px;font-weight:500}
+.notif .nb{font-size:12px;color:var(--muted)}
+.notif .na{display:flex;gap:7px;margin-top:8px}
+.toast{position:absolute;left:50%;bottom:92px;transform:translate(-50%,10px);background:#2a3133;border-radius:10px;padding:8px 14px;font-size:12px;opacity:0;transition:.25s;z-index:10;white-space:nowrap}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+/* notes */
+.notes{max-width:440px;color:var(--muted);line-height:1.8}
+.notes h2{color:var(--ink);font-size:18px;margin-bottom:4px}
+.notes .lead{margin-bottom:18px}
+.notes h4{color:var(--ink);font-size:13px;margin:16px 0 4px}
+.notes p{font-size:13px}
+.notes b{color:var(--ink);font-weight:500}
+.notes code{background:var(--raised);padding:0 5px;border-radius:4px;font-size:12px}
+.notes .tbl{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:12.5px;margin-top:6px}
+.notes .tbl span:nth-child(odd){color:var(--ink)}
+.notes .try{margin-top:20px;border:1px solid var(--line2);border-radius:10px;padding:10px 12px;font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="statusbar"><span>09:41</span><div class="cam"></div><span class="grow"></span><span>5G ▮▮▮ 82%</span></div>
+  <div class="topbar" id="topbar"></div>
+  <div class="screen" id="screen"></div>
+  <button class="fab" id="fab" onclick="openCapture()">＋</button>
+  <nav class="tabbar" id="tabbar"></nav>
+  <div class="notif" id="notif"></div>
+  <div class="scrim" id="scrim" onclick="closeSheet()"></div>
+  <div class="sheet" id="sheet"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<div class="notes">
+  <h2>手机端：只做决定，不做实现</h2>
+  <div class="lead">桌面端负责「看全局、干活」，手机端负责<b>「30 秒内拍板」</b>。手机只连中枢，看到的是同一份目标、结果和设备。</div>
+  <h4>四个页签</h4>
+  <div class="tbl">
+    <span>收件箱</span><span>验收、批准、接手、派活，每条一屏内处理完</span>
+    <span>目标</span><span>只看进度、结果、卡在哪；不看会话细节</span>
+    <span>设备</span><span>5 台机器在干什么，取代现在逐台「切换主机」</span>
+    <span>随手聊</span><span>现在的手机对话，保持不变</span>
+  </div>
+  <h4>右下角 ＋：随手记</h4>
+  <p>说一句话（或语音），EasyAgent 判断它是<b>新目标</b>、某个目标的<b>补充</b>，还是一个<b>问题</b>，你确认后归档。</p>
+  <h4>从手机派活，有一个现实约束</h4>
+  <p>人不在电脑前，就只能用工具的<b>无头模式</b>：<code>codex exec</code>、<code>claude -p</code>、EasyAgent 自己。Codex 桌面版这种需要人坐在屏幕前的工具，手机只能「排队，等你回到那台机器时提醒」。</p>
+  <h4>和现在的 Android 端的关系</h4>
+  <p>现在是<b>逐台保存、切换主机</b>，每台主机都是孤岛。改成<b>只连中枢</b>后，主机列表变成「设备」页签，审批和会话能力原样保留在「随手聊」和目标里。</p>
+  <div class="try"><b>试试：</b>① 等 4 秒，顶部会弹通知（mac 离线留下交接包），点它接手　② 收件箱里的 PR 点「看改动」，在弹出面板里合并　③ 点右下角 ＋，输入一句话　④ 目标页点「派活」，看手机派活时的工具限制</div>
+</div>
+
+<script>
+const TOOLS={codex:{n:'Codex',i:'⌘',c:'#7cb7f0',headless:'codex exec'},claude:{n:'Claude Code',i:'✳',c:'#e8a27c',headless:'claude -p'},zcode:{n:'zcode',i:'Z',c:'#9bd36a',headless:null},ea:{n:'EasyAgent',i:'ea·',c:'#4ecdc4',headless:'内置'}};
+const DEV={
+  mac:{n:'mac',os:'macOS',ic:'⌘',st:'busy',now:'#12 · Codex 实现审批按钮',tools:['codex','claude','zcode','ea'],cap:'macOS 打包'},
+  win:{n:'win',os:'Windows',ic:'⊞',st:'online',now:null,tools:['codex','claude','ea'],cap:'Windows 兼容'},
+  lx:{n:'lx-dev',os:'Ubuntu',ic:'🐧',st:'online',now:null,tools:['codex','claude','zcode','ea'],cap:'Android 构建'},
+  s1:{n:'srv-1',os:'Debian',ic:'▤',st:'busy',now:'#10 · 压测 31/50 轮',tools:['codex','claude','ea'],cap:'长任务'},
+  s2:{n:'srv-2',os:'Debian',ic:'▤',st:'online',now:null,tools:['claude','ea'],cap:'长任务'},
+  mini:{n:'mini',os:'中枢',ic:'★',st:'online',now:'目标 / 结果 / 设备注册表',tools:['ea'],cap:'飞书 · 手机',hub:true},
+};
+const DC={online:'var(--ok)',busy:'var(--accent)',offline:'var(--dim)'};
+const goals=[
+  {id:12,t:'Android 端收件箱',sp:'easyagent',c:'#4ecdc4',dev:'mac',pct:25,due:'11-15',
+   crit:[['列表显示待审批 / 完成 / 失败',1],['能在手机上直接批准工具调用',0],['真机安装包验证',0,'lx'],['随 v0.19 发布',0]],
+   res:[['⎇','PR #216 收件箱列表页','lx-dev · 已合并','var(--ok)'],['⑂','goal/12-mobile-approve','mac · 2 个提交','var(--warn)'],['📄','交互方案.md','mini · 已确认','var(--muted)']]},
+  {id:11,t:'API 限流与常量时间比较',sp:'easyagent',c:'#4ecdc4',dev:'win',pct:67,st:'待验收',crit:[['令牌比较常量时间',1],['连续失败触发节流',1],['合并到 main',0]],res:[['⎇','PR #215','win · CI 通过 · 待合并','var(--blue)']]},
+  {id:10,t:'夜间测试稳定',sp:'easyagent',c:'#4ecdc4',dev:'s1',pct:0,crit:[['定位 sdk/mcp 重连超时',0],['连续 7 天全绿',0]],res:[['⚙','压测日志：已复现 2 次','srv-1 · 进行中','var(--accent)']]},
+  {id:21,t:'B 公司：Agent 平台工程师',sp:'求职',c:'#f0b95a',dev:'mini',pct:33,due:'周五',crit:[['定制简历',1],['跟进 HR',0],['完成笔试',0]],res:[['📄','简历-B.md','mini · 已确认','var(--ok)'],['✉','跟进邮件','等你批准','var(--warn)']]},
+  {id:31,t:'读完 codex-rs exec 模块',sp:'学 Rust',c:'#ef7d7d',dev:'lx',pct:0,crit:[['沙箱章节笔记',0]],res:[]},
+];
+let inbox=[
+  {id:'pr',type:'result',tt:'待验收',g:11,dev:'win',title:'PR #215 CI 通过，可以合并',acts:[['看改动','diff'],['合并','drop:已合并 · #11 完成',1]]},
+  {id:'ml',type:'approve',tt:'待批准',g:21,dev:'mini',title:'发送跟进邮件给 B 公司 HR',acts:[['看草稿','mail'],['允许','drop:已发送 · 「跟进 HR」已勾选',1]]},
+  {id:'sv',type:'server',tt:'服务器',g:10,dev:'s1',title:'srv-1 压测 31/50 轮，已复现 2 次超时',acts:[['再等等','drop:好的，跑完通知你'],['交给 Codex 修','dispatch10',1]]},
+  {id:'st',type:'stuck',tt:'没动静',g:31,title:'9 天没有新结果',acts:[['推到周六','drop:已推到周六'],['暂停','drop:已暂停']]},
+];
+let tab='inbox',stack=[],pick={dev:null,tool:null,gid:null};
+const $=id=>document.getElementById(id);
+const G=id=>goals.find(g=>g.id===id);
+const devB=k=>k?`<span class="devb"><span class="dot" style="background:${DC[DEV[k].st]};width:5px;height:5px"></span>${DEV[k].n}</span>`:'';
+function toast(t){const e=$('toast');e.textContent=t;e.classList.add('on');clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove('on'),2200)}
+
+function render(){
+  const top=stack[stack.length-1];
+  const titles={inbox:'收件箱',goals:'目标',devices:'设备',chat:'随手聊'};
+  $('topbar').innerHTML=top?`<button class="back" onclick="stack.pop();render()">‹</button><span style="color:var(--muted);font-size:13px">#${top.id} · ${G(top.id).sp}</span>`
+    :`<h1>${titles[tab]}</h1><span class="grow"></span><span class="hub"><span class="dot" style="background:var(--ok);width:6px;height:6px"></span>中枢 mini</span>`;
+  $('screen').innerHTML=top?vGoal(G(top.id)):{inbox:vInbox,goals:vGoals,devices:vDevices,chat:vChat}[tab]();
+  $('fab').style.display=top?'none':'block';
+  const tabs=[['inbox','◎','收件箱',inbox.length],['goals','◉','目标'],['devices','⧉','设备'],['chat','💬','随手聊']];
+  $('tabbar').innerHTML=tabs.map(([k,i,l,b])=>`<button class="tab ${tab===k&&!top?'on':''}" onclick="stack=[];tab='${k}';render()"><span class="i">${i}</span>${l}${b?`<span class="bd">${b}</span>`:''}</button>`).join('');
+}
+function card(n){
+  const g=n.g?G(n.g):null;
+  return `<div class="card" id="c-${n.id}"><div class="r1"><span class="tag t-${n.type}">${n.tt}</span>${devB(n.dev)}<span class="grow"></span>${n.time||''}</div>
+  <div class="title">${n.title}</div>
+  ${g?`<div class="gref" onclick="openGoal(${g.id})"><span class="dot" style="background:${g.c}"></span>#${g.id} ${g.t} · ${g.pct}% ›</div>`:''}
+  <div class="acts">${n.acts.map(([l,a,p])=>`<button class="btn ${p?'pri':''}" onclick="act('${n.id}','${a}')">${l}</button>`).join('')}</div></div>`;
+}
+function vInbox(){
+  return `<div class="brief">☀ <b>${inbox.length} 件</b>等你拍板 · mac 和 srv-1 在干活 · <b>B 公司</b>周五截止</div>${inbox.map(card).join('')||'<div style="text-align:center;color:var(--dim);padding:60px 0">✓ 都处理完了</div>'}`;
+}
+function vGoals(){
+  return `<div class="sec">进行中</div>`+goals.map(g=>`<div class="row" onclick="openGoal(${g.id})"><span class="ring" style="border-color:${g.c}"></span><div class="tt"><div class="a">${g.t}</div><div class="b">${g.sp}${g.due?' · 截止 '+g.due:''}${g.st?' · '+g.st:''}</div><div class="prog"><i style="width:${g.pct}%"></i></div></div>${devB(g.dev)}<span class="chev">›</span></div>`).join('');
+}
+function vDevices(){
+  return Object.entries(DEV).map(([k,d])=>`<div class="dv ${d.hub?'hubc':''}"><div class="h"><span style="width:18px;text-align:center">${d.ic}</span><div><div class="n">${d.n}</div><div class="os">${d.os} · ${d.cap}</div></div><span class="grow"></span><span style="font-size:11px;color:${DC[d.st]}">● ${{online:'空闲',busy:'忙碌',offline:'离线'}[d.st]}</span></div>${d.now?`<div class="now">${d.now}</div>`:''}</div>`).join('')
+  +`<div style="font-size:11px;color:var(--dim);padding:6px 4px">经 Tailscale 互通。手机只连中枢，不再逐台切换主机。</div>`;
+}
+function vChat(){
+  return `<div class="sec">今天</div><div class="row"><span>💬</span><div class="tt"><div class="a">docker 镜像怎么瘦身</div><div class="b">mini · EasyAgent</div></div><span class="chev">›</span></div>
+  <div class="sec">更早</div><div class="row"><span>💬</span><div class="tt"><div class="a">翻译一段英文合同</div><div class="b">mini · EasyAgent</div></div><span class="chev">›</span></div>
+  <div style="font-size:11px;color:var(--dim);padding:8px 4px">和现在的手机端对话一样：流式输出、工具审批、排队消息。</div>`;
+}
+function vGoal(g){
+  return `<div class="gh"><div class="t">${g.t}</div><div class="m"><span class="st">${g.st||'进行中'}</span>${g.dev?'正在 '+devB(g.dev):''}${g.due?`<span style="color:var(--warn)">截止 ${g.due}</span>`:''}</div>
+  <div class="prog" style="margin-top:10px;height:5px"><i style="width:${g.pct}%"></i></div></div>
+  <div class="actbar"><button class="btn pri" onclick="openDispatch(${g.id})">▶ 派活</button>${g.dev?`<button class="btn" onclick="openHandoff(${g.id})">⇄ 交接</button>`:''}<button class="btn" onclick="toast('已让 EasyAgent 汇总进展，稍后推送')">问进展</button></div>
+  <div class="sec">完成标准</div><div class="blk">${g.crit.map(([t,ok,need])=>`<div class="li"><span class="box ${ok?'on':''}">${ok?'✓':''}</span><span>${t}${need&&!ok?`<span class="need">需要 ${DEV[need].n}</span>`:''}</span></div>`).join('')}</div>
+  <div class="sec">结果</div><div class="blk">${g.res.map(([i,t,s,c])=>`<div class="li"><span>${i}</span><div><div>${t}</div><div class="sub" style="color:${c}">${s}</div></div></div>`).join('')||'<div class="li sub">还没有结果</div>'}</div>
+  <div style="font-size:11px;color:var(--dim);padding:2px 4px">过程（会话）在手机上不展示，需要时去电脑上看。</div>`;
+}
+function openGoal(id){stack.push({id});render();$('screen').scrollTop=0}
+function rm(id,msg){const el=$('c-'+id);if(el)el.classList.add('out');setTimeout(()=>{inbox=inbox.filter(x=>x.id!==id);render()},250);if(msg)toast(msg)}
+function act(id,a){
+  if(a.startsWith('drop:'))return rm(id,a.slice(5));
+  if(a==='diff')return sheet(`<h3>PR #215 · 4 个文件 +186 −23</h3><div class="hint">win · Codex 产出 · CI 通过</div><div class="diff"> internal/server/auth.go       <span class="add">+92</span> <span class="del">−18</span>
+ internal/server/ratelimit.go  <span class="add">+71</span>
+ internal/server/auth_test.go  <span class="add">+21</span> <span class="del">−5</span></div><div class="diff"><span class="del">- if token != expected {</span>
+<span class="add">+ if subtle.ConstantTimeCompare(</span>
+<span class="add">+     []byte(token), []byte(expected)) != 1 {</span></div><div class="actbar"><button class="btn" onclick="closeSheet();rm('pr','已打回，附上你的语音意见')">打回</button><button class="btn pri" onclick="closeSheet();rm('pr','已合并 · #11 完成')">合并</button></div>`);
+  if(a==='mail')return sheet(`<h3>跟进邮件草稿</h3><div class="hint">发给 hr@b-company.com · 外发需要你批准</div><div class="diff" style="font-family:inherit;color:var(--ink)">您好，我是上周投递 Agent 平台工程师岗位的候选人，想跟进一下流程进展…</div><div class="actbar"><button class="btn" onclick="toast('语音修改…')">🎤 改一下</button><button class="btn pri" onclick="closeSheet();rm('ml','已发送')">允许发送</button></div>`);
+  if(a==='dispatch10'){rm(id);return openDispatch(10,'复现日志会一起带过去')}
+  if(a==='takeover'){rm(id);return openHandoff(12,true)}
+}
+/* sheets */
+function sheet(h){$('sheet').innerHTML='<div class="grab"></div>'+h;$('sheet').classList.add('on');$('scrim').classList.add('on')}
+function closeSheet(){$('sheet').classList.remove('on');$('scrim').classList.remove('on')}
+function openDispatch(gid,hint){
+  const g=G(gid);pick.gid=gid;pick.hint=hint;
+  if(!pick.dev||pick.gid0!==gid){pick.dev=gid===10?'lx':g.crit.find(c=>c[2]&&!c[1])?.[2]||'lx';pick.tool='codex';pick.gid0=gid}
+  const d=DEV[pick.dev];
+  sheet(`<h3>派活 · #${g.id} ${g.t}</h3><div class="hint">${hint?'💡 '+hint:'你不在电脑前，所以只能用无头模式的工具。'}</div>
+  <div class="lbl">哪台机器</div><div class="pick">${Object.entries(DEV).filter(([k,x])=>!x.hub).map(([k,x])=>`<button class="pk ${pick.dev===k?'on':''} ${x.st==='offline'?'off':''}" onclick="${x.st==='offline'?'':`pick.dev='${k}';openDispatch(${gid},pick.hint)`}">${x.ic} <b>${x.n}</b><div class="w">${x.st==='offline'?'离线':x.st==='busy'?'忙':x.cap}</div></button>`).join('')}</div>
+  <div class="lbl">什么工具（${d.n} 上的）</div><div class="pick">${d.tools.map(t=>{const T=TOOLS[t];const ok=!!T.headless;return `<button class="pk ${pick.tool===t?'on':''} ${ok?'':'off'}" onclick="${ok?`pick.tool='${t}';openDispatch(${gid},pick.hint)`:`toast('${T.n} 需要人在屏幕前，可以排队到你回到 ${d.n} 时提醒')`}"><span style="color:${T.c};font-weight:600">${T.i}</span> ${T.n}<div class="w">${ok?'无头：'+T.headless:'需要人在场 · 只能排队'}</div></button>`}).join('')}</div>
+  <div class="lbl">补一句（可选）</div><textarea class="inp" rows="2" placeholder="🎤 按住说话，或输入…"></textarea>
+  <div class="mode">中枢通过 Tailscale 让 <b>${d.n}</b> 拉取分支，用 <b>${TOOLS[pick.tool].headless}</b> 带着开工包运行；产出的提交会自动挂回 #${g.id}。</div>
+  <div class="actbar"><button class="btn" onclick="closeSheet()">取消</button><button class="btn pri" onclick="closeSheet();toast('已派到 ${d.n} · ${TOOLS[pick.tool].n}');DEV['${pick.dev}'].st='busy';DEV['${pick.dev}'].now='#${g.id} · ${TOOLS[pick.tool].n}（无头）';render()">派出</button></div>`);
+}
+function openHandoff(gid,auto){
+  const g=G(gid);
+  sheet(`<h3>${auto?'接手':'交接'} · #${g.id} ${g.t}</h3><div class="hint">${auto?'mac 离线前已经留下交接包':'从 '+DEV[g.dev].n+' 交出去'}</div>
+  <div class="blk"><div class="li"><span class="box ${auto?'on':''}">${auto?'✓':''}</span>未提交的 3 个文件推成 WIP 提交</div><div class="li"><span class="box ${auto?'on':''}">${auto?'✓':''}</span>Codex 会话整理成交接说明</div><div class="li"><span class="box"></span>在 lx-dev 上用 Claude Code（无头）接着干</div></div>
+  <div class="diff" style="font-family:inherit"><b style="color:var(--ink)">下一步</b>：审批超时后的状态回滚；补 ViewModel 单测
+<b style="color:var(--ink)">注意</b>：Compose 预览崩溃只在 mac 上出现</div>
+  <div class="actbar"><button class="btn" onclick="closeSheet()">${auto?'等 mac 回来':'取消'}</button><button class="btn pri" onclick="closeSheet();G(${gid}).dev='lx';DEV.lx.st='busy';DEV.lx.now='#${gid} · 接手（Claude Code 无头）';toast('lx-dev 已接手 #${gid}');render()">在 lx-dev 接手</button></div>`);
+}
+function openCapture(){
+  sheet(`<h3>随手记</h3><div class="hint">说一句，EasyAgent 判断它该放哪</div><textarea class="inp" id="cap" rows="3" placeholder="🎤 例如：Windows 上安装包打开闪退，回头查一下"></textarea>
+  <div id="capr" class="lbl" style="min-height:20px"></div>
+  <div class="actbar"><button class="btn" onclick="closeSheet()">取消</button><button class="btn pri" onclick="capDone()">确认</button></div>`);
+  setTimeout(()=>$('cap').focus(),300);
+  $('cap').oninput=()=>{const v=$('cap').value;$('capr').innerHTML=!v?'':/查|修|做|加|发布|实现/.test(v)?`→ 识别为 <b style="color:var(--accent)">新目标</b>：「${v.slice(0,16)}」 · 空间 easyagent${/windows/i.test(v)?' · <span class="need">需要 win</span>':''}`:/[?？吗]$/.test(v)?'→ 识别为 <b style="color:var(--accent)">问题</b>：在随手聊里回答':'→ 识别为 <b style="color:var(--accent)">补充</b>：挂到 #12 的笔记'};
+}
+function capDone(){const v=$('cap').value.trim()||'Windows 上安装包打开闪退';closeSheet();goals.unshift({id:41,t:v.slice(0,18),sp:'easyagent',c:'#4ecdc4',dev:null,pct:0,crit:[[v.slice(0,18)+' 已修复',0],['在 Windows 上验证',0,'win']],res:[]});toast('已建目标 #41，电脑上也能看到');tab='goals';stack=[];render()}
+/* notification demo */
+function notify(){
+  const n=$('notif');
+  n.innerHTML=`<div class="nh"><b>ea·</b> EasyAgent · 现在</div><div class="nt">mac 离线了，#12 留下了交接包</div><div class="nb">未提交改动已推成 WIP。lx-dev 空闲，能接手。</div><div class="na"><button class="btn sm pri" onclick="event.stopPropagation();n_close();inbox=inbox.filter(x=>x.id!=='ho');openHandoff(12,true)">接手</button><button class="btn sm" onclick="event.stopPropagation();n_close()">稍后</button></div>`;
+  n.classList.add('on');n.onclick=()=>{n_close();stack=[];tab='inbox';render()};
+  DEV.mac.st='offline';DEV.mac.now=null;
+  inbox.unshift({id:'ho',type:'handoff',tt:'可接手',g:12,dev:'mac',title:'mac 离线了，#12 留下了交接包',time:'刚刚',acts:[['等 mac','drop:好的，mac 上线后提醒你'],['在 lx-dev 接手','takeover',1]]});
+  render();document.querySelector('#c-ho')?.classList.add('new');
+  setTimeout(n_close,7000);
+}
+function n_close(){$('notif').classList.remove('on')}
+setTimeout(notify,4000);
+render();
+</script>
+</body>
+</html>

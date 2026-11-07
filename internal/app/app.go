@@ -9,6 +9,7 @@ import (
 
 	"github.com/nightgopher/easyagent/internal/agents/business"
 	"github.com/nightgopher/easyagent/internal/agents/coding"
+	"github.com/nightgopher/easyagent/internal/command"
 	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
@@ -42,6 +43,7 @@ type App struct {
 	applications      map[string]runtime.Application // named applications for per-session selection
 	extraTools        []agent.ExternalToolDef
 	profile           *profile.Store // unified user profile (shared across agents)
+	command           *command.Store // personal command center (spaces/goals/results)
 	loopMgr           *scheduler.LoopManager
 }
 
@@ -60,6 +62,10 @@ type AppOptions struct {
 	// Profile is the unified user profile store (shared across agents).
 	// Optional — if nil, profile API endpoints return empty.
 	Profile *profile.Store
+
+	// Command is the personal command center store (spaces, goals, results,
+	// inbox). Optional — if nil, command endpoints return empty.
+	Command *command.Store
 }
 
 // New creates a new App, assembling all shared dependencies.
@@ -118,6 +124,7 @@ func New(opts AppOptions) (*App, error) {
 		application:       application,
 		applications:      apps,
 		profile:           opts.Profile,
+		command:           opts.Command,
 		loopMgr:           scheduler.NewLoopManager(),
 	}
 	result.initMCP()
@@ -150,6 +157,12 @@ func (a *App) ResolveApplication(name string) runtime.Application {
 }
 
 // Profile returns the unified user profile store (may be nil if not configured).
+// Command returns the personal command center store (nil-safe callers
+// should treat nil as "feature disabled").
+func (a *App) Command() *command.Store {
+	return a.command
+}
+
 func (a *App) Profile() *profile.Store {
 	return a.profile
 }
@@ -404,7 +417,13 @@ func (a *App) ToolNames() []string {
 		ToolNames(enableBash bool) []string
 	}
 	var baseNames []string
-	if tn, ok := a.application.(toolNamer); ok {
+	application := a.application
+	if configurable, ok := application.(interface {
+		WithRuntimeOverrides(config.Config) runtime.Application
+	}); ok {
+		application = configurable.WithRuntimeOverrides(cfg)
+	}
+	if tn, ok := application.(toolNamer); ok {
 		baseNames = tn.ToolNames(cfg.EnableBash)
 	} else {
 		baseNames = coding.BaseToolNames(cfg.EnableBash)
@@ -429,7 +448,8 @@ func (a *App) ToolNames() []string {
 		baseNames = append(baseNames, tool.Name())
 	}
 	// Apply filtering
-	if len(cfg.AllowedTools) == 0 && len(cfg.BlockedTools) == 0 {
+	blockedTools := cfg.EffectiveBlockedTools()
+	if len(cfg.AllowedTools) == 0 && len(blockedTools) == 0 {
 		return baseNames
 	}
 
@@ -437,8 +457,8 @@ func (a *App) ToolNames() []string {
 	for _, name := range cfg.AllowedTools {
 		allowedSet[name] = true
 	}
-	blockedSet := make(map[string]bool, len(cfg.BlockedTools))
-	for _, name := range cfg.BlockedTools {
+	blockedSet := make(map[string]bool, len(blockedTools))
+	for _, name := range blockedTools {
 		blockedSet[name] = true
 	}
 

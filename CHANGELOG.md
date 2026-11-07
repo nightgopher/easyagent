@@ -4,6 +4,58 @@
 
 ## [Unreleased]
 
+## [v0.40.4] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码不变；v0.40.0–v0.40.3 tag 因不可变规则保留，均不发布 Release）：打包冒烟的就绪预算环境变量改用 `EASYAGENT_CORE_READY_SECONDS`（smoke 测试会清洗所有环境中的 `EA_*` 变量，EA_ 前缀永远到不了读取点）；同时让冒烟用例的运行上下文上限从同一变量推导（预算 + 15s），否则 20s 的 ctx 先到点，放宽预算无效。
+
+
+## [v0.40.3] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码不变；v0.40.0–v0.40.2 tag 因不可变规则保留，均不发布 Release）：v0.40.2 引入的打包冒烟就绪预算环境变量在 build-native.sh 中写成了 `EASYAGENT_CORE_READY_SECONDS`，与实际读取的 `EA_CORE_READY_SECONDS` 不一致，预算未生效。对齐命名。
+
+
+## [v0.40.2] - 2026-11-06
+
+### Development
+- 发布工程修复（应用代码与 v0.40.0/v0.40.1 相同；v0.40.0 / v0.40.1 tag 因不可变规则保留，不发布 Release）：
+  - native-windows job 设置 `PYTHONUTF8=1`：Windows 上 Python 文件读取默认按 locale（cp1252）解码，仓库内 UTF-8 中文内容会让 `python3 -c` 的 JSON 读取崩溃（上一轮只修了 release.py 的 subprocess 解码，遗漏了这一处）。
+  - 打包冒烟的就绪预算支持 `EA_CORE_READY_SECONDS` 覆盖（默认仍为 15s，clamp 5–300），native 发布链路放宽到 60s：共享桌面机器上核心启动应答有数十秒级方差，真实坏包永不就绪，保障语义不变。
+
+
+## [v0.40.1] - 2026-11-06
+
+### Development
+- 发布工程修复：`release.py` 的 git 输出显式按 UTF-8 解码（Windows runner 默认 cp1252，CHANGELOG 的中文内容曾令 native-windows 的 validate 崩溃）；native 打包链路的测试收敛为打包保障（`TestPackagedCoreSmoke` + tools 子包），完整 desktop-native 套件继续在 PR 门禁的 hosted runner 上运行。应用代码与 v0.40.0 相同；v0.40.0 tag 因不可变规则保留，不发布 Release。
+
+
+## [v0.40.0] - 2026-11-06
+
+### Added
+- 企业微信智能机器人扫码连接：`/wecom setup` 在终端渲染二维码并轮询确认（3 秒间隔、5 分钟上限），机器人凭据保存至 `~/.easyagent/wecom-credentials.json`；`/wecom status` / `/wecom logout` 管理连接。协议对齐公开参考客户端 WecomTeam/wecom-cli；开放能力的工具化接入留待后续。(#83)
+- 工具权限管理：桌面「设置 → 工具权限」与网页设置可按运行主机配置文件读取/修改、终端命令、联网搜索、网页读取的允许与禁用名单，并展示配置来源；保存后新建或重新加载的会话生效。(#70)
+- Windows 发布产物：每版新增 `windows-amd64` 核心与 bridge 可执行文件，以及 MyGo NSIS 每用户安装器（`easyagent-native-windows-amd64-setup.exe`，暂无签名自动更新通道）。(#82)
+- CLI 飞书登录成功后可选择账号可用模型、切换模型并支持关闭 CLI 模式；SSH 远程登录提供回环端口转发指引。(#70)
+
+### Changed
+- 默认启用联网搜索与网页读取；DuckDuckGo 不可用时回退 Bing RSS；显式配置 SearXNG 时不向其他服务泄露查询。(#70)
+- 发布流水线新增 `windows/amd64` 核心矩阵与 `native-windows` job（windows-2025），发布入口等待其通过；`release.py` 的资产清单与门控同步扩展。(#82)
+- macOS native 发布 job 关闭 setup-go 缓存：自建 runner 上缓存的回拉/回传各自占用约 20 分钟家宽带宽且曾因 cache 服务鉴权失败中断，重下工具链反而更快。
+
+### Development
+- C 级迁移路径引用同步（Desktop→Projects）。(#77)
+
+
+### Added
+- Windows 成为正式发版平台：核心 `easyagent-windows-amd64(.exe)` / `easyagent-bridge-windows-amd64(.exe)` 进入全部发行（v0.39.4-alpha.1 起），原生桌面客户端新增 NSIS 每用户安装包 `easyagent-native-windows-amd64-setup.exe`（Windows runner 构建，暂无签名自动更新清单）；发版脚本与 CI 矩阵同步支持 windows/amd64。
+
+## [v0.39.3] - 2026-11-05
+
+### Fixed
+- 市场安装技能不再多套一层目录：store 包（如 GitHub "Download ZIP" 归档）自带顶层 `<name>/` 目录时，安装结果原本是 `skills/<name>/<name>/SKILL.md`，市场清单滞留在顶层。现在解压后由 `normalizeExtractedLayout` 拍平为 `skills/<name>/SKILL.md`（忽略 `__MACOSX` / `.DS_Store` 等 zip 副产物，受 `maxLiftDepth` 限制，歧义布局原样发布）。
+
+
 ## [v0.39.2] - 2026-11-04
 
 ### Development

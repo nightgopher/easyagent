@@ -25,7 +25,9 @@ EA_API_KEY=your-api-key
 
 Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
 
-EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 可执行 `easyagent easycode login` 打开浏览器授权，`easyagent easycode models` 列出账号可用模型，再设置 `EA_PROVIDER=deepv` 与 `EA_MODEL=<模型 ID>`。`easyagent easycode status` 和 `easyagent easycode logout` 查询或退出本机账号。
+EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 运行 `easyagent easycode login` 完成飞书授权后，会选择账号可用模型并作为后续 CLI 对话的默认模型；可用 `easyagent easycode models` 查看模型，`easyagent easycode use <模型 ID>` 切换，或首次登录时使用 `easyagent easycode login --model <模型 ID>` 指定。`easyagent easycode status` 查询状态，`easyagent easycode off` 停用 CLI 的 EasyCode 模式并恢复原配置（保留登录），`easyagent easycode logout` 退出账号。模型目录暂不可用时登录仍会保存，可稍后列出并选择模型。
+
+远程 SSH 登录可执行 `easyagent easycode login --no-browser`，并在本机另一个终端按提示运行 SSH 本地端口转发，然后在本机浏览器打开登录地址。回调仅监听远程主机的回环地址。CLI 的模型选择不会更改桌面或 `serve` 的模型配置；命令所在 shell 显式设置的 `EA_PROVIDER` 优先于保存的 CLI 选择，`EA_MODEL` / `OPENAI_MODEL` 可覆盖 EasyCode 模型。`.env` 中的旧默认配置则在 `easycode off` 后恢复。
 
 EasyAgent 的 EasyCode 凭据位于 `EA_HOME/easycode/credentials.json`，使用用户私有目录和文件权限，并独立于 EasyCode 原客户端。访问令牌到期自动续期；退出只删除这份本机凭据。桌面使用自身的 `EA_HOME=core-home`，与普通 CLI 各自登录。默认服务是 `https://api-code.deepvlab.ai`；测试或自建服务可通过 `EA_EASYCODE_BASE_URL` 指定 HTTPS 地址（本机回环地址允许 HTTP）。
 
@@ -73,13 +75,19 @@ Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSo
 | `EA_AUTO_APPROVE` | `false` | 跳过交互工具确认，对应 `-y` |
 | `EA_DEFAULT_ACCESS_MODE` | 沿用 `EA_AUTO_APPROVE`，未开启时为 `ask` | 新会话默认 `ask` / `full`；已保存的主机设置优先 |
 | `EA_ALLOW_OUTSIDE_WORKSPACE` | `false` | 允许文件工具访问工作区外路径 |
-| `EA_ENABLE_WEB` | `false` | 启用网页抓取工具 |
-| `EA_ENABLE_WEB_SEARCH` | `false` | 启用搜索工具 |
+| `EA_ENABLE_WEB` | `true` | 启用网页抓取工具，设为 `false` 可关闭 |
+| `EA_ENABLE_WEB_SEARCH` | `true` | 启用搜索工具，设为 `false` 可关闭 |
 | `EA_WEB_TIMEOUT_SECONDS` | `30` | 网页请求超时 |
 | `EA_MAX_OUTPUT_LEN` | `51200` | 工具输出长度上限（50KB，对齐 pi） |
 | `EA_SYNOPSIS_THRESHOLD` | `51200` | 输出概览化阈值：超过该长度的大输出对模型替换为结构概览（可用 `full_output` 工具按 ref 取回全文）。read/grep 等内容型工具豁免 |
 | `EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` | 空 | 逗号分隔的工具过滤名单 |
 | `EA_PROMPT_TEMPLATE` | 空 | 自定义系统提示模板 |
+
+搜索和公开网页抓取默认启用；未保存主机开关时，已有配置文件或环境变量中显式设置的 `false` 仍然有效。CLI 也可用 `--web=false` / `--web-search=false` 关闭，或用 `--web=true` / `--web-search=true` 覆盖已有配置。`EA_ALLOWED_TOOLS` 和 `EA_BLOCKED_TOOLS` 仍可限制这两个工具。默认搜索先请求 DuckDuckGo，失败时在同一次超时预算内尝试 Bing RSS；查询会发送给所用的搜索服务。设置 `SEARXNG_URL` 后仅使用指定的 SearXNG，不会向其他搜索服务回退。`WEB_SEARCH_TIMEOUT` 设置总超时秒数，默认 15 秒。网络限制、服务反爬或模型不支持工具调用仍可能使搜索不可用。
+
+桌面「设置 → 工具权限 → 内置工具」和网页设置可分别启停文件读取、文件修改、终端命令、联网搜索和读取网页，显示开关的配置来源及工具过滤后的实际状态。文件读取包含 `read`、`grep`、`find`、`ls`；文件修改包含 `write`、`edit`、`patch`、`delete_file`；终端开关控制 `bash` 和后台任务工具。这些开关只控制对应内置工具，不限制终端命令或其他已授权工具的能力，也不替代审批策略。
+
+开关保存在当前运行主机的 `<EA_DATA_DIR>/settings.json`，影响保存后新建或重新加载的会话；已经加载的会话和正在执行的任务保留原工具配置。桌面、网页、手机和飞书通过同一个主机服务时共享设置；独立 CLI 只有指向相同 `EA_DATA_DIR` 时才读取同一份设置。启动时的默认值、YAML 和环境变量提供初始状态，用户保存的主机设置覆盖它们，显式 `--web` / `--web-search` 参数优先并在界面显示为不可编辑。`EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 仍独立约束工具；即使开关打开，工具也可能因此不可用或部分可用。
 
 `easyagent serve --allow-outside-workspace` 与环境开关等效。默认检查绝对路径、相对路径及符号链接，防止文件工具逃出工作区；放开后仍受运行用户的系统权限限制。此开关与 `-y`、API 认证独立。HTTP 工作区文件接口仍有自己的路径检查，不能把文件工具开关理解为所有 API 的任意路径访问许可。
 

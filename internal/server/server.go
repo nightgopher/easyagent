@@ -192,6 +192,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /computer/settings", s.getComputerSettings)
 	restMux.HandleFunc("GET /settings/tool-discovery", s.getToolDiscovery)
 	restMux.HandleFunc("POST /settings/tool-discovery", s.setToolDiscovery)
+	restMux.HandleFunc("GET /settings/builtin-tools", s.getBuiltinTools)
+	restMux.HandleFunc("POST /settings/builtin-tools", s.setBuiltinTools)
 	restMux.HandleFunc("POST /computer/settings", s.updateComputerSettings)
 	restMux.HandleFunc("POST /computer/permissions", s.requestComputerPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/messages", s.getSessionMessages)
@@ -284,6 +286,9 @@ func (s *Server) Handler() http.Handler {
 	// User profile endpoints
 	s.registerProfileRoutes(restMux)
 
+	// Personal command center endpoints (spaces/goals/results/inbox)
+	s.registerCommandRoutes(restMux)
+
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
 
@@ -321,6 +326,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/tools", restHandler)
 	topMux.Handle("/tools/", restHandler)
 	topMux.Handle("/commands", restHandler)
+	topMux.Handle("/command", restHandler)
+	topMux.Handle("/command/", restHandler)
 	topMux.Handle("/mcp", restHandler)
 	topMux.Handle("/mcp/", restHandler)
 	topMux.Handle("/applications", restHandler)

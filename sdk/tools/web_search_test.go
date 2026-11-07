@@ -3,13 +3,110 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
+
+type stubSearchEngine struct {
+	results []SearchResult
+	err     error
+	calls   int
+}
+
+type searchRoundTrip func(*http.Request) (*http.Response, error)
+
+func (f searchRoundTrip) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestDuckDuckGoDistinguishesResultsAndBlockedPages(t *testing.T) {
+	for _, tc := range []struct {
+		name, body string
+		wantCount  int
+		wantErr    bool
+	}{
+		{"ordinary result mentioning captcha", `<a class="result__a" href="https://example.com">CAPTCHA docs</a>`, 1, false},
+		{"legitimate empty result", `<div>No results found for query</div>`, 0, false},
+		{"challenge", `<div class="anomaly-modal">Verify</div>`, 0, true},
+		{"unexpected markup", `<html>unrecognized page</html>`, 0, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := newDuckDuckGoEngine(time.Second)
+			engine.client = &http.Client{Transport: searchRoundTrip(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+			})}
+			results, err := engine.search(context.Background(), "query", 5)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Len(t, results, tc.wantCount)
+			}
+		})
+	}
+}
+
+func (s *stubSearchEngine) search(_ context.Context, _ string, _ int) ([]SearchResult, error) {
+	s.calls++
+	return s.results, s.err
+}
+
+func TestWebSearchFallbackAndPrivateServiceIsolation(t *testing.T) {
+	primary := &stubSearchEngine{err: errors.New("provider unavailable")}
+	secondary := &stubSearchEngine{results: []SearchResult{{Title: "Result", URL: "https://example.com"}}}
+	engine := &fallbackSearchEngine{primary: primary, fallback: secondary, primaryTimeout: time.Second}
+	results, err := engine.search(context.Background(), "query", 5)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	require.Equal(t, 1, primary.calls)
+	require.Equal(t, 1, secondary.calls)
+
+	primary.err = nil
+	primary.results = nil // A valid empty response is not a provider failure.
+	_, err = engine.search(context.Background(), "no results", 5)
+	require.NoError(t, err)
+	require.Equal(t, 1, secondary.calls)
+
+	t.Setenv("SEARXNG_URL", "http://127.0.0.1:12345")
+	_, explicitOnly := NewWebSearchTool().engine.(*searxngEngine)
+	require.True(t, explicitOnly, "configured searches must not fall back to a third party")
+}
+
+func TestBingRSSResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "golang docs", r.URL.Query().Get("q"))
+		require.Equal(t, "rss", r.URL.Query().Get("format"))
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss><channel>
+			<item><title>Go &amp; Docs</title><link>https://go.dev/doc/</link><description>Official documentation</description></item>
+			<item><title>Unsafe</title><link>javascript:alert(1)</link></item>
+			<item><title>Second</title><link>https://example.com/</link><description>More</description></item>
+		</channel></rss>`))
+	}))
+	defer server.Close()
+	engine := &bingEngine{baseURL: server.URL, client: server.Client()}
+	results, err := engine.search(context.Background(), "golang docs", 2)
+	require.NoError(t, err)
+	require.Equal(t, []SearchResult{
+		{Title: "Go & Docs", URL: "https://go.dev/doc/", Snippet: "Official documentation"},
+		{Title: "Second", URL: "https://example.com/", Snippet: "More"},
+	}, results)
+}
+
+func TestBingRejectsNonRSS(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html>verification required</html>`))
+	}))
+	defer server.Close()
+	engine := &bingEngine{baseURL: server.URL, client: server.Client()}
+	_, err := engine.search(context.Background(), "query", 5)
+	require.Error(t, err)
+}
 
 func TestWebSearchValidate(t *testing.T) {
 	tool := NewWebSearchTool()
@@ -30,7 +127,7 @@ func TestWebSearchValidate(t *testing.T) {
 			wantErr: true,
 		},
 		{
- name:    "missing query",
+			name:    "missing query",
 			input:   `{"max_results": 5}`,
 			wantErr: true,
 		},

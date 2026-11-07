@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Linux core builder. Desktop payloads join this staging manifest before publication.
 set -euo pipefail
-version=${1:?Usage: build-release.sh vMAJOR.MINOR.PATCH [linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|--assemble]}
+version=${1:?Usage: build-release.sh vMAJOR.MINOR.PATCH [linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64|--assemble]}
 target=${2:-all}
 case "$target" in
-  all|linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|--assemble) ;;
+  all|linux/amd64|linux/arm64|darwin/amd64|darwin/arm64|windows/amd64|--assemble) ;;
   *) echo "Unsupported core target: $target" >&2; exit 1 ;;
 esac
 python3 scripts/release.py validate "$version"
@@ -14,19 +14,21 @@ if [[ "$target" != --assemble ]]; then
   [[ ! -e dist ]] || { echo 'dist already exists; use a clean checkout' >&2; exit 1; }
   mkdir dist
   targets=("$target")
-  if [[ "$target" == all ]]; then targets=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64); fi
+  if [[ "$target" == all ]]; then targets=(linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64); fi
   for platform in "${targets[@]}"; do
     for binary in easyagent easyagent-bridge; do
+      # Windows executables need the .exe suffix for the OS and exec.LookPath.
+      suffix=""; [[ ${platform%/*} == windows ]] && suffix=".exe"
       CGO_ENABLED=0 GOOS=${platform%/*} GOARCH=${platform#*/} go build -trimpath \
         -ldflags "-s -w -X main.version=$version" \
-        -o "dist/$binary-${platform%/*}-${platform#*/}" "./cmd/$binary"
+        -o "dist/$binary-${platform%/*}-${platform#*/}$suffix" "./cmd/$binary"
     done
   done
 fi
 # Generated output is ignored; source changes during bundle generation are not.
 [[ -z $(git status --porcelain --untracked-files=normal) ]] \
   || { echo 'Source changed during release build; publication refused' >&2; exit 1; }
-for artifact in dist/easyagent-{linux,darwin}-* dist/easyagent-bridge-*; do
+for artifact in dist/easyagent-{linux,darwin,windows}-* dist/easyagent-bridge-*; do
   [[ -f "$artifact" ]] || continue
   metadata=$(go version -m "$artifact")
   [[ "$metadata" == *"vcs.revision=$revision"* && "$metadata" == *"vcs.modified=false"* ]] \

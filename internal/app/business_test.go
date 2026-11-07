@@ -72,6 +72,31 @@ func TestBusinessSessionDoesNotReadGlobalInstructions(t *testing.T) {
 	require.NotContains(t, prompt, "coding identity")
 }
 
+func TestBusinessToolSettingsUseSessionSnapshot(t *testing.T) {
+	ctx := context.Background()
+	a := taskTestApp(t, nil)
+	definition, err := a.Agents().SaveAgent(ctx, agentdata.Agent{Name: "Research", Instructions: "Research", Tools: []string{"read", "web_search"}})
+	require.NoError(t, err)
+	newSession := func() *runtime.AgentSession {
+		cfg, deps, err := a.SessionSetup(ctx, "", definition.ID, a.Config())
+		require.NoError(t, err)
+		sess, err := a.SessionStore().Create(ctx, runtime.AgentSessionOptions{Config: cfg}, deps)
+		require.NoError(t, err)
+		return sess
+	}
+	old := newSession()
+	require.Contains(t, old.ToolNames(), "web_search")
+	require.Contains(t, old.ToolNames(), "read")
+	require.NoError(t, a.SetBuiltinToolSetting("web_search", false))
+	require.NoError(t, a.SetBuiltinToolSetting("file_read", false))
+	require.NoError(t, old.RefreshTools(ctx))
+	require.Contains(t, old.ToolNames(), "web_search")
+	require.Contains(t, old.ToolNames(), "read")
+	current := newSession()
+	require.NotContains(t, current.ToolNames(), "web_search")
+	require.NotContains(t, current.ToolNames(), "read")
+}
+
 func TestStewardUsesOnlySelectedHostToolsAndOwnMemory(t *testing.T) {
 	ctx := context.Background()
 	a := taskTestApp(t, nil)

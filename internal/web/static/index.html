@@ -143,6 +143,20 @@
           <div class="settings-actions"><button type="submit" class="btn btn-primary" disabled>保存默认权限</button><button id="permission-defaults-refresh" type="button" class="btn btn-ghost">刷新</button></div>
           <p id="permission-defaults-status" class="settings-notice" role="status" aria-live="polite"></p>
         </form>
+        <section id="builtin-tools" class="settings-section" aria-labelledby="builtin-tools-title">
+          <h2 id="builtin-tools-title">内置工具</h2>
+          <p class="settings-hint">保存到当前运行主机，新会话生效；正在运行的任务保持原有设置。</p>
+          <div class="builtin-tool-list">
+            <label class="builtin-tool-row"><span><strong>读取文件</strong><small>读取、查找和搜索工作区文件。</small><small id="builtin-file_read-status"></small></span><input type="checkbox" id="builtin-file_read" disabled></label>
+            <label class="builtin-tool-row"><span><strong>修改文件</strong><small>创建、修改和删除工作区文件。</small><small id="builtin-file_write-status"></small></span><input type="checkbox" id="builtin-file_write" disabled></label>
+            <label class="builtin-tool-row"><span><strong>终端命令</strong><small>执行命令，命令也可能访问文件和网络。</small><small id="builtin-bash-status"></small></span><input type="checkbox" id="builtin-bash" disabled></label>
+            <label class="builtin-tool-row"><span><strong>联网搜索</strong><small>搜索公开网页，查询会发送到搜索服务。</small><small id="builtin-web_search-status"></small></span><input type="checkbox" id="builtin-web_search" disabled></label>
+            <label class="builtin-tool-row"><span><strong>读取网页</strong><small>读取公开网页的内容。</small><small id="builtin-web_fetch-status"></small></span><input type="checkbox" id="builtin-web_fetch" disabled></label>
+          </div>
+          <p class="settings-hint">关闭内置工具不会限制终端命令或其他已授权工具的能力。</p>
+          <button id="builtin-tools-refresh" type="button" class="btn btn-ghost">刷新工具设置</button>
+          <p id="builtin-tools-status" class="settings-notice" role="status" aria-live="polite"></p>
+        </section>
         <div class="settings-tabs" role="tablist" aria-label="设置类别">
           <button id="settings-tab-feishu" role="tab" aria-selected="true" aria-controls="settings-feishu">飞书连接</button>
           <button id="settings-tab-mcp" role="tab" aria-selected="false" aria-controls="settings-mcp" tabindex="-1">MCP 工具</button>

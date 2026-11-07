@@ -43,8 +43,9 @@ func RegisterRoutes(mux *http.ServeMux) {
 
 // hasFileExtension checks if the path looks like it has a file extension
 func hasFileExtension(path string) bool {
-	// Check for common static file extensions
-	extensions := []string{".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"}
+	// Check for common static file extensions. .html pages（如 command.html）
+	// 是嵌入 FS 里的真实文件，不能落进 SPA 回落。
+	extensions := []string{".html", ".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot"}
 	for _, ext := range extensions {
 		if strings.HasSuffix(path, ext) {
 			return true
