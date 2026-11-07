@@ -20,6 +20,7 @@ import (
 type teamFakeProvider struct {
 	mu          sync.Mutex
 	calls       int
+	models      []string
 	memberReq   *ai.StreamRequest
 	leaderModel string
 }
@@ -34,6 +35,7 @@ func (p *teamFakeProvider) Stream(ctx context.Context, req ai.StreamRequest) (*a
 	p.mu.Lock()
 	p.calls++
 	turn := p.calls
+	p.models = append(p.models, req.Model.ID)
 	member := req.Model.ID != p.leaderModel
 	if member {
 		copy := req
@@ -167,9 +169,23 @@ func TestTeamSessionStartsAndDelegates(t *testing.T) {
 	require.Equal(t, "completed", run.State)
 
 	fake.mu.Lock()
-	calls, memberReq := fake.calls, fake.memberReq
+	calls, memberReq, models := fake.calls, fake.memberReq, append([]string(nil), fake.models...)
 	fake.mu.Unlock()
-	require.Equal(t, 3, calls, "leader + member + leader")
+	stored, ok := s.app.SessionStore().Get(session.ID)
+	require.True(t, ok)
+	messages, err := stored.Session().BuildContext(context.Background())
+	require.NoError(t, err)
+	var delegation *ai.ToolResultMessage
+	for _, message := range messages {
+		if result, ok := message.(ai.ToolResultMessage); ok && result.ToolCallID == "call-1" {
+			delegation = &result
+			break
+		}
+	}
+	require.NotNil(t, delegation, "the leader's delegation must have a tool result; model calls: %v", models)
+	require.False(t, delegation.IsError, "delegation failed: %s; model calls: %v", delegation.Content, models)
+	require.Contains(t, delegation.Content, "member findings: alpha notes")
+	require.Equal(t, 3, calls, "leader + member + leader; model calls: %v", models)
 	require.NotNil(t, memberReq, "member was never called")
 
 	// The member ran with its own identity: fresh context, its own system

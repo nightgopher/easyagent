@@ -96,6 +96,13 @@ type TeamApplication struct {
 
 var _ runtime.Application = TeamApplication{}
 
+// Override the promoted Application method so rebuilding a team session keeps
+// the team roster and delegation tool instead of returning a plain application.
+func (a TeamApplication) WithRuntimeOverrides(cfg config.Config) runtime.Application {
+	a.Application.Config = cfg
+	return a
+}
+
 func (a TeamApplication) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 	list := a.Application.BuildTools(o)
 	// Starting a team session is the user's explicit authorization for the

@@ -153,6 +153,25 @@ func TestTeamApplicationPromptAndTools(t *testing.T) {
 	require.Contains(t, prompt, "Beta (member agent is disabled)")
 }
 
+func TestTeamApplicationRuntimeOverridesKeepDelegation(t *testing.T) {
+	store, leader, alpha, beta := teamFixture(t)
+	app := TeamApplication{
+		Application: Application{Definition: leader, Store: store},
+		Team:        testSnapshot(leader, alpha, beta),
+		Members:     testAssembler(store, &scriptedProvider{}),
+	}
+	updated, ok := app.WithRuntimeOverrides(config.Config{EnableWeb: true}).(TeamApplication)
+	require.True(t, ok, "runtime overrides must preserve the team application")
+	require.True(t, updated.Config.EnableWeb)
+	require.Equal(t, app.Team, updated.Team)
+	require.Same(t, app.Members, updated.Members)
+	var names []string
+	for _, tool := range updated.BuildTools(runtime.ToolBuildOptions{Workspace: t.TempDir()}) {
+		names = append(names, tool.Name())
+	}
+	require.Contains(t, names, TeamDelegateToolName)
+}
+
 func TestTeamDelegateUnknownMember(t *testing.T) {
 	store, leader, alpha, beta := teamFixture(t)
 	tool := &teamDelegateTool{team: testSnapshot(leader, alpha, beta), members: testAssembler(store, &scriptedProvider{})}
