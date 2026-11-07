@@ -149,11 +149,23 @@ func (t *GrepTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	}
 
 	var matches []grepMatch
+	maxResults := params.MaxResults
+	if maxResults <= 0 {
+		maxResults = 100
+	}
+	searchLimit := maxResults
+	if searchLimit < int(^uint(0)>>1) {
+		searchLimit++ // one extra match lets us report an actual result limit
+	}
 
 	if info.IsDir {
-		matches = t.searchDir(ctx, re, searchPath, params, params.MaxResults)
+		matches = t.searchDir(ctx, re, searchPath, params, searchLimit)
 	} else {
-		matches = t.searchFile(ctx, re, searchPath, params.MaxResults)
+		matches = t.searchFile(ctx, re, searchPath, searchLimit)
+	}
+	limited := len(matches) > maxResults
+	if limited {
+		matches = matches[:maxResults]
 	}
 
 	if len(matches) == 0 {
@@ -162,14 +174,13 @@ func (t *GrepTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 
 	// 格式化输出
 	var b strings.Builder
-	if params.ShowContext > 0 {
-		// 按文件分组，输出上下文行
-		grouped := groupMatchesByFile(matches)
-		for _, fileGroup := range grouped {
+	for _, fileGroup := range groupMatchesByFile(matches) {
+		fmt.Fprintf(&b, "%s:\n", t.displayPath(fileGroup.file))
+		if params.ShowContext > 0 {
 			lines, err := t.opsReadLines(ctx, fileGroup.file)
 			if err != nil {
 				for _, m := range fileGroup.matches {
-					fmt.Fprintf(&b, "%s:%d: %s\n", m.File, m.Line, m.Content)
+					fmt.Fprintf(&b, "  %d: %s\n", m.Line, m.Content)
 				}
 				continue
 			}
@@ -188,19 +199,33 @@ func (t *GrepTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 					if i == m.Line {
 						prefix = "> "
 					}
-					fmt.Fprintf(&b, "%s%s:%d: %s\n", prefix, m.File, i, strings.TrimSpace(lines[i-1]))
+					fmt.Fprintf(&b, "%s%d: %s\n", prefix, i, strings.TrimSpace(lines[i-1]))
 				}
 				b.WriteString("\n")
 			}
-		}
-	} else {
-		for _, m := range matches {
-			fmt.Fprintf(&b, "%s:%d: %s\n", m.File, m.Line, m.Content)
+		} else {
+			for _, m := range fileGroup.matches {
+				fmt.Fprintf(&b, "  %d: %s\n", m.Line, m.Content)
+			}
 		}
 	}
 	fmt.Fprintf(&b, "\n%d matches found.", len(matches))
+	if limited {
+		b.WriteString("\n[Result limit reached; additional matches omitted. Refine the search or increase max_results.]")
+	}
 
 	return agent.ToolResult{Content: TruncateOutput(b.String(), t.maxOutputLen)}, nil
+}
+
+// Keep paths outside the workspace absolute; files within it can be addressed
+// with shorter workspace-relative paths.
+func (t *GrepTool) displayPath(path string) string {
+	if t.workspace != "" {
+		if rel, err := filepath.Rel(t.workspace, path); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return filepath.ToSlash(path)
 }
 
 func (t *GrepTool) searchDir(ctx context.Context, re *regexp.Regexp, root string, params GrepParams, maxResults int) []grepMatch {

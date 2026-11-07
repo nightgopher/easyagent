@@ -1,11 +1,33 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestExplorationDetectionRequiresOverlappingReadsAndResets(t *testing.T) {
+	var detector loopDetector
+	for i := 0; i < 24; i++ {
+		args := fmt.Sprintf(`{"path":"/a","offset":%d,"limit":100}`, i*100)
+		assert.False(t, detector.observeExploration("read", args), "distinct ranges are useful investigation")
+	}
+	detector.reset()
+	for i := 0; i < 11; i++ {
+		args := fmt.Sprintf(`{"path":"/a","offset":%d,"limit":100}`, i%2*50)
+		assert.False(t, detector.observeExploration("read", args))
+	}
+	assert.True(t, detector.observeExploration("read", `{"path":"/a","offset":0,"limit":100}`))
+	for i := 0; i < 12; i++ {
+		args := fmt.Sprintf(`{"path":"/other-%d","offset":0,"limit":100}`, i)
+		assert.False(t, detector.observeExploration("read", args), "old overlaps must not trigger a later unrelated investigation")
+	}
+	assert.False(t, detector.observeExploration("edit", `{}`))
+	assert.Zero(t, detector.readOnlyCalls)
+	assert.Empty(t, detector.recentReads)
+}
 
 func TestLoopDetector_ConsecutiveRepeats(t *testing.T) {
 	d := loopDetector{}

@@ -2,14 +2,116 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
+	"github.com/nightgopher/easyagent/sdk/session"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type loopProgressTool struct {
+	name string
+	path string
+}
+
+func (t *loopProgressTool) Name() string                                        { return t.name }
+func (*loopProgressTool) Description() string                                   { return "test file operation" }
+func (*loopProgressTool) Parameters() map[string]any                            { return map[string]any{"type": "object"} }
+func (*loopProgressTool) Validate(raw json.RawMessage) (json.RawMessage, error) { return raw, nil }
+func (t *loopProgressTool) Execute(_ context.Context, _ json.RawMessage, _ func(PartialResult)) (ToolResult, error) {
+	if t.name == "edit" {
+		return ToolResult{Content: "edited"}, os.WriteFile(t.path, []byte("after"), 0o600)
+	}
+	content, err := os.ReadFile(t.path)
+	return ToolResult{Content: string(content)}, err
+}
+
+type progressProvider struct {
+	path        string
+	alternating bool
+	calls       int
+	edited      bool
+	reminderAt  int
+}
+
+func (*progressProvider) Name() string { return "progress-test" }
+func (p *progressProvider) StreamSimple(ctx context.Context, req ai.SimpleStreamRequest) (*ai.EventStream, error) {
+	return p.Stream(ctx, ai.StreamRequest{Model: req.Model, Messages: req.Messages})
+}
+func (p *progressProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error) {
+	p.calls++
+	if last, ok := req.Messages[len(req.Messages)-1].(ai.UserMessage); ok {
+		for _, block := range last.Content {
+			if strings.Contains(block.Text, "looks like a loop") || strings.Contains(block.Text, "file reads overlap") {
+				p.reminderAt = p.calls
+			}
+		}
+	}
+	msg := ai.StreamAssistantMessage{Text: "done", StopReason: ai.StopReasonStop}
+	if !p.edited {
+		name, args := "read", fmt.Sprintf(`{"path":%q,"offset":0,"limit":300}`, p.path)
+		if p.reminderAt > 0 {
+			name, args, p.edited = "edit", `{}`, true
+		} else if p.alternating {
+			args = fmt.Sprintf(`{"path":%q,"offset":%d,"limit":300}`, p.path, (p.calls%3)*100)
+		}
+		msg = ai.StreamAssistantMessage{StopReason: ai.StopReasonToolUse, ToolCalls: []ai.ToolCall{{ID: fmt.Sprintf("call-%d", p.calls), Name: name, Args: args}}}
+	}
+	stream := ai.NewEventStream(2)
+	go func() {
+		defer stream.Close()
+		_ = stream.Push(ctx, ai.EventDone{Reason: msg.StopReason, Message: msg})
+		stream.SetResult(msg, nil)
+	}()
+	return stream, nil
+}
+
+func TestLoopReminderReachesNextRequestAndAgentCanEdit(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		alternating bool
+		wantRequest int
+		wantKind    string
+	}{
+		{"identical calls", false, 6, LoopDetectionExact},
+		{"overlapping ranges", true, 13, LoopDetectionExploration},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			path := filepath.Join(t.TempDir(), "target.txt")
+			require.NoError(t, os.WriteFile(path, []byte("before"), 0o600))
+			storage := session.NewJSONLStorage(filepath.Join(t.TempDir(), "session.jsonl"))
+			require.NoError(t, storage.Init())
+			defer storage.Close()
+			p := &progressProvider{path: path, alternating: tc.alternating}
+			registry := providers.NewRegistry()
+			registry.Register(p)
+			ag := New(Options{Registry: registry, Model: ai.Model{Provider: p.Name()}, Session: session.New(storage), MaxTurns: 20,
+				Tools: []Tool{&loopProgressTool{name: "read", path: path}, &loopProgressTool{name: "edit", path: path}}, LoopDetectSettings: DefaultLoopDetectSettings()})
+			var kinds []string
+			ag.Subscribe(func(_ context.Context, event AgentEvent) {
+				if detected, ok := event.(EventLoopDetected); ok {
+					kinds = append(kinds, detected.Kind)
+				}
+			})
+			_, err := ag.Prompt(ctx, ai.NewTextUserMessage("Update the file"))
+			require.NoError(t, err)
+			require.Contains(t, kinds, tc.wantKind)
+			require.Equal(t, tc.wantRequest, p.reminderAt, "the reminder must reach the immediate next model request")
+			content, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, "after", string(content), "the agent must continue through the edit")
+		})
+	}
+}
 
 // 集成测试：连续重复相同 tool call 达到阈值时，
 //  1. 发出 EventLoopDetected

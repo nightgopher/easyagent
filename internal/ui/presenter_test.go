@@ -8,6 +8,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestPresentExplorationWarningDoesNotClaimSameToolRepeated(t *testing.T) {
+	var buf bytes.Buffer
+	NewPresenter(&buf).Present(agent.AgentStreamEvent{Type: agent.StreamEventLoopDetected, ToolName: "grep", RepeatCount: 12, LoopKind: agent.LoopDetectionExploration})
+	assert.Contains(t, buf.String(), "12 次只读探索")
+	assert.NotContains(t, buf.String(), "grep 连续重复")
+}
+
 func TestPresent_TextDelta(t *testing.T) {
 	var buf bytes.Buffer
 	p := NewPresenter(&buf)

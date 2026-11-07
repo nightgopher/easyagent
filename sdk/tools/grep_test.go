@@ -2,13 +2,44 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGrepGroupsRelativePathsAndReportsResultLimit(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "src"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "src", "main.go"), []byte("match one\nmatch two\nmatch three\n"), 0o644))
+	tool := NewGrepTool(WithGrepWorkspace(dir))
+	raw, err := json.Marshal(GrepParams{Pattern: "match", Path: ".", MaxResults: 2})
+	require.NoError(t, err)
+	validated, err := tool.Validate(raw)
+	require.NoError(t, err)
+	result, err := tool.Execute(context.Background(), validated, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(result.Content, "src/main.go:"))
+	assert.NotContains(t, result.Content, dir)
+	assert.Contains(t, result.Content, "  1: match one")
+	assert.Contains(t, result.Content, "  2: match two")
+	assert.NotContains(t, result.Content, "match three")
+	assert.Contains(t, result.Content, "additional matches omitted")
+
+	raw, err = json.Marshal(GrepParams{Pattern: "match", Path: ".", MaxResults: 3, ShowContext: 1})
+	require.NoError(t, err)
+	validated, err = tool.Validate(raw)
+	require.NoError(t, err)
+	result, err = tool.Execute(context.Background(), validated, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, strings.Count(result.Content, "src/main.go:"))
+	assert.NotContains(t, result.Content, "additional matches omitted", "exactly reaching the limit is not truncation")
+	assert.Contains(t, result.Content, "> 2: match two")
+}
 
 func TestGrepTool_SearchFile(t *testing.T) {
 	dir := t.TempDir()

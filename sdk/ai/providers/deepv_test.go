@@ -176,3 +176,25 @@ func TestDeepVPreservesImagesParallelToolResultsAndTemperature(t *testing.T) {
 		t.Fatal("Haiku temperature was not omitted")
 	}
 }
+
+func TestDeepVToolResultsAndSteeringStayInOneTurn(t *testing.T) {
+	messages := []ai.Message{
+		ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: "one", Name: "read", Args: `{}`}, {ID: "two", Name: "read", Args: `{}`}}},
+		ai.ToolResultMessage{ToolCallID: "one", Content: "first"},
+		ai.ToolResultMessage{ToolCallID: "two", Content: "second"},
+		ai.NewTextUserMessage("loop reminder"),
+		ai.NewTextUserMessage("user correction"),
+	}
+	inner := NewAnthropicProvider("", "")
+	wire, err := deepVFromAnthropic(inner.buildRequest(ai.StreamRequest{Model: ai.Model{ID: "fixture"}, Messages: messages}, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(wire.Contents) != 2 || wire.Contents[1].Role != "user" {
+		t.Fatalf("tool results and steering were split into different user turns: %+v", wire.Contents)
+	}
+	parts := wire.Contents[1].Parts
+	if len(parts) != 4 || parts[0].FunctionResponse == nil || parts[1].FunctionResponse == nil || parts[2].Text != "loop reminder" || parts[3].Text != "user correction" {
+		t.Fatalf("tool results or steering were lost or reordered: %+v", parts)
+	}
+}

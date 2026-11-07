@@ -109,8 +109,11 @@ func (p *EnhancedPresenter) Present(event agent.AgentStreamEvent) {
 		}
 
 	case agent.StreamEventLoopDetected:
-		fmt.Fprintf(p.w, "%s⚠ 检测到循环：%s 已连续重复 %d 次，已提醒 Agent 换方案%s\n",
-			ColorYellow, event.ToolName, event.RepeatCount, ColorReset)
+		if event.LoopKind == agent.LoopDetectionExploration {
+			fmt.Fprintf(p.w, "%s⚠ 连续 %d 次只读探索中存在重复读取，将提示 Agent 检查下一步%s\n", ColorYellow, event.RepeatCount, ColorReset)
+		} else {
+			fmt.Fprintf(p.w, "%s⚠ 检测到循环：%s 连续重复 %d 次，将提示 Agent 检查下一步%s\n", ColorYellow, event.ToolName, event.RepeatCount, ColorReset)
+		}
 
 	case agent.StreamEventMicroCompacted:
 		fmt.Fprintf(p.w, "%s↘ 已清理 %d 个旧工具结果以节省上下文%s\n",

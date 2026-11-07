@@ -14,6 +14,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAnthropicKeepsToolResultsAndSteeringInOneUserTurn(t *testing.T) {
+	messages := []ai.Message{
+		ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: "one", Name: "read", Args: `{}`}, {ID: "two", Name: "read", Args: `{}`}}},
+		ai.ToolResultMessage{ToolCallID: "one", Content: "first"},
+		ai.ToolResultMessage{ToolCallID: "two", Content: "second"},
+		ai.NewTextUserMessage("loop reminder"),
+		ai.NewTextUserMessage("user correction"),
+	}
+	converted := convertToAnthropicMessages(messages)
+	require.Len(t, converted, 2)
+	require.Equal(t, "assistant", converted[0].Role)
+	require.Equal(t, "user", converted[1].Role)
+	require.Len(t, converted[1].Content, 4)
+	require.Equal(t, "tool_result", converted[1].Content[0].Type)
+	require.Equal(t, "tool_result", converted[1].Content[1].Type)
+	require.Equal(t, "loop reminder", converted[1].Content[2].Text)
+	require.Equal(t, "user correction", converted[1].Content[3].Text)
+}
+
 // anthropicSSEServer 按给定事件/data 行输出 Anthropic 格式 SSE。
 func anthropicSSEServer(t *testing.T, lines ...string) *httptest.Server {
 	t.Helper()

@@ -18,6 +18,7 @@ type Settings struct {
 	// MicroCompact（清旧 tool result，不调 LLM）
 	MicroCompactRatio float64 // 默认 0.6，token 占比超此值触发 MicroCompact
 	MicroKeepRecent   int     // 默认 5，保留最近 N 个 tool result 完整
+	MicroKeepTokens   int     // recent tool-result budget; 0 keeps count-only SDK behavior
 	MinSavingsTokens  int     // 默认 2048，小额输出积累后批量清理
 }
 
@@ -29,6 +30,7 @@ func DefaultSettings() Settings {
 		KeepRecentTokens:  20000,
 		MicroCompactRatio: 0.6,
 		MicroKeepRecent:   5,
+		MicroKeepTokens:   20000,
 		MinSavingsTokens:  2048,
 	}
 }

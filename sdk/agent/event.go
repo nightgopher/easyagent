@@ -117,11 +117,17 @@ type EventConfirmationResult struct {
 
 func (EventConfirmationResult) agentEventMarker() {}
 
-// EventLoopDetected 在检测到 Agent 连续重复调用同一工具（相同参数）时发出。
-// UI 可据此展示"⚠ 检测到循环"提示；Agent 会同时收到一条提醒 follow-up。
+const (
+	LoopDetectionExact       = "exact"
+	LoopDetectionExploration = "exploration"
+)
+
+// EventLoopDetected reports either identical calls or repeated exploration.
+// The reminder is delivered at the next complete tool-result boundary.
 type EventLoopDetected struct {
 	ToolName    string
 	RepeatCount int
+	Kind        string
 }
 
 func (EventLoopDetected) agentEventMarker() {}
@@ -129,9 +135,10 @@ func (EventLoopDetected) agentEventMarker() {}
 // EventMicroCompacted 在 MicroCompact（清旧 tool result）执行后发出。
 // UI 可据此展示"已清理 N 个旧工具结果，节省上下文"。
 type EventMicroCompacted struct {
-	TokensAfter    int
-	ClearedResults int
-	TokensBefore   int
+	TokensAfter        int
+	ClearedResults     int
+	TokensBefore       int
+	ClearedToolCallIDs []string
 }
 
 func (EventMicroCompacted) agentEventMarker() {}

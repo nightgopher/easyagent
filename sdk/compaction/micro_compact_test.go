@@ -1,12 +1,46 @@
 package compaction
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/stretchr/testify/assert"
 )
+
+func TestMicroCompactWorkingSetBudget(t *testing.T) {
+	var history []ai.Message
+	for i := 0; i < 10; i++ {
+		history = append(history, turn("read", fmt.Sprintf("r%d", i), fmt.Sprintf("file-%d:", i)+strings.Repeat("x", 1000))...)
+	}
+	out, cleared := MicroCompactWithBudget(append([]ai.Message(nil), history...), 2, 1500)
+	assert.Equal(t, 5, cleared)
+	for i := 0; i < 10; i++ {
+		content := out[i*2+1].(ai.ToolResultMessage).Content
+		if i < 5 {
+			assert.Equal(t, clearedPlaceholder, content)
+		} else {
+			assert.Contains(t, content, fmt.Sprintf("file-%d:", i))
+		}
+	}
+}
+
+func TestMicroCompactPrefersRecentSourceOverSearchNoise(t *testing.T) {
+	history := turn("read", "source", "source:"+strings.Repeat("x", 2800))
+	for i := 0; i < 3; i++ {
+		history = append(history, turn("grep", fmt.Sprintf("grep-%d", i), strings.Repeat("y", 4000))...)
+	}
+	for i := 0; i < 5; i++ {
+		history = append(history, turn("ls", fmt.Sprintf("ls-%d", i), strings.Repeat("z", 400))...)
+	}
+	out, cleared := MicroCompactWithBudget(append([]ai.Message(nil), history...), 5, 1400)
+	assert.Equal(t, 3, cleared)
+	assert.Contains(t, out[1].(ai.ToolResultMessage).Content, "source:")
+	for i := 0; i < 3; i++ {
+		assert.Equal(t, clearedPlaceholder, out[3+i*2].(ai.ToolResultMessage).Content)
+	}
+}
 
 // 构造一个工具调用 turn：assistant 发起 tool_call，紧接 tool result。
 func turn(toolName, id, resultContent string) []ai.Message {
