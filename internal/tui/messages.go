@@ -75,6 +75,7 @@ type CompactionMsg struct {
 type LoopDetectedMsg struct {
 	Tool  string
 	Count int
+	Kind  string
 }
 
 // TickMsg is used for spinner animation.

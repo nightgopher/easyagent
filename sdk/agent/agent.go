@@ -262,9 +262,9 @@ func (a *Agent) PromptStream(ctx context.Context, msg ai.Message) (<-chan AgentS
 		case EventConfirmationResult:
 			ev = AgentStreamEvent{Type: StreamEventConfirmationRes, ToolCallID: e.ToolCallID, Approved: e.Approved, Description: e.Reason}
 		case EventLoopDetected:
-			ev = AgentStreamEvent{Type: StreamEventLoopDetected, ToolName: e.ToolName, RepeatCount: e.RepeatCount}
+			ev = AgentStreamEvent{Type: StreamEventLoopDetected, ToolName: e.ToolName, RepeatCount: e.RepeatCount, LoopKind: e.Kind}
 		case EventMicroCompacted:
-			ev = AgentStreamEvent{Type: StreamEventMicroCompacted, ClearedCount: e.ClearedResults, TokensBefore: e.TokensBefore, TokensAfter: e.TokensAfter}
+			ev = AgentStreamEvent{Type: StreamEventMicroCompacted, ClearedCount: e.ClearedResults, TokensBefore: e.TokensBefore, TokensAfter: e.TokensAfter, ClearedToolCallIDs: e.ClearedToolCallIDs}
 		case EventAutoContinued:
 			ev = AgentStreamEvent{Type: StreamEventAutoContinued, RepeatCount: e.Attempt}
 		default:
@@ -435,7 +435,7 @@ func (a *Agent) CompactNow(ctx context.Context, customInstructions string) (stri
 	}
 
 	// 2. Split into history (to summarize) and recent (to keep).
-	historyPart, recentPart := compaction.SplitMessages(history, a.compactionSettings.KeepRecentTokens)
+	historyPart, recentPart := compaction.SplitMessagesForModel(history, a.compactionSettings.KeepRecentTokens, a.model)
 	if len(historyPart) == 0 {
 		return "", 0, 0, fmt.Errorf("nothing to compact (recent context too large)")
 	}
@@ -447,7 +447,7 @@ func (a *Agent) CompactNow(ctx context.Context, customInstructions string) (stri
 	}
 
 	// 4. Persist compaction entry to session storage.
-	info := compactionInfo("manual", customInstructions, history, summary, recentPart)
+	info := compactionInfo("manual", customInstructions, history, summary, recentPart, a.model)
 	if err := a.session.AppendCompactionKeeping(ctx, summary, recentPart, info); err != nil {
 		return "", 0, 0, fmt.Errorf("persist compaction: %w", err)
 	}
@@ -569,31 +569,33 @@ const (
 )
 
 type AgentStreamEvent struct {
-	Retry          *ai.ModelRetry          `json:"retry,omitempty"`
-	ContextUsage   *ContextUsage           `json:"context_usage,omitempty"`
-	Timestamp      int64                   `json:"timestamp,omitempty"`
-	DurationMS     int64                   `json:"duration_ms,omitempty"`
-	Type           StreamEventType         `json:"type"`
-	TextDelta      string                  `json:"text_delta,omitempty"`
-	Message        ai.Message              `json:"message,omitempty"`
-	ToolName       string                  `json:"tool_name,omitempty"`
-	ToolCallID     string                  `json:"tool_call_id,omitempty"`
-	ToolArgs       any                     `json:"tool_args,omitempty"` // raw arguments for diff preview
-	ToolResult     any                     `json:"tool_result,omitempty"`
-	ToolDetails    any                     `json:"tool_details,omitempty"` // 结构化附加数据（如 PlayDetails）
-	PartialResult  any                     `json:"partial_result,omitempty"`
-	IsError        bool                    `json:"is_error,omitempty"`
-	FinalMessage   ai.AssistantMessage     `json:"final_message,omitempty"`
-	Error          string                  `json:"error,omitempty"`
-	CompactionInfo *session.CompactionInfo `json:"compaction_info,omitempty"`
-	Summary        string                  `json:"summary,omitempty"`
-	TrimmedFrom    int                     `json:"trimmed_from,omitempty"`
-	TrimmedTo      int                     `json:"trimmed_to,omitempty"`
-	Description    string                  `json:"description,omitempty"`  // 确认请求：工具给出的操作描述
-	Approved       bool                    `json:"approved,omitempty"`     // 确认结果：是否放行
-	RepeatCount    int                     `json:"repeat_count,omitempty"` // 循环检测：连续重复次数
-	TokensBefore   int                     `json:"tokens_before,omitempty"`
-	TokensAfter    int                     `json:"tokens_after,omitempty"`
-	ClearedCount   int                     `json:"cleared_count,omitempty"` // MicroCompact：清理的 tool result 数
-	Usage          ai.Usage                `json:"usage,omitempty"`         // token usage from final assistant message
+	Retry              *ai.ModelRetry          `json:"retry,omitempty"`
+	ContextUsage       *ContextUsage           `json:"context_usage,omitempty"`
+	Timestamp          int64                   `json:"timestamp,omitempty"`
+	DurationMS         int64                   `json:"duration_ms,omitempty"`
+	Type               StreamEventType         `json:"type"`
+	TextDelta          string                  `json:"text_delta,omitempty"`
+	Message            ai.Message              `json:"message,omitempty"`
+	ToolName           string                  `json:"tool_name,omitempty"`
+	ToolCallID         string                  `json:"tool_call_id,omitempty"`
+	ToolArgs           any                     `json:"tool_args,omitempty"` // raw arguments for diff preview
+	ToolResult         any                     `json:"tool_result,omitempty"`
+	ToolDetails        any                     `json:"tool_details,omitempty"` // 结构化附加数据（如 PlayDetails）
+	PartialResult      any                     `json:"partial_result,omitempty"`
+	IsError            bool                    `json:"is_error,omitempty"`
+	FinalMessage       ai.AssistantMessage     `json:"final_message,omitempty"`
+	Error              string                  `json:"error,omitempty"`
+	CompactionInfo     *session.CompactionInfo `json:"compaction_info,omitempty"`
+	Summary            string                  `json:"summary,omitempty"`
+	TrimmedFrom        int                     `json:"trimmed_from,omitempty"`
+	TrimmedTo          int                     `json:"trimmed_to,omitempty"`
+	Description        string                  `json:"description,omitempty"`  // 确认请求：工具给出的操作描述
+	Approved           bool                    `json:"approved,omitempty"`     // 确认结果：是否放行
+	RepeatCount        int                     `json:"repeat_count,omitempty"` // 循环检测：连续重复次数
+	LoopKind           string                  `json:"loop_kind,omitempty"`
+	TokensBefore       int                     `json:"tokens_before,omitempty"`
+	TokensAfter        int                     `json:"tokens_after,omitempty"`
+	ClearedCount       int                     `json:"cleared_count,omitempty"` // MicroCompact：清理的 tool result 数
+	ClearedToolCallIDs []string                `json:"cleared_tool_call_ids,omitempty"`
+	Usage              ai.Usage                `json:"usage,omitempty"` // token usage from final assistant message
 }

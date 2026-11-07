@@ -35,6 +35,13 @@ var compactableTools = map[string]bool{
 // 原地替换消息内容，不改变历史长度/结构，保持每个 turn 的完整性
 // （assistant tool_call + tool result 配对不变）。
 func MicroCompact(history []ai.Message, keepRecent int) ([]ai.Message, int) {
+	return MicroCompactWithBudget(history, keepRecent, 0)
+}
+
+// MicroCompactWithBudget also retains recent complete tool results within a
+// token budget, preferring file reads to older search output. The count is a
+// minimum. A zero budget keeps the original count-only behavior for SDK callers.
+func MicroCompactWithBudget(history []ai.Message, keepRecent, keepTokens int) ([]ai.Message, int) {
 	if keepRecent < 0 {
 		keepRecent = 0
 	}
@@ -51,14 +58,14 @@ func MicroCompact(history []ai.Message, keepRecent int) ([]ai.Message, int) {
 
 	// 2. 收集可压缩 tool result 的（索引, ID），按出现顺序
 	type resultRef struct {
-		idx int
-		id  string
+		idx  int
+		name string
 	}
 	var compactable []resultRef
 	for i, msg := range history {
 		if tr, ok := msg.(ai.ToolResultMessage); ok {
 			if name, found := toolNameByID[tr.ToolCallID]; found && compactableTools[name] {
-				compactable = append(compactable, resultRef{idx: i, id: tr.ToolCallID})
+				compactable = append(compactable, resultRef{idx: i, name: name})
 			}
 		}
 	}
@@ -68,16 +75,41 @@ func MicroCompact(history []ai.Message, keepRecent int) ([]ai.Message, int) {
 		return history, 0
 	}
 
-	// 3. 保留最近 keepRecent 个（切片末尾），清理其余
+	// 3. Always keep the last keepRecent results. Within the remaining budget,
+	// keep recent source reads first, including different ranges of the same
+	// file, then other results. Never resurrect an earlier placeholder.
 	keepFrom := len(compactable) - keepRecent
-	cleared := 0
-	// 保留集合：最近 keepRecent 个的索引
-	keepIdx := make(map[int]bool, keepRecent)
+	keep := make(map[int]bool, len(compactable))
+	used := 0
 	for _, ref := range compactable[keepFrom:] {
-		keepIdx[ref.idx] = true
+		keep[ref.idx] = true
+		used += EstimateTokens([]ai.Message{history[ref.idx]})
 	}
-	// 清理 keepFrom 之前的
+	if keepTokens > 0 {
+		for _, readsOnly := range []bool{true, false} {
+			for i := keepFrom - 1; i >= 0; i-- {
+				ref := compactable[i]
+				if (ref.name == "read") != readsOnly {
+					continue
+				}
+				tr := history[ref.idx].(ai.ToolResultMessage)
+				if tr.Content == clearedPlaceholder && len(tr.Images) == 0 {
+					continue
+				}
+				cost := EstimateTokens([]ai.Message{tr})
+				if used <= keepTokens && cost <= keepTokens-used {
+					keep[ref.idx] = true
+					used += cost
+				}
+			}
+		}
+	}
+	cleared := 0
+	// 清理不在保留集合中的旧结果
 	for _, ref := range compactable[:keepFrom] {
+		if keep[ref.idx] {
+			continue
+		}
 		if tr, ok := history[ref.idx].(ai.ToolResultMessage); ok {
 			// 占位符可能比原内容长（原内容极短时），但通常短得多；只在确实能省时清理
 			if len(clearedPlaceholder) < len(tr.Content) || len(tr.Images) > 0 {

@@ -13,6 +13,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMicroCompactionRetainsRecentWorkingSet(t *testing.T) {
+	history := []ai.Message{ai.NewTextUserMessage(strings.Repeat("x", 300000))}
+	for i := 0; i < 8; i++ {
+		id := fmt.Sprintf("read-%d", i)
+		history = append(history, ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: id, Name: "read"}}},
+			ai.ToolResultMessage{ToolCallID: id, Content: strings.Repeat("y", 4000)})
+	}
+	ag := New(Options{Model: ai.Model{ContextWindow: 128000}, CompactionSettings: compaction.DefaultSettings()})
+	result := ag.maybeCompact(context.Background(), history)
+	require.Equal(t, history, result, "recent source that fits the working-set budget should remain available")
+}
+
+func TestMicroCompactionKeepsSourceAheadOfSearchNoise(t *testing.T) {
+	history := []ai.Message{ai.NewTextUserMessage(strings.Repeat("x", 300000))}
+	history = append(history, ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: "source", Name: "read"}}},
+		ai.ToolResultMessage{ToolCallID: "source", Content: "source:" + strings.Repeat("s", 2800)})
+	for i := 0; i < 3; i++ {
+		id := fmt.Sprintf("grep-%d", i)
+		history = append(history, ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: id, Name: "grep"}}},
+			ai.ToolResultMessage{ToolCallID: id, Content: strings.Repeat("g", 30000)})
+	}
+	for i := 0; i < 5; i++ {
+		id := fmt.Sprintf("ls-%d", i)
+		history = append(history, ai.AssistantMessage{ToolCalls: []ai.ToolCall{{ID: id, Name: "ls"}}},
+			ai.ToolResultMessage{ToolCallID: id, Content: strings.Repeat("l", 400)})
+	}
+	ag := New(Options{Model: ai.Model{ContextWindow: 128000}, CompactionSettings: compaction.DefaultSettings()})
+	var compacted EventMicroCompacted
+	ag.Subscribe(func(_ context.Context, event AgentEvent) {
+		if e, ok := event.(EventMicroCompacted); ok {
+			compacted = e
+		}
+	})
+	result := ag.maybeCompact(context.Background(), history)
+	require.Contains(t, result[2].(ai.ToolResultMessage).Content, "source:")
+	require.Equal(t, []string{"grep-0"}, compacted.ClearedToolCallIDs)
+}
+
 func TestMicroCompactionBatchesSmallOutputsAcrossRestart(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "session.jsonl")
@@ -24,7 +62,9 @@ func TestMicroCompactionBatchesSmallOutputsAcrossRestart(t *testing.T) {
 	microCount := 0
 	var savings []int
 	newAgent := func() *Agent {
-		ag := New(Options{Session: sess, Model: ai.Model{ContextWindow: 128000}, CompactionSettings: compaction.DefaultSettings()})
+		settings := compaction.DefaultSettings()
+		settings.MicroKeepTokens = 0 // isolate the batching policy from the working-set budget
+		ag := New(Options{Session: sess, Model: ai.Model{ContextWindow: 128000}, CompactionSettings: settings})
 		ag.Subscribe(func(_ context.Context, event AgentEvent) {
 			if micro, ok := event.(EventMicroCompacted); ok {
 				microCount++
@@ -85,7 +125,9 @@ func TestMicroCompactionDeferralDoesNotBlockFullCompaction(t *testing.T) {
 }
 
 func TestMicroCompactionSavingsPolicy(t *testing.T) {
-	custom := compaction.DefaultSettings()
+	countOnly := compaction.DefaultSettings()
+	countOnly.MicroKeepTokens = 0
+	custom := countOnly
 	custom.MinSavingsTokens = 100
 	for _, tc := range []struct {
 		name     string
@@ -93,8 +135,8 @@ func TestMicroCompactionSavingsPolicy(t *testing.T) {
 		oldSize  int
 		want     bool
 	}{
-		{"small result deferred", compaction.DefaultSettings(), 500, false},
-		{"large result reclaimed immediately", compaction.DefaultSettings(), 12000, true},
+		{"small result deferred", countOnly, 500, false},
+		{"large result reclaimed immediately", countOnly, 12000, true},
 		{"zero minimum uses default", compaction.Settings{Enabled: true, MicroKeepRecent: 5}, 500, false},
 		{"explicit SDK minimum", custom, 500, true},
 	} {
