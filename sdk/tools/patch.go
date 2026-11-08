@@ -402,14 +402,15 @@ func (t *PatchTool) apply(ctx context.Context, hunks []patchHunk) (agent.ToolRes
 		}
 		var err error
 		attempted := true
-		if c.kind == "delete" {
+		switch c.kind {
+		case "delete":
 			err = remover.RemoveFile(ctx, c.path)
-		} else if c.kind == "add" {
+		case "add":
 			attempted = false // CreateFile cleans up its own partial output on failure.
 			if err = t.ops.MkdirAll(ctx, filepath.Dir(c.path), 0o755); err == nil {
 				err = creator.CreateFile(ctx, c.path, c.after, c.mode)
 			}
-		} else {
+		default:
 			err = t.ops.WriteFile(ctx, c.path, c.after, c.mode)
 		}
 		if err != nil {

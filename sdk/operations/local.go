@@ -93,7 +93,7 @@ func (LocalFileOperations) RemoveFile(_ context.Context, path string) error {
 
 // CreateFile atomically reserves a new path and cleans up on a write failure.
 func (LocalFileOperations) CreateFile(_ context.Context, path string, data []byte, perm os.FileMode) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm) // #nosec G304 -- the caller selects and authorizes the filesystem path.
 	if err != nil {
 		return err
 	}

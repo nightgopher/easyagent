@@ -40,3 +40,12 @@ func TestGetIndexFollowsSymlinkedRepoRoot(t *testing.T) {
 		require.Equal(t, viaReal.Root, viaLink.Root)
 	}
 }
+
+func TestGetIndexDoesNotReadSymlinkOutsideRoot(t *testing.T) {
+	root, outside := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "private.md"), []byte("# private contents"), 0o600))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "private.md"), filepath.Join(root, "escape.md")))
+	idx, err := GetIndex(root)
+	require.NoError(t, err)
+	require.Empty(t, idx.Entries)
+}

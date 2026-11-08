@@ -96,7 +96,7 @@ func (s SSHFileOperations) CreateFile(ctx context.Context, path string, data []b
 	template := parentDirSSH(path) + "/.easyagent-patch.XXXXXXXX"
 	command := fmt.Sprintf("tmp=$(mktemp %s) || exit 1; trap 'rm -f \"$tmp\"' EXIT; cat > \"$tmp\" && chmod %o \"$tmp\" && link \"$tmp\" %s", shellQuote(template), perm.Perm(), shellQuote(path))
 	args := append(s.sshArgs(), command)
-	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd := exec.CommandContext(ctx, "ssh", args...) // #nosec G204 -- configured host and shell-quoted remote paths are passed as arguments.
 	cmd.Stdin = bytes.NewReader(data)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

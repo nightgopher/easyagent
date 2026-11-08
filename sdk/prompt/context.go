@@ -42,7 +42,7 @@ func LoadProjectContextFiles(cwd string, agentDir string) []ContextFile {
 		// save_memory persists to AGENTS.md even when a global CLAUDE.md also
 		// exists. Load both once so the saved memory is not silently masked.
 		memoryPath := filepath.Join(agentDir, "AGENTS.md")
-		if data, err := os.ReadFile(memoryPath); err == nil && strings.TrimSpace(string(data)) != "" {
+		if data, err := os.ReadFile(memoryPath); err == nil && strings.TrimSpace(string(data)) != "" { // #nosec G304 -- agentDir is the explicitly selected context directory.
 			globalFiles = append(globalFiles, ContextFile{Path: memoryPath, Content: strings.TrimSpace(string(data))})
 		}
 		for _, f := range globalFiles {
