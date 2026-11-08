@@ -1,13 +1,7 @@
-package kbtools
+package knowledgeindex
 
-// ── Maintenance (second-brain health) ─────────────────────────────────────
-//
-// The KB agent is not just a reader — it's the **owner** of the second brain.
-// This module provides maintenance capabilities: health checks, deduplication
-// detection, tag normalization suggestions, and metadata completeness audits.
-//
-// All operations are READ-ONLY by default — they produce *recommendations*.
-// The AI reviews them and decides what to act on (with user confirmation).
+// Read-only health checks for the knowledge browser, including duplicate and
+// tag suggestions and metadata completeness audits.
 
 import (
 	"fmt"
@@ -20,15 +14,15 @@ import (
 
 // HealthReport is the top-level result of a KB health check.
 type HealthReport struct {
-	GeneratedAt       time.Time
-	TotalEntries      int
-	Categories        int
-	Tags              int
+	GeneratedAt           time.Time
+	TotalEntries          int
+	Categories            int
+	Tags                  int
 	EntriesMissingSummary []Entry
 	EntriesMissingTags    []Entry
 	EntriesMissingTitle   []Entry
-	DuplicateGroups   []DuplicateGroup
-	TagClusters       []TagCluster
+	DuplicateGroups       []DuplicateGroup
+	TagClusters           []TagCluster
 }
 
 // DuplicateGroup is a set of entries with highly similar titles.

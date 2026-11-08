@@ -86,6 +86,32 @@ func combinedOutput(cmd *exec.Cmd, w io.Writer, onStart func(int)) ([]byte, erro
 // LocalFileOperations performs file operations on the local filesystem.
 type LocalFileOperations struct{}
 
+// RemoveFile removes a local file.
+func (LocalFileOperations) RemoveFile(_ context.Context, path string) error {
+	return os.Remove(path)
+}
+
+// CreateFile atomically reserves a new path and cleans up on a write failure.
+func (LocalFileOperations) CreateFile(_ context.Context, path string, data []byte, perm os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if err != nil {
+		return err
+	}
+	created, statErr := f.Stat()
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil || closeErr != nil {
+		if current, err := os.Lstat(path); err == nil && statErr == nil && os.SameFile(created, current) {
+			_ = os.Remove(path)
+		}
+		if writeErr != nil {
+			return writeErr
+		}
+		return closeErr
+	}
+	return nil
+}
+
 // ReadFile reads a file from the local filesystem.
 func (LocalFileOperations) ReadFile(_ context.Context, path string) ([]byte, error) {
 	return os.ReadFile(path)

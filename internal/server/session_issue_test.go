@@ -40,7 +40,7 @@ func TestHistoricalForkDuringRunAndApplicationChoice(t *testing.T) {
 	waitRunText(t, s, run)
 	// New runs may append while each fork snapshots only the immutable prefix.
 	for i := 0; i < 12; i++ {
-		fork := forkIssue(t, s, source.SessionID(), fmt.Sprintf(`{"entry_id":%q,"application":"kb"}`, ids[1]), 201)
+		fork := forkIssue(t, s, source.SessionID(), fmt.Sprintf(`{"entry_id":%q,"application":""}`, ids[1]), 201)
 		require.Equal(t, 2, fork.KeptMessages)
 		loaded, err := s.app.LoadSession(ctx, fork.ID)
 		require.NoError(t, err)
@@ -52,7 +52,7 @@ func TestHistoricalForkDuringRunAndApplicationChoice(t *testing.T) {
 		found := false
 		for _, item := range info {
 			if item.ID == fork.ID {
-				require.Equal(t, "kb", item.Application)
+				require.Equal(t, "", item.Application)
 				found = true
 			}
 		}
@@ -77,7 +77,8 @@ func TestHistoricalForkDuringRunAndApplicationChoice(t *testing.T) {
 	}
 	forkIssue(t, s, source.SessionID(), `{"application":"unknown"}`, 400)
 	forkIssue(t, s, source.SessionID(), `{"application":"music"}`, 400)
-	for _, application := range []string{"music", "unknown"} {
+	forkIssue(t, s, source.SessionID(), `{"application":"kb"}`, 400)
+	for _, application := range []string{"music", "kb", "unknown"} {
 		create := httptest.NewRecorder()
 		s.createSession(create, httptest.NewRequest("POST", "/sessions", bytes.NewBufferString(fmt.Sprintf(`{"application":%q}`, application))))
 		require.Equal(t, 400, create.Code)

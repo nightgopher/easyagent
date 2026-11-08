@@ -157,11 +157,28 @@ func TestNativeNewSessionModeKeepsCurrentProject(t *testing.T) {
 	a, requests := workspacePickerFixture(t)
 	tt := ui.NewTester(a.View, 1240, 820)
 	click(t, tt, "选择模式")
-	click(t, tt, "知识库")
+	if _, ok := tt.Find("知识库"); ok {
+		t.Fatal("retired knowledge agent is still offered")
+	}
+	click(t, tt, "编程")
 	waitNative(t, a, func() bool { return a.current().RemoteID == "chosen-project" })
 	body := <-requests
-	if str(body["application"]) != "kb" || str(body["cwd"]) != "/demo/easyagent" {
+	if str(body["application"]) != "" || str(body["cwd"]) != "/demo/easyagent" {
 		t.Fatalf("mode changed current project: %v", body)
+	}
+}
+
+func TestNativeNewSessionMenuDoesNotOfferRetiredKnowledgeAgent(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Live.Client = nil
+	a.Live.Connected = true
+	tt := ui.NewTester(a.View, 1240, 820)
+	click(t, tt, "选择模式")
+	if _, ok := tt.Find("编程"); !ok {
+		t.Fatal("coding session is missing")
+	}
+	if _, ok := tt.Find("知识库"); ok {
+		t.Fatal("retired knowledge agent is still offered")
 	}
 }
 

@@ -87,6 +87,8 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 	extensions = append(extensions, capture.Tool{Store: capture.New(a.Cfg.DataDir), Source: "session:" + opts.SessionID})
 	extensions = append(extensions, worktools.Tools(agentdata.New(a.Cfg.DataDir), opts.SessionID)...)
 	return codingtools.BuildList(codingtools.ListOptions{
+		TodoDataDir:            a.Cfg.DataDir,
+		SessionID:              opts.SessionID,
 		Workspace:              opts.Workspace,
 		AllowOutsideWorkspace:  a.Cfg.AllowOutsideWorkspace,
 		MaxOutputLen:           opts.MaxOutputLen,

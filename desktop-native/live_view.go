@@ -136,7 +136,7 @@ func (a *preview) liveSidebar(c *ui.Context) {
 					})
 				})
 				popup := a.menuPanel(c, group, &a.NewMenu, func() {
-					for _, item := range []struct{ Name, Icon, Application string }{{"编程", "cpu", ""}, {"知识库", "search", "kb"}} {
+					for _, item := range []struct{ Name, Icon, Application string }{{"编程", "cpu", ""}} {
 						menuOption(c, item.Icon, item.Name, false).OnClick(func() { a.NewMenu = false; a.createLiveSessionIn("", a.current().Workspace, item.Application) })
 					}
 					ui.Divider(c)

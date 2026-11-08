@@ -69,6 +69,18 @@ type FileOperations interface {
 	Walk(ctx context.Context, root string, fn WalkFunc) error
 }
 
+// FileRemover is an optional capability of a file backend. Tools must not
+// substitute a local filesystem operation when a backend cannot remove files.
+type FileRemover interface {
+	RemoveFile(ctx context.Context, path string) error
+}
+
+// FileCreator creates a new file without replacing an existing path. On error,
+// it must not leave a partially created file behind.
+type FileCreator interface {
+	CreateFile(ctx context.Context, path string, data []byte, perm os.FileMode) error
+}
+
 // FileInfo describes a file and is returned by Stat.
 type FileInfo struct {
 	Name    string      // Base name of the file

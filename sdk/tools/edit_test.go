@@ -10,6 +10,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestEditModelSchemaHidesMultiEdit(t *testing.T) {
+	tool := NewEditTool()
+	properties, ok := tool.Parameters()["properties"].(map[string]any)
+	require.True(t, ok)
+	require.NotContains(t, properties, "edits")
+	require.Contains(t, properties, "old_string")
+	require.Contains(t, properties, "new_string")
+	// Historic tool calls are still accepted by the implementation.
+	_, err := tool.Validate([]byte(`{"path":"file","edits":[{"old_string":"a","new_string":"b"}]}`))
+	require.NoError(t, err)
+}
+
 func TestEditTool_Replace(t *testing.T) {
 	dir := t.TempDir()
 	testFile := filepath.Join(dir, "test.txt")

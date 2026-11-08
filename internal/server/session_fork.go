@@ -45,7 +45,7 @@ func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
 	// writes from other entrypoints and manual compaction.
 	s.runs.mu.Lock()
 	defer s.runs.mu.Unlock()
-	if req.Application != nil && *req.Application != "" && *req.Application != "kb" {
+	if req.Application != nil && *req.Application != "" && *req.Application != "coding" {
 		writeError(w, 400, "unknown application")
 		return
 	}

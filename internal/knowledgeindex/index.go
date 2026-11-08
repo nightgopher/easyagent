@@ -1,4 +1,4 @@
-package kbtools
+package knowledgeindex
 
 import (
 	"bufio"

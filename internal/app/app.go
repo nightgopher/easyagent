@@ -221,6 +221,11 @@ func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.Agent
 		deps.Application = retiredMusicApp{}
 		return a.sessionStore.Load(ctx, sessionID, opts, deps)
 	}
+	if application == retiredKBApplication && agentID == "" {
+		deps := a.deps()
+		deps.Application = retiredKBApp{}
+		return a.sessionStore.Load(ctx, sessionID, opts, deps)
+	}
 	cfg, deps, err := a.SessionSetup(ctx, application, agentID, opts.Config)
 	opts.Config = cfg
 	if err != nil {

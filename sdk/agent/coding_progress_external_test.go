@@ -26,6 +26,7 @@ type codingProgressProvider struct {
 	reminder       bool
 	readsAvailable int
 	editSucceeded  bool
+	simplifiedEdit bool
 }
 
 func (*codingProgressProvider) Name() string { return "coding-progress-fixture" }
@@ -34,6 +35,18 @@ func (p *codingProgressProvider) StreamSimple(ctx context.Context, req ai.Simple
 }
 func (p *codingProgressProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.EventStream, error) {
 	p.calls++
+	for _, tool := range req.Tools {
+		if tool.Name == "edit" {
+			if schema, ok := tool.Parameters.(map[string]any); ok {
+				if properties, ok := schema["properties"].(map[string]any); ok {
+					_, hasOld := properties["old_string"]
+					_, hasNew := properties["new_string"]
+					_, hasMulti := properties["edits"]
+					p.simplifiedEdit = hasOld && hasNew && !hasMulti
+				}
+			}
+		}
+	}
 	p.readsAvailable = 0
 	for _, raw := range req.Messages {
 		switch m := raw.(type) {
@@ -99,4 +112,5 @@ func TestCodingAgentMovesFromRepeatedReadsToRealEdit(t *testing.T) {
 	updated, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(updated), "return 2")
+	require.True(t, p.simplifiedEdit, "the model should receive the simplified edit schema")
 }

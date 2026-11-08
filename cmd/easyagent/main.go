@@ -14,7 +14,6 @@ import (
 
 	"github.com/nightgopher/easyagent/internal/agents/coding"
 	"github.com/nightgopher/easyagent/internal/agents/coding/commands"
-	kbapp "github.com/nightgopher/easyagent/internal/agents/kb"
 	"github.com/nightgopher/easyagent/internal/app"
 	"github.com/nightgopher/easyagent/internal/command"
 	"github.com/nightgopher/easyagent/internal/mode"
@@ -22,7 +21,6 @@ import (
 	"github.com/nightgopher/easyagent/internal/scheduler"
 	"github.com/nightgopher/easyagent/internal/tui"
 	"github.com/nightgopher/easyagent/sdk/config"
-	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/nightgopher/easyagent/sdk/slashcmd"
 )
 
@@ -164,26 +162,13 @@ func main() {
 	// Personal command center (spaces/goals/results), state under DataDir.
 	commandStore := command.NewStore(cfg.DataDir)
 
-	// Resolve KB repo path from config (default: ~/agent-lessons)
-	kbRepoPath := cfg.KBRepoPath
-	if kbRepoPath == "" {
-		homeDir, _ := os.UserHomeDir()
-		kbRepoPath = homeDir + "/agent-lessons"
-	}
-
-	// Create App (thin assembly layer) with coding and kb applications.
-	// Coding agent does NOT receive the profile (it relies on .llm-wiki + project context).
-	// KB agent receives the full profile (it's the second brain).
+	// Create the coding application. Knowledge browsing remains available separately.
 	application, err := app.New(app.AppOptions{
 		Config:      cfg,
 		SkillDirs:   skillDirs(*skillDir),
 		Application: coding.NewCodingApplication(cfg),
 		Profile:     userProfile,
 		Command:     commandStore,
-		Applications: map[string]runtime.Application{
-			"coding": coding.NewCodingApplication(cfg),
-			"kb":     kbapp.NewKBApplicationWithProfile(cfg, kbRepoPath, userProfile),
-		},
 	})
 	if err != nil {
 		slog.Error("failed to create app", "error", err)

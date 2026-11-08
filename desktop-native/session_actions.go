@@ -59,7 +59,7 @@ func (a *preview) sessionOptions(c *ui.Context, s *session, close func()) {
 	}
 	menuOption(c, "pin", pin, false).Disabled(a.Live.Loading["preferences/"+s.RemoteID]).OnClick(func() { close(); a.patchSessionPreference(s, map[string]any{"pinned": !s.Pinned}, nil) })
 	menuOption(c, "git-branch", "分叉会话", false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSession(s) })
-	for _, target := range []struct{ Name, ID string }{{"编程", ""}, {"知识库", "kb"}} {
+	for _, target := range []struct{ Name, ID string }{{"编程", ""}} {
 		menuOption(c, "git-branch", "分叉为："+target.Name, false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSessionTo(s, &target.ID) })
 	}
 	menuOption(c, "edit", "重命名", false).OnClick(func() { close(); a.renameNativeSession(s) })

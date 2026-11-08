@@ -1,12 +1,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
-	"os"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/operations"
@@ -60,8 +60,7 @@ func NewDeleteFileTool(opts ...DeleteFileOption) *DeleteFileTool {
 func (t *DeleteFileTool) Name() string { return "delete_file" }
 
 func (t *DeleteFileTool) Description() string {
-	return `Safely deletes text files from the filesystem after capturing their content for potential rollback.
-The tool will read and preserve the file content before deletion, allowing for recovery if needed.
+	return `Deletes text files from the configured filesystem. Local files are backed up when an undo manager is available; remote deletions do not have an undo snapshot.
 
 RESTRICTIONS: This tool can only delete text files (code, configuration, documentation, etc.).
 For non-text files (images, videos, binaries, archives, etc.), use the shell tool with commands like "rm".
@@ -112,6 +111,9 @@ func (t *DeleteFileTool) RequiresConfirmation(raw json.RawMessage) (string, bool
 	return fmt.Sprintf("即将删除文件:%s\n  %s", reason, cleanPath), true
 }
 
+// Refuse to delete if the entrypoint cannot provide an approval decision.
+func (t *DeleteFileTool) RequiresConfirmationAvailable() bool { return true }
+
 func (t *DeleteFileTool) Execute(ctx context.Context, raw json.RawMessage, _ func(agent.PartialResult)) (agent.ToolResult, error) {
 	var params DeleteFileParams
 	if err := json.Unmarshal(raw, &params); err != nil {
@@ -142,16 +144,30 @@ func (t *DeleteFileTool) Execute(ctx context.Context, raw json.RawMessage, _ fun
 	if err != nil {
 		return agent.ToolResult{IsError: true, Content: fmt.Sprintf("error reading file before deletion: %v", err)}, err
 	}
+	if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
+		return agent.ToolResult{IsError: true, Content: "refusing to delete a binary file"}, fmt.Errorf("cannot delete binary file")
+	}
+	remover, ok := t.ops.(operations.FileRemover)
+	if !ok {
+		return agent.ToolResult{IsError: true, Content: "the configured file backend does not support deletion"}, fmt.Errorf("file backend cannot remove files")
+	}
 
-	// Take snapshot via BackupManager if available
-	if t.backupMgr != nil {
+	// BackupManager restores local paths only. Never snapshot a local path while
+	// deleting a remote file with the same name.
+	backedUp := false
+	_, local := t.ops.(operations.LocalFileOperations)
+	if _, ok := t.ops.(*operations.LocalFileOperations); ok {
+		local = true
+	}
+	if t.backupMgr != nil && local {
 		if _, err := t.backupMgr.Snapshot(cleanPath); err != nil {
-			slog.Warn("delete_file: backup snapshot failed", "path", cleanPath, "error", err)
+			return agent.ToolResult{IsError: true, Content: fmt.Sprintf("backup failed: %v", err)}, err
 		}
+		backedUp = true
 	}
 
 	// Perform the deletion
-	if err := os.Remove(cleanPath); err != nil {
+	if err := remover.RemoveFile(ctx, cleanPath); err != nil {
 		return agent.ToolResult{IsError: true, Content: fmt.Sprintf("error deleting file: %v", err)}, err
 	}
 
@@ -167,8 +183,10 @@ func (t *DeleteFileTool) Execute(ctx context.Context, raw json.RawMessage, _ fun
 	if params.Reason != "" {
 		parts = append(parts, fmt.Sprintf("Deletion reason: %s", params.Reason))
 	}
-	if t.backupMgr != nil {
+	if backedUp {
 		parts = append(parts, "Original content has been preserved in backup for potential rollback.")
+	} else {
+		parts = append(parts, "No undo snapshot is available for this deletion.")
 	}
 
 	return agent.ToolResult{Content: strings.Join(parts, ". ") + "."}, nil

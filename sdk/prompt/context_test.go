@@ -8,6 +8,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProjectContextLoadsGlobalMemoryAlongsideClaude(t *testing.T) {
+	root := t.TempDir()
+	agentDir, cwd := filepath.Join(root, "agent"), filepath.Join(root, "project")
+	require.NoError(t, os.MkdirAll(agentDir, 0o755))
+	require.NoError(t, os.MkdirAll(cwd, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(agentDir, "CLAUDE.md"), []byte("global instructions"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(agentDir, "AGENTS.md"), []byte("remembered fact"), 0o644))
+	files := LoadProjectContextFiles(cwd, agentDir)
+	require.Len(t, files, 2)
+	require.Equal(t, "global instructions", files[0].Content)
+	require.Equal(t, "remembered fact", files[1].Content)
+}
+
 func TestLoadContextFiles_Priority(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "CLAUDE.md"), []byte("Claude"), 0o644))

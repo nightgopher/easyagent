@@ -11,6 +11,30 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestTodoToolSessionsAreIsolatedAndPersistent(t *testing.T) {
+	dir := t.TempDir()
+	first := NewTodoToolForSession(dir, "session-a")
+	second := NewTodoToolForSession(dir, "session-b")
+	for _, item := range []struct {
+		tool *TodoTool
+		id   string
+	}{{first, "first"}, {second, "second"}} {
+		params, err := json.Marshal(TodoParams{Todos: []TodoItem{{ID: item.id, Content: item.id, Status: "pending", Priority: "high"}}})
+		require.NoError(t, err)
+		_, err = item.tool.Execute(context.Background(), params, nil)
+		require.NoError(t, err)
+	}
+	reloaded := NewTodoToolForSession(dir, "session-a")
+	items, err := reloaded.GetTodos()
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "first", items[0].ID)
+	items, err = second.GetTodos()
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	require.Equal(t, "second", items[0].ID)
+}
+
 func TestTodoTool_Basic(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := &TodoTool{filePath: filepath.Join(tmpDir, "todo.json")}
