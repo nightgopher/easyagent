@@ -93,7 +93,7 @@ func NewEditTool(opts ...EditToolOption) *EditTool {
 func (t *EditTool) Name() string { return "edit" }
 
 func (t *EditTool) Description() string {
-	return "Perform exact string replacements in files. Supports single replacement (old_string must be unique), replace_all mode, and multi-edit mode (edits array for multiple replacements in one call)."
+	return "Perform a targeted string replacement in one file. The old string must be unique unless replace_all is enabled."
 }
 
 func (t *EditTool) Parameters() map[string]any {
@@ -104,20 +104,8 @@ func (t *EditTool) Parameters() map[string]any {
 			"old_string":  map[string]any{"type": "string", "description": "The text to replace (single-edit mode). Must match exactly, including whitespace and indentation."},
 			"new_string":  map[string]any{"type": "string", "description": "The text to replace with (single-edit mode)."},
 			"replace_all": map[string]any{"type": "boolean", "description": "Replace all occurrences (single-edit mode, default false)."},
-			"edits": map[string]any{
-				"type":        "array",
-				"description": "Multi-edit mode: array of replacements to apply in one call. Each old_string must be unique in the original file. Mutually exclusive with old_string/new_string.",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"old_string": map[string]any{"type": "string", "description": "The text to replace. Must be unique in the file."},
-						"new_string": map[string]any{"type": "string", "description": "The replacement text."},
-					},
-					"required": []string{"old_string", "new_string"},
-				},
-			},
 		},
-		"required": []string{"path"},
+		"required": []string{"path", "old_string", "new_string"},
 	}
 }
 

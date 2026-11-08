@@ -111,11 +111,6 @@ type Config struct {
 	// Knowledge base (second-brain)
 	KBRepoPath string // path to the personal knowledge repo (default: ~/agent-lessons)
 
-	// KB vector search (optional, for semantic search)
-	KBEmbeddingAPIKey  string // API key for embedding provider (e.g. SiliconFlow)
-	KBEmbeddingModel   string // embedding model name (e.g. BAAI/bge-m3)
-	KBEmbeddingBaseURL string // embedding API base URL
-
 	// ASR (speech-to-text)
 	ASRAPIKey  string // API key for SiliconFlow ASR
 	ASRModel   string // ASR model name (default: TeleAI/TeleSpeechASR)
@@ -342,17 +337,6 @@ func (c *Config) LoadFromEnv() {
 		c.SkillMarketSkillDir = v
 	}
 
-	// KB vector search
-	if v := os.Getenv("SILICONFLOW_API_KEY"); v != "" {
-		c.KBEmbeddingAPIKey = v
-	}
-	if v := os.Getenv("SILICONFLOW_EMBEDDING_MODEL"); v != "" {
-		c.KBEmbeddingModel = v
-	}
-	if v := os.Getenv("SILICONFLOW_BASE_URL"); v != "" {
-		c.KBEmbeddingBaseURL = v
-	}
-
 	// ASR: credentials and endpoint must come from the same provider. Never
 	// forward a gateway key to the default SiliconFlow endpoint (or vice versa).
 	asrKey, siliconKey, asrURL := os.Getenv("ASR_API_KEY"), os.Getenv("SILICONFLOW_API_KEY"), os.Getenv("ASR_BASE_URL")
@@ -468,10 +452,7 @@ type yamlConfig struct {
 
 	APIKey string `yaml:"api_key,omitempty"`
 
-	KBRepoPath         string `yaml:"kb_repo_path,omitempty"`
-	KBEmbeddingAPIKey  string `yaml:"kb_embedding_api_key,omitempty"`
-	KBEmbeddingModel   string `yaml:"kb_embedding_model,omitempty"`
-	KBEmbeddingBaseURL string `yaml:"kb_embedding_base_url,omitempty"`
+	KBRepoPath string `yaml:"kb_repo_path,omitempty"`
 
 	SkillMarketBaseURL  string `yaml:"skill_market_base_url,omitempty"`
 	SkillMarketSkillDir string `yaml:"skill_market_skill_dir,omitempty"`
@@ -623,15 +604,6 @@ func (c *Config) LoadFromYAML(path string) error {
 	}
 	if yc.SkillMarketSkillDir != "" {
 		c.SkillMarketSkillDir = yc.SkillMarketSkillDir
-	}
-	if yc.KBEmbeddingAPIKey != "" {
-		c.KBEmbeddingAPIKey = yc.KBEmbeddingAPIKey
-	}
-	if yc.KBEmbeddingModel != "" {
-		c.KBEmbeddingModel = yc.KBEmbeddingModel
-	}
-	if yc.KBEmbeddingBaseURL != "" {
-		c.KBEmbeddingBaseURL = yc.KBEmbeddingBaseURL
 	}
 	if yc.ASRAPIKey != "" {
 		c.ASRAPIKey = yc.ASRAPIKey

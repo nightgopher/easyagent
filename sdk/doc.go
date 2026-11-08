@@ -1,7 +1,7 @@
 // Package sdk 是 easyagent 的库入口：Agent 框架的原子能力集合。
 //
 // easyagent 由两部分组成：本目录（可被外部 Go 模块 import 的 SDK）与
-// internal/（easyagent 自身的 Application 与入口，如 coding/kb agent、
+// internal/（easyagent 自身的 Application 与入口，如 coding agent、
 // TUI、飞书、server）。
 //
 // # 能力地图

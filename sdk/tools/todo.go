@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -40,6 +41,19 @@ type TodoParams struct {
 
 func NewTodoTool() *TodoTool {
 	return &TodoTool{}
+}
+
+// NewTodoToolForSession persists plans independently for each conversation.
+// The session identifier is hashed so it cannot escape the data directory.
+func NewTodoToolForSession(dataDir, sessionID string) *TodoTool {
+	if sessionID == "" {
+		return NewTodoTool()
+	}
+	if dataDir == "" {
+		dataDir = config.HomeDir()
+	}
+	hash := sha256.Sum256([]byte(sessionID))
+	return &TodoTool{filePath: filepath.Join(dataDir, "todos", fmt.Sprintf("%x.json", hash))}
 }
 
 func (t *TodoTool) Name() string { return "todo_write" }
@@ -175,8 +189,7 @@ func (t *TodoTool) saveTodos(todos []TodoItem) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o700); err != nil {
 		return fmt.Errorf("create todo dir: %w", err)
 	}
 
@@ -185,7 +198,20 @@ func (t *TodoTool) saveTodos(todos []TodoItem) error {
 		return fmt.Errorf("marshal todos: %w", err)
 	}
 
-	return os.WriteFile(filePath, data, 0o644)
+	file, err := os.CreateTemp(filepath.Dir(filePath), ".todo-*")
+	if err != nil {
+		return err
+	}
+	tempPath := file.Name()
+	defer os.Remove(tempPath)
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tempPath, filePath)
 }
 
 // GetTodos returns the current in-memory todo list (for testing).

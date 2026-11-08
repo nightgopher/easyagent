@@ -52,16 +52,40 @@ func TestCodingDiscoveryFiltersPromptAndPreservesSkillMetadata(t *testing.T) {
 			u := snapshot.Usage.ToolDiscovery
 			require.Equal(t, len(snapshot.Tools), u.Resident+u.Loaded)
 			require.Equal(t, snapshot.Usage.Tools, u.DefinitionTokens)
+			require.NotContains(t, snapshot.System, "### web_fetch")
 			if mode == "local" {
-				require.NotContains(t, snapshot.System, "### web_fetch")
 				require.NotContains(t, snapshot.System, "The URL to fetch (http or https).")
 				require.NotContains(t, names, "web_fetch")
 				require.Contains(t, names, agent.SearchToolsName)
 			} else {
-				require.Contains(t, snapshot.System, "### web_fetch")
 				require.Contains(t, names, "web_fetch")
 				require.NotContains(t, names, agent.SearchToolsName)
+				for _, tool := range snapshot.Tools {
+					if tool.Name == "web_fetch" {
+						require.NotEmpty(t, tool.Description)
+						require.NotEmpty(t, tool.Parameters)
+					}
+				}
 			}
 		})
 	}
+}
+
+func TestCodingSessionLoadsSavedGlobalMemory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("EA_HOME", home)
+	require.NoError(t, os.WriteFile(filepath.Join(home, "CLAUDE.md"), []byte("global instructions"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(home, "AGENTS.md"), []byte("saved preference"), 0o600))
+	cfg := config.Default()
+	cfg.DataDir, cfg.Workspace, cfg.OpenAIBaseURL = t.TempDir(), t.TempDir(), ""
+	cfg.Provider, cfg.OpenAIAPIKey = "openai", "fixture"
+	a, err := New(AppOptions{Config: cfg})
+	require.NoError(t, err)
+	defer a.Close()
+	s, err := a.NewSession(context.Background())
+	require.NoError(t, err)
+	snapshot, err := s.ContextSnapshot(context.Background())
+	require.NoError(t, err)
+	require.Contains(t, snapshot.System, "global instructions")
+	require.Contains(t, snapshot.System, "saved preference")
 }

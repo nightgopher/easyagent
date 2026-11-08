@@ -55,16 +55,6 @@ func BuildSystemPrompt(opts Options) string {
 		}
 	}
 
-	if len(opts.Tools) > 0 {
-		b.WriteString("\n## Available Tools\n\n")
-		for _, tool := range opts.Tools {
-			fmt.Fprintf(&b, "### %s\n\n%s\n\n", tool.Name(), tool.Description())
-			if params := tool.Parameters(); len(params) > 0 {
-				b.WriteString(formatParameters(tool.Name(), params))
-			}
-		}
-	}
-
 	if len(guidelines) > 0 {
 		b.WriteString("\n## Guidelines\n\n")
 		for _, g := range guidelines {
@@ -217,42 +207,6 @@ func collectToolGuidelines(tools []agent.Tool, toolNames []string) []string {
 	addGuideline("Briefly state the next action when helpful; avoid repeatedly restating the plan")
 
 	return guidelines
-}
-
-func formatParameters(toolName string, params map[string]any) string {
-	props, ok := params["properties"].(map[string]any)
-	if !ok {
-		return ""
-	}
-
-	required := make(map[string]bool)
-	if req, ok := params["required"].([]string); ok {
-		for _, r := range req {
-			required[r] = true
-		}
-	}
-
-	var b strings.Builder
-	b.WriteString("Parameters:\n")
-	for name, schema := range props {
-		schemaMap, ok := schema.(map[string]any)
-		if !ok {
-			continue
-		}
-		typeStr, _ := schemaMap["type"].(string)
-		desc, _ := schemaMap["description"].(string)
-		reqMark := ""
-		if required[name] {
-			reqMark = " (required)"
-		}
-		fmt.Fprintf(&b, "  - `%s` (%s)%s", name, typeStr, reqMark)
-		if desc != "" {
-			fmt.Fprintf(&b, ": %s", desc)
-		}
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
-	return b.String()
 }
 
 // buildWikiContext returns wiki context text if .llm-wiki/index.md exists.

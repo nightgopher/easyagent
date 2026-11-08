@@ -128,9 +128,12 @@ jobs:
         run: swift test
       - name: Download the pinned XcodeGen binary
         if: ${{ hashFiles('mobile-ios/project.yml') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           archive="$RUNNER_TEMP/easyagent-xcodegen.zip"
-          curl --fail --location --retry 3 --output "$archive" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip
+          curl --fail --location --retry 3 --output "$archive" https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip || \
+            python3 scripts/release-dependencies.py asset https://github.com/yonaskolb/XcodeGen/releases/download/2.46.0/xcodegen.zip 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806 "$archive"
           printf '%s  %s\n' 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806 "$archive" | shasum -a 256 -c -
           unzip -q "$archive" -d "$RUNNER_TEMP/easyagent-xcodegen"
           echo "$RUNNER_TEMP/easyagent-xcodegen/xcodegen/bin" >> "$GITHUB_PATH"

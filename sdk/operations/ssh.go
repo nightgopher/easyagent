@@ -1,6 +1,7 @@
 package operations
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -75,6 +76,33 @@ func (s SSHBashOperations) Run(ctx context.Context, req RunRequest) (RunResult, 
 type SSHFileOperations struct {
 	config SSHConfig
 	bash   SSHBashOperations
+}
+
+// RemoveFile removes a file on the configured remote host.
+func (s SSHFileOperations) RemoveFile(ctx context.Context, path string) error {
+	result, err := s.bash.Run(ctx, RunRequest{Command: fmt.Sprintf("rm -- %s", shellQuote(path))})
+	if err != nil {
+		return fmt.Errorf("delete remote file %s: %w", path, err)
+	}
+	if result.ExitCode != 0 {
+		return fmt.Errorf("delete remote file %s failed (exit %d): %s", path, result.ExitCode, string(result.Output))
+	}
+	return nil
+}
+
+// CreateFile writes to a temporary sibling and links it into place only if the
+// target does not already exist. The temporary file is removed on every exit.
+func (s SSHFileOperations) CreateFile(ctx context.Context, path string, data []byte, perm os.FileMode) error {
+	template := parentDirSSH(path) + "/.easyagent-patch.XXXXXXXX"
+	command := fmt.Sprintf("tmp=$(mktemp %s) || exit 1; trap 'rm -f \"$tmp\"' EXIT; cat > \"$tmp\" && chmod %o \"$tmp\" && link \"$tmp\" %s", shellQuote(template), perm.Perm(), shellQuote(path))
+	args := append(s.sshArgs(), command)
+	cmd := exec.CommandContext(ctx, "ssh", args...) // #nosec G204 -- configured host and shell-quoted remote paths are passed as arguments.
+	cmd.Stdin = bytes.NewReader(data)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("create remote file %s: %w: %s", path, err, string(out))
+	}
+	return nil
 }
 
 // ReadFile reads a remote file via ssh cat.

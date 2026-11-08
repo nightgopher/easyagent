@@ -129,7 +129,6 @@ tool_search: local
 | `EA_MCP_CONFIG` / `--mcp-config` / YAML `mcp_config` | 用户 MCP 配置文件，默认 `EA_HOME/mcp.json`；项目文件与授权见 [MCP](MCP.md) |
 | `EA_KB_REPO_PATH` | 知识库目录；未设置时运行入口使用 `~/agent-lessons` |
 | `EA_SKILL_MARKET`、`EA_SKILL_MARKET_BASE_URL`、`EA_SKILL_MARKET_SKILL_DIR` | 技能市场（EasyCode 官方 skill store）；默认开启，`EA_SKILL_MARKET=0` 关闭。安装到 `EA_SKILL_MARKET_SKILL_DIR`（默认 `~/.agents/skills`），下一轮或新会话生效，见 [技能市场](SKILL_MARKET.md) |
-| `SILICONFLOW_API_KEY`、`SILICONFLOW_EMBEDDING_MODEL`、`SILICONFLOW_BASE_URL` | 可选知识库向量搜索 |
 | `ASR_API_KEY`、`ASR_MODEL`、`ASR_BASE_URL` | 语音识别；未设置 ASR Key 时可回退到 SiliconFlow Key |
 | `EA_FEISHU_ENV_FILE`、`FEISHU_OWNER_STATE_FILE` | 托管飞书配置与配对状态，见 [飞书](FEISHU.md) |
 | `FEISHU_BUILTIN_APP_SECRET` | 预注册内置应用的浏览器授权流程所需密钥；原随源码发布的值已移除并轮换，只能通过环境变量提供 |
@@ -185,6 +184,6 @@ SSE 空流仍按原有上限退避重试；空闲超时仅在一个 body 字节�
 
 ## 分叉与失败续跑
 
-`POST /sessions/{id}/fork` 支持可选 `application`：省略继承源 Agent，`""` 为编程，`"kb"` 为知识库。`entry_id` 和 `before_message_index` 互斥；运行中仅允许本轮之前的历史分叉，整条分叉和本轮消息返回 409。带工具调用的切点自动延伸至全部工具结果；工具尚未完成时返回说明性错误。源会话继续运行。
+`POST /sessions/{id}/fork` 支持可选 `application`：省略继承源 Agent，`""` 或 `"coding"` 为编程。知识库 Agent 已下线，旧会话保留为历史记录；知识库浏览和原有数据不受影响。`entry_id` 和 `before_message_index` 互斥；运行中仅允许本轮之前的历史分叉，整条分叉和本轮消息返回 409。带工具调用的切点自动延伸至全部工具结果；工具尚未完成时返回说明性错误。源会话继续运行。
 
 `POST /sessions/{id}/run/continue` 接受 `{"run_id":"失败任务ID","request_id":"唯一请求ID"}`，返回 202。仅对最新失败／中断任务、且上下文停在已保存工具结果时可用；原生客户端显示“从已保存的工具结果继续”。服务重用现有上下文请求模型，不再次写入原始用户问题，也不重新执行已保存的工具；模型后续主动提出的新工具请求仍按正常权限流程处理。过期任务返回冲突；重复 `request_id` 返回同一次接受结果。

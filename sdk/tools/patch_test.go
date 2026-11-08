@@ -51,7 +51,8 @@ func TestParseUnifiedDiff_Basic(t *testing.T) {
 +new
  line3
 `
-	hunks := parseUnifiedDiff(patch)
+	hunks, err := parseUnifiedDiff(patch)
+	require.NoError(t, err)
 	require.Len(t, hunks, 1)
 	assert.Equal(t, "file.txt", hunks[0].Path)
 	assert.Equal(t, "update", hunks[0].Type)
@@ -63,11 +64,12 @@ func TestParseUnifiedDiff_NewFile(t *testing.T) {
 @@ -0,0 +1 @@
 +new content
 `
-	hunks := parseUnifiedDiff(patch)
+	hunks, err := parseUnifiedDiff(patch)
+	require.NoError(t, err)
 	require.Len(t, hunks, 1)
 	assert.Equal(t, "newfile.txt", hunks[0].Path)
 	assert.Equal(t, "add", hunks[0].Type)
-	assert.Contains(t, hunks[0].Content, "new content")
+	assert.Equal(t, "new content", hunks[0].Chunks[0].Lines[0].Content)
 }
 
 func TestPatchTool_WithBackup(t *testing.T) {

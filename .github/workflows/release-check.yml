@@ -96,6 +96,10 @@ jobs:
           cache-dependency-path: |
             go.sum
             desktop-native/go.sum
+      - name: Prepare verified MyGo native dependency
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-dependencies.py natives darwin-arm64
       - name: Exercise the native release builder
         run: bash scripts/check-native-release-build.sh
   android-build:
@@ -128,6 +132,10 @@ jobs:
           cache-dependency-path: |
             go.sum
             desktop-native/go.sum
+      - name: Prepare verified MyGo native dependency
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-dependencies.py natives darwin-arm64
       - name: Verify the configured release certificate without publishing
         env:
           MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}

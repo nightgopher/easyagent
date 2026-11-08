@@ -24,6 +24,7 @@ func TestPromptReflectsInitialCapabilitiesAndEncouragesProgress(t *testing.T) {
 	require.Contains(t, withoutBash, "bash tool is not in the initial tool list")
 	require.Contains(t, withoutBash, "available or discoverable tools")
 	require.Contains(t, withoutBash, "move to a small verifiable change")
+	require.NotContains(t, withoutBash, "test tool") // descriptions are already sent as tool definitions
 	require.NotContains(t, withoutBash, "you cannot run commands")
 
 	withBash := BuildSystemPrompt(Options{Tools: []agent.Tool{capabilityTestTool("bash"), capabilityTestTool("read")}})

@@ -1,4 +1,4 @@
-package kbtools
+package knowledgeindex
 
 import (
 	"bufio"
@@ -79,7 +79,15 @@ func GetIndex(repoPath string) (*Index, error) {
 	}
 
 	idx := &Index{Root: repoPath}
-	err := filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
+	root, err := os.OpenRoot(repoPath)
+	if os.IsNotExist(err) {
+		return idx, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	err = filepath.Walk(repoPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -95,8 +103,11 @@ func GetIndex(repoPath string) (*Index, error) {
 			return nil
 		}
 
-		relPath, _ := filepath.Rel(repoPath, path)
-		relPath = filepath.ToSlash(relPath)
+		relative, err := filepath.Rel(repoPath, path)
+		if err != nil {
+			return nil
+		}
+		relPath := filepath.ToSlash(relative)
 
 		// Skip root README
 		if relPath == "README.md" {
@@ -114,7 +125,10 @@ func GetIndex(repoPath string) (*Index, error) {
 			}
 		}
 
-		entry := parseEntry(path, repoPath, info)
+		entry, ok := parseEntry(root, path, repoPath, relative, info)
+		if !ok {
+			return nil
+		}
 		entry.RelPath = relPath
 		idx.Entries = append(idx.Entries, entry)
 		return nil
@@ -145,7 +159,7 @@ func ClearCache() {
 //   - chatgpt-export/doubao-export conversations (# Title\n> URL...\n## 👤 User)
 //   - project-journals (# Title\n> 自动生成于...)
 //   - Legacy markdown (# Title\n\n**Tags**: a, b\n\nbody)
-func parseEntry(absPath, repoPath string, fileInfo ...os.FileInfo) Entry {
+func parseEntry(root *os.Root, absPath, repoPath, relative string, fileInfo ...os.FileInfo) (Entry, bool) {
 	var info os.FileInfo
 	if len(fileInfo) > 0 && fileInfo[0] != nil {
 		info = fileInfo[0]
@@ -160,9 +174,9 @@ func parseEntry(absPath, repoPath string, fileInfo ...os.FileInfo) Entry {
 	// Category from directory structure
 	entry.Category = deriveCategory(absPath, repoPath)
 
-	content, err := os.ReadFile(absPath)
+	content, err := root.ReadFile(relative)
 	if err != nil {
-		return entry
+		return entry, false
 	}
 	text := string(content)
 
@@ -190,7 +204,7 @@ func parseEntry(absPath, repoPath string, fileInfo ...os.FileInfo) Entry {
 		if len(entry.Tags) == 0 {
 			entry.Tags = extractSectionTags(body)
 		}
-		return entry
+		return entry, true
 	}
 
 	// No frontmatter — parse markdown body
@@ -209,7 +223,7 @@ func parseEntry(absPath, repoPath string, fileInfo ...os.FileInfo) Entry {
 	if entry.Summary == "" {
 		entry.Summary = extractSummary(text)
 	}
-	return entry
+	return entry, true
 }
 
 // deriveCategory determines the category from the file's directory path.

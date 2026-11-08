@@ -662,7 +662,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	cwd := s.workspaceLocked()
 
 	// Load context files
-	contextFiles := prompt.LoadProjectContextFiles(cwd, "")
+	contextFiles := prompt.LoadProjectContextFiles(cwd, config.HomeDir())
 
 	// Load skills. Apply host preferences after precedence resolution: disabling a winner
 	// must not silently activate an older duplicate from another shared directory.

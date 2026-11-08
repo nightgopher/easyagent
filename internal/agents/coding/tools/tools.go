@@ -22,6 +22,8 @@ type ListOptions struct {
 	ComputerSessionID      string
 	ComputerApprovalPolicy string // "ask" | "auto"
 	ComputerApprovedApps   []string
+	TodoDataDir            string
+	SessionID              string
 	FileOps                operations.FileOperations
 	ExtensionTools         []agent.Tool
 	AllowedTools           []string
@@ -129,8 +131,10 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithPatchPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
 			basetools.WithPatchOperations(opts.FileOps),
 			basetools.WithPatchBackupManager(opts.BackupManager),
+			basetools.WithPatchMutationQueue(opts.FileMutationQueue),
+			basetools.WithPatchReadTracker(opts.ReadTracker),
 		),
-		basetools.NewTodoTool(),
+		basetools.NewTodoToolForSession(opts.TodoDataDir, opts.SessionID),
 		basetools.NewMemoryTool(),
 		basetools.NewLocalTimeTool(),
 		basetools.NewDeleteFileTool(

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	kbtools "github.com/nightgopher/easyagent/internal/agents/kb/tools"
+	"github.com/nightgopher/easyagent/internal/knowledgeindex"
 )
 
 // ── JSON Response Types ───────────────────────────────────────────────────
@@ -97,8 +97,8 @@ func (s *Server) resolveKBRepoPath() string {
 	return homeDir + "/agent-lessons"
 }
 
-// entryToJSON converts a kbtools.Entry to the JSON response type.
-func entryToJSON(e kbtools.Entry) kbEntryJSON {
+// entryToJSON converts a knowledgeindex.Entry to the JSON response type.
+func entryToJSON(e knowledgeindex.Entry) kbEntryJSON {
 	tags := e.Tags
 	if tags == nil {
 		tags = []string{}
@@ -137,24 +137,24 @@ func (s *Server) registerKBRoutes(mux *http.ServeMux) {
 
 func (s *Server) kbStats(w http.ResponseWriter, r *http.Request) {
 	repoPath := s.resolveKBRepoPath()
-	idx, err := kbtools.GetIndex(repoPath)
+	idx, err := knowledgeindex.GetIndex(repoPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read KB index: "+err.Error())
 		return
 	}
 
-	cats := kbtools.CategoryOverview(idx)
+	cats := knowledgeindex.CategoryOverview(idx)
 	writeJSON(w, kbStatsResponse{
 		TotalEntries: len(idx.Entries),
 		Categories:   len(cats),
-		Tags:         kbtools.CountTagsDistinct(idx),
+		Tags:         knowledgeindex.CountTagsDistinct(idx),
 		RepoPath:     repoPath,
 	})
 }
 
 func (s *Server) kbEntries(w http.ResponseWriter, r *http.Request) {
 	repoPath := s.resolveKBRepoPath()
-	idx, err := kbtools.GetIndex(repoPath)
+	idx, err := knowledgeindex.GetIndex(repoPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read KB index: "+err.Error())
 		return
@@ -167,7 +167,7 @@ func (s *Server) kbEntries(w http.ResponseWriter, r *http.Request) {
 
 	// If a keyword query is provided, use the search strategy.
 	if strings.TrimSpace(query) != "" {
-		results := kbtools.KeywordSearcher{}.Search(idx.Entries, kbtools.SearchQuery{
+		results := knowledgeindex.KeywordSearcher{}.Search(idx.Entries, knowledgeindex.SearchQuery{
 			Query:    query,
 			Tag:      tag,
 			Category: category,
@@ -218,13 +218,13 @@ func (s *Server) kbEntries(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) kbCategories(w http.ResponseWriter, r *http.Request) {
 	repoPath := s.resolveKBRepoPath()
-	idx, err := kbtools.GetIndex(repoPath)
+	idx, err := knowledgeindex.GetIndex(repoPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read KB index: "+err.Error())
 		return
 	}
 
-	stats := kbtools.CategoryOverview(idx)
+	stats := knowledgeindex.CategoryOverview(idx)
 	result := make([]kbCategoryJSON, 0, len(stats))
 	for _, c := range stats {
 		result = append(result, kbCategoryJSON{Name: c.Name, Count: c.Count})
@@ -234,13 +234,13 @@ func (s *Server) kbCategories(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) kbTags(w http.ResponseWriter, r *http.Request) {
 	repoPath := s.resolveKBRepoPath()
-	idx, err := kbtools.GetIndex(repoPath)
+	idx, err := knowledgeindex.GetIndex(repoPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read KB index: "+err.Error())
 		return
 	}
 
-	stats := kbtools.TagOverview(idx)
+	stats := knowledgeindex.TagOverview(idx)
 	result := make([]kbTagJSON, 0, len(stats))
 	for _, t := range stats {
 		result = append(result, kbTagJSON{Name: t.Name, Count: t.Count})
@@ -250,13 +250,13 @@ func (s *Server) kbTags(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) kbHealth(w http.ResponseWriter, r *http.Request) {
 	repoPath := s.resolveKBRepoPath()
-	idx, err := kbtools.GetIndex(repoPath)
+	idx, err := knowledgeindex.GetIndex(repoPath)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to read KB index: "+err.Error())
 		return
 	}
 
-	report := kbtools.GenerateHealthReport(idx)
+	report := knowledgeindex.GenerateHealthReport(idx)
 
 	// Convert duplicate groups
 	dupGroups := make([]kbDupGroupJSON, 0, len(report.DuplicateGroups))
