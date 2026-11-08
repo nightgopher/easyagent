@@ -55,54 +55,6 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/agents/kb/tools/index.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "0518c39082d13041d3e66d3bf6af5f26e1504e4134eb9e10f620a027876cedd7",
-      "line_at_baseline": 163,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/kb/tools/kb_read.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "dbfffc239169cd906434e49e98f86c2000d48cf587b7fb53ffac601be5727037",
-      "line_at_baseline": 84,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/kb/tools/kb_save.go",
-      "message": "G301: Expect directory permissions to be 0750 or less",
-      "source_sha256": "256265dcec64396e3cb842d88f4f71a1b3663a789be87bccd8962875e42020e1",
-      "line_at_baseline": 100,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/kb/tools/kb_save.go",
-      "message": "G306: Expect WriteFile permissions to be 0600 or less",
-      "source_sha256": "1f37bfa0db99f6855fdb5e35d41b2597d7c67a59b10a532d92b3429710d21ad4",
-      "line_at_baseline": 149,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/kb/tools/kb_save.go",
-      "message": "G401: Use of weak cryptographic primitive",
-      "source_sha256": "c9a35eba956cb8e0ec7b50f0a597c3871e913b51d9ca084415e475308f1c9335",
-      "line_at_baseline": 207,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/kb/tools/kb_save.go",
-      "message": "G501: Blocklisted import crypto/md5: weak cryptographic primitive",
-      "source_sha256": "dc06783b95e9180d2a4d12b128a97f82a455d874d94bdc878b832f88dc394822",
-      "line_at_baseline": 5,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
       "file": "internal/computer/computer.go",
       "message": "G204: Subprocess launched with a potential tainted input or cmd arguments",
       "source_sha256": "03ef8fbee9c9d497eff0c95515c53de6cac6d648b9e25b425ad4e50cfe577ee4",
@@ -267,22 +219,6 @@
       "message": "G306: Expect WriteFile permissions to be 0600 or less",
       "source_sha256": "2392b9798d6f6d093d58c85acf994a9a81109276e82c57c384c2ced0f6ab44a9",
       "line_at_baseline": 130,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/kbvector/store.go",
-      "message": "G301: Expect directory permissions to be 0750 or less",
-      "source_sha256": "21259418c058c8e1094e6ab3df9eceaf97881b0da59ba66a66d3222b667669f5",
-      "line_at_baseline": 271,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/kbvector/store.go",
-      "message": "G306: Expect WriteFile permissions to be 0600 or less",
-      "source_sha256": "31753f8a3ad6e538ea3ae825d4fb3ff7c6a6fce31b880d72717284861d352bb3",
-      "line_at_baseline": 274,
       "count": 1
     },
     {
@@ -792,25 +728,9 @@
     {
       "linter": "gosec",
       "file": "sdk/tools/todo.go",
-      "message": "G301: Expect directory permissions to be 0750 or less",
-      "source_sha256": "bedf1d3b8fb1972cfa75dcd61b8b8f69dc2eb63bc52f50dd0ef50b3d8f350232",
-      "line_at_baseline": 178,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "sdk/tools/todo.go",
       "message": "G304: Potential file inclusion via variable",
       "source_sha256": "d910c05c1ea3f16f03462a6fb12e855a11466a27e9e11949b436aefe49e9f730",
       "line_at_baseline": 200,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "sdk/tools/todo.go",
-      "message": "G306: Expect WriteFile permissions to be 0600 or less",
-      "source_sha256": "6b2c26cea1e5028dcf2c82d27ba6ed22f15ee4c4b865a725a166c6a1a2380a27",
-      "line_at_baseline": 187,
       "count": 1
     },
     {
