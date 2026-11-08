@@ -15,6 +15,7 @@
 ### Changed
 - 精简编码 Agent 的工具提示；`edit` 对模型只暴露单处替换和 `replace_all`，已有多处替换调用仍可由后端处理。
 - 移除独立知识库 Agent 及其专属工具、向量搜索和新建入口。原有知识库文件与浏览功能保留，旧 Agent 会话仍可阅读，但专属工具不再执行。
+- 发布构建可通过 GitHub 官方 API 获取校验和固定的依赖，减少发布直链故障对构建的影响。
 
 ### Compatibility
 - Go SDK 的 `config.Config` 移除 `KBEmbeddingAPIKey`、`KBEmbeddingModel` 和 `KBEmbeddingBaseURL`；旧知识库向量搜索配置不再生效。原有知识库目录配置继续用于浏览。

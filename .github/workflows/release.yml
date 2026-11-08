@@ -103,6 +103,11 @@ jobs:
           cache-dependency-path: |
             go.sum
             desktop-native/go.sum
+      - name: Prepare verified MyGo native dependency
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-dependencies.py natives windows-amd64
       - name: Build and validate the Windows native installer
         shell: bash
         env:
@@ -134,6 +139,10 @@ jobs:
           # 20 minutes each way (and once failed on a cache-service auth
           # error). A cold toolchain download plus a fresh build is faster.
           cache: false
+      - name: Prepare verified MyGo native dependency
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-dependencies.py natives darwin-arm64
       - name: Build and validate the MyGo native installer
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -191,6 +200,10 @@ jobs:
           cache-dependency-path: |
             go.sum
             desktop-native/go.sum
+      - name: Prepare verified MyGo native dependencies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/release-dependencies.py natives linux-amd64 linux-arm64
       - name: Build and validate the Linux native packages
         env:
           TAG: ${{ needs.validate.outputs.version }}
