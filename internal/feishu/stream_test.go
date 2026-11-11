@@ -38,7 +38,7 @@ func TestStreamChatRejectsInvalidResponses(t *testing.T) {
 			}))
 			defer upstream.Close()
 			h := &Handler{piAgentURL: upstream.URL, piAgentAPIKey: "test-key", httpClient: upstream.Client()}
-			got, err := h.streamChat(context.Background(), "test-session", "在吗", nil)
+			got, err := h.streamChat(context.Background(), "", "", "test-session", "在吗", nil)
 			if got != tt.want {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}

@@ -10,12 +10,12 @@ import (
 // without introducing the application's dependency cycle or contacting Feishu.
 func StreamChatForTest(ctx context.Context, url, key, prompt string, client *http.Client) (string, error) {
 	h := &Handler{piAgentURL: url, piAgentAPIKey: key, httpClient: client}
-	return h.streamChat(ctx, "", prompt, nil)
+	return h.streamChat(ctx, "", "", "", prompt, nil)
 }
 
 func StreamInboundChatForTest(ctx context.Context, url, key, appID, messageID, sessionID, prompt string, client *http.Client) (string, error) {
 	h := &Handler{appID: appID, piAgentURL: url, piAgentAPIKey: key, httpClient: client}
-	return h.streamChat(ctx, sessionID, prompt, nil, h.messageRequestID(messageID))
+	return h.streamChat(ctx, "", "", sessionID, prompt, nil, h.messageRequestID(messageID))
 }
 
 // StreamChatWithUpdatesForTest captures card progress without calling Feishu.
@@ -45,5 +45,5 @@ func StreamChatWithUpdatesForTest(ctx context.Context, url, key, prompt string, 
 		return cardResponse(`{"code":0}`), nil
 	})
 	h := &Handler{piAgentURL: url, piAgentAPIKey: key, httpClient: client}
-	return h.streamChat(ctx, "", prompt, card)
+	return h.streamChat(ctx, "", "", "", prompt, card)
 }

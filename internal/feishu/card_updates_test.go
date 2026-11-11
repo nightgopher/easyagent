@@ -132,7 +132,7 @@ func TestStreamChatDoesNotWaitForSlowCardRequests(t *testing.T) {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	text, err := handler.streamChat(ctx, "test", "prompt", card)
+	text, err := handler.streamChat(ctx, "", "", "test", "prompt", card)
 	if err != nil {
 		t.Fatal(err)
 	}
