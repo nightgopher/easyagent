@@ -2,9 +2,12 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // ─── POST /chat ───────────────────────────────────────────────────────────────
@@ -113,4 +116,39 @@ func (s *Server) chatStream(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// ─── POST /sessions/{id}/steer ───────────────────────────────────────────────
+
+// steerHTTP injects a user message into the session's running task. Unlike
+// /chat it never starts a run and deliberately bypasses admission — a busy
+// session is exactly the precondition here. When nothing is running the client
+// gets 409 {"code":"not_running"} and may fall back to a regular prompt.
+func (s *Server) steerHTTP(w http.ResponseWriter, r *http.Request) {
+	var req ChatRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 128*1024)).Decode(&req); err != nil {
+		writeError(w, 400, "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(req.Prompt) == "" {
+		writeError(w, 400, "prompt is empty")
+		return
+	}
+	sess, ok := s.app.SessionStore().Get(r.PathValue("id"))
+	if !ok {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+	if err := sess.Steer(r.Context(), ai.NewTextUserMessage(req.Prompt)); err != nil {
+		if errors.Is(err, agent.ErrAgentNotRunning) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error(), "code": "not_running"})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "steer failed: "+err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"steered": true})
 }

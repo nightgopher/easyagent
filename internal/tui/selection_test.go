@@ -144,15 +144,29 @@ func TestProgramOwnsMouseUntilExit(t *testing.T) {
 	}
 }
 
-func TestBusySubmitKeepsDraftAndCancelRejectsLateEvents(t *testing.T) {
+// busy 时 Enter 的分流行为：斜杠命令保持草稿不投递；普通文本转插话
+// （session 空闲的竞态下由 Steer 返回 ErrAgentNotRunning，回退为普通发送——
+// 零值 session 即此路径：草稿清空、消息上屏、返回未执行的 prompt cmd）。
+func TestBusySubmitSteersPlainInputKeepsSlashDraft(t *testing.T) {
+	m := New(&runtime.AgentSession{}, slashcmd.NewRegistry(), false)
+	m.agentBusy = true
+	m.input.insertString("/compact")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || m.input.Text() != "/compact" || len(m.messages) != 0 {
+		t.Fatal("busy slash submit started another run or lost draft")
+	}
+	m.input.Reset()
+	m.input.insertString("next draft")
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || m.input.Text() != "" || len(m.messages) != 1 {
+		t.Fatal("busy plain submit should steer or resend as a new prompt")
+	}
+}
+
+func TestBusyCancelRejectsLateEvents(t *testing.T) {
 	m := New(&runtime.AgentSession{}, slashcmd.NewRegistry(), false)
 	m.agentBusy = true
 	m.streamID = 7
-	m.input.insertString("next draft")
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil || m.input.Text() != "next draft" || len(m.messages) != 0 {
-		t.Fatal("busy submit started another run or lost draft")
-	}
 	cancelled := false
 	m.registerStreamCancel(func() { cancelled = true })
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})

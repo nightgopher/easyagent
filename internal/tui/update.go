@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -154,7 +155,12 @@ func (m *TuiModel) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openSessionPicker()
 
 	case ActionSubmit: // Enter
-		if m.agentBusy {
+		if m.agentBusy && m.session != nil {
+			steerInput := sanitizeInput(m.input.Text())
+			// 任务运行中：普通文本转插话；空输入与斜杠命令保持原有行为。
+			if steerInput != "" && !slashcmd.IsSlashCommand(steerInput) {
+				return m.steerRunning(steerInput)
+			}
 			m.copyNotice = "Working | Ctrl+C: cancel; draft kept"
 			return m, nil
 		}
@@ -452,6 +458,26 @@ func (m *TuiModel) sendMessage(input string) (tea.Model, tea.Cmd) {
 	m.input.AddHistory(input)
 	m.input.Reset()
 	return m.startPrompt(context.Background(), input, nil)
+}
+
+// steerRunning 把输入作为插话转给正在运行的任务，不打断它；
+// 回应会跟在当前任务的输出后面。任务恰好已结束时回退为普通消息。
+func (m *TuiModel) steerRunning(input string) (tea.Model, tea.Cmd) {
+	err := m.session.Steer(context.Background(), ai.NewTextUserMessage(input))
+	if errors.Is(err, agent.ErrAgentNotRunning) {
+		return m.sendMessage(input)
+	}
+	if err != nil {
+		m.copyNotice = "Steer failed: " + err.Error()
+		return m, nil
+	}
+	m.input.AddHistory(input)
+	m.input.Reset()
+	m.messages = append(m.messages, ChatMessage{Role: "user", Content: input, Timestamp: time.Now()})
+	m.viewport.SetMessages(m.messages)
+	m.viewport.GotoBottom()
+	m.copyNotice = "已插话，将在任务下个步骤生效"
+	return m, nil
 }
 
 // startPrompt shares rendering and approval handling with scheduled prompts,
