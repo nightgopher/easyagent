@@ -2,6 +2,13 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
+## v0.44.0 发布候选
+
+本轮 Android 端无功能变化，`mobile-native/` 源码与 v0.43.0 相同。候选版本为 `0.44.0`，versionCode 为 `4400300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
+
+- 发布流水线要求对候选 SHA 重新运行 API 31 / 34 / 35 界面矩阵、单测、lint 和构建，结果以对应的 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)为准；流水线完成前不记为通过。
+- 本轮未执行实体手机、实体相机、蜂窝网络或正式 APK 跨版本覆盖安装验收；此前版本的验收记录不计为本轮通过。
+
 ## v0.43.0 发布候选
 
 本轮 Android 端无功能变化，`mobile-native/` 源码与 v0.42.0 相同。候选版本为 `0.43.0`，versionCode 为 `4300300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
