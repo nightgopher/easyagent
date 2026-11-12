@@ -1,0 +1,35 @@
+[Unit]
+Description=EasyAgent lark watch (Feishu inbox sensor)
+Documentation=https://github.com/nightgopher/easyagent
+BindsTo=easyagent.service
+After=easyagent.service
+
+[Service]
+Type=simple
+User=easyagent
+Group=easyagent
+WorkingDirectory=/var/lib/easyagent
+EnvironmentFile=/etc/easyagent/easyagent.env
+# 看门狗需要调用 lark-cli（用户身份凭据在其运行用户 HOME 下），
+# 因此不像 bridge 那样设置 ProtectHome=true。
+ExecStart=/usr/bin/easyagent watch serve
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateDevices=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
