@@ -206,6 +206,8 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 			s.cfg.Provider, s.cfg.OpenAIModel = choice.Provider, choice.Model
 		case "anthropic":
 			s.cfg.Provider, s.cfg.AnthropicModel = choice.Provider, choice.Model
+		case "codex":
+			s.cfg.Provider, s.cfg.CodexModel = choice.Provider, choice.Model
 		default:
 			_ = s.Close()
 			return nil, fmt.Errorf("unsupported saved model provider %q", choice.Provider)
@@ -478,6 +480,8 @@ func (s *AgentSession) SwitchModel(ctx context.Context, modelID string, provider
 		s.cfg.OpenAIModel = modelID
 	case "anthropic":
 		s.cfg.AnthropicModel = modelID
+	case "codex":
+		s.cfg.CodexModel = modelID
 	default:
 		s.cfg.Provider = "openai"
 		s.cfg.OpenAIModel = modelID
@@ -507,6 +511,9 @@ func (s *AgentSession) saveModel() error {
 	model := s.cfg.AnthropicModel
 	if s.cfg.Provider == "openai" || s.cfg.Provider == "deepv" {
 		model = s.cfg.OpenAIModel
+	}
+	if s.cfg.Provider == "codex" {
+		model = s.cfg.CodexModel
 	}
 	if model == "" || s.cfg.Provider == "" {
 		return nil
@@ -726,6 +733,9 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	providerName := cfg.Provider
 	if providerName == "openai" || providerName == "deepv" {
 		modelID = cfg.OpenAIModel
+	}
+	if providerName == "codex" {
+		modelID = cfg.CodexModel
 	}
 	if modelID == "" {
 		providerName = ""

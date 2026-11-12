@@ -57,7 +57,7 @@ type Config struct {
 	Timeout                       time.Duration
 
 	// Provider
-	Provider string // anthropic / openai / deepv
+	Provider string // anthropic / openai / deepv / codex
 
 	// Anthropic
 	AnthropicAPIKey  string
@@ -68,6 +68,9 @@ type Config struct {
 	OpenAIAPIKey  string
 	OpenAIModel   string
 	OpenAIBaseURL string
+
+	// Codex (ChatGPT OAuth subscription)
+	CodexModel string
 
 	// Tool sandbox
 	AllowOutsideWorkspace  bool // Explicit file-path policy; independent of confirmation.
@@ -286,6 +289,11 @@ func (c *Config) LoadFromEnv() {
 		c.OpenAIBaseURL = sanitizeConfigString(v)
 	} else if v := os.Getenv("OPENAI_BASE_URL"); v != "" {
 		c.OpenAIBaseURL = sanitizeConfigString(v)
+	}
+
+	// Codex (ChatGPT OAuth subscription)
+	if v := getEnv("EA_CODEX_MODEL", ""); v != "" {
+		c.CodexModel = sanitizeConfigString(v)
 	}
 
 	// Tool output
