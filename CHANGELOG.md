@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 桌面「常规」设置新增「更新代理」：更新检查与安装包下载的网络代理可选「跟随系统」（默认，行为不变）/「直连」/「自定义代理」（支持 http、https、socks5 地址）。多代理客户端（Clash、Tailscale、aTrust 等）并存改写系统代理时，可把更新流量固定到指定代理；自定义源走 `mygo.Updater.SetSource`，签名校验与自动更新行为不变。
+
 ### Changed
 - 桌面客户端底层框架 MyGo 从 v0.6.4 升级到 v0.8.3（取代 2026-11-08 的暂缓决策）：获得 macOS 文本渲染 CPU 减半、Windows GPU 每帧减半、无障碍大幅增强、`Context.SetZoom` 等能力；v0.8.0 按键模型重构经核实对本客户端无影响（全部 `HandleInput` 均按具体按键匹配）。暂不追 v0.9.x（native modules 实验性）。
 
