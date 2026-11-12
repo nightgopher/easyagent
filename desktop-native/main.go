@@ -34,6 +34,7 @@ func main() {
 		})
 		state.Window = win
 		state.UpdaterReady = true
+		state.applyUpdateProxy()
 		offUpdates := updater.OnChange(win.Invalidate)
 		offQuit := app.OnBeforeQuit(func(e *mygo.QuitEvent) {
 			if reason := state.quitBlockReason(); reason != "" {
