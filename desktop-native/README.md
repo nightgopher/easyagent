@@ -19,6 +19,8 @@ Go / MyGo 是唯一维护中的桌面客户端，不依赖 Electron、React、No
 
 旧 `desktop/`（含 Capacitor Android 外壳）已退役，完整历史可从 `archive/workflow` 查看；退役前精确源码见提交 `e4b4088`。旧客户端的用户数据、已安装应用和签名身份不会自动删除或迁移。原生客户端使用 MyGo 原生签名更新器，从正式 Release 检查和安装更新。
 
+**MyGo 上游升级说明（2026-11-12）**：本客户端已从 MyGo v0.6.4 升级到 v0.8.3（取代 2026-11-08 的暂缓决策）。v0.8.0 按键模型重构（`InputEvent.Code` 按物理键位命名、`HandleInput` 可见系统报告的每一个按键）对本客户端无影响：全部 3 处 `HandleInput` 均按具体 `ev.Key` 匹配、未命中返回 false，属上游确认无需改动的模式；快捷键 API 未变。上游暂不追 v0.9.x（native modules 实验性）。后续升级时一并评估：`ui/richtext`/`ui/markdown` 能否替代会话流的自有渲染路径，以及 `mygo-automation` 是否纳入桌面验收工具链。
+
 ## 实际功能
 
 - 本机核心进程的启动、鉴权、重连、退出清理；远程主机保存、切换与重连。
