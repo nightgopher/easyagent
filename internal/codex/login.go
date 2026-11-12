@@ -33,7 +33,7 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 	}
 	u, perr := url.Parse(flow.url)
 	if perr != nil {
-		return nil, errors.New("Codex 授权地址无效")
+		return nil, errors.New("codex 授权地址无效")
 	}
 	session := &LoginSession{
 		URL:     u.String(),
@@ -53,7 +53,7 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 		q := r.URL.Query()
 		if e := q.Get("error"); e != "" {
 			http.Error(w, "授权未完成: "+e, http.StatusBadRequest)
-			session.fail(errors.New("Codex 授权被拒绝: " + e))
+			session.fail(errors.New("codex 授权被拒绝: " + e))
 			return
 		}
 		code := q.Get("code")
@@ -110,7 +110,8 @@ func (s *LoginSession) CompleteManual(ctx context.Context, input string) error {
 
 func (s *LoginSession) succeed() {
 	select {
-	case <-s.done:
+	case outcome := <-s.done:
+		_ = outcome // 结果已由等待方送达，这里只负责清空挂起的投递。
 	default:
 		s.done <- nil
 	}
@@ -123,7 +124,8 @@ func (s *LoginSession) succeed() {
 
 func (s *LoginSession) fail(err error) {
 	select {
-	case <-s.done:
+	case prev := <-s.done:
+		_ = prev // 已有结果投递在途，丢弃并保留传入的错误。
 	default:
 		s.done <- err
 	}

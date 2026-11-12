@@ -94,6 +94,43 @@ func TestLoginSessionWrongStateRejected(t *testing.T) {
 	}
 }
 
+// TestLoginSessionMissingStateRejected state 缺失同样必须拒绝：
+// 授权请求总是携带 state，回调缺失 state 即不可信，不得进入 token 交换。
+func TestLoginSessionMissingStateRejected(t *testing.T) {
+	var mu sync.Mutex
+	var requests []tokenRequest
+	auth := tokenServer(t, &requests, &mu)
+	defer auth.Close()
+
+	m, err := NewManager(t.TempDir(), auth.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := m.StartLogin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if session.portBusy {
+		t.Skip("callback port 1455 busy")
+	}
+
+	cb, _ := url.Parse(redirectURI + "?code=cb-code")
+	resp, err := http.Get(cb.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if err := session.Wait(context.Background()); err == nil {
+		t.Fatal("missing state accepted")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 0 {
+		t.Fatal("token exchange reached with missing state")
+	}
+}
+
 // TestCompleteManualPasteURL 手动粘贴回调 URL 路径。
 func TestCompleteManualPasteURL(t *testing.T) {
 	var mu sync.Mutex

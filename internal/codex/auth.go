@@ -73,12 +73,12 @@ func NewManager(home, base string) (*Manager, error) {
 	}
 	u, err := url.Parse(base)
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-		return nil, errors.New("Codex 认证服务地址无效")
+		return nil, errors.New("codex 认证服务地址无效")
 	}
 	ip := net.ParseIP(u.Hostname())
 	local := strings.EqualFold(u.Hostname(), "localhost") || (ip != nil && ip.IsLoopback())
 	if u.Scheme != "https" && !(u.Scheme == "http" && local) {
-		return nil, errors.New("Codex 认证服务必须使用 HTTPS")
+		return nil, errors.New("codex 认证服务必须使用 HTTPS")
 	}
 	if strings.TrimSpace(home) == "" {
 		return nil, errors.New("无法定位 EasyAgent 用户目录")
@@ -203,7 +203,7 @@ type tokenResponse struct {
 func (m *Manager) tokenRequest(ctx context.Context, form url.Values) (*tokenResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, m.base+"/oauth/token", strings.NewReader(form.Encode()))
 	if err != nil {
-		return nil, errors.New("Codex 认证请求地址无效")
+		return nil, errors.New("codex 认证请求地址无效")
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := m.client.Do(req)
@@ -213,7 +213,7 @@ func (m *Manager) tokenRequest(ctx context.Context, form url.Values) (*tokenResp
 	defer resp.Body.Close()
 	var data tokenResponse
 	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&data) != nil {
-		return nil, fmt.Errorf("Codex 认证服务返回 HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("codex 认证服务返回 HTTP %d", resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK || data.AccessToken == "" {
 		relogin := resp.StatusCode == http.StatusBadRequest || resp.StatusCode == http.StatusUnauthorized ||
@@ -316,7 +316,8 @@ func (m *Manager) completeLogin(ctx context.Context, flow *authorizationFlow, in
 	if code == "" {
 		return errors.New("授权回调缺少 code 参数")
 	}
-	if state != "" && subtle.ConstantTimeCompare([]byte(state), []byte(flow.state)) != 1 {
+	// state 缺失同样拒绝：授权请求总是携带 state，缺失意味着回调不可信。
+	if subtle.ConstantTimeCompare([]byte(state), []byte(flow.state)) != 1 {
 		return errors.New("授权回调 state 不匹配")
 	}
 	_, err = m.exchangeAuthorizationCode(ctx, code, flow.verifier, redirectURI)
@@ -334,7 +335,7 @@ func (m *Manager) locked(ctx context.Context, fn func() error) error {
 	if runtime.GOOS != "windows" {
 		info, err := os.Lstat(m.dir)
 		if err != nil || !info.IsDir() || info.Mode().Perm()&0o077 != 0 {
-			return errors.New("Codex 凭据目录必须仅当前用户可访问")
+			return errors.New("codex 凭据目录必须仅当前用户可访问")
 		}
 	}
 	m.mu.Lock()
@@ -348,23 +349,23 @@ func (m *Manager) locked(ctx context.Context, fn func() error) error {
 func (m *Manager) readLocked() (credentials, error) {
 	var data credentials
 	path := filepath.Join(m.dir, "credentials.json")
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- path is the credential file inside the manager's own 0700 directory.
 	if os.IsNotExist(err) {
 		return data, ErrLoginRequired
 	}
 	if err != nil {
-		return data, errors.New("Codex 凭据文件不可读取")
+		return data, errors.New("codex 凭据文件不可读取")
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil || !info.Mode().IsRegular() {
-		return data, errors.New("Codex 凭据文件不可安全读取")
+		return data, errors.New("codex 凭据文件不可安全读取")
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		return data, errors.New("Codex 凭据文件不可安全读取")
+		return data, errors.New("codex 凭据文件不可安全读取")
 	}
 	if json.NewDecoder(io.LimitReader(file, 64<<10)).Decode(&data) != nil || data.AccessToken == "" {
-		return credentials{}, errors.New("Codex 登录凭据无效，请重新登录")
+		return credentials{}, errors.New("codex 登录凭据无效，请重新登录")
 	}
 	return data, nil
 }

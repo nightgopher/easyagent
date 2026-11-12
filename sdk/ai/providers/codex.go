@@ -344,13 +344,13 @@ func (p *CodexProvider) handleSSE(ctx context.Context, stream *ai.EventStream, b
 			if msg == "" {
 				msg = "Codex 响应失败"
 			}
-			return received, fmt.Errorf("Codex 响应失败: %s", msg)
+			return received, fmt.Errorf("codex 响应失败: %s", msg)
 		case "error":
 			msg := ev.Message
 			if msg == "" {
 				msg = payload
 			}
-			return received, fmt.Errorf("Codex 流错误: %s", msg)
+			return received, fmt.Errorf("codex 流错误: %s", msg)
 		}
 		eventName = ""
 	}
@@ -370,7 +370,7 @@ func (p *CodexProvider) handleSSE(ctx context.Context, stream *ai.EventStream, b
 		return false, nil
 	}
 	if !terminalSeen {
-		return received, errors.New("Codex 流在终止事件前结束")
+		return received, errors.New("codex 流在终止事件前结束")
 	}
 	if partial.ToolCalls != nil && partial.StopReason == ai.StopReasonStop {
 		partial.StopReason = ai.StopReasonToolUse
@@ -475,7 +475,7 @@ func (p *CodexProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.E
 				cancel()
 				// 一次请求只刷新一次：服务端未换发新 token 时重试也只会再次 401
 				if refreshed {
-					fail(errors.New("Codex 登录已失效，请重新登录"))
+					fail(errors.New("codex 登录已失效，请重新登录"))
 					return
 				}
 				refreshed = true
@@ -485,7 +485,7 @@ func (p *CodexProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.E
 					return
 				}
 				if newToken == "" || newToken == token {
-					fail(errors.New("Codex 登录已失效，请重新登录"))
+					fail(errors.New("codex 登录已失效，请重新登录"))
 					return
 				}
 				token = newToken
@@ -525,7 +525,7 @@ func (p *CodexProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.E
 				return
 			}
 			if err == nil {
-				err = errors.New("Codex 返回了空流")
+				err = errors.New("codex 返回了空流")
 			}
 			fail(err)
 			return
