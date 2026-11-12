@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/url"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/netproxy"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -70,7 +72,12 @@ func runCodexHelper(ctx context.Context, dir, action string, onBrowser func(stri
 		return result, err
 	}
 	cmd := exec.CommandContext(ctx, binary, "codex", action, "--machine") //nolint:gosec // 与 EasyCode helper 同源：Bin 为本机装配的核心，参数固定
-	cmd.Env = filterEnvironment(map[string]string{"EA_HOME": filepath.Join(dir, "core-home")})
+	overrides := map[string]string{"EA_HOME": filepath.Join(dir, "core-home")}
+	if u := codexProxyURL(); u != "" {
+		overrides["HTTPS_PROXY"] = u
+		overrides["HTTP_PROXY"] = u
+	}
+	cmd.Env = filterEnvironment(overrides)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return result, errors.New("无法启动 Codex 登录")
@@ -120,6 +127,25 @@ func runCodexHelper(ctx context.Context, dir, action string, onBrowser func(stri
 		return result, errors.New("Codex 操作没有返回结果")
 	}
 	return result, nil
+}
+
+// codexProxyLookup is replaced by tests.
+var codexProxyLookup = netproxy.Proxy
+
+// codexProxyURL resolves the proxy the user's browser would use for OpenAI
+// traffic: GUI-spawned helper and core processes have no shell environment,
+// so their Go HTTP clients cannot see the system proxy, and OpenAI's edge
+// rejects the direct connection in proxy-required regions — the OAuth
+// token exchange would fail right after the browser login. netproxy
+// resolves env variables first, then the system settings; loopback stays
+// direct. Empty means no proxy: keep current behaviour.
+func codexProxyURL() string {
+	req := &http.Request{URL: &url.URL{Scheme: "https", Host: "auth.openai.com"}}
+	u, err := codexProxyLookup(req)
+	if err != nil || u == nil {
+		return ""
+	}
+	return u.String()
 }
 
 func (a *preview) refreshCodexStatus() {

@@ -182,6 +182,12 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	}
 	home, _ := os.UserHomeDir()
 	env := map[string]string{"EA_DATA_DIR": filepath.Join(dir, "core-data"), "EA_SERVER_API_KEY": token, "EA_ALLOW_NO_AUTH": "0", "EA_ALLOWED_ORIGINS": "", "EA_ENABLE_TERMINAL": "1", "EA_HOME": filepath.Join(dir, "core-home"), "EA_MCP_CONFIG": filepath.Join(dir, "core-home", "mcp.json")}
+	// Codex traffic only (token exchange and the ChatGPT backend): gateways,
+	// Feishu and MCP keep their direct routes. The name mirrors
+	// sdk/ai.CodexProxyEnv; this module does not import the core.
+	if u := codexProxyURL(); u != "" {
+		env["EA_CODEX_PROXY"] = u
+	}
 	for k, v := range inheritedCoreEnvironment(home) {
 		if _, fixed := env[k]; !fixed && os.Getenv(k) == "" {
 			env[k] = v
