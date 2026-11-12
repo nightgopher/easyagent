@@ -37,6 +37,12 @@ func NewClient(appID, appSecret string) *Client {
 	return &Client{sdk: sdk, appID: appID, appSecret: appSecret}
 }
 
+// newClientWithBaseURL 仅测试用：把 lark SDK 指向替代域名，便于本地模拟飞书 API。
+func newClientWithBaseURL(appID, appSecret, baseURL string) *Client {
+	sdk := lark.NewClient(appID, appSecret, lark.WithOpenBaseUrl(baseURL))
+	return &Client{sdk: sdk, appID: appID, appSecret: appSecret}
+}
+
 const maxTextLen = 25000
 
 // truncateText truncates text to maxTextLen and appends a truncation notice.
