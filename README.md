@@ -35,6 +35,14 @@ cp .env.example .env
 
 macOS 从 [Release](https://github.com/nightgopher/easyagent/releases/latest) 下载 `easyagent-native-darwin-arm64.dmg`。Linux 桌面安装 `easyagent-native-linux-<架构>.deb`（应用菜单入口 `easyagent-desktop`，需 libwebkit2gtk-4.1），或用 tar.gz + `easyagent-native-install-linux-<架构>.sh` 做用户级安装并支持应用内自动更新。
 
+桌面安装后可在「设置 → 通用 → 命令行」一键安装 `easyagent` 命令：应用把内嵌核心 symlink 到 `~/.easyagent/bin/easyagent`（随应用更新自动跟进），`~/.easyagent/bin` 不在 PATH 时自动写入 shell rc。也可用官方脚本独立安装：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nightgopher/easyagent/main/scripts/install.sh | bash
+```
+
+命令行与桌面端的模型配置、EasyCode 登录各自独立（各自 `~/.easyagent`），详见[配置说明](docs/CONFIG.md)。
+
 Debian/Ubuntu 服务器安装服务端包（自动注册 systemd，监听 127.0.0.1:8080，首次安装生成含随机 `EA_SERVER_API_KEY` 的 `/etc/easyagent/easyagent.env`）：
 
 ```bash
@@ -52,7 +60,7 @@ sudo systemctl enable --now easyagent-bridge   # 飞书桥接（配置后启用�
 
 登录凭据与 EasyCode 原客户端分开保存在本机用户私有目录（目录权限 `0700`、凭据文件 `0600`），访问凭据到期会自动续期。退出 EasyAgent 中的 EasyCode 账号会清除本机凭据并恢复之前的模型配置，不会退出其他 EasyCode 客户端。当前登录入口支持 macOS 和 Linux 原生桌面；远程主机使用该主机自身的模型配置。
 
-终端可运行 `easyagent easycode login` 使用飞书登录并启用账号模型，运行 `easyagent easycode models` 查看或 `easyagent easycode use <模型 ID>` 切换；远程 SSH 登录使用 `easyagent easycode login --no-browser` 并按提示转发本地端口。更多设置见[配置说明](docs/CONFIG.md)。
+安装命令行后（桌面端「设置 → 通用 → 命令行」，或上方一键脚本），终端可运行 `easyagent easycode login` 使用飞书登录并启用账号模型，运行 `easyagent easycode models` 查看或 `easyagent easycode use <模型 ID>` 切换；远程 SSH 登录使用 `easyagent easycode login --no-browser` 并按提示转发本地端口。更多设置见[配置说明](docs/CONFIG.md)。
 
 ### 配置其他模型与网页
 

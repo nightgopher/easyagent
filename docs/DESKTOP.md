@@ -19,6 +19,14 @@ open desktop-native/build.noindex/darwin-arm64/EasyAgent.app
 python3 scripts/unregister-desktop-apps.py desktop-native/build.noindex/darwin-arm64/EasyAgent.app
 ```
 
+## 安装命令行
+
+「设置 → 通用 → 命令行」可把应用内嵌的核心 CLI 安装为终端命令：应用创建 symlink `~/.easyagent/bin/easyagent` 指向包内 `Contents/Resources/easyagent`，目录与 `scripts/install.sh` 保持一致。应用自更新后 symlink 指向的内容自动跟进新版，无需重复安装。
+
+若 `~/.easyagent/bin` 不在 PATH，安装时按当前 shell 追加一行带 `# EasyAgent` 注释的 PATH 配置（zsh → `~/.zshrc`，bash → `~/.bashrc`，fish 使用 `set -gx` 语法，其余 → `~/.profile`；已有 `.easyagent/bin` 配置时不重复写入），重启终端后生效；安装同时会创建空的 `~/.easyagent/.env` 作为命令行 env 配置入口。
+
+「卸载命令行」仅删除该 symlink；`scripts/install.sh` 的独立安装或手动放置的同名命令不会被改动或覆盖。命令行与桌面端的模型配置、EasyCode 登录各自独立——桌面核心使用应用私有的 `EA_HOME=core-home`，命令行使用 `~/.easyagent`；需要命令行使用同一模型配置时按[配置说明](CONFIG.md)单独配置。
+
 ## 配置和数据
 
 “运行主机”支持此 Mac 与远程 Go 服务。此 Mac 启动独立 loopback 核心，使用应用自己的 `core-data` 和 `core-home`；模型配置可沿用 CLI 默认值，也可在“模型连接”中单独设置。远程主机配置需要服务地址和 API 令牌。密钥由 macOS 钥匙串保存，普通 JSON 仅存元数据。
