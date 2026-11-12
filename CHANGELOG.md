@@ -4,7 +4,10 @@
 
 ## [Unreleased]
 
-## [v0.46.0] - 2026-11-12
+## [v0.46.1] - 2026-11-12
+
+### Fixed
+- 修复 Windows 安装包发布：MyGo v0.8.3 起安装包按 slug 小写命名（`easyagent-setup-<版本>-amd64.exe`），发版脚本的大小写敏感 glob 找不到新文件名导致 v0.46.0 的 Release 构建在 Windows 步骤失败。改用大小写不敏感匹配，新旧命名都兼容；发布资产名不变（`easyagent-native-windows-amd64-setup.exe`）。v0.46.0 tag 存在但未发布 Release，本版本包含其全部内容。
 
 ### Fixed
 - 修复桌面端 ChatGPT（Codex）登录在系统代理环境下必败的问题：GUI 启动的 helper 与核心没有 shell 环境变量，Go 的 HTTP 客户端看不到系统代理，`auth.openai.com` 的 OAuth token 兑换被边缘 403 拒绝。现在桌面把解析出的代理（标准环境变量优先，其次系统设置，回环直连）经 `HTTPS_PROXY` 注入登录 helper、经 `EA_CODEX_PROXY` 注入核心，仅作用于 Codex 流量——登录兑换与 ChatGPT 后端模型请求一致生效，网关、飞书与 MCP 流量保持直连不受影响。
