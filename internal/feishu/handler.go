@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,6 +37,13 @@ type ChatRoute struct {
 	TaskPath          string `json:"task_path,omitempty"`
 	ChatName          string `json:"chat_name,omitempty"`
 }
+
+// errAgentBusy 表示会话有任务在跑（server 返回 409 code=busy）。
+// 上层据此把消息转为插话，而不是当错误抛给用户。
+var errAgentBusy = errors.New("agent session is busy")
+
+// steerAckText 插话成功后回给用户的确认文案；后续回应会出现在原任务的流式卡片里。
+const steerAckText = "✅ 已插话给进行中的任务，它会在下个步骤收到并回应。"
 
 // Handler processes Feishu messages by calling the easyagent HTTP API.
 type Handler struct {
@@ -502,7 +510,17 @@ func (h *Handler) handleAgentMessage(ctx context.Context, chatKey, messageID, te
 func (h *Handler) handleWithCard(ctx context.Context, chatKey, messageID, sessionID, text string, card *StreamingCardHandle) {
 	startTime := time.Now()
 
-	fullText, err := h.streamChat(ctx, chatKey, messageID, sessionID, text, card, h.messageRequestID(messageID))
+	fullText, steered, err := h.streamChatWithSteer(ctx, chatKey, messageID, sessionID, text, card, h.messageRequestID(messageID))
+	if steered {
+		// 插话已转交；回应会出现在原任务的流式卡片里。
+		steerCtx, cancelSteer := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancelSteer()
+		metrics := &FooterMetrics{Status: "已插话", ElapsedMs: time.Since(startTime).Milliseconds()}
+		if finalizeErr := card.Finalize(steerCtx, steerAckText, metrics); finalizeErr != nil {
+			slog.Warn("card finalize failed", "error", finalizeErr)
+		}
+		return
+	}
 	elapsed := time.Since(startTime)
 	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -532,7 +550,16 @@ func (h *Handler) handleWithTextFallback(ctx context.Context, chatKey, messageID
 		slog.Warn("send processing message failed", "error", err)
 	}
 
-	fullText, err := h.streamChat(ctx, chatKey, messageID, sessionID, text, nil, h.messageRequestID(messageID))
+	fullText, steered, err := h.streamChatWithSteer(ctx, chatKey, messageID, sessionID, text, nil, h.messageRequestID(messageID))
+	if steered {
+		// 插话已转交；回应会跟在原任务的输出后面。
+		if botMsgID != "" {
+			_ = h.client.UpdateMessage(ctx, botMsgID, steerAckText)
+		} else {
+			_, _ = h.client.ReplyMessage(ctx, messageID, chatKey, steerAckText)
+		}
+		return
+	}
 	if err != nil {
 		slog.Error("stream chat failed", "error", err)
 		errMsg := "❌ 处理出错，请重试：`" + errorDetail(err) + "`"
@@ -550,7 +577,48 @@ func (h *Handler) handleWithTextFallback(ctx context.Context, chatKey, messageID
 	}
 }
 
-// streamChat calls POST /chat/stream and collects the full response text.
+// steer 把文本作为插话转交给会话中正在运行的任务（POST /sessions/{id}/steer）。
+// 返回 false 表示当前没有运行中的任务（或请求失败），调用方应回退为普通消息。
+func (h *Handler) steer(ctx context.Context, sessionID, text string) bool {
+	body, _ := json.Marshal(map[string]string{"prompt": text})
+	steerURL := fmt.Sprintf("%s/sessions/%s/steer", h.piAgentURL, url.PathEscape(sessionID))
+	req, err := http.NewRequestWithContext(ctx, "POST", steerURL, bytes.NewReader(body))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+	setAgentAuth(req, h.piAgentAPIKey)
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		slog.Warn("steer request failed", "sessionID", sessionID, "error", err)
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		slog.Warn("steer rejected", "sessionID", sessionID, "status", resp.StatusCode)
+		return false
+	}
+	slog.Info("steered running task", "sessionID", sessionID)
+	return true
+}
+
+// streamChatWithSteer 遇到 busy（会话有任务在跑）时先尝试把消息作为插话转交；
+// 插话失败（任务恰好结束的竞态）则按普通消息重投一次。
+// 返回 steered=true 表示消息已作为插话转交，调用方负责回执文案。
+func (h *Handler) streamChatWithSteer(ctx context.Context, chatKey, messageID, sessionID, text string, card *StreamingCardHandle, requestID string) (string, bool, error) {
+	fullText, err := h.streamChat(ctx, chatKey, messageID, sessionID, text, card, requestID)
+	if !errors.Is(err, errAgentBusy) {
+		return fullText, false, err
+	}
+	if h.steer(ctx, sessionID, text) {
+		return "", true, nil
+	}
+	fullText, err = h.streamChat(ctx, chatKey, messageID, sessionID, text, card, requestID)
+	return fullText, false, err
+}
+
+// steer 把文本作为插话转交给会话中正在运行的任务（POST /sessions/{id}/steer）。
+// 返回 false 表示当前没有运行中的任务（或请求失败），调用方应回退为普通消息。
 // Card updates are coalesced asynchronously so Feishu latency cannot block SSE reads.
 func (h *Handler) messageRequestID(messageID string) string {
 	if messageID == "" {
@@ -621,6 +689,10 @@ func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID,
 			// 只去掉会话约束；原身份与内容仍由核心校验，最多查询一次。
 			resp.Body.Close()
 			return h.streamChat(ctx, chatKey, messageID, "", prompt, card, values["request_id"])
+		}
+		if resp.StatusCode == http.StatusConflict && failure.Code == "busy" {
+			// 会话有任务在跑：交给上层转插话，而不是当错误抛给用户。
+			return "", errAgentBusy
 		}
 		return "", fmt.Errorf("agent stream HTTP %d", resp.StatusCode)
 	}
