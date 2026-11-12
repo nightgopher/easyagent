@@ -108,12 +108,13 @@ jobs:
   ios:
     needs: changes
     if: needs.changes.outputs.full == 'true'
-    # Swift tests and simulator cross-compilation do not need an arm64 host.
-    # ios stays on hosted intel regardless of EASYAGENT_MACOS_ARM_RUNNER: the
-    # self-hosted Mac that label points at has only Command Line Tools (no
-    # xcodebuild or simulator runtimes), while native release jobs need the
-    # certificate and notarization tooling that CLT already provides.
-    runs-on: macos-15-intel
+    # Swift tests and simulator cross-compilation run the same on ARM. ios
+    # stays on a hosted image regardless of EASYAGENT_MACOS_ARM_RUNNER (the
+    # self-hosted Mac that label points at has only Command Line Tools, no
+    # xcodebuild or simulator runtimes); macos-15-intel was the old
+    # load-balancing pick, but that transitional x86_64 pool is being
+    # retired and starves jobs for hours, so the ARM hosted image serves.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
         with:
