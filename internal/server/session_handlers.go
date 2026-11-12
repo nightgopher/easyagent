@@ -92,6 +92,8 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 			cfg.OpenAIModel = req.Model
 		case "anthropic":
 			cfg.AnthropicModel = req.Model
+		case "codex":
+			cfg.CodexModel = req.Model
 		}
 	}
 
@@ -358,6 +360,8 @@ func (s *Server) setDefaultModel(w http.ResponseWriter, r *http.Request) {
 		modelID = cfg.OpenAIModel
 	case "anthropic":
 		modelID = cfg.AnthropicModel
+	case "codex":
+		modelID = cfg.CodexModel
 	}
 
 	w.Header().Set("Content-Type", "application/json")

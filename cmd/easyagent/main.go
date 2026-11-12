@@ -69,6 +69,10 @@ func main() {
 		runEasyCodeCLI(os.Args[2:])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "codex" {
+		runCodexCLI(os.Args[2:])
+		return
+	}
 
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {
@@ -219,6 +223,13 @@ func main() {
 
 func runEasyCodeCLI(args []string) {
 	if err := runEasyCodeCommand(context.Background(), args, config.HomeDir(), os.Getenv("EA_EASYCODE_BASE_URL"), os.Stdout); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func runCodexCLI(args []string) {
+	if err := runCodexCommand(context.Background(), args, config.HomeDir(), os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

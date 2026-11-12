@@ -9,6 +9,7 @@ import (
 
 	"github.com/nightgopher/easyagent/internal/agents/business"
 	"github.com/nightgopher/easyagent/internal/agents/coding"
+	"github.com/nightgopher/easyagent/internal/codex"
 	"github.com/nightgopher/easyagent/internal/command"
 	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/internal/profile"
@@ -304,6 +305,8 @@ func (a *App) SetDefaultModel(provider, model string) error {
 		a.cfg.OpenAIModel = model
 	case "anthropic":
 		a.cfg.AnthropicModel = model
+	case "codex":
+		a.cfg.CodexModel = model
 	default:
 		a.cfg.OpenAIModel = model
 	}
@@ -496,6 +499,18 @@ func registerProviders(registry *providers.Registry, cfg config.Config) error {
 		}
 		registry.Register(providers.NewDeepVProvider(account.BaseURL(), account))
 		return nil
+	case "codex":
+		account, err := codex.NewManager(config.HomeDir(), "")
+		if err != nil {
+			return err
+		}
+		cred, err := account.CurrentCredentials(context.Background())
+		if err != nil {
+			return err
+		}
+		registry.Register(providers.NewCodexProvider(cred.AccountID, account, thinking))
+		slog.Info("registered codex provider", "model", cfg.CodexModel, "account", cred.AccountID)
+		return nil
 	case "anthropic":
 		if cfg.AnthropicAPIKey != "" {
 			registry.Register(providers.NewAnthropicProvider(cfg.AnthropicAPIKey, cfg.AnthropicBaseURL, thinking))
@@ -511,9 +526,9 @@ func registerProviders(registry *providers.Registry, cfg config.Config) error {
 		}
 		return fmt.Errorf("EA_PROVIDER=openai but OPENAI_API_KEY is empty")
 	case "":
-		return fmt.Errorf("EA_PROVIDER is not set (valid values: anthropic, openai, deepv)")
+		return fmt.Errorf("EA_PROVIDER is not set (valid values: anthropic, openai, deepv, codex)")
 	default:
-		return fmt.Errorf("unknown EA_PROVIDER %q (valid values: anthropic, openai, deepv)", cfg.Provider)
+		return fmt.Errorf("unknown EA_PROVIDER %q (valid values: anthropic, openai, deepv, codex)", cfg.Provider)
 	}
 }
 
