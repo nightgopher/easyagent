@@ -22,7 +22,7 @@ func TestStreamChatBusyReturnsSentinel(t *testing.T) {
 	}))
 	defer upstream.Close()
 	h := &Handler{piAgentURL: upstream.URL, piAgentAPIKey: "test-key", httpClient: upstream.Client()}
-	_, err := h.streamChat(context.Background(), "test-session", "在吗", nil, "")
+	_, err := h.streamChat(context.Background(), "", "", "test-session", "在吗", nil, "")
 	if !errors.Is(err, errAgentBusy) {
 		t.Fatalf("expected errAgentBusy, got %v", err)
 	}
@@ -85,7 +85,7 @@ func TestStreamChatWithSteerHandsOffWhenAccepted(t *testing.T) {
 	}))
 	defer upstream.Close()
 	h := &Handler{piAgentURL: upstream.URL, piAgentAPIKey: "test-key", httpClient: upstream.Client()}
-	text, steered, err := h.streamChatWithSteer(context.Background(), "sess-1", "在吗", nil, "req-1")
+	text, steered, err := h.streamChatWithSteer(context.Background(), "chat-1", "om_msg", "sess-1", "在吗", nil, "req-1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestStreamChatWithSteerFallsBackToResend(t *testing.T) {
 	}))
 	defer upstream.Close()
 	h := &Handler{piAgentURL: upstream.URL, piAgentAPIKey: "test-key", httpClient: upstream.Client()}
-	text, steered, err := h.streamChatWithSteer(context.Background(), "sess-1", "在吗", nil, "req-1")
+	text, steered, err := h.streamChatWithSteer(context.Background(), "chat-1", "om_msg", "sess-1", "在吗", nil, "req-1")
 	if err != nil {
 		t.Fatal(err)
 	}

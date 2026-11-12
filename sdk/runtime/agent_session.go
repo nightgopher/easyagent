@@ -823,7 +823,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 
 // subagentExcludedTools 是子 agent 不继承的工具：子 agent 无法与用户交互，也不应改写主会话的
 // 待办与概览存储。
-var subagentExcludedTools = map[string]bool{"ask_user_question": true, "todo_write": true, "full_output": true}
+var subagentExcludedTools = map[string]bool{"ask_user_question": true, "send_message": true, "todo_write": true, "full_output": true}
 
 // newTaskTool 为声明支持子 agent 的应用创建 task 工具；工具过滤配置同样作用于 task。
 func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry, tools []agent.Tool, searchMode agent.ToolSearchMode) *agent.TaskTool {

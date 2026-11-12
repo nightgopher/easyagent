@@ -82,7 +82,7 @@ func TestStreamChatReportsWaitingForServerApprovalWithoutExposingArguments(t *te
 			handler := &Handler{piAgentURL: upstream.URL, piAgentAPIKey: "test-key", httpClient: upstream.Client()}
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			text, err := handler.streamChat(ctx, "test-session", "prompt", card)
+			text, err := handler.streamChat(ctx, "", "", "test-session", "prompt", card)
 			if err != nil {
 				t.Fatal(err)
 			}

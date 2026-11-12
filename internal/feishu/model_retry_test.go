@@ -42,7 +42,7 @@ func TestStreamChatShowsModelRetryWhileWaiting(t *testing.T) {
 	h := &Handler{piAgentURL: upstream.URL, httpClient: upstream.Client()}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	text, err := h.streamChat(ctx, "retry-session", "finish", card)
+	text, err := h.streamChat(ctx, "", "", "retry-session", "finish", card)
 	if err != nil {
 		t.Fatal(err)
 	}

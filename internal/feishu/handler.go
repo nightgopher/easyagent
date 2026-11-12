@@ -510,7 +510,7 @@ func (h *Handler) handleAgentMessage(ctx context.Context, chatKey, messageID, te
 func (h *Handler) handleWithCard(ctx context.Context, chatKey, messageID, sessionID, text string, card *StreamingCardHandle) {
 	startTime := time.Now()
 
-	fullText, steered, err := h.streamChatWithSteer(ctx, sessionID, text, card, h.messageRequestID(messageID))
+	fullText, steered, err := h.streamChatWithSteer(ctx, chatKey, messageID, sessionID, text, card, h.messageRequestID(messageID))
 	if steered {
 		// 插话已转交；回应会出现在原任务的流式卡片里。
 		steerCtx, cancelSteer := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -550,7 +550,7 @@ func (h *Handler) handleWithTextFallback(ctx context.Context, chatKey, messageID
 		slog.Warn("send processing message failed", "error", err)
 	}
 
-	fullText, steered, err := h.streamChatWithSteer(ctx, sessionID, text, nil, h.messageRequestID(messageID))
+	fullText, steered, err := h.streamChatWithSteer(ctx, chatKey, messageID, sessionID, text, nil, h.messageRequestID(messageID))
 	if steered {
 		// 插话已转交；回应会跟在原任务的输出后面。
 		if botMsgID != "" {
@@ -605,15 +605,15 @@ func (h *Handler) steer(ctx context.Context, sessionID, text string) bool {
 // streamChatWithSteer 遇到 busy（会话有任务在跑）时先尝试把消息作为插话转交；
 // 插话失败（任务恰好结束的竞态）则按普通消息重投一次。
 // 返回 steered=true 表示消息已作为插话转交，调用方负责回执文案。
-func (h *Handler) streamChatWithSteer(ctx context.Context, sessionID, text string, card *StreamingCardHandle, requestID string) (string, bool, error) {
-	fullText, err := h.streamChat(ctx, sessionID, text, card, requestID)
+func (h *Handler) streamChatWithSteer(ctx context.Context, chatKey, messageID, sessionID, text string, card *StreamingCardHandle, requestID string) (string, bool, error) {
+	fullText, err := h.streamChat(ctx, chatKey, messageID, sessionID, text, card, requestID)
 	if !errors.Is(err, errAgentBusy) {
 		return fullText, false, err
 	}
 	if h.steer(ctx, sessionID, text) {
 		return "", true, nil
 	}
-	fullText, err = h.streamChat(ctx, sessionID, text, card, requestID)
+	fullText, err = h.streamChat(ctx, chatKey, messageID, sessionID, text, card, requestID)
 	return fullText, false, err
 }
 
@@ -630,7 +630,27 @@ func (h *Handler) messageRequestID(messageID string) string {
 	return "feishu_" + hex.EncodeToString(sum[:])
 }
 
-func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card *StreamingCardHandle, requestIDs ...string) (string, error) {
+// maybeDeliverBroadcast 在 tool_end SSE 事件中识别 send_message 工具，
+// 把消息正文作为独立聊天消息投递（卡片流式更新不受影响）。
+func (h *Handler) maybeDeliverBroadcast(ctx context.Context, chatKey, messageID, data string) {
+	var ev struct {
+		ToolName   string `json:"tool_name"`
+		ToolResult string `json:"tool_result"`
+	}
+	if json.Unmarshal([]byte(data), &ev) != nil || ev.ToolName != "send_message" {
+		return
+	}
+	message := strings.TrimSpace(ev.ToolResult)
+	if message == "" || chatKey == "" || h.client == nil {
+		return
+	}
+	if _, err := h.client.SendMarkdown(ctx, chatKey, message, messageID); err != nil {
+		slog.Warn("send_message delivery failed", "error", err)
+	}
+}
+
+// chatKey/messageID 用于 send_message 工具的独立播报投递；可为空（不投递）。
+func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID, prompt string, card *StreamingCardHandle, requestIDs ...string) (string, error) {
 	startTime := time.Now()
 	values := map[string]string{
 		"prompt":     prompt,
@@ -668,7 +688,7 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 			// /new 后旧消息重投仍应回放原任务，不能拿新会话再执行。
 			// 只去掉会话约束；原身份与内容仍由核心校验，最多查询一次。
 			resp.Body.Close()
-			return h.streamChat(ctx, "", prompt, card, values["request_id"])
+			return h.streamChat(ctx, chatKey, messageID, "", prompt, card, values["request_id"])
 		}
 		if resp.StatusCode == http.StatusConflict && failure.Code == "busy" {
 			// 会话有任务在跑：交给上层转插话，而不是当错误抛给用户。
@@ -772,6 +792,7 @@ func (h *Handler) streamChat(ctx context.Context, sessionID, prompt string, card
 					updates.update(buf.String(), FooterMetrics{Status: status, ElapsedMs: time.Since(startTime).Milliseconds()})
 				}
 			case "tool_end":
+				h.maybeDeliverBroadcast(ctx, chatKey, messageID, data)
 				if updates != nil {
 					updates.update(buf.String(), FooterMetrics{Status: "正在思考", ElapsedMs: time.Since(startTime).Milliseconds()})
 				}

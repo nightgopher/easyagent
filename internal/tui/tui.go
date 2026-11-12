@@ -332,6 +332,14 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.spinnerTick()
 
 	case ToolEndMsg:
+		// send_message 主动播报：正文作为独立气泡上屏，工具行照常收尾。
+		if msg.Name == "send_message" && !msg.IsError {
+			if text := strings.TrimSpace(fmt.Sprintf("%v", msg.Result)); text != "" && text != "<nil>" {
+				m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: text, Timestamp: time.Now()})
+				m.viewport.SetMessages(m.messages)
+				m.viewport.GotoBottom()
+			}
+		}
 		// Find the matching tool call by ID (primary) or name (fallback).
 		// Search from the last message backwards.
 		found := false
