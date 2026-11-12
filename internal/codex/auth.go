@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
 // ClientID is the Codex CLI's public OAuth client. It is not a secret: PKCE
@@ -87,8 +89,18 @@ func NewManager(home, base string) (*Manager, error) {
 		mu:     sync.Mutex{},
 		base:   strings.TrimRight(u.String(), "/"),
 		dir:    filepath.Join(home, "codex"),
-		client: &http.Client{Timeout: httpTimeout},
+		client: &http.Client{Timeout: httpTimeout, Transport: codexTransport()},
 	}, nil
+}
+
+// codexTransport is the HTTP transport for OpenAI auth traffic: the proxy
+// comes from the desktop's answer (sdk/ai.CodexProxyEnv) or the standard
+// proxy variables. Without one of them OpenAI's edge rejects the direct
+// connection from GUI-spawned processes in proxy-required regions.
+func codexTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = ai.NamedProxy(ai.CodexProxyEnv)
+	return t
 }
 
 // tokenError marks refresh-token failures that require re-login.
