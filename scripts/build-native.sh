@@ -76,7 +76,9 @@ fi
 if [[ "$OS" == windows ]]; then
   go run ./tools/build -platform "windows/$ARCH"
   OUT="build.noindex/$TARGET"
-  SETUP=$(find "$OUT" -maxdepth 1 -name '*Setup*.exe' | head -1)
+  # MyGo v0.7+ names installers after the slug (easyagent-setup-1.2.0-amd64.exe,
+  # lowercase); -iname matches both that and the old ...Setup... spelling.
+  SETUP=$(find "$OUT" -maxdepth 1 -iname '*setup*.exe' | head -1)
   [[ -n "$SETUP" && -s "$SETUP" ]] || { echo "MyGo build did not produce a Windows installer in $OUT" >&2; exit 1; }
   # The staged installer must carry the core beside the UI, like the deb check
   # above: local_backend.go looks for easyagent-core.exe next to EasyAgent.exe.
