@@ -24,7 +24,7 @@ func NewState() *State {
 
 // LoadState 从磁盘读取状态；文件不存在时返回空状态而非错误。
 func LoadState(path string) (*State, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) //nolint:gosec // path 是看门狗自己的状态文件，来自显式配置而非外部输入
 	if err != nil {
 		if os.IsNotExist(err) {
 			return NewState(), nil

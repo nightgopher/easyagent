@@ -2,7 +2,7 @@ package larkwatch
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -347,7 +347,7 @@ func requestID(items []sighting) string {
 		}
 	}
 	sort.Strings(lines)
-	sum := sha1.Sum([]byte(strings.Join(lines, "\n")))
+	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 	return "larkwatch-" + hex.EncodeToString(sum[:])[:16]
 }
 

@@ -34,7 +34,7 @@ func (e ExecRunner) Output(ctx context.Context, args ...string) ([]byte, error) 
 	if bin == "" {
 		bin = "lark-cli"
 	}
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // Bin 来自本机显式配置（EA_LARKWATCH_LARK_CLI），参数为固定 CLI 序列
 	cmd.Env = larkEnv
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
