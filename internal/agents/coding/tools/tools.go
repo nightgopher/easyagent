@@ -36,7 +36,7 @@ type ListOptions struct {
 
 // BaseToolNames returns the canonical coding-agent tool names before extension tools.
 func BaseToolNames(enableBash bool) []string {
-	names := []string{"read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question"}
+	names := []string{"read", "write", "edit", "grep", "find", "ls", "patch", "todo_write", "save_memory", "local_time", "delete_file", "ask_user_question", "send_message"}
 	if enableBash {
 		names = append([]string{"bash", "bash_output", "bash_kill"}, names...)
 	}
@@ -144,6 +144,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithDeleteFileBackupManager(opts.BackupManager),
 		),
 		basetools.NewAskUserTool(),
+		basetools.NewSendMessageTool(),
 	)
 
 	toolList = append(toolList, opts.ExtensionTools...)

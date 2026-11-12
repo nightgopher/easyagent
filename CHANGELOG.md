@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [v0.43.0] - 2026-11-11
+
+### Added
+- 运行中插话：会话有任务在跑时，用户新消息自动转为插话而不是被拒绝。SDK 新增 `AgentSession.Steer` 与 `agent.ErrAgentNotRunning`，服务端新增 `POST /sessions/{id}/steer`；飞书把忙时消息转插话并以「已插话」卡片回执，回应出现在原任务卡片；TUI 在任务运行时按 Enter 直接插话上屏。插话作为普通用户消息持久化，句句有回响。(#97)
+- `send_message` 工具：agent 在长任务关键节点（阶段完成、遇到阻塞、计划变更）主动向用户播报，任务不中断。飞书以独立聊天消息送达，TUI 以独立气泡上屏；子 agent 不可使用。(#98)
+- 桌面端「设置 → 通用 → 命令行」：一键把应用内嵌 CLI 安装为终端命令（symlink `~/.easyagent/bin/easyagent`，随应用更新自动跟进）。`~/.easyagent/bin` 不在 PATH 时自动写入 shell rc（zsh/bash/fish 语法、防重复）；卸载仅删除本应用链接，不覆盖 `scripts/install.sh` 独立安装。(#100)
+
+### Fixed
+- 升级 Go 工具链至 1.26.11 / 1.27.4，修复标准库 `net/http` 安全漏洞 GO-2026-6859（CVE-2026-97054，MaxBytesReader 数据竞争可致 HTTP/1 服务崩溃）。
+
+### Compatibility
+- TUI 任务运行中按 Enter 从「保留草稿」改为「转插话」；斜杠命令保持保留草稿行为。
+- 飞书会话忙时不再报「处理出错」，自动转插话；依赖 409 busy 语义的集成需改用 `POST /sessions/{id}/steer`。
+- 新增 `agent.ErrAgentNotRunning`、`AgentSession.Steer` 与 steer 端点均为增量接口，无破坏性变更。
+
 ## [v0.42.0] - 2026-11-08
 
 ### Fixed

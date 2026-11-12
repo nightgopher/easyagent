@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -113,6 +115,65 @@ func (a *preview) preferenceRow(c *ui.Context, label, detail string, control fun
 		ui.Column(c).Basis(220).Grow(1).MinWidth(0).Gap(3).Children(func() { a.text(c, label).FontSize(13).FontWeight(500); a.note(c, detail) })
 		control()
 	})
+}
+
+// commandLineRow 渲染「命令行」设置行：把应用内嵌的 CLI 安装到 ~/.easyagent/bin
+// （VS Code「Install 'code' command」模式），终端即可使用 easyagent 命令。
+func (a *preview) commandLineRow(c *ui.Context) {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	corePath, err := coreBinaryAt(exe)
+	if err != nil {
+		return // 无内嵌核心（如经 PATH 部署的形态），无可安装
+	}
+	status, _, err := inspectCLIInstall(corePath)
+	if err != nil {
+		return
+	}
+	switch status {
+	case cliNotInstalled:
+		a.preferenceRow(c, "命令行", "在终端使用 easyagent 命令；symlink 到应用内嵌核心，随应用更新自动跟进", func() {
+			a.action(c, "安装命令行").OnClick(func() {
+				installed, rcPath, err := installCLI(corePath)
+				if err != nil {
+					c.Toast("安装失败：" + err.Error())
+					return
+				}
+				if installed == cliInstallConflict {
+					c.Toast("检测到独立的 easyagent 命令，未改动")
+					return
+				}
+				if installed == cliInstalledHere {
+					c.Toast("命令行已安装")
+					return
+				}
+				if rcPath != "" {
+					c.Toast("已安装命令行；PATH 已写入 " + rcPath + "，重启终端生效")
+					return
+				}
+				c.Toast("已安装命令行，终端可直接使用 easyagent")
+			})
+		})
+	case cliInstalledHere:
+		a.preferenceRow(c, "命令行", "已安装：终端可直接使用 easyagent 命令（随应用更新自动跟进）", func() {
+			a.action(c, "卸载命令行").OnClick(func() {
+				removed, message, err := uninstallCLI(corePath)
+				if err != nil {
+					c.Toast("卸载失败：" + err.Error())
+					return
+				}
+				if !removed {
+					c.Toast(message)
+					return
+				}
+				c.Toast("已卸载命令行")
+			})
+		})
+	case cliInstallConflict:
+		a.preferenceRow(c, "命令行", "检测到独立的 easyagent 命令（install.sh 或手动安装），本应用不做改动", func() {})
+	}
 }
 
 // dirtySuffix marks form headings on pages with uncommitted edits; the save
@@ -308,7 +369,10 @@ func (a *preview) generalSettings(c *ui.Context) {
 		version := "EasyAgent " + nativeAppVersion()
 		a.preferenceRow(c, "桌面版本", version, func() {
 			a.action(c, "检查更新").Disabled(!a.UpdaterReady).OnClick(updater.CheckForUpdates)
-		}).BorderWidth(0)
+		})
+		if runtime.GOOS != "windows" {
+			a.commandLineRow(c)
+		}
 	})
 	if a.UpdaterReady {
 		checks := updater.AutomaticChecks()

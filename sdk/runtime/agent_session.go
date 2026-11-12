@@ -259,6 +259,21 @@ func (s *AgentSession) PromptMessageStream(ctx context.Context, input ai.UserMes
 func (s *AgentSession) ContinueStream(ctx context.Context) (<-chan agent.AgentStreamEvent, error) {
 	return s.promptMessageStream(ctx, nil)
 }
+
+// Steer 向正在运行的 Agent 注入一条用户消息。消息会在下一个 tool/model 边界被
+// 循环取走处理（并作为普通 user message 持久化），不打断当前任务。
+// 没有正在处理的请求时返回 agent.ErrAgentNotRunning，调用方可回退为普通 Prompt。
+// 注意队列在内存中：注入成功但进程随后退出，该消息不会落盘。
+func (s *AgentSession) Steer(ctx context.Context, msg ai.Message) error {
+	s.mu.RLock()
+	ag := s.agent
+	s.mu.RUnlock()
+	if ag == nil || ag.State() != agent.StateRunning {
+		return agent.ErrAgentNotRunning
+	}
+	ag.Steer(ctx, msg)
+	return nil
+}
 func (s *AgentSession) promptMessageStream(ctx context.Context, input ai.Message) (<-chan agent.AgentStreamEvent, error) {
 	ag, err := s.preparePrompt(ctx)
 	if err != nil {
@@ -818,7 +833,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 
 // subagentExcludedTools 是子 agent 不继承的工具：子 agent 无法与用户交互，也不应改写主会话的
 // 待办与概览存储。
-var subagentExcludedTools = map[string]bool{"ask_user_question": true, "todo_write": true, "full_output": true}
+var subagentExcludedTools = map[string]bool{"ask_user_question": true, "send_message": true, "todo_write": true, "full_output": true}
 
 // newTaskTool 为声明支持子 agent 的应用创建 task 工具；工具过滤配置同样作用于 task。
 func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry, tools []agent.Tool, searchMode agent.ToolSearchMode) *agent.TaskTool {
