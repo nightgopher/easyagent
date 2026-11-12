@@ -49,8 +49,20 @@ func NewCodexProvider(accountID string, tokens CodexTokenSource, options ...Thin
 		accountID: accountID,
 		tokens:    tokens,
 		baseURL:   DefaultCodexBaseURL,
-		client:    newStreamHTTPClient(),
+		client:    newCodexStreamClient(),
 	}
+}
+
+// newCodexStreamClient is the stream client for the ChatGPT backend: same
+// timeouts as the shared stream client, but the proxy resolves through the
+// desktop's answer (sdk/ai.CodexProxyEnv) or the standard proxy variables,
+// so subscription-quota requests follow the proxy the login used.
+func newCodexStreamClient() *http.Client {
+	client := newStreamHTTPClient()
+	if t, ok := client.Transport.(*http.Transport); ok {
+		t.Proxy = ai.NamedProxy(ai.CodexProxyEnv)
+	}
+	return client
 }
 
 func (p *CodexProvider) Name() string { return "codex" }
