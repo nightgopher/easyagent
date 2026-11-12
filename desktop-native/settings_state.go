@@ -55,6 +55,7 @@ var settingsPages = []settingsPage{
 type localPreferences struct {
 	Language       string               `json:"language"`
 	Theme          string               `json:"theme"`
+	LarkWatch      bool                 `json:"lark_watch,omitempty"`
 	Background     wallpaperPreferences `json:"background"`
 	WorkbenchWidth float32              `json:"workbench_width,omitempty"`
 	TerminalHeight float32              `json:"terminal_height,omitempty"`

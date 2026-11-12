@@ -70,11 +70,17 @@ func atomicJSON(path string, value any) error {
 }
 
 type localBackend struct {
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	done   chan struct{}
-	client *backendClient
-	closed bool
+	mu          sync.Mutex
+	cmd         *exec.Cmd
+	done        chan struct{}
+	client      *backendClient
+	closed      bool
+	dir         string
+	watchOn     bool
+	watchErr    string
+	watchCmd    *exec.Cmd
+	watchDone   chan struct{}
+	watchStderr *ringBuffer
 }
 
 // coreBinary locates the EasyAgent core binary to serve the local backend.
@@ -177,6 +183,7 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 		return nil, err
 	}
 	token := hex.EncodeToString(random[:])
+	m.dir = dir
 	if err = os.MkdirAll(filepath.Join(dir, "core-data"), 0700); err != nil {
 		return nil, err
 	}
@@ -293,6 +300,12 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 				_ = res.Body.Close()
 				if res.StatusCode == 200 {
 					m.client = client
+					if m.watchOn {
+						// 看门狗拉起失败不阻断核心就绪，错误在飞书设置页可见。
+						if werr := m.startLarkWatchLocked(); werr != nil {
+							m.watchErr = werr.Error()
+						}
+					}
 					ready = true
 					return client, nil
 				}
@@ -305,6 +318,7 @@ func (m *localBackend) stop() {
 	cmd, done := m.cmd, m.done
 	m.cmd = nil
 	m.client = nil
+	m.stopLarkWatchLocked()
 	m.mu.Unlock()
 	if cmd == nil {
 		return

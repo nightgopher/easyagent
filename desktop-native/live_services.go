@@ -428,6 +428,33 @@ func (a *preview) liveFeishuSettings(c *ui.Context) {
 			a.operation("bridge", "POST", "/settings/feishu/bridge/restart", map[string]any{}, func(v any) { l.Data["feishu"] = v })
 		})
 	}
+	if a.Settings.host().Local {
+		a.heading(c, "收件箱看门狗（本机）")
+		a.note(c, "用 lark-cli 用户身份低频巡查主人单聊，发现新消息自动唤醒当前主机的会话处理并转达；没事不叫醒 Agent。前提：lark-cli 已 auth login 且用户身份授权 im:chat:read、im:message:readonly。")
+		on := a.Settings.Preferences.LarkWatch
+		_, running, detail := l.Core.LarkWatchStatus()
+		status := "已关闭"
+		if on {
+			status = "未运行"
+			if running {
+				status = "运行中"
+			}
+		}
+		a.note(c, "当前状态："+status)
+		if tail := strings.TrimSpace(detail); tail != "" {
+			if len(tail) > 400 {
+				tail = tail[len(tail)-400:]
+			}
+			ui.Text(c, tail).FontSize(12).TextColor(c.Theme().Danger)
+		}
+		if l.Loading["larkwatch"] {
+			a.note(c, "正在应用…")
+		} else if !on {
+			a.primary(c, "开启看门狗").OnClick(func() { a.toggleLarkWatch(true) })
+		} else {
+			a.action(c, "关闭看门狗").OnClick(func() { a.toggleLarkWatch(false) })
+		}
+	}
 	a.heading(c, "自建应用凭据"+a.dirtySuffix())
 	if managed && str(m["app_id"]) != "" {
 		s.AppID = str(m["app_id"])
@@ -694,4 +721,22 @@ func (a *preview) discardSettingsForms() {
 	if !boolean(m["managed"]) || str(m["app_id"]) == "" {
 		s.AppID = str(m["app_id"])
 	}
+}
+
+// toggleLarkWatch 应用收件箱看门狗开关：偏好先落盘，随后进程级生效并刷新。
+func (a *preview) toggleLarkWatch(on bool) {
+	l := a.Live
+	if l == nil || l.Loading["larkwatch"] {
+		return
+	}
+	l.Loading["larkwatch"] = true
+	a.Settings.Preferences.LarkWatch = on
+	a.Settings.savePreferences()
+	epoch := l.epoch
+	go func() {
+		l.Core.ApplyLarkWatch(on)
+		a.post(epoch, func() {
+			l.Loading["larkwatch"] = false
+		})
+	}()
 }

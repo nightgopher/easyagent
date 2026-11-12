@@ -2,6 +2,11 @@
 
 版本规则与操作步骤见 [发布指南](docs/RELEASING.md)。正式版本以不可移动的 Git tag 为准；本文件记录面向使用者的变化，不代替提交历史。
 
+## [Unreleased]
+
+### Added
+- 桌面端（本机主机）新增「收件箱看门狗」开关（飞书设置页）：应用随核心拉起 `easyagent watch serve`，直接注入当次核心地址与令牌，核心重启时看门狗跟着重启，规避常驻进程的地址/密钥漂移。lark-cli 按 PATH 与常见安装位置自动解析（GUI 启动的进程没有 shell PATH）。唤醒目标会话由 EA_HOME 下的 feishu-routes.json 自动发现。前提：lark-cli 已登录且用户身份授权 `im:chat:read`、`im:message:readonly`。
+
 ## [v0.45.0] - 2026-11-12
 
 ### Added
