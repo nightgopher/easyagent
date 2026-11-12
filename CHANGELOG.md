@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v0.46.0] - 2026-11-12
+
 ### Fixed
 - 修复桌面端 ChatGPT（Codex）登录在系统代理环境下必败的问题：GUI 启动的 helper 与核心没有 shell 环境变量，Go 的 HTTP 客户端看不到系统代理，`auth.openai.com` 的 OAuth token 兑换被边缘 403 拒绝。现在桌面把解析出的代理（标准环境变量优先，其次系统设置，回环直连）经 `HTTPS_PROXY` 注入登录 helper、经 `EA_CODEX_PROXY` 注入核心，仅作用于 Codex 流量——登录兑换与 ChatGPT 后端模型请求一致生效，网关、飞书与 MCP 流量保持直连不受影响。
 
