@@ -64,6 +64,9 @@ func (a *preview) loadSettingsPage() {
 			a.refreshEasyCodeModels()
 		}
 	}
+	if a.Settings.Tab == "models" && a.Settings.host().Local {
+		a.refreshCodexStatus()
+	}
 	if l.Client == nil {
 		return
 	}
@@ -309,6 +312,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	if s.Mode == SettingCopyEasyCodeMode {
 		a.easyCodeSettings(c)
 	}
+	a.codexSettings(c)
 	running := false
 	for _, session := range a.Sessions {
 		running = running || session.Running || session.Pending || session.Sending
