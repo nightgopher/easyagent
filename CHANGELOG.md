@@ -2,6 +2,11 @@
 
 版本规则与操作步骤见 [发布指南](docs/RELEASING.md)。正式版本以不可移动的 Git tag 为准；本文件记录面向使用者的变化，不代替提交历史。
 
+## [Unreleased]
+
+### Changed
+- 桌面客户端底层框架 MyGo 从 v0.6.4 升级到 v0.8.3（取代 2026-11-08 的暂缓决策）：获得 macOS 文本渲染 CPU 减半、Windows GPU 每帧减半、无障碍大幅增强、`Context.SetZoom` 等能力；v0.8.0 按键模型重构经核实对本客户端无影响（全部 `HandleInput` 均按具体按键匹配）。暂不追 v0.9.x（native modules 实验性）。
+
 ## [v0.45.0] - 2026-11-12
 
 ### Added
