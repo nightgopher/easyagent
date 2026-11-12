@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added
+- 桌面「模型连接」新增 Codex（ChatGPT）登录入口：登录、状态与退出直接在桌面完成（此前仅 CLI），登录后计入 ChatGPT 订阅额度，会话内用 /models 选择 Codex 模型。桌面 UI 复用与 EasyCode 相同的 helper 管线（--machine NDJSON + core 私有凭据），登录页地址强制校验 OpenAI/ChatGPT 官方域名。
+
+### Added
 - lark 看门狗支持会话自动发现：未指定 `--session`/`EA_LARKWATCH_SESSION_ID` 时，自动读取桥接的 feishu-routes.json（EA_HOME 下）；恰好一个 owner 会话即直接使用，多个时列出候选要求显式指定。配合 watch，部署收敛为「装 easyagent + lark-cli 认证登录 + 一条启动命令」。
 
 ### Added

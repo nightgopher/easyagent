@@ -21,6 +21,7 @@ type liveResult struct {
 }
 type liveState struct {
 	EasyCode                                                               nativeEasyCodeState
+	Codex                                                                  nativeCodexState
 	MCPStatus                                                              nativeMCPStatus
 	Work                                                                   nativeWorkState
 	SessionSearch                                                          nativeSessionSearch
