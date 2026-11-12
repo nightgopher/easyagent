@@ -2,15 +2,13 @@
 
 版本规则与操作步骤见 [发布指南](docs/RELEASING.md)。正式版本以不可移动的 Git tag 为准；本文件记录面向使用者的变化，不代替提交历史。
 
-## [Unreleased]
+## [v0.45.0] - 2026-11-12
 
 ### Added
 - 桌面「模型连接」新增 Codex（ChatGPT）登录入口：登录、状态与退出直接在桌面完成（此前仅 CLI），登录后计入 ChatGPT 订阅额度，会话内用 /models 选择 Codex 模型。桌面 UI 复用与 EasyCode 相同的 helper 管线（--machine NDJSON + core 私有凭据），登录页地址强制校验 OpenAI/ChatGPT 官方域名。
 
-### Added
 - lark 看门狗支持会话自动发现：未指定 `--session`/`EA_LARKWATCH_SESSION_ID` 时，自动读取桥接的 feishu-routes.json（EA_HOME 下）；恰好一个 owner 会话即直接使用，多个时列出候选要求显式指定。配合 watch，部署收敛为「装 easyagent + lark-cli 认证登录 + 一条启动命令」。
 
-### Added
 - lark 看门狗 `easyagent watch serve|once`：用 lark-cli 用户身份低频巡查主人单聊的新消息（按会话内位点去重，排除自消息与机器人会话），发现新消息才唤醒指定会话（`POST /chat`，忙时自动转 `/sessions/{id}/steer` 插话，request_id 稳定防重），并把任务最终文本以机器人身份转达给主人。轮询不调模型，「没事不叫醒 Agent」。配置、安全边界与部署见 docs/LARK_WATCH.md。
 - `deploy/systemd/easyagent-watch.service`：看门狗系统级服务单元。
 
