@@ -5,6 +5,9 @@
 ## [Unreleased]
 
 ### Added
+- lark 看门狗支持会话自动发现：未指定 `--session`/`EA_LARKWATCH_SESSION_ID` 时，自动读取桥接的 feishu-routes.json（EA_HOME 下）；恰好一个 owner 会话即直接使用，多个时列出候选要求显式指定。配合 watch，部署收敛为「装 easyagent + lark-cli 认证登录 + 一条启动命令」。
+
+### Added
 - lark 看门狗 `easyagent watch serve|once`：用 lark-cli 用户身份低频巡查主人单聊的新消息（按会话内位点去重，排除自消息与机器人会话），发现新消息才唤醒指定会话（`POST /chat`，忙时自动转 `/sessions/{id}/steer` 插话，request_id 稳定防重），并把任务最终文本以机器人身份转达给主人。轮询不调模型，「没事不叫醒 Agent」。配置、安全边界与部署见 docs/LARK_WATCH.md。
 - `deploy/systemd/easyagent-watch.service`：看门狗系统级服务单元。
 

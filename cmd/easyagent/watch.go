@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nightgopher/easyagent/internal/larkwatch"
+	"github.com/nightgopher/easyagent/sdk/config"
 )
 
 const watchUsage = `usage: easyagent watch serve [--core-url URL] [--session ID] [--interval DURATION]
@@ -134,6 +135,20 @@ func buildWatchConfig(opts *watchOptions, getter func(string) string) (larkwatch
 				cfg.MaxPerWake = n
 			}
 		}
+	}
+	if cfg.SessionID == "" {
+		// 未显式指定会话时，从桥接的 feishu-routes.json 自动发现
+		// （单 owner 部署即开箱即用；多会话时报错并列出候选，不替人猜）。
+		var candidates []string
+		if eaHome := getter("EA_HOME"); eaHome != "" {
+			candidates = append(candidates, filepath.Join(eaHome, "feishu-routes.json"))
+		}
+		candidates = append(candidates, filepath.Join(config.HomeDir(), "feishu-routes.json"))
+		id, err := larkwatch.DiscoverSessionID(candidates...)
+		if err != nil {
+			return cfg, err
+		}
+		cfg.SessionID = id
 	}
 	if cfg.StateFile == "" {
 		if base, err := os.UserConfigDir(); err == nil {
