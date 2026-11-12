@@ -73,6 +73,10 @@ func main() {
 		runCodexCLI(os.Args[2:])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "watch" {
+		runWatchCLI(os.Args[2:])
+		return
+	}
 
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {

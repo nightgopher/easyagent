@@ -4,6 +4,10 @@
 
 ## [Unreleased]
 
+### Added
+- lark 看门狗 `easyagent watch serve|once`：用 lark-cli 用户身份低频巡查主人单聊的新消息（按会话内位点去重，排除自消息与机器人会话），发现新消息才唤醒指定会话（`POST /chat`，忙时自动转 `/sessions/{id}/steer` 插话，request_id 稳定防重），并把任务最终文本以机器人身份转达给主人。轮询不调模型，「没事不叫醒 Agent」。配置、安全边界与部署见 docs/LARK_WATCH.md。
+- `deploy/systemd/easyagent-watch.service`：看门狗系统级服务单元。
+
 ## [v0.44.0] - 2026-11-11
 
 ### Added
