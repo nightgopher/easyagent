@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [v0.44.0] - 2026-11-11
+
+### Added
+- 新增 `EA_PROVIDER=codex`：复用 Codex CLI 的 ChatGPT OAuth 登录（PKCE + loopback 回调），模型请求直连 ChatGPT Responses API，订阅额度计入登录账号，无需 API key。凭据 0600 私有保存、跨进程串行刷新、token 到期自动续期且刷新失败不打转；`EA_CODEX_MODEL` 选择模型，`easyagent codex login|status|models|logout` 管理，桌面端会话内可切换 codex 模型。(#99)
+
+### Fixed
+- 审核修复：codex 授权回调的 `state` 校验此前在回调缺失 `state` 时整体跳过；现在缺失同样拒绝并补回归测试。
+
 ## [v0.43.0] - 2026-11-11
 
 ### Added
