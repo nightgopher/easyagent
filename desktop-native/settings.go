@@ -383,6 +383,36 @@ func (a *preview) generalSettings(c *ui.Context) {
 		if ui.Checkbox(c, &downloads, "自动下载并安装更新，下次启动生效").Changed() {
 			updater.SetAutomaticDownloads(downloads)
 		}
+		a.preferenceRow(c, "更新代理", "更新检查与安装包下载使用的网络代理；默认跟随系统。", func() {
+			mode := s.Preferences.UpdateProxyMode
+			if mode == "" {
+				mode = updateProxyDefault
+			}
+			if a.selectControl(c, "更新代理", &mode, []string{updateProxySystem, updateProxyDirect, updateProxyCustom}).Width(160).Label(a.tr("更新代理")).Changed() {
+				s.Preferences.UpdateProxyMode = mode
+				if saved := s.savePreferences(); saved {
+					a.applyUpdateProxy()
+					c.Toast(a.tr("已保存"))
+				}
+			}
+		})
+		if s.Preferences.UpdateProxyMode == updateProxyCustom {
+			a.preferenceRow(c, "代理地址", "支持 http、https、socks5；例如 http://127.0.0.1:7890。", func() {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+					ui.TextInput(c.Key("更新代理地址"), &s.Preferences.UpdateProxyURL).Label(a.tr("代理地址")).Placeholder(a.tr("例如 http://127.0.0.1:7890")).FontSize(13).Padding(11, 13).Background(c.Theme().Surface).Border(1, c.Theme().Border).Width(280)
+					a.action(c, "应用").OnClick(func() {
+						if _, err := updaterTransport(updateProxyCustom, s.Preferences.UpdateProxyURL); err != nil {
+							c.Toast(a.tr("代理地址无效"))
+							return
+						}
+						if saved := s.savePreferences(); saved {
+							a.applyUpdateProxy()
+							c.Toast(a.tr("已保存"))
+						}
+					})
+				})
+			})
+		}
 		if last := updater.LastCheck(); !last.IsZero() {
 			a.note(c, "上次成功检查："+last.Local().Format("2006-01-02 15:04"))
 		}

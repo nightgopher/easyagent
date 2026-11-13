@@ -53,12 +53,15 @@ var settingsPages = []settingsPage{
 }
 
 type localPreferences struct {
-	Language       string               `json:"language"`
-	Theme          string               `json:"theme"`
-	Background     wallpaperPreferences `json:"background"`
-	WorkbenchWidth float32              `json:"workbench_width,omitempty"`
-	TerminalHeight float32              `json:"terminal_height,omitempty"`
-	Shortcuts      map[string]string    `json:"shortcuts,omitempty"`
+	Language        string               `json:"language"`
+	Theme           string               `json:"theme"`
+	LarkWatch       bool                 `json:"lark_watch,omitempty"`
+	Background      wallpaperPreferences `json:"background"`
+	WorkbenchWidth  float32              `json:"workbench_width,omitempty"`
+	TerminalHeight  float32              `json:"terminal_height,omitempty"`
+	Shortcuts       map[string]string    `json:"shortcuts,omitempty"`
+	UpdateProxyMode string               `json:"update_proxy_mode,omitempty"`
+	UpdateProxyURL  string               `json:"update_proxy_url,omitempty"`
 }
 type demoHost struct {
 	ID, Name, URL string
