@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v0.46.4] - 2026-11-13
+
 ### Fixed
 - 修复桌面看门狗注入被核心拒绝的问题：看门狗以 `channel: "larkwatch"` 经 POST /chat 投递任务，而核心的渠道白名单只接受 `feishu`，导致每次注入都返回 400 invalid_channel——看门狗看似在轮询、位点推进但管家永远不被唤醒（v0.46.2 引入）。白名单现接受 `larkwatch` 渠道。
 
