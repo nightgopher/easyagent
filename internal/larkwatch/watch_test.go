@@ -389,7 +389,7 @@ func TestBuildPrompt(t *testing.T) {
 		},
 	}}
 	got := buildPrompt(items, 2)
-	for _, want := range []string{"发现 2 条新消息", "王伟（2026-11-12 09:30）：在吗", "butler-rules", "[非文本消息]"} {
+	for _, want := range []string{"发现 2 条新消息", "王伟（2026-11-12 09:30，来自会话「王伟」）：在吗", "butler-rules", "[unknown 消息，无文字内容]"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("prompt missing %q:\n%s", want, got)
 		}
@@ -453,5 +453,28 @@ func TestConfigValidate(t *testing.T) {
 	}
 	if cfg.MaxPerWake != DefaultMaxPerWake {
 		t.Errorf("maxPerWake = %d, want default", cfg.MaxPerWake)
+	}
+}
+
+func TestBuildPromptCarriesRichTextContentAndChatName(t *testing.T) {
+	items := []sighting{{
+		chat: P2PChat{ChatID: "oc_x", Name: "韦贺文"},
+		msgs: []Message{
+			{Sender: "韦贺文", Time: "01:05", IsText: false, MsgType: "post", Content: "赛豆额度治理 PRD 推进建议"},
+			{Sender: "韦贺文", Time: "01:06", IsText: false, MsgType: "image", Content: ""},
+		},
+	}}
+	out := buildPrompt(items, 2)
+	if !strings.Contains(out, "赛豆额度治理 PRD 推进建议") {
+		t.Fatalf("rich text content lost:\n%s", out)
+	}
+	if strings.Contains(out, "[非文本消息]") {
+		t.Fatalf("legacy placeholder leaked:\n%s", out)
+	}
+	if !strings.Contains(out, "[image 消息，无文字内容]") {
+		t.Fatalf("type label missing:\n%s", out)
+	}
+	if !strings.Contains(out, "来自会话「韦贺文」") {
+		t.Fatalf("chat name missing:\n%s", out)
 	}
 }
