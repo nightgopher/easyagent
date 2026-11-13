@@ -50,6 +50,30 @@ type nativeAgentMemory struct {
 	Version       int64  `json:"version"`
 	Expired       bool   `json:"expired"`
 }
+type nativeExpertText struct {
+	Zh string `json:"zh"`
+	En string `json:"en"`
+}
+type nativeExpertTemplate struct {
+	ID           string             `json:"id"`
+	Kind         string             `json:"kind"`
+	Category     string             `json:"category"`
+	Icon         string             `json:"icon"`
+	Name         nativeExpertText   `json:"name"`
+	Description  nativeExpertText   `json:"description"`
+	Instructions nativeExpertText   `json:"instructions"`
+	Roles        nativeExpertText   `json:"roles"`
+	Leader       string             `json:"leader"`
+	Members      []string           `json:"members"`
+	Skills       []string           `json:"skills"`
+	Tags         []nativeExpertText `json:"tags"`
+}
+type nativeExpertInstallRecord struct {
+	TemplateID string   `json:"template_id"`
+	Kind       string   `json:"kind"`
+	AgentIDs   []string `json:"agent_ids"`
+	TeamID     string   `json:"team_id"`
+}
 type businessSettingsState struct {
 	AgentEditor, SourceEditor, MemoryEditor, Publishing, Advanced   bool
 	Agent                                                           nativeBusinessAgent
@@ -60,6 +84,9 @@ type businessSettingsState struct {
 	MemoryOffset                                                    int
 	BrowseSourceID, KnowledgeQuery, DocumentPath                    string
 	PublishSourceID, PublishDirectory, PublishTitle, PublishContent string
+	// Expert market tab state: ExpertTab is "" or "mine" (agent list) vs
+	// "market" (remote expert catalog); the rest drive market filters.
+	ExpertTab, ExpertKind, ExpertCategory, ExpertDetail, ExpertHint string
 }
 
 var businessBaseTools = []string{"read", "write", "ask_user_question", "local_time", "search_tools", "web_fetch", "web_search", "host_work_search", "host_session_search", "host_agents_list"}

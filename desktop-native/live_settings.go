@@ -86,6 +86,9 @@ func (a *preview) loadSettingsPage() {
 		if s.Business.Tab == "memories" {
 			a.loadAgentMemories()
 		}
+		if s.Business.ExpertTab == "market" {
+			a.loadExpertMarket()
+		}
 	case "teams":
 		a.refreshTeams()
 	case "models":

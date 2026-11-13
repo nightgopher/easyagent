@@ -62,6 +62,32 @@ func (a *preview) businessSettings(c *ui.Context) {
 		a.businessAgentEditor(c)
 		return
 	}
+	ui.Row(c).Gap(4).Children(func() {
+		for _, tab := range []businessChoice{{"mine", "我的 Agent"}, {"market", "专家市场"}} {
+			selected := (s.ExpertTab == "" && tab.ID == "mine") || s.ExpertTab == tab.ID
+			btn := a.action(c, tab.Label)
+			if selected {
+				btn.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+			}
+			btn.OnClick(func() {
+				a.businessNavigate(func() {
+					s.closeEditors()
+					if s.ExpertTab == tab.ID {
+						return
+					}
+					s.ExpertTab = tab.ID
+					s.ExpertDetail, s.ExpertHint = "", ""
+					if tab.ID == "market" {
+						a.loadExpertMarket()
+					}
+				})
+			})
+		}
+	})
+	if s.ExpertTab == "market" {
+		a.expertMarketView(c)
+		return
+	}
 	ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &s.AgentQuery).Label("搜索业务 Agent").Placeholder("搜索名称或角色说明…").Grow(1).Basis(180).MinWidth(0)
 		a.primary(c, "创建 Agent").Disabled(!a.Live.Connected).OnClick(func() { a.editBusinessAgent(nativeBusinessAgent{}) })
