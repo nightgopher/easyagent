@@ -174,6 +174,13 @@ func (a *preview) openSettings(tab string) {
 			a.Settings.CapabilityTab = "mine"
 		}
 	}
+	if tab == "agents" {
+		// Opening the page from settings search for "专家市场" lands on the market tab.
+		if s := strings.ToLower(a.Settings.Search); strings.Contains(s, "专家市场") {
+			a.Settings.Business.ExpertTab = "market"
+			a.Settings.Business.ExpertQuery, a.Settings.Business.ExpertKind, a.Settings.Business.ExpertCategory, a.Settings.Business.ExpertDetail, a.Settings.Business.ExpertHint = "", "", "", "", ""
+		}
+	}
 	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
 		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
 			a.discardSettingsForms()
@@ -248,6 +255,9 @@ func settingsPageMatches(p settingsPage, search string) bool {
 	text := strings.ToLower(p.Label + p.Description + p.ID)
 	if p.ID == "capabilities" {
 		text += " 技能市场 市场 market 安装技能"
+	}
+	if p.ID == "agents" {
+		text += " 专家市场 market 安装专家 专家团模板"
 	}
 	if p.ID == "appearance" {
 		text += " 背景 壁纸 图片 模糊 wallpaper background blur"

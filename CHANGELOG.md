@@ -5,7 +5,7 @@
 ## [Unreleased]
 
 ### Added
-- 接入远程专家市场：桌面端「业务 Agent」页新增「专家市场」标签，可浏览同一商城（源 easycode-skills-workspace `catalog/expert-templates.json`，每小时同步）的专家/专家团模板并一键安装为业务 Agent/专家团；新增 `GET /experts/market/templates` 与 `POST /experts/market/install`（同步安装，响应带缺失技能提示 `missing_skills`，安装记录存 `<dataDir>/expert-market/installed.json`）。模板经逐字段校验（坏条目剔除、团队只引用同目录专家），目录缓存 10 分钟、失败保留上次结果。默认开启，`EA_EXPERT_MARKET=0` 关闭；地址可用 `EA_EXPERT_MARKET_BASE_URL` / YAML `expert_market_base_url` 覆盖。
+- 接入远程专家市场：桌面端「业务 Agent」页新增「专家市场」标签，可浏览同一商城（源 easycode-skills-workspace `catalog/expert-templates.json`，每小时同步）的专家/专家团模板并一键安装为业务 Agent/专家团；新增 `GET /experts/market/templates` 与 `POST /experts/market/install`（同步安装，响应带缺失技能提示 `missing_skills`，安装记录存 `<dataDir>/expert-market/installed.json`）。模板经逐字段校验（坏条目剔除、团队只引用同目录专家），目录缓存 10 分钟、失败保留上次结果。默认开启，`EA_EXPERT_MARKET=0` 关闭；地址可用 `EA_EXPERT_MARKET_BASE_URL` / YAML `expert_market_base_url` 覆盖。市场模板卡片带目录图标、团队卡片显示成员构成，市场内支持按名称/描述/标签搜索，设置搜索「专家市场」可直达市场标签。
 
 ## [v0.46.5] - 2026-11-13
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -48,6 +49,31 @@ var expertCategories = []businessChoice{
 	{"life", "生活"},
 }
 
+// expertIcon maps a catalog icon id to this app's icon set; unknown or
+// missing glyphs fall back to sparkle.
+func expertIcon(name string) string {
+	switch name {
+	case "file-text":
+		return "file"
+	case "flask", "shapes", "":
+		return "sparkle"
+	default:
+		if icons[name] != nil {
+			return name
+		}
+		return "sparkle"
+	}
+}
+
+// expertIconTile renders the card's leading icon inside a rounded tile.
+func (a *preview) expertIconTile(c *ui.Context, iconID string) {
+	ui.Column(c.Key("icon-" + iconID)).Size(36, 36).Center().Radius(8).Background(c.Theme().Accent.Alpha(.12)).Children(func() {
+		if svg := icons[expertIcon(iconID)]; svg != nil {
+			ui.Icon(c, svg).FontSize(19).TextColor(c.Theme().Accent)
+		}
+	})
+}
+
 func (a *preview) expertCategoryLabel(category string) string {
 	for _, choice := range expertCategories {
 		if choice.ID == category {
@@ -57,9 +83,30 @@ func (a *preview) expertCategoryLabel(category string) string {
 	return category
 }
 
+// expertMatchesQuery filters by the market search box: name, description and
+// tags in both languages, case-insensitive.
+func expertMatchesQuery(t nativeExpertTemplate, q string) bool {
+	if q == "" {
+		return true
+	}
+	haystack := strings.ToLower(t.Name.Zh + " " + t.Name.En + " " + t.Description.Zh + " " + t.Description.En)
+	for _, tag := range t.Tags {
+		haystack += " " + strings.ToLower(tag.Zh + " " + tag.En)
+	}
+	if t.Kind == "team" {
+		haystack += " " + strings.ToLower(t.Roles.Zh + " " + t.Roles.En)
+	}
+	return strings.Contains(haystack, q)
+}
+
 func (a *preview) expertMarketView(c *ui.Context) {
 	s := &a.Settings.Business
 	l := a.Live
+	ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
+		ui.TextInput(c, &s.ExpertQuery).Label("搜索专家市场").Placeholder("搜索名称、描述或标签…").Grow(1).Basis(200).MinWidth(0).OnSubmit(func() {})
+		ui.Spacer(c)
+		a.action(c, "刷新").Disabled(l.Loading["expert-market"]).OnClick(a.loadExpertMarket)
+	})
 	ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 		for _, f := range []businessChoice{{"", "全部"}, {"expert", "专家"}, {"team", "专家团"}} {
 			selected := s.ExpertKind == f.ID
@@ -77,8 +124,6 @@ func (a *preview) expertMarketView(c *ui.Context) {
 			}
 			btn.OnClick(func() { s.ExpertCategory = choice.ID })
 		}
-		ui.Spacer(c)
-		a.action(c, "刷新").Disabled(l.Loading["expert-market"]).OnClick(a.loadExpertMarket)
 	})
 
 	if m := a.marketState(); m.Error != "" && l.Data["expert-market"] == nil {
@@ -102,6 +147,7 @@ func (a *preview) expertMarketView(c *ui.Context) {
 	for _, t := range templates {
 		byID[t.ID] = t
 	}
+	query := strings.ToLower(strings.TrimSpace(s.ExpertQuery))
 	count := 0
 	for _, t := range templates {
 		if s.ExpertKind != "" && t.Kind != s.ExpertKind {
@@ -110,16 +156,21 @@ func (a *preview) expertMarketView(c *ui.Context) {
 		if s.ExpertCategory != "" && t.Category != s.ExpertCategory {
 			continue
 		}
+		if !expertMatchesQuery(t, query) {
+			continue
+		}
 		count++
 		if s.ExpertDetail == t.ID {
 			a.expertMarketDetail(c, t, byID, installed[t.ID])
 			continue
 		}
 		ui.Column(c.Key(t.ID)).Label("专家模板："+t.Name.Zh).Padding(14, 0).Gap(6).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
-			ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Wrap().Gap(10).AlignItems(ui.Center).Children(func() {
+				a.expertIconTile(c, t.Icon)
 				ui.Text(c, t.Name.Zh).FontSize(14).FontWeight(600).Grow(1).MinWidth(0)
 				if t.Kind == "team" {
 					a.businessBadge(c, "专家团")
+					a.businessBadge(c, fmt.Sprintf("负责人 + %d 名成员", len(t.Members)))
 				} else {
 					a.businessBadge(c, "专家")
 				}
@@ -141,7 +192,7 @@ func (a *preview) expertMarketView(c *ui.Context) {
 		})
 	}
 	if count == 0 {
-		a.note(c, "目录暂无匹配的模板。")
+		a.note(c, "没有匹配的模板，请调整筛选或搜索词。")
 	}
 }
 
@@ -152,6 +203,7 @@ func (a *preview) expertMarketDetail(c *ui.Context, t nativeExpertTemplate, byID
 	l := a.Live
 	ui.Column(c.Key("detail-" + t.ID)).Padding(14).Gap(8).Radius(8).Background(c.Theme().Surface).Children(func() {
 		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
+			a.expertIconTile(c, t.Icon)
 			ui.Text(c, t.Name.Zh).FontSize(15).FontWeight(600).Grow(1).MinWidth(0)
 			if t.Kind == "team" {
 				a.businessBadge(c, "专家团")

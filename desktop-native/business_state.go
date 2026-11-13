@@ -87,6 +87,7 @@ type businessSettingsState struct {
 	// Expert market tab state: ExpertTab is "" or "mine" (agent list) vs
 	// "market" (remote expert catalog); the rest drive market filters.
 	ExpertTab, ExpertKind, ExpertCategory, ExpertDetail, ExpertHint string
+	ExpertQuery                                                     string
 }
 
 var businessBaseTools = []string{"read", "write", "ask_user_question", "local_time", "search_tools", "web_fetch", "web_search", "host_work_search", "host_session_search", "host_agents_list"}
