@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -23,6 +24,7 @@ const watchStopGrace = 5 * time.Second
 var (
 	larkLookPath = exec.LookPath
 	larkStat     = func(path string) bool { _, err := os.Stat(path); return err == nil }
+	nodeLookPath = exec.LookPath
 )
 
 // resolveLarkCLI 按 PATH 与常见用户级安装位置解析 lark-cli 绝对路径。
@@ -39,6 +41,28 @@ func resolveLarkCLI(home string) string {
 		if larkStat(candidate) {
 			return candidate
 		}
+	}
+	return ""
+}
+
+// resolveNodeDir locates the Node.js runtime directory: lark-cli is a
+// Node program whose `#!/usr/bin/env node` shebang needs node on PATH,
+// and Homebrew/nvm installs live outside the PATH a GUI-spawned process
+// inherits.
+func resolveNodeDir(home string) string {
+	if path, err := nodeLookPath("node"); err == nil {
+		return filepath.Dir(path)
+	}
+	for _, candidate := range []string{
+		"/opt/homebrew/bin/node",
+		"/usr/local/bin/node",
+	} {
+		if larkStat(candidate) {
+			return filepath.Dir(candidate)
+		}
+	}
+	if matches, _ := filepath.Glob(filepath.Join(home, ".nvm", "versions", "node", "*", "bin")); len(matches) > 0 {
+		return matches[len(matches)-1]
 	}
 	return ""
 }
@@ -81,12 +105,17 @@ func (m *localBackend) startLarkWatchLocked() error {
 	if larkCLI == "" {
 		return errors.New("未找到 lark-cli，请先安装并完成 lark-cli auth login")
 	}
+	pathDirs := []string{filepath.Dir(larkCLI)}
+	if nodeDir := resolveNodeDir(home); nodeDir != "" {
+		pathDirs = append(pathDirs, nodeDir)
+	}
+	pathDirs = append(pathDirs, os.Getenv("PATH"))
 	env := map[string]string{
 		"EA_LARKWATCH_CORE_URL": m.client.URL,
 		"EA_SERVER_API_KEY":     m.client.Token,
 		"EA_HOME":               filepath.Join(m.dir, "core-home"),
 		"EA_LARKWATCH_LARK_CLI": larkCLI,
-		"PATH":                  filepath.Dir(larkCLI) + ":" + os.Getenv("PATH"),
+		"PATH":                  strings.Join(pathDirs, ":"),
 	}
 	stderr := newRingBuffer(8192)
 	cmd := exec.Command(binary, "watch", "serve") //nolint:gosec // 与核心 helper 同源：Bin 为本机装配的核心，参数固定
