@@ -39,7 +39,9 @@ func (s *Server) startRun(sessionID, prompt, requestID string, values ...promptI
 }
 
 func (s *Server) startChannelRun(sessionID, prompt, requestID, channel string, values ...promptInputs) (run *sessionRun, duplicate bool, err error) {
-	if channel != "" && channel != "feishu" {
+	// larkwatch 是飞书看门狗（easyagent watch）的注入渠道：它经 POST /chat
+	// 投递任务，与 feishu 桥接渠道同等对待。
+	if channel != "" && channel != "feishu" && channel != "larkwatch" {
 		return nil, false, &runAdmissionError{"invalid_channel", "unknown session channel"}
 	}
 	inputs := promptInputs{}
