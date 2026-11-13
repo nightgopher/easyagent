@@ -77,6 +77,7 @@ func (a *preview) businessSettings(c *ui.Context) {
 					}
 					s.ExpertTab = tab.ID
 					s.ExpertDetail, s.ExpertHint = "", ""
+					a.Settings.Notice, a.Settings.Error = "", ""
 					if tab.ID == "market" {
 						a.loadExpertMarket()
 					}
@@ -256,6 +257,9 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 			btn.OnClick(func() {
 				a.businessNavigate(func() {
 					s.closeEditors()
+					if s.Tab != tab.ID {
+						a.Settings.Notice, a.Settings.Error = "", ""
+					}
 					s.Tab = tab.ID
 					if tab.ID == "memories" {
 						if s.MemoryAgentID == "" {
@@ -291,7 +295,14 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 	if a.resourceFeedback(c, "knowledge-sources", a.refreshBusiness) {
 		return
 	}
-	for _, v := range a.knowledgeSources() {
+	sources := a.knowledgeSources()
+	if len(sources) == 0 {
+		a.heading(c, "添加一个知识来源")
+		a.note(c, "把主机上的一个目录作为知识库，Agent 绑定后可以检索其中的 Markdown 文档；原文始终保留在原处。")
+		a.action(c, "了解绑定方式").AlignSelf(ui.Start).OnClick(func() { a.openSettings("agents") })
+		return
+	}
+	for _, v := range sources {
 		ui.Column(c.Key(v.ID)).Label("知识来源："+v.Name).Padding(16, 0).Gap(8).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 			ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, v.Name).FontSize(15).FontWeight(600).Grow(1).MinWidth(0)

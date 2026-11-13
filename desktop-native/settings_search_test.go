@@ -24,6 +24,25 @@ func TestSettingsSidebarSearch(t *testing.T) {
 	if !settingsPageMatches(settingsPage{ID: "general", Label: "常规", Description: "语言"}, "") {
 		t.Fatal("empty query should match every page")
 	}
+	// Common synonyms reach the intended page via the per-page alias lists.
+	cases := []struct{ query, page string }{
+		{"api key", "models"}, {"codex", "models"},
+		{"工具服务", "mcp"}, {"屏幕", "experiments"},
+		{"中继", "remote-access"}, {"机器人", "feishu"},
+		{"token", "usage"}, {"审批", "permissions"},
+		{"知识库", "memory-knowledge"}, {"专家市场", "agents"},
+	}
+	for _, c := range cases {
+		matched := false
+		for _, p := range settingsPages {
+			if settingsPageMatches(p, c.query) && p.ID == c.page {
+				matched = true
+			}
+		}
+		if !matched {
+			t.Fatalf("query %q should match %q", c.query, c.page)
+		}
+	}
 }
 
 func TestShortcutRegistryDrivesNewSession(t *testing.T) {
