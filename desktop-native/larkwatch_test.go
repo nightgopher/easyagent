@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,5 +99,39 @@ func TestStopLarkWatchForceKillsOnHang(t *testing.T) {
 	}
 	if _, running, _ := m.LarkWatchStatus(); running {
 		t.Fatal("want stopped after force kill")
+	}
+}
+
+func TestResolveNodeDirPrefersPath(t *testing.T) {
+	origLook := nodeLookPath
+	nodeLookPath = func(string) (string, error) { return "/opt/homebrew/bin/node", nil }
+	t.Cleanup(func() { nodeLookPath = origLook })
+	if got := resolveNodeDir(t.TempDir()); got != "/opt/homebrew/bin" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveNodeDirFallsBackToKnownLocations(t *testing.T) {
+	origLook, origStat := nodeLookPath, larkStat
+	nodeLookPath = func(string) (string, error) { return "", errors.New("not found") }
+	home := t.TempDir()
+	larkStat = func(path string) bool { return os.PathSeparator != 0 && strings.HasPrefix(path, home) }
+	t.Cleanup(func() { nodeLookPath, larkStat = origLook, origStat })
+	nvmBin := filepath.Join(home, ".nvm", "versions", "node", "v26.13.0", "bin")
+	if err := os.MkdirAll(nvmBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveNodeDir(home); got != nvmBin {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestResolveNodeDirMissing(t *testing.T) {
+	origLook, origStat := nodeLookPath, larkStat
+	nodeLookPath = func(string) (string, error) { return "", errors.New("not found") }
+	larkStat = func(string) bool { return false }
+	t.Cleanup(func() { nodeLookPath, larkStat = origLook, origStat })
+	if got := resolveNodeDir(t.TempDir()); got != "" {
+		t.Fatalf("want empty, got %q", got)
 	}
 }
