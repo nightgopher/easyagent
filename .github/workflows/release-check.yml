@@ -82,13 +82,10 @@ jobs:
     # many concurrent WKWebView instances. That needs an unattended GUI
     # session: on a self-hosted runner sharing the maintainer's active login
     # session the preview windows contend with real use and time out, so this
-    # job always stays on hosted Apple Silicon — never on the
-    # EASYAGENT_MACOS_ARM_RUNNER label, which may point at that self-hosted
-    # Mac (release.yml native keeps using that var; it builds, signs and
-    # smoke-checks one bundle without the UI suite). macos-15 is the
-    # documented release fallback image; macos-26 starved for hours on
-    # 2026-11-12 and blocked every desktop-native PR.
-    runs-on: macos-15
+    # job always stays on hosted Apple Silicon regardless of
+    # EASYAGENT_MACOS_ARM_RUNNER (release.yml native keeps using that var; it
+    # builds, signs and smoke-checks one bundle without the UI suite).
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
         with:
