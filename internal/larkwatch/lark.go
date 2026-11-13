@@ -90,6 +90,7 @@ type Message struct {
 	Time     string
 	SenderID string
 	Sender   string
+	MsgType  string // text/post/image/file/...
 	IsText   bool
 	Content  string
 	Deleted  bool
@@ -215,6 +216,7 @@ func (l *Lark) LatestMessages(ctx context.Context, chatID string, limit int) ([]
 			Time:     m.CreateTime,
 			SenderID: m.Sender.ID,
 			Sender:   m.Sender.Name,
+			MsgType:  m.MsgType,
 			IsText:   m.MsgType == "text",
 			Content:  strings.TrimSpace(m.Content),
 			Deleted:  m.Deleted,
