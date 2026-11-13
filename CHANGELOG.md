@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [v0.46.2] - 2026-11-13
+
 ### Added
 - 桌面端（本机主机）新增「收件箱看门狗」开关（飞书设置页）：应用随核心拉起 `easyagent watch serve`，直接注入当次核心地址与令牌，核心重启时看门狗跟着重启，规避常驻进程的地址/密钥漂移。lark-cli 按 PATH 与常见安装位置自动解析（GUI 启动的进程没有 shell PATH）。唤醒目标会话由 EA_HOME 下的 feishu-routes.json 自动发现。前提：lark-cli 已登录且用户身份授权 `im:chat:read`、`im:message:readonly`。
 - 桌面「常规」设置新增「更新代理」：更新检查与安装包下载的网络代理可选「跟随系统」（默认，行为不变）/「直连」/「自定义代理」（支持 http、https、socks5 地址）。多代理客户端（Clash、Tailscale、aTrust 等）并存改写系统代理时，可把更新流量固定到指定代理；自定义源走 `mygo.Updater.SetSource`，签名校验与自动更新行为不变。
