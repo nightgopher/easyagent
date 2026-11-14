@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 )
 
@@ -17,11 +18,13 @@ type LoginSession struct {
 	URL      string
 	portBusy bool
 
-	manager *Manager
-	flow    *authorizationFlow
-	server  *http.Server
-	closed  chan struct{}
-	done    chan error
+	manager      *Manager
+	flow         *authorizationFlow
+	server       *http.Server
+	closed       chan struct{}
+	closeOnce    sync.Once
+	completeOnce sync.Once
+	done         chan error
 }
 
 // StartLogin opens the loopback callback server and returns the authorize URL
@@ -65,8 +68,12 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 		_, _ = fmt.Fprint(w, "登录成功，可以关闭此页面并返回 EasyAgent。")
 		go func() {
 			input := redirectURI + "?" + q.Encode()
-			session.done <- session.manager.completeLogin(context.WithoutCancel(ctx), session.flow, input)
-			close(session.closed)
+			// 完成路径整体一次性：授权码只能换一次令牌，重复回调不得重复
+			// 交换（第二次的错误会污染 Wait 结果），也不得二次 close。
+			session.completeOnce.Do(func() {
+				session.done <- session.manager.completeLogin(context.WithoutCancel(ctx), session.flow, input)
+				session.markClosed()
+			})
 		}()
 	})
 	session.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -115,11 +122,7 @@ func (s *LoginSession) succeed() {
 	default:
 		s.done <- nil
 	}
-	select {
-	case <-s.closed:
-	default:
-		close(s.closed)
-	}
+	s.markClosed()
 }
 
 func (s *LoginSession) fail(err error) {
@@ -136,9 +139,12 @@ func (s *LoginSession) Close() {
 	if s.server != nil {
 		_ = s.server.Close()
 	}
-	select {
-	case <-s.closed:
-	default:
-		close(s.closed)
-	}
+	s.markClosed()
+}
+
+// markClosed closes the closed channel exactly once. The callback handler,
+// CompleteManual and Close can all race to end the session; a bare close
+// panics on the second caller (observed in CI as a double browser redirect).
+func (s *LoginSession) markClosed() {
+	s.closeOnce.Do(func() { close(s.closed) })
 }

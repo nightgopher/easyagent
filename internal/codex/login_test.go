@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -184,3 +185,54 @@ func TestStartLoginAuthorizeURL(t *testing.T) {
 
 var _ = fmt.Sprintf
 var _ = time.Now
+
+// TestLoginSessionDoubleCallback：浏览器可能对同一回调重定向两次（用户刷新、
+// 代理重试）。第二次回调不得让 close(session.closed) panic，也不得重复交换
+// 令牌导致 Wait 结果错乱。
+func TestLoginSessionDoubleCallback(t *testing.T) {
+	var mu sync.Mutex
+	var requests []tokenRequest
+	auth := tokenServer(t, &requests, &mu)
+	defer auth.Close()
+
+	m, err := NewManager(t.TempDir(), auth.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := m.StartLogin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if session.portBusy {
+		t.Skip("callback port 1455 busy")
+	}
+
+	cb, err := url.Parse(redirectURI + "?code=cb-code&state=" + session.flow.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{}, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			resp, err := http.Get(cb.String())
+			if err == nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				resp.Body.Close()
+			}
+		}()
+	}
+	<-done
+	<-done
+	if err := session.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait: %v", err)
+	}
+	session.Close()
+	session.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if len(requests) != 1 {
+		t.Fatalf("token exchange must happen exactly once: %d", len(requests))
+	}
+}
