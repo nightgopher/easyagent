@@ -242,7 +242,7 @@ func (u *Updater) stageAsset(ctx context.Context, tag string, sums map[string]st
 	}
 
 	staged := filepath.Join(stageDir, asset)
-	f, err := os.Create(staged)
+	f, err := os.Create(staged) // #nosec G304 -- 暂存目录由 MkdirTemp 生成，asset 是固定命名的 Release 资产，非用户输入。
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func (u *Updater) stageAsset(ctx context.Context, tag string, sums map[string]st
 		_ = os.Remove(staged)
 		return fmt.Errorf("SHA-256 校验失败: %s（期望 %s，实际 %s）", asset, digest, actual)
 	}
-	if err := os.Chmod(staged, 0o755); err != nil {
+	if err := os.Chmod(staged, 0o755); err != nil { // #nosec G302 -- 替换目标是可执行二进制，必须保留执行位（install.sh 同款 0755）。
 		return err
 	}
 	if progress != nil {
