@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -59,6 +60,21 @@ func sanitizeURL(s string) string {
 	return b.String()
 }
 
+// versionedAPIBase 匹配以版本段（/v1…/v9）结尾的 API 根地址，如智谱 coding
+// 端点 https://api.z.ai/api/coding/paas/v4、显式配置的 https://api.openai.com/v1。
+var versionedAPIBase = regexp.MustCompile(`/v[1-9]$`)
+
+// chatCompletionsURL 拼接 Chat Completions 请求地址。baseURL 约定是网关根
+// 地址（如 http://localhost:4001，自动补 v1/ 前缀）；已带版本段的地址原样
+// 使用，不再叠加 v1。
+func (p *OpenAIProvider) chatCompletionsURL() string {
+	base := strings.TrimSuffix(p.baseURL, "/")
+	if versionedAPIBase.MatchString(base) {
+		return base + "/chat/completions"
+	}
+	return base + "/v1/chat/completions"
+}
+
 func (p *OpenAIProvider) Name() string { return "openai" }
 
 func (p *OpenAIProvider) StreamSimple(ctx context.Context, req ai.SimpleStreamRequest) (*ai.EventStream, error) {
@@ -83,10 +99,12 @@ type openAIToolCall struct {
 }
 
 type openAIMessage struct {
-	Role       string           `json:"role"`
-	Content    any              `json:"content"`
-	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Role    string `json:"role"`
+	Content any    `json:"content"`
+	// ReasoningContent：GLM 思考模式工具调用轮次须回放真实推理内容（仅 glm- 模型填充）
+	ReasoningContent string           `json:"reasoning_content,omitempty"`
+	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 type openAIToolParam struct {
@@ -202,7 +220,7 @@ func (p *OpenAIProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.
 			streamCtx, cancel := context.WithCancel(ctx)
 			started := time.Now()
 			httpReq, err := http.NewRequestWithContext(streamCtx, http.MethodPost,
-				p.baseURL+"v1/chat/completions", bytes.NewReader(body))
+				p.chatCompletionsURL(), bytes.NewReader(body))
 			if err != nil {
 				cancel()
 				fail(fmt.Errorf("create request: %w", err))
@@ -571,6 +589,11 @@ func (p *OpenAIProvider) buildOpenAIRequest(req ai.StreamRequest, stream bool) o
 
 		case ai.AssistantMessage:
 			msg := openAIMessage{Role: "assistant", Content: m.Text}
+			// GLM 思考模式约定：工具调用轮次的 assistant 历史必须回放真实
+			// reasoning_content，缺失会导致后续工具轮报错；会话已持久化 Thinking。
+			if strings.HasPrefix(req.Model.ID, "glm-") && m.Thinking != "" && len(m.ToolCalls) > 0 {
+				msg.ReasoningContent = m.Thinking
+			}
 			for _, tc := range m.ToolCalls {
 				msg.ToolCalls = append(msg.ToolCalls, openAIToolCall{
 					ID:   tc.ID,

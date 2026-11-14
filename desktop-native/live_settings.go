@@ -253,20 +253,34 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 					ui.Column(c.Key(index)).Basis(220).Grow(1).MinWidth(180).Children(func() {
 						switch index {
 						case 0:
-							if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic"}).Changed() {
+							if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic", SettingCopyZhipuProvider}).Changed() {
 								s.APIKey = ""
 								a.clearModelCheck()
+								// 切到智谱时把仍是各家默认占位的地址替换为 coding 端点，已有自定义地址不动
+								if s.Provider == SettingCopyZhipuProvider {
+									switch s.BaseURL {
+									case "", "http://localhost:4001", "https://api.anthropic.com":
+										s.BaseURL = SettingCopyZhipuBaseURL
+									}
+								}
 							}
 						case 1:
 							placeholder := "http://localhost:4001"
-							if s.Provider == "Anthropic" {
+							switch s.Provider {
+							case "Anthropic":
 								placeholder = "https://api.anthropic.com"
+							case SettingCopyZhipuProvider:
+								placeholder = SettingCopyZhipuBaseURL
 							}
 							if a.input(c, "服务地址", &s.BaseURL, placeholder, false).Label("全局模型服务地址").Changed() {
 								a.clearModelCheck()
 							}
 						case 2:
-							a.input(c, "默认模型", &s.Model, "填写模型 ID，或检测连接后选择", false).Label("全局默认模型")
+							placeholder := "填写模型 ID，或检测连接后选择"
+							if s.Provider == SettingCopyZhipuProvider {
+								placeholder = "填写模型 ID，或从下方常用模型选择"
+							}
+							a.input(c, "默认模型", &s.Model, placeholder, false).Label("全局默认模型")
 						case 3:
 							placeholder := "首次配置请输入 API Key"
 							provider := "openai"
@@ -353,6 +367,15 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 			ItemKey(func(i int) any { return names[i] }).Rows(func(row ui.ListRow) {
 			c, name := row.Context, names[row.Index]
 			menuOption(c.Key(name), "cpu", name, s.Model == name).Label("设为默认模型：" + name).Disabled(busy || s.Mode != "在桌面客户端配置").OnClick(func() { s.Model = name })
+		})
+	}
+	if s.Mode == "在桌面客户端配置" && s.Provider == SettingCopyZhipuProvider {
+		a.heading(c, "常用模型")
+		a.note(c, SettingCopyZhipuModelNote)
+		ui.List(c.Key("zhipu-presets"), nil, len(zhipuModelPresets)).Label("智谱常用模型").MaxHeight(180).Shrink(0).
+			ItemKey(func(i int) any { return zhipuModelPresets[i] }).Rows(func(row ui.ListRow) {
+			c, name := row.Context, zhipuModelPresets[row.Index]
+			menuOption(c.Key(name), "cpu", name, s.Model == name).Label("设为默认模型：" + name).Disabled(busy).OnClick(func() { s.Model = name })
 		})
 	}
 	if catalog := object(l.Data["models"]); str(catalog["discovery_error"]) != "" {

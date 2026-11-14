@@ -2,7 +2,9 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -906,4 +908,84 @@ func TestStreamHTTPAndEmptyRetryBudgetsAreIndependent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(4), hits.Load())
 	assert.Equal(t, "recovered", msg.Text)
+}
+
+// ─── 请求地址与 GLM 方言 ────────────────────────────────────────────────────────
+
+// TestStreamChatCompletionsURL：baseURL 为网关根地址时自动补 v1/ 前缀（现状
+// 约定不变）；以版本段（/v1…/v9）结尾的地址原样使用，不再叠加 v1——智谱
+// coding 端点（…/api/coding/paas/v4）与显式 /v1 配置都走这条路。
+func TestStreamChatCompletionsURL(t *testing.T) {
+	for _, tc := range []struct {
+		suffix   string
+		wantPath string
+	}{
+		{"", "/v1/chat/completions"},                                     // 网关根地址
+		{"/", "/v1/chat/completions"},                                    // 尾斜杠归一化后仍补 v1
+		{"/v1", "/v1/chat/completions"},                                  // 显式 /v1 不再叠加
+		{"/api/coding/paas/v4", "/api/coding/paas/v4/chat/completions"},  // 智谱 coding 端点
+		{"/api/coding/paas/v4/", "/api/coding/paas/v4/chat/completions"}, // 带尾斜杠
+	} {
+		var gotPath string
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotPath = r.URL.Path
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: %s\ndata: %s\ndata: %s\ndata: [DONE]\n\n", roleChunk(), textChunk("ok"), finishChunk("stop"))
+		}))
+		p := NewOpenAIProvider("test-key", srv.URL+tc.suffix)
+		_, _, err := collectStream(t, p)
+		require.NoError(t, err, "baseURL 后缀 %q", tc.suffix)
+		assert.Equal(t, tc.wantPath, gotPath, "baseURL 后缀 %q", tc.suffix)
+		srv.Close()
+	}
+}
+
+// TestStreamGLMReasoningReplay：GLM 思考模式下工具调用轮次的 assistant 历史
+// 回放真实 reasoning_content；纯文本轮和非 glm 模型不携带该字段（OpenAI 拒绝
+// 未知请求字段）。
+func TestStreamGLMReasoningReplay(t *testing.T) {
+	for _, tc := range []struct {
+		modelID     string
+		withToolUse bool
+		want        string
+	}{
+		{"glm-5.3", true, "先查配置再动手"}, // 工具轮回放
+		{"glm-5.3", false, ""},       // 纯文本轮不回放
+		{"gpt-5", true, ""},          // 非 glm 模型请求体零变化
+	} {
+		var body []byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, _ = io.ReadAll(r.Body)
+			w.Header().Set("Content-Type", "text/event-stream")
+			fmt.Fprintf(w, "data: %s\ndata: %s\ndata: [DONE]\n\n", textChunk("ok"), finishChunk("stop"))
+		}))
+
+		messages := []ai.Message{ai.AssistantMessage{Thinking: "先查配置再动手", Text: "好的"}}
+		if tc.withToolUse {
+			messages = []ai.Message{
+				ai.AssistantMessage{Thinking: "先查配置再动手", ToolCalls: []ai.ToolCall{{ID: "c1", Name: "read", Args: `{"path":"a.go"}`}}},
+				ai.ToolResultMessage{ToolCallID: "c1", Content: "ok"},
+			}
+		}
+		stream, err := NewOpenAIProvider("test-key", srv.URL).Stream(context.Background(), ai.StreamRequest{
+			Model:    ai.Model{ID: tc.modelID},
+			Messages: messages,
+		})
+		require.NoError(t, err, tc.modelID)
+		for range stream.Events() {
+		}
+		_, err = stream.Result()
+		require.NoError(t, err, tc.modelID)
+		srv.Close()
+
+		var req struct {
+			Messages []struct {
+				Role             string `json:"role"`
+				ReasoningContent string `json:"reasoning_content"`
+			} `json:"messages"`
+		}
+		require.NoError(t, json.Unmarshal(body, &req), tc.modelID)
+		require.NotEmpty(t, req.Messages, tc.modelID)
+		assert.Equal(t, tc.want, req.Messages[0].ReasoningContent, tc.modelID)
+	}
 }
