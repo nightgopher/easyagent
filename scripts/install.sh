@@ -85,8 +85,10 @@ fi
 download_release() (
     set -euo pipefail
     tag=${EA_VERSION:-}
-    # GitHub is tried first; the Gitee mirror helps where GitHub is unreachable (EA_MIRROR_REPO= disables it).
-    mirror_repo=${EA_MIRROR_REPO-weijian-huang/easyagent}
+    # GitHub is the only source by default. Set EA_MIRROR_REPO=<owner>/<repo>
+    # (e.g. a synced Gitee mirror) to add a fallback source; do not ship a
+    # default mirror — dead mirrors fail harder than an honest GitHub error.
+    mirror_repo=${EA_MIRROR_REPO:-}
     latest_urls=("https://api.github.com/repos/${REPO}/releases/latest")
     release_roots=("https://github.com/${REPO}/releases/download")
     if [ -n "$mirror_repo" ]; then
@@ -132,7 +134,7 @@ download_release() (
             fi
         fi
     done
-    [ "${#sources[@]}" -gt 0 ] || fail "Cannot retrieve release checksums; installation unchanged"
+    [ "${#sources[@]}" -gt 0 ] || fail "Cannot retrieve release checksums; installation unchanged. GitHub unreachable? Retry, set HTTPS_PROXY, or opt into a synced mirror with EA_MIRROR_REPO=owner/repo"
     for root in "${release_roots[@]}"; do
         [ "$root/$tag" = "${sources[0]}" ] || sources+=("$root/$tag")
     done
@@ -150,7 +152,7 @@ download_release() (
                 break
             fi
         done
-        [ "$downloaded" = true ] || fail "Download failed: $asset; installation unchanged"
+        [ "$downloaded" = true ] || fail "Download failed: $asset; installation unchanged. Retry, set HTTPS_PROXY, or opt into a synced mirror with EA_MIRROR_REPO=owner/repo"
         if command -v sha256sum >/dev/null 2>&1; then
             actual=$(sha256sum "$stage/$asset" | awk '{print $1}')
         else

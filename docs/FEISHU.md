@@ -8,6 +8,15 @@
 
 `GET /settings/feishu` 的 `local_mode:true`、`bridge.running` 和可选 `bridge.error` 用于查看进程内桥接状态。管理接口仍要求显式服务令牌，桌面托管核心自动提供。桥接随 serve 退出，重新启动核心后需再次启动桥接；需要独立常驻时使用下方 systemd 部署。托管主机使用自建应用凭据与配对，不走扫码注册。
 
+## macOS 常驻桥（launchd）
+
+桌面进程内桥随 serve 退出、需要每次手动启动；需要开机自启与崩溃自愈时，用 launchd 常驻独立桥。模板见 [deploy/launchd/com.hwj.easyagent-bridge.plist.example](../deploy/launchd/com.hwj.easyagent-bridge.plist.example)：
+
+1. 把模板复制到 `~/Library/LaunchAgents/com.hwj.easyagent-bridge.plist`，替换二进制路径、`PI_AGENT_URL`（核心地址）与 `EA_SERVER_API_KEY`（服务令牌）三个占位。
+2. 应用凭据默认读取 `$EA_HOME/feishu-credentials.json`（即 `~/.easyagent/`），`/feishu setup` 或桌面扫码保存后无需再配置；owner 绑定与路由文件同目录。
+3. 加载：`launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hwj.easyagent-bridge.plist`；卸载用 `bootout`。日志在 `~/.easyagent/bridge.log`。
+4. **同一份应用凭据不要同时跑桌面进程内桥与本桥**：两端都会收到 WebSocket 消息并重复回复。
+
 ## 网页配置（托管部署）
 
 按 [迷你主机部署](MINI_DEPLOY.md) 配好 core / bridge 两个 systemd 用户服务。核心配置需要：

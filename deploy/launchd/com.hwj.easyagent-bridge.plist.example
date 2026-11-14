@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	macOS 常驻飞书桥模板：复制到 ~/Library/LaunchAgents/com.hwj.easyagent-bridge.plist，
+	替换下面三处占位（二进制路径、核心地址、服务令牌），然后：
+	  launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hwj.easyagent-bridge.plist
+	凭据默认读取 $EA_HOME/feishu-credentials.json（~/.easyagent/），无需在此填写。
+	注意：同一份应用凭据不要同时跑桌面进程内桥与本桥，两端都会收取消息并重复回复。
+-->
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PI_AGENT_URL</key>
+		<string>http://127.0.0.1:8080</string>
+		<key>EA_SERVER_API_KEY</key>
+		<string>your-agent-server-key</string>
+	</dict>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>com.hwj.easyagent-bridge</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/you/.easyagent/bin/easyagent-bridge</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/you/.easyagent/bridge.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/you/.easyagent/bridge.log</string>
+</dict>
+</plist>
