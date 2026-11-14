@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestInferredDefaultMode(t *testing.T) {
 	tests := []struct {
@@ -25,5 +28,13 @@ func TestInferredDefaultMode(t *testing.T) {
 				t.Fatalf("inferredDefaultMode(%v) = %q, want %q", tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestBuildSlashRegistryListsUpdate：/update 注册进 chat/serve 共用的命令表，
+// /help 自动列出。
+func TestBuildSlashRegistryListsUpdate(t *testing.T) {
+	if !strings.Contains(buildSlashRegistry(nil).Help(), "update") {
+		t.Fatal("/update must be registered in the slash command registry")
 	}
 }

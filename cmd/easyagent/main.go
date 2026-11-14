@@ -77,6 +77,10 @@ func main() {
 		runWatchCLI(os.Args[2:])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "update" {
+		runUpdateCLI(os.Args[2:])
+		return
+	}
 
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {
@@ -280,6 +284,7 @@ func buildSlashRegistry(loopMgr *scheduler.LoopManager) *slashcmd.Registry {
 	commands.RegisterUndoCommands(registry)
 	commands.RegisterFeishuCommands(registry)
 	commands.RegisterWecomCommands(registry)
+	commands.RegisterUpdateCommands(registry, version)
 	return registry
 }
 
