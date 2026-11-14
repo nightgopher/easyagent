@@ -48,6 +48,12 @@ func (a *preview) action(c *ui.Context, label string) ui.Element {
 func (a *preview) primary(c *ui.Context, label string) ui.Element {
 	return a.action(c, label).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Border(0, c.Theme().Accent)
 }
+
+// danger marks a destructive action (uninstall, remove, delete) so it reads
+// as one before the confirmation dialog opens.
+func (a *preview) danger(c *ui.Context, label string) ui.Element {
+	return a.action(c, label).TextColor(c.Theme().Danger)
+}
 func (a *preview) note(c *ui.Context, text string) {
 	if strings.TrimSpace(text) == "" {
 		return

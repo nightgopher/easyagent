@@ -281,7 +281,8 @@ func (a *preview) codexSettings(c *ui.Context) {
 				a.action(c, "取消登录").OnClick(a.cancelCodexLogin)
 			} else {
 				if !l.Codex.LoggedIn {
-					a.primary(c, "ChatGPT 登录 (Codex)").Disabled(l.configBusy()).OnClick(a.startCodexLogin)
+					// A login entry, not the page's primary save action: keep it visually secondary.
+					a.action(c, "ChatGPT 登录 (Codex)").Disabled(l.configBusy()).OnClick(a.startCodexLogin)
 				} else {
 					a.action(c, "退出 Codex").Disabled(l.configBusy()).OnClick(a.logoutCodex)
 				}

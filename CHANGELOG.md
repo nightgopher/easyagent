@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [v0.47.0] - 2026-11-13
+
+### Added
+- 接入远程专家市场：桌面端「业务 Agent」页新增「专家市场」标签，可浏览同一商城（源 easycode-skills-workspace `catalog/expert-templates.json`，每小时同步）的专家/专家团模板并一键安装为业务 Agent/专家团；新增 `GET /experts/market/templates` 与 `POST /experts/market/install`（同步安装，响应带缺失技能提示 `missing_skills`，安装记录存 `<dataDir>/expert-market/installed.json`）。模板经逐字段校验（坏条目剔除、团队只引用同目录专家），目录缓存 10 分钟、失败保留上次结果。默认开启，`EA_EXPERT_MARKET=0` 关闭；地址可用 `EA_EXPERT_MARKET_BASE_URL` / YAML `expert_market_base_url` 覆盖。市场模板卡片带目录图标、团队卡片显示成员构成，市场内支持按名称/描述/标签搜索，设置搜索「专家市场」可直达市场标签。
+- 设置全面 UX 打磨：设置搜索为全部 14 个分区补充同义词别名（如「api key」→模型连接、「工具服务」→MCP、「知识库」→记忆与知识）；用量统计在未连接时显示「—」而非误导性的 0；页内标签切换（技能、业务 Agent、记忆与知识）不再残留上一标签的操作提示；知识来源列表补齐空态引导；破坏性操作按钮（删除记忆、移除主机、卸载技能、清除审计记录等）统一为红色警示样式。
+
 ## [v0.46.5] - 2026-11-13
 
 ### Fixed

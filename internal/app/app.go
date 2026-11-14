@@ -31,6 +31,7 @@ import (
 type App struct {
 	mcpState          mcpState
 	skillMarket       *skillMarketState
+	expertMarket      *expertMarketState
 	cfgMu             sync.Mutex
 	cfg               config.Config
 	discoveryRevision uint64
@@ -130,6 +131,7 @@ func New(opts AppOptions) (*App, error) {
 	}
 	result.initMCP()
 	result.skillMarket = initSkillMarket(cfg)
+	result.expertMarket = initExpertMarket(cfg)
 	return result, nil
 }
 

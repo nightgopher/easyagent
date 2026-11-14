@@ -124,6 +124,10 @@ type Config struct {
 	SkillMarketBaseURL  string // store endpoint (default: https://skills.deepvlab.ai)
 	SkillMarketSkillDir string // local install root (default: ~/.agents/skills)
 
+	// Expert market (remote expert/team template catalog on the same store)
+	ExpertMarketEnabled bool   // expose expert market REST endpoints (default: true)
+	ExpertMarketBaseURL string // catalog endpoint (default: https://skills.deepvlab.ai)
+
 	// Server security
 	APIKey string // Bearer token for HTTP API auth (empty = no auth, backward compatible)
 }
@@ -159,8 +163,9 @@ func Default() Config {
 
 		MaxOutputLen: 51200,
 
-		KBRepoPath:         "", // empty → defaults to ~/agent-lessons at runtime
-		SkillMarketEnabled: true,
+		KBRepoPath:          "", // empty → defaults to ~/agent-lessons at runtime
+		SkillMarketEnabled:  true,
+		ExpertMarketEnabled: true,
 	}
 }
 
@@ -345,6 +350,12 @@ func (c *Config) LoadFromEnv() {
 		c.SkillMarketSkillDir = v
 	}
 
+	// Expert market
+	c.ExpertMarketEnabled = getEnvBool("EA_EXPERT_MARKET", c.ExpertMarketEnabled)
+	if v := getEnv("EA_EXPERT_MARKET_BASE_URL", ""); v != "" {
+		c.ExpertMarketBaseURL = sanitizeConfigString(v)
+	}
+
 	// ASR: credentials and endpoint must come from the same provider. Never
 	// forward a gateway key to the default SiliconFlow endpoint (or vice versa).
 	asrKey, siliconKey, asrURL := os.Getenv("ASR_API_KEY"), os.Getenv("SILICONFLOW_API_KEY"), os.Getenv("ASR_BASE_URL")
@@ -464,6 +475,8 @@ type yamlConfig struct {
 
 	SkillMarketBaseURL  string `yaml:"skill_market_base_url,omitempty"`
 	SkillMarketSkillDir string `yaml:"skill_market_skill_dir,omitempty"`
+
+	ExpertMarketBaseURL string `yaml:"expert_market_base_url,omitempty"`
 
 	ASRAPIKey  string `yaml:"asr_api_key,omitempty"`
 	ASRModel   string `yaml:"asr_model,omitempty"`
@@ -612,6 +625,9 @@ func (c *Config) LoadFromYAML(path string) error {
 	}
 	if yc.SkillMarketSkillDir != "" {
 		c.SkillMarketSkillDir = yc.SkillMarketSkillDir
+	}
+	if yc.ExpertMarketBaseURL != "" {
+		c.ExpertMarketBaseURL = yc.ExpertMarketBaseURL
 	}
 	if yc.ASRAPIKey != "" {
 		c.ASRAPIKey = yc.ASRAPIKey

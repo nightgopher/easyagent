@@ -86,6 +86,9 @@ func (a *preview) loadSettingsPage() {
 		if s.Business.Tab == "memories" {
 			a.loadAgentMemories()
 		}
+		if s.Business.ExpertTab == "market" {
+			a.loadExpertMarket()
+		}
 	case "teams":
 		a.refreshTeams()
 	case "models":
@@ -588,7 +591,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			a.action(c, label).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
 			if !h.Local {
 				a.action(c, "编辑").OnClick(func() { s.hostForm = hostForm{EditHost: h.ID, HostName: h.Name, HostURL: h.URL} })
-				a.action(c, "移除").OnClick(func() {
+				a.danger(c, "移除").OnClick(func() {
 					l.Confirm = &nativeConfirmation{"移除主机连接？", h.Name + "；不会删除主机上的会话或文件。", func() { a.removeLiveHost(index) }}
 				})
 			}
@@ -751,13 +754,19 @@ func (a *preview) liveUsageSettings(c *ui.Context) {
 	total["total_tokens"] = number(total["input_tokens"]) + number(total["output_tokens"])
 	a.heading(c, "近 30 天用量概览")
 	a.note(c, "基于核心持久化的执行收据统计，包含多轮工具调用与子 Agent 用量。")
+	// Without a connection the totals would read as zero, which reads as
+	// "no usage" — show an explicit placeholder instead.
+	format := formatCount
+	if !a.Live.Connected {
+		format = func(any) string { return "—" }
+	}
 	ui.Row(c).Gap(12).Children(func() {
 		for _, item := range []struct{ label, key string }{{"总 Tokens", "total_tokens"}, {"输入 Tokens", "input_tokens"}, {"输出 Tokens", "output_tokens"}, {"总任务数 (Runs)", "run_count"}} {
-			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(8).Padding(12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() { a.note(c, item.label); ui.Text(c, formatCount(total[item.key])).FontSize(20).Bold() })
+			ui.Column(c).Grow(1).Basis(0).MinWidth(0).Gap(8).Padding(12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Radius(8).Children(func() { a.note(c, item.label); ui.Text(c, format(total[item.key])).FontSize(20).Bold() })
 		}
 	})
 	child := object(total["subagent_usage"])
-	a.note(c, "其中子 Agent · 输入 "+formatCount(child["input_tokens"])+" · 输出 "+formatCount(child["output_tokens"]))
+	a.note(c, "其中子 Agent · 输入 "+format(child["input_tokens"])+" · 输出 "+format(child["output_tokens"]))
 	a.heading(c, "会话用量排行")
 	for _, raw := range list(m["sessions"]) {
 		row := object(raw)
@@ -830,7 +839,7 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 	a.action(c, "请求系统权限").AlignSelf(ui.Start).Disabled(!a.Settings.host().Local || !boolean(m["available"]) || l.Loading["permissions"]).OnClick(func() {
 		a.operation("permissions", "POST", "/computer/permissions", map[string]any{}, func(any) { a.loadSettingsPage() })
 	})
-	a.action(c, "清除应用审计记录").AlignSelf(ui.Start).OnClick(func() {
+	a.danger(c, "清除应用审计记录").AlignSelf(ui.Start).OnClick(func() {
 		l.Confirm = &nativeConfirmation{"清除应用审计记录？", "仅清除审批记录，不会撤销系统权限。", func() {
 			a.operation("computer-save", "POST", "/computer/settings", map[string]any{"clear_approved_apps": true}, func(v any) { l.Data["computer"] = v })
 		}}
@@ -850,6 +859,9 @@ func (a *preview) liveCapabilitySettings(c *ui.Context) {
 			for _, t := range tabs {
 				selected := s.CapabilityTab == t.id
 				btn := flatButton(c, "", a.tr(t.label)).Padding(7, 12).Selected(selected).OnClick(func() {
+					if s.CapabilityTab != t.id {
+						a.Settings.Notice, a.Settings.Error = "", ""
+					}
 					s.CapabilityTab = t.id
 					if t.id == "market" {
 						a.openSkillMarket()
