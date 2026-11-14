@@ -546,11 +546,18 @@ func (a *preview) modelSettings(c *ui.Context) {
 	if s.Mode == SettingCopyCmdlineMode {
 		a.note(c, SettingCopyCmdlineNote)
 	} else {
-		if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic"}).Changed() {
+		if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic", SettingCopyZhipuProvider}).Changed() {
 			s.APIKey = ""
 			s.Checked = false
 		}
-		if a.input(c, "服务地址", &s.BaseURL, "http://localhost:4001", false).Changed() {
+		placeholder := "http://localhost:4001"
+		switch s.Provider {
+		case "Anthropic":
+			placeholder = "https://api.anthropic.com"
+		case SettingCopyZhipuProvider:
+			placeholder = SettingCopyZhipuBaseURL
+		}
+		if a.input(c, "服务地址", &s.BaseURL, placeholder, false).Changed() {
 			s.Checked = false
 			s.Notice = ""
 			s.Error = ""

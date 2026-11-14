@@ -31,7 +31,14 @@ const (
 	SettingCopyDesktopMode       = "在桌面客户端配置"
 	SettingCopyEasyCodeMode      = "EasyCode 飞书登录"
 	SettingCopyCmdlineNote       = "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。"
+	SettingCopyZhipuProvider     = "智谱 GLM Coding Plan"
+	SettingCopyZhipuBaseURL      = "https://open.bigmodel.cn/api/coding/paas/v4"
+	SettingCopyZhipuModelNote    = "Coding Plan 端点不提供模型目录，检测连接不可用；直接从常用模型选择或手动填写模型 ID。国际版把地址域名换成 api.z.ai。"
 )
+
+// zhipuModelPresets 是智谱 GLM Coding Plan 的常用模型；coding 端点没有
+// /models 目录，设置页用它替代「检测到的模型」列表。
+var zhipuModelPresets = []string{"glm-5.3", "glm-5.3-flash", "glm-4.7", "glm-4.6"}
 
 // Effect badges the page with when its changes take effect: 立即生效,
 // 新会话生效 or 需重启核心; empty pages are informational only.

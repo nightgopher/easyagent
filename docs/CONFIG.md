@@ -23,6 +23,17 @@ EA_API_KEY=your-api-key
 
 应显式填写自己的模型与地址。`EA_MODEL`、`EA_BASE_URL`、`EA_API_KEY` 分别优先于 `OPENAI_MODEL`、`OPENAI_BASE_URL`、`OPENAI_API_KEY`。
 
+智谱 GLM Coding Plan（订阅额度）走同一 OpenAI 兼容通道，地址带版本段时不再叠加 `/v1`：
+
+```dotenv
+EA_PROVIDER=openai
+EA_BASE_URL=https://open.bigmodel.cn/api/coding/paas/v4
+EA_MODEL=glm-5.3
+EA_API_KEY=your-coding-plan-key
+```
+
+国际版把地址域名换成 `https://api.z.ai/api/coding/paas/v4`。思考开关用 `EA_THINKING=enabled/disabled`（GLM 会随工具调用轮次自动回放 reasoning_content）；Coding Plan 端点不提供 `/models` 模型目录，模型 ID 需显式填写。桌面端「设置 → 模型连接」内置同名选项。
+
 Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
 
 EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 运行 `easyagent easycode login` 完成飞书授权后，会选择账号可用模型并作为后续 CLI 对话的默认模型；可用 `easyagent easycode models` 查看模型，`easyagent easycode use <模型 ID>` 切换，或首次登录时使用 `easyagent easycode login --model <模型 ID>` 指定。`easyagent easycode status` 查询状态，`easyagent easycode off` 停用 CLI 的 EasyCode 模式并恢复原配置（保留登录），`easyagent easycode logout` 退出账号。模型目录暂不可用时登录仍会保存，可稍后列出并选择模型。

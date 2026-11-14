@@ -303,3 +303,35 @@ func TestDefaultModelMenuScrollAndKeyboard(t *testing.T) {
 		})
 	}
 }
+
+// TestZhipuCodingCandidateMapsToOpenAIChannel：设置页选「智谱 GLM Coding Plan」
+// 复用 openai provider 通道，/v4 端点地址原样保留（不被剥尾 /v1 影响）。
+func TestZhipuCodingCandidateMapsToOpenAIChannel(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Settings.Mode, a.Settings.Provider = "在桌面客户端配置", SettingCopyZhipuProvider
+	a.Settings.BaseURL, a.Settings.Model = SettingCopyZhipuBaseURL, "glm-5.3"
+	cfg, _, err := a.modelCandidate()
+	if err != nil {
+		t.Fatal("zhipu candidate rejected:", err)
+	}
+	if cfg.Provider != "openai" {
+		t.Fatal("zhipu provider label must map to the openai channel:", cfg.Provider)
+	}
+	if cfg.BaseURL != SettingCopyZhipuBaseURL {
+		t.Fatal("coding endpoint URL must be preserved:", cfg.BaseURL)
+	}
+}
+
+// TestExpectedModelFormZhipuBackfill：保存的智谱配置按地址特征回填下拉标签，
+// 往返稳定；普通网关地址仍回填通用标签。
+func TestExpectedModelFormZhipuBackfill(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: SettingCopyZhipuBaseURL, Model: "glm-5.3", HasKey: true}
+	if f := a.expectedModelForm(); f.Provider != SettingCopyZhipuProvider || f.BaseURL != SettingCopyZhipuBaseURL {
+		t.Fatal("zhipu saved config must backfill the zhipu label:", f.Provider, f.BaseURL)
+	}
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: "http://localhost:4001", Model: "coding", HasKey: true}
+	if f := a.expectedModelForm(); f.Provider != "OpenAI 兼容服务 / 网关" {
+		t.Fatal("plain gateway config must keep the generic label:", f.Provider)
+	}
+}

@@ -185,6 +185,10 @@ func (a *preview) expectedModelForm() modelForm {
 	if m.Provider == "anthropic" {
 		f.Provider = "Anthropic"
 	}
+	// 智谱 coding 端点复用 openai 通道，凭地址特征回填下拉标签，保持往返与 dirty 对比稳定
+	if strings.Contains(m.BaseURL, "coding/paas/") {
+		f.Provider = SettingCopyZhipuProvider
+	}
 	if f.ReasoningEffort == "" {
 		f.ReasoningEffort = "沿用模型默认"
 	}
