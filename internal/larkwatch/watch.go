@@ -319,12 +319,22 @@ func buildPrompt(items []sighting, total int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "【飞书看门狗】发现 %d 条新消息：\n", total)
 	for _, s := range items {
+		chatLabel := s.chat.Name
+		if chatLabel == "" {
+			chatLabel = s.chat.ChatID
+		}
 		for _, m := range s.msgs {
-			content := m.Content
-			if !m.IsText || content == "" {
-				content = "[非文本消息]"
+			// 富文本（post）等类型经 lark-cli 已解析出可读文字，直接携带；
+			// 仅当确实没有文字内容（图片/文件等）时标注消息类型。
+			content := strings.TrimSpace(m.Content)
+			if content == "" {
+				kind := m.MsgType
+				if kind == "" {
+					kind = "unknown"
+				}
+				content = "[" + kind + " 消息，无文字内容]"
 			}
-			fmt.Fprintf(&b, "- %s（%s）：%s\n", senderLabel(m), m.Time, content)
+			fmt.Fprintf(&b, "- %s（%s，来自会话「%s」）：%s\n", senderLabel(m), m.Time, chatLabel, content)
 		}
 	}
 	b.WriteString("\n请按 butler-rules 铁律处理：先判断是否需要回复；能直接回的以我的身份直接回复；涉及承诺、钱、合同、人事或拿不准的，先把拟稿发给我确认。完成后给出一句话处理摘要。")

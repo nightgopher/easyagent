@@ -4,7 +4,17 @@
 
 ## [Unreleased]
 
-## [v0.46.3] - 2026-11-13
+## [v0.46.5] - 2026-11-13
+
+### Fixed
+- 看门狗唤醒提示携带消息实质内容与会话名：富文本（post）等非纯文本类型此前一律显示为「[非文本消息]」，管家拿不到实质内容只能转人工；现在只要有可读文字就直接携带（lark-cli 已解析），无文字的才标注消息类型，并注明消息来自哪个会话。实测：李佩琪的富文本工作消息（赛豆额度治理 PRD 推进建议）此前触发「[非文本消息]」转人工，修复后管家可直接阅读处理。
+
+## [v0.46.4] - 2026-11-13
+
+### Fixed
+- 修复桌面看门狗注入被核心拒绝的问题：看门狗以 `channel: "larkwatch"` 经 POST /chat 投递任务，而核心的渠道白名单只接受 `feishu`，导致每次注入都返回 400 invalid_channel——看门狗看似在轮询、位点推进但管家永远不被唤醒（v0.46.2 引入）。白名单现接受 `larkwatch` 渠道。
+
+### Added## [v0.46.3] - 2026-11-13
 
 ### Fixed
 - 修复桌面看门狗在 GUI 启动的进程里找不到 Node 运行时的问题：lark-cli 是 Node 程序（shebang `#!/usr/bin/env node`），而 GUI 进程的 PATH 没有 Homebrew/nvm 的安装目录，导致 `contact +get-user` 直接报 `env: node: No such file or directory`。现在解析 node 所在目录（PATH → Homebrew → /usr/local/bin → nvm）一并注入看门狗子进程 PATH。
