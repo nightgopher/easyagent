@@ -113,7 +113,11 @@ func main() {
 	// No subcommand starts the interactive TUI. Prompt flags preserve the
 	// one-shot behavior for `easyagent -p ...` and `easyagent --prompt ...`.
 	args := os.Args[1:]
-	modeFlag := flag.String("mode", inferredDefaultMode(args), "run, chat, interactive, or serve (default: chat; prompt flags select run)")
+	if hint := removedSubcommandHint(args); hint != "" {
+		fmt.Fprintln(os.Stderr, hint)
+		os.Exit(2)
+	}
+	modeFlag := flag.String("mode", inferredDefaultMode(args), "run, chat, or serve (default: chat; prompt flags select run)")
 	listen := flag.String("listen", fmt.Sprintf("%s:%d", cfg.Host, cfg.Port), "HTTP listen address")
 	input := "hello"
 	flag.StringVar(&input, "prompt", input, "prompt for run mode")
@@ -121,22 +125,25 @@ func main() {
 	sessionFlag := flag.String("session", "", "session ID (empty = new session)")
 	skillDir := flag.String("skill-dir", "", "directory containing skills (SKILL.md files)")
 	legacyTUI := flag.Bool("legacy", false, "Use legacy linear CLI instead of Bubble Tea TUI")
-	flag.BoolVar(&cfg.AllowOutsideWorkspace, "allow-outside-workspace", cfg.AllowOutsideWorkspace, "Allow file tools outside workspace (independent of -y; OS permissions still apply)")
+	flag.BoolVar(&cfg.AllowOutsideWorkspace, "allow-outside-workspace", cfg.AllowOutsideWorkspace, "Allow file tools outside workspace (default true with -y; pass =false to keep the restriction; OS permissions still apply)")
 	flag.StringVar(&cfg.MCPConfigPath, "mcp-config", cfg.MCPConfigPath, "MCP user config path (default ~/.easyagent/mcp.json)")
 	flag.StringVar(&cfg.ToolSearch, "tool-search", cfg.ToolSearch, "tool definitions: off (all) or local (on-demand)")
 	flag.BoolVar(&cfg.EnableWeb, "web", cfg.EnableWeb, "Enable web page fetching (use --web=false to disable)")
 	flag.BoolVar(&cfg.EnableWebSearch, "web-search", cfg.EnableWebSearch, "Enable web search (use --web-search=false to disable)")
-	yolo := flag.Bool("y", false, "全权模式：初始跳过危险工具确认（会话内 /confirm on|off 随时切换）")
+	yolo := flag.Bool("y", false, "完全权限模式：自动批准工具调用并解除工作区路径限制（会话内 /confirm on 恢复询问；--allow-outside-workspace=false 可单独收回路径放开）")
 	if mode := modeForSubcommand(args); mode != "" {
 		os.Args = append([]string{os.Args[0], "--mode", mode}, args[1:]...)
 	}
 	flag.Parse()
+	outsideWorkspaceExplicit := false
 	flag.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "web":
 			cfg.MarkBuiltinToolCommandLine("web_fetch")
 		case "web-search":
 			cfg.MarkBuiltinToolCommandLine("web_search")
+		case "allow-outside-workspace":
+			outsideWorkspaceExplicit = true
 		}
 	})
 	if err := applyEasyCodeCLISelection(context.Background(), &cfg, config.HomeDir(), *modeFlag, explicitProvider, explicitModel); err != nil {
@@ -148,10 +155,9 @@ func main() {
 		cfg.Host = host
 	}
 
-	// -y 全权模式：等价 auto_approve: true，仅决定初始状态（/confirm 可切）
-	if *yolo {
-		cfg.AutoApprove = true
-	}
+	// -y 完全权限模式：自动批准工具调用；未显式指定路径策略时一并解除工作区
+	// 路径限制。ask_user / computer 的强制交互不受影响（/confirm 可切确认）。
+	applyYoloMode(&cfg, *yolo, outsideWorkspaceExplicit)
 
 	// UI modes route diagnostics to a log file so log output cannot corrupt
 	// the full-screen TUI; other modes keep stderr logging.
@@ -262,14 +268,41 @@ func modeForSubcommand(args []string) string {
 		return ""
 	}
 	switch args[0] {
-	case "chat", "interactive":
-		return "chat"
 	case "serve", "server":
 		return "serve"
 	case "run":
 		return "run"
 	default:
 		return ""
+	}
+}
+
+// removedSubcommandNotice is shown when the removed chat/interactive
+// subcommands are used, teaching the simplified invocation model.
+const removedSubcommandNotice = "easyagent chat 已移除：直接运行 easyagent 进入对话（每次询问）；easyagent -y 为完全权限模式（自动批准 + 解除路径限制）。"
+
+// removedSubcommandHint returns the removal notice for subcommands that used
+// to alias the interactive TUI; "" means the argument list is unaffected.
+// The bare command already opens the same TUI and -y selects full-permission
+// mode, so failing loudly corrects the habit instead of silently working.
+func removedSubcommandHint(args []string) string {
+	if len(args) > 0 && (args[0] == "chat" || args[0] == "interactive") {
+		return removedSubcommandNotice
+	}
+	return ""
+}
+
+// applyYoloMode implements the -y flag contract: full-permission mode auto-
+// approves tool calls and, unless --allow-outside-workspace was passed
+// explicitly, lifts the workspace path restriction of the eight file tools.
+// Forced-confirmation tools (ask_user, computer) still prompt by design.
+func applyYoloMode(cfg *config.Config, yolo, outsideWorkspaceExplicit bool) {
+	if !yolo {
+		return
+	}
+	cfg.AutoApprove = true
+	if !outsideWorkspaceExplicit {
+		cfg.AllowOutsideWorkspace = true
 	}
 }
 

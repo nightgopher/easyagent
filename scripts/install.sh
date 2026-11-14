@@ -322,7 +322,7 @@ if [ "$PATH_CONFIGURED" = false ]; then
     echo ""
 fi
 echo -e "  ${BOLD}启动交互式 TUI:${NC}"
-echo -e "     ${GREEN}easyagent chat${NC}"
+echo -e "     ${GREEN}easyagent${NC}       # 每次询问；-y 为完全权限模式"
 echo ""
 echo -e "  ${BOLD}单次提问:${NC}"
 echo -e "     ${GREEN}easyagent run -p \"你好\"${NC}"

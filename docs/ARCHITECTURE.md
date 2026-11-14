@@ -46,6 +46,6 @@ EasyAgent 由 Go Agent 核心、运行时、应用与入口组成。桌面、And
 
 ## 权限与部署边界
 
-HTTP API 认证、飞书使用者配对、工具确认、文件路径限制是不同机制。`-y` 不解除工作区限制；`--allow-outside-workspace` 也不跳过认证。Bash 和 SSH 按运行账号的系统权限执行，文件工具的路径检查不是 OS 沙箱。
+HTTP API 认证、飞书使用者配对、工具确认、文件路径限制是不同机制。`-y` 同时跳过工具确认并解除工作区路径限制（`--allow-outside-workspace=false` 可单独收回路径）；`--allow-outside-workspace` 不跳过认证。Bash 和 SSH 按运行账号的系统权限执行，文件工具的路径检查不是 OS 沙箱。
 
 Web 静态资源嵌入 Go 程序；桌面本地模式管理独立 loopback 核心与令牌，远程模式通过主进程代理。迷你主机运行核心服务、飞书桥接和更新 timer，Mac 用于开发预览与本地任务；发布按 main 的确定 SHA 构建并验证，配置与会话数据独立保留。详见 [配置](CONFIG.md)、[MCP](MCP.md)、[桌面](DESKTOP.md)、[飞书](FEISHU.md) 和 [部署](MINI_DEPLOY.md)。

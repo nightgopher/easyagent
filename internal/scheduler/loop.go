@@ -38,7 +38,7 @@ func (lc *LoopContext) Remaining() time.Duration {
 type TriggerFunc func(ctx context.Context, prompt string) error
 
 // ErrNoTrigger prevents entrypoints without prompt dispatch from accepting loops.
-var ErrNoTrigger = errors.New("/loop is not supported in this interface; use easyagent chat without --legacy, or serve")
+var ErrNoTrigger = errors.New("/loop is not supported in this interface; use easyagent without --legacy, or serve")
 
 // TriggerResolver resolves a sessionID to a TriggerFunc.
 // The entrypoint sets this so loops can inject prompts into the right session.

@@ -124,7 +124,7 @@ JSONL append-only（`sdk/session/jsonl.go`）：message/compaction/checkpoint �
 go build -o easyagent ./cmd/easyagent        # 构建
 go test ./...                               # 全量测试
 go test ./sdk/tools/ -v                # 单包测试
-./easyagent chat                             # 交互式
+./easyagent                                  # 交互式（-y 完全权限模式）
 ./easyagent serve --listen :8080             # HTTP 服务
 ```
 
