@@ -188,6 +188,13 @@ func (s *session) history(records []storedMessage) {
 				tool := &message{Tool: call.Name, CallID: call.ID, Args: args, Text: displayText(args), Kind: "tool", EntryID: m.EntryID, Status: "未完成"}
 				tools[call.ID] = tool
 				s.Messages = append(s.Messages, tool)
+				// send_message 的播报正文只保留在 tool_calls 的 args 里；历史重载时
+				// 补一条独立气泡，与运行时投影一致（TUI 不做此重导，属桌面有意差异）。
+				if call.Name == "send_message" {
+					if body := strings.TrimSpace(str(object(args)["message"])); body != "" {
+						s.Messages = append(s.Messages, &message{Kind: "broadcast", CallID: call.ID, Text: body})
+					}
+				}
 			}
 		case "tool":
 			if tool := tools[m.ToolID]; tool != nil {
@@ -268,7 +275,7 @@ func (s *session) event(e agentEvent) {
 		args := toolArguments(e.Args)
 		s.Messages = append(s.Messages, &message{Tool: e.ToolName, CallID: e.ToolID, RunID: s.runID(), Kind: "tool", Status: "执行中", Args: args, Text: displayText(args)})
 	case "tool_update", "tool_end":
-		for _, m := range s.Messages {
+		for i, m := range s.Messages {
 			if m.CallID == e.ToolID && m.RunID == s.runID() {
 				result := e.Partial
 				if e.Type == "tool_end" {
@@ -292,6 +299,16 @@ func (s *session) event(e agentEvent) {
 				}
 				if e.Details != nil {
 					m.Details = e.Details
+				}
+				// send_message 主动播报：正文作为独立气泡紧贴工具行上屏（与 TUI
+				// 行为一致）；CallID 去重防止 snapshot 回放叠加。
+				if e.Type == "tool_end" && m.Tool == "send_message" && !e.Error {
+					if body := displayText(result); body != "" && !s.hasBroadcast(e.ToolID) {
+						rest := make([]*message, 0, len(s.Messages)-i)
+						rest = append(rest, &message{Kind: "broadcast", CallID: e.ToolID, RunID: s.runID(), Text: body})
+						rest = append(rest, s.Messages[i+1:]...)
+						s.Messages = append(s.Messages[:i+1], rest...)
+					}
 				}
 				return
 			}
@@ -535,6 +552,17 @@ func (s *session) removeWaiting() {
 		kept = append(kept, m)
 	}
 	s.Messages = kept
+}
+
+// hasBroadcast reports whether a send_message broadcast bubble for the given
+// tool call is already on screen; guards against snapshot replay double-insert.
+func (s *session) hasBroadcast(callID string) bool {
+	for _, m := range s.Messages {
+		if m.Kind == "broadcast" && m.CallID == callID {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *session) syncAnchors(records []storedMessage) {
