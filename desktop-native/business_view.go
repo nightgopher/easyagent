@@ -463,7 +463,7 @@ func (a *preview) agentMemorySettings(c *ui.Context) {
 			ui.Row(c).Wrap().Gap(8).Children(func() {
 				a.action(c, "修正").Label("修正记忆：" + m.Key).Disabled(!enabled).OnClick(func() { a.editAgentMemory(m) })
 				a.action(c, "整理为知识").Label("整理记忆：" + m.Key).OnClick(func() { a.prepareMemoryPublication(m) })
-				a.action(c, "删除").Label("删除记忆：" + m.Key).Disabled(a.Live.Loading["business-save"]).OnClick(func() { a.deleteAgentMemory(m) })
+				a.danger(c, "删除").Label("删除记忆：" + m.Key).Disabled(a.Live.Loading["business-save"]).OnClick(func() { a.deleteAgentMemory(m) })
 			})
 		})
 	}

@@ -591,7 +591,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			a.action(c, label).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
 			if !h.Local {
 				a.action(c, "编辑").OnClick(func() { s.hostForm = hostForm{EditHost: h.ID, HostName: h.Name, HostURL: h.URL} })
-				a.action(c, "移除").OnClick(func() {
+				a.danger(c, "移除").OnClick(func() {
 					l.Confirm = &nativeConfirmation{"移除主机连接？", h.Name + "；不会删除主机上的会话或文件。", func() { a.removeLiveHost(index) }}
 				})
 			}
@@ -839,7 +839,7 @@ func (a *preview) liveComputerSettings(c *ui.Context) {
 	a.action(c, "请求系统权限").AlignSelf(ui.Start).Disabled(!a.Settings.host().Local || !boolean(m["available"]) || l.Loading["permissions"]).OnClick(func() {
 		a.operation("permissions", "POST", "/computer/permissions", map[string]any{}, func(any) { a.loadSettingsPage() })
 	})
-	a.action(c, "清除应用审计记录").AlignSelf(ui.Start).OnClick(func() {
+	a.danger(c, "清除应用审计记录").AlignSelf(ui.Start).OnClick(func() {
 		l.Confirm = &nativeConfirmation{"清除应用审计记录？", "仅清除审批记录，不会撤销系统权限。", func() {
 			a.operation("computer-save", "POST", "/computer/settings", map[string]any{"clear_approved_apps": true}, func(v any) { l.Data["computer"] = v })
 		}}
