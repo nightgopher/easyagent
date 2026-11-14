@@ -129,7 +129,7 @@ func TestExpertMarketInstallExpert(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"template_id":"fullstack"`)
 
 	// Re-install produces a fresh agent id.
-	var first string = out.Agents[0].ID
+	first := out.Agents[0].ID
 	w = businessRequest(t, s, "POST", "/experts/market/install",
 		map[string]any{"id": "fullstack", "kind": "expert"}, 200)
 	require.NotContains(t, w.Body.String(), first)
