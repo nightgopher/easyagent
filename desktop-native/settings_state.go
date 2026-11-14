@@ -174,6 +174,13 @@ func (a *preview) openSettings(tab string) {
 			a.Settings.CapabilityTab = "mine"
 		}
 	}
+	if tab == "agents" {
+		// Opening the page from settings search for "专家市场" lands on the market tab.
+		if s := strings.ToLower(a.Settings.Search); strings.Contains(s, "专家市场") {
+			a.Settings.Business.ExpertTab = "market"
+			a.Settings.Business.ExpertQuery, a.Settings.Business.ExpertKind, a.Settings.Business.ExpertCategory, a.Settings.Business.ExpertDetail, a.Settings.Business.ExpertHint = "", "", "", "", ""
+		}
+	}
 	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
 		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
 			a.discardSettingsForms()
@@ -246,11 +253,36 @@ func settingsPageMatches(p settingsPage, search string) bool {
 		return true
 	}
 	text := strings.ToLower(p.Label + p.Description + p.ID)
-	if p.ID == "capabilities" {
+	// Extra aliases so common synonyms reach the right page from settings search.
+	switch p.ID {
+	case "capabilities":
 		text += " 技能市场 市场 market 安装技能"
-	}
-	if p.ID == "appearance" {
+	case "agents":
+		text += " 专家市场 market 安装专家 专家团模板"
+	case "appearance":
 		text += " 背景 壁纸 图片 模糊 wallpaper background blur"
+	case "general":
+		text += " 语言 快捷键 版本 更新 language shortcuts"
+	case "usage":
+		text += " token 消耗 统计 排行"
+	case "connections":
+		text += " 远程主机 添加主机 host remote"
+	case "remote-access":
+		text += " 手机 配对 中继 pair relay"
+	case "models":
+		text += " api key 供应商 provider 模型服务 网关 codex"
+	case "permissions":
+		text += " 审批 批准 自动执行 approval"
+	case "mcp":
+		text += " 工具服务 stdio sse 扩展"
+	case "experiments":
+		text += " 屏幕 操控 computer use 桌面控制"
+	case "feishu":
+		text += " 机器人 lark 桥接 扫码"
+	case "teams":
+		text += " 团队 协作 委派"
+	case "memory-knowledge":
+		text += " 知识库 记忆 检索 来源"
 	}
 	return strings.Contains(text, search)
 }

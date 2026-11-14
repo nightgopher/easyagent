@@ -284,6 +284,9 @@ func (s *Server) Handler() http.Handler {
 	// Skill marketplace endpoints (no-op when disabled)
 	s.registerSkillMarketRoutes(restMux)
 
+	// Expert market endpoints (no-op when disabled)
+	s.registerExpertMarketRoutes(restMux)
+
 	// User profile endpoints
 	s.registerProfileRoutes(restMux)
 
@@ -344,6 +347,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/skills/local", restHandler)
 	topMux.Handle("/skills/market", restHandler)
 	topMux.Handle("/skills/market/", restHandler)
+	topMux.Handle("/experts", restHandler)
+	topMux.Handle("/experts/", restHandler)
 	topMux.Handle("/inbox", restHandler)
 	topMux.Handle("/profile", restHandler)
 	topMux.Handle("/settings/", restHandler)

@@ -154,7 +154,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 								}
 								a.action(c, "退出授权").Disabled(l.Loading["mcp-action"]).OnClick(func() { a.operation("mcp-action", "POST", path+"/logout"+params, map[string]any{}, apply) })
 							}
-							a.action(c, "删除").Disabled(l.Loading["mcp-action"]).TextColor(c.Theme().Danger).OnClick(func() {
+							a.danger(c, "删除").Disabled(l.Loading["mcp-action"]).OnClick(func() {
 								l.Confirm = &nativeConfirmation{"删除 MCP 服务？", name + " · " + scope + " · " + workspace, func() { a.operation("mcp-action", "DELETE", path+params, nil, apply) }}
 							})
 						})

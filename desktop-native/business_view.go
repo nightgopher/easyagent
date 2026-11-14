@@ -62,6 +62,33 @@ func (a *preview) businessSettings(c *ui.Context) {
 		a.businessAgentEditor(c)
 		return
 	}
+	ui.Row(c).Gap(4).Children(func() {
+		for _, tab := range []businessChoice{{"mine", "我的 Agent"}, {"market", "专家市场"}} {
+			selected := (s.ExpertTab == "" && tab.ID == "mine") || s.ExpertTab == tab.ID
+			btn := a.action(c, tab.Label)
+			if selected {
+				btn.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+			}
+			btn.OnClick(func() {
+				a.businessNavigate(func() {
+					s.closeEditors()
+					if s.ExpertTab == tab.ID {
+						return
+					}
+					s.ExpertTab = tab.ID
+					s.ExpertDetail, s.ExpertHint = "", ""
+					a.Settings.Notice, a.Settings.Error = "", ""
+					if tab.ID == "market" {
+						a.loadExpertMarket()
+					}
+				})
+			})
+		}
+	})
+	if s.ExpertTab == "market" {
+		a.expertMarketView(c)
+		return
+	}
 	ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &s.AgentQuery).Label("搜索业务 Agent").Placeholder("搜索名称或角色说明…").Grow(1).Basis(180).MinWidth(0)
 		a.primary(c, "创建 Agent").Disabled(!a.Live.Connected).OnClick(func() { a.editBusinessAgent(nativeBusinessAgent{}) })
@@ -230,6 +257,9 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 			btn.OnClick(func() {
 				a.businessNavigate(func() {
 					s.closeEditors()
+					if s.Tab != tab.ID {
+						a.Settings.Notice, a.Settings.Error = "", ""
+					}
 					s.Tab = tab.ID
 					if tab.ID == "memories" {
 						if s.MemoryAgentID == "" {
@@ -265,7 +295,14 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 	if a.resourceFeedback(c, "knowledge-sources", a.refreshBusiness) {
 		return
 	}
-	for _, v := range a.knowledgeSources() {
+	sources := a.knowledgeSources()
+	if len(sources) == 0 {
+		a.heading(c, "添加一个知识来源")
+		a.note(c, "把主机上的一个目录作为知识库，Agent 绑定后可以检索其中的 Markdown 文档；原文始终保留在原处。")
+		a.action(c, "了解绑定方式").AlignSelf(ui.Start).OnClick(func() { a.openSettings("agents") })
+		return
+	}
+	for _, v := range sources {
 		ui.Column(c.Key(v.ID)).Label("知识来源："+v.Name).Padding(16, 0).Gap(8).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 			ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, v.Name).FontSize(15).FontWeight(600).Grow(1).MinWidth(0)
@@ -426,7 +463,7 @@ func (a *preview) agentMemorySettings(c *ui.Context) {
 			ui.Row(c).Wrap().Gap(8).Children(func() {
 				a.action(c, "修正").Label("修正记忆：" + m.Key).Disabled(!enabled).OnClick(func() { a.editAgentMemory(m) })
 				a.action(c, "整理为知识").Label("整理记忆：" + m.Key).OnClick(func() { a.prepareMemoryPublication(m) })
-				a.action(c, "删除").Label("删除记忆：" + m.Key).Disabled(a.Live.Loading["business-save"]).OnClick(func() { a.deleteAgentMemory(m) })
+				a.danger(c, "删除").Label("删除记忆：" + m.Key).Disabled(a.Live.Loading["business-save"]).OnClick(func() { a.deleteAgentMemory(m) })
 			})
 		})
 	}

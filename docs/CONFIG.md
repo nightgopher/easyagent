@@ -129,6 +129,7 @@ tool_search: local
 | `EA_MCP_CONFIG` / `--mcp-config` / YAML `mcp_config` | 用户 MCP 配置文件，默认 `EA_HOME/mcp.json`；项目文件与授权见 [MCP](MCP.md) |
 | `EA_KB_REPO_PATH` | 知识库目录；未设置时运行入口使用 `~/agent-lessons` |
 | `EA_SKILL_MARKET`、`EA_SKILL_MARKET_BASE_URL`、`EA_SKILL_MARKET_SKILL_DIR` | 技能市场（EasyCode 官方 skill store）；默认开启，`EA_SKILL_MARKET=0` 关闭。安装到 `EA_SKILL_MARKET_SKILL_DIR`（默认 `~/.agents/skills`），下一轮或新会话生效，见 [技能市场](SKILL_MARKET.md) |
+| `EA_EXPERT_MARKET`、`EA_EXPERT_MARKET_BASE_URL` | 专家市场（同一商城的专家/专家团模板目录，源为 easycode-skills-workspace 的 `catalog/expert-templates.json`）；默认开启，`EA_EXPERT_MARKET=0` 关闭且 REST 端点 `/experts/market/*` 不注册。YAML 对应 `expert_market_base_url`。桌面端「业务 Agent → 专家市场」浏览与一键安装，安装即写入业务 Agent/专家团，下次执行生效；模板绑定的技能缺失时在响应 `missing_skills` 中提示 |
 | `ASR_API_KEY`、`ASR_MODEL`、`ASR_BASE_URL` | 语音识别；未设置 ASR Key 时可回退到 SiliconFlow Key |
 | `EA_FEISHU_ENV_FILE`、`FEISHU_OWNER_STATE_FILE` | 托管飞书配置与配对状态，见 [飞书](FEISHU.md) |
 | `FEISHU_BUILTIN_APP_SECRET` | 预注册内置应用的浏览器授权流程所需密钥；原随源码发布的值已移除并轮换，只能通过环境变量提供 |

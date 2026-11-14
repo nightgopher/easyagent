@@ -522,7 +522,7 @@ func (a *preview) marketActions(c *ui.Context, skill map[string]any, installedVi
 			label = "卸载"
 		}
 		if installedView {
-			flatButton(c, "delete", "卸载").FontSize(12.5).Padding(6, 8).TextColor(c.Theme().TextMuted).Disabled(disabled).OnClick(func() { m.ConfirmName = name })
+			a.danger(c, "卸载").Label("卸载：" + name).FontSize(12.5).Disabled(disabled).OnClick(func() { m.ConfirmName = name })
 		} else {
 			iconButton(c, "delete", label).TextColor(c.Theme().TextMuted).Disabled(disabled).OnClick(func() { m.ConfirmName = name })
 		}
