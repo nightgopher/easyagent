@@ -22,6 +22,7 @@
 
 - [架构](ARCHITECTURE.md)：源码分层、数据流和公共 SDK。
 - [工具发现与按需加载](decisions/tool-discovery.md)：工具分层、本地搜索、会话恢复和 Skills 边界。
+- [常驻 Agent 原语](decisions/always-on-primitives.md)：收件箱、定时器、记忆、权限与发件箱的现状差距和分阶段计划（设计提案，未实施）。
 - [核心机制](INTERNALS.md)：工具生命周期、确认门、循环检测、双层压缩与事件流。
 - [贡献指南](CONTRIBUTING.md)：本地验证、PR、合并及分支清理。
 - [Worktree 开发指南](WORKTREES.md)：并行任务隔离、会话提交纪律与收尾清理。
