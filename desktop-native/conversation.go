@@ -67,6 +67,8 @@ func copyNativeConversation(s *session) string {
 			if m.Result != "" {
 				body += "\n" + m.Result
 			}
+		case m.Kind == "broadcast":
+			name = "Agent 播报"
 		case m.Kind != "":
 			name = m.Kind
 		}

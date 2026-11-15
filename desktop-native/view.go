@@ -617,6 +617,19 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 		ui.Text(key, m.Text).TextColor(c.Theme().Danger).FontSize(13).Role(ui.RoleStatus)
 	} else if m.Kind == "thought" {
 		a.nativeThought(key, s, i, m)
+	} else if m.Kind == "broadcast" {
+		ui.Column(key).Gap(6).MinWidth(0).Children(func() {
+			ui.Row(key).Gap(6).AlignItems(ui.Center).Children(func() {
+				icon(key, "comment")
+				ui.Text(key, "Agent 播报").FontSize(11).FontWeight(600).TextColor(c.Theme().Accent)
+			})
+			ui.Column(key).Padding(10, 14).Gap(4).MinWidth(0).Background(c.Theme().Accent.Alpha(.06)).Border(1, c.Theme().Accent.Alpha(.25)).Radius(10).Children(func() {
+				a.renderSessionMarkdown(key, &m.Markdown, m.Text, s, "", false)
+			})
+			messageActions(key, reveal, func() {
+				iconButton(key, "copy", "复制播报").OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制播报") })
+			})
+		})
 	} else if m.Tool != "" {
 		a.tool(key, m)
 	} else {
