@@ -48,6 +48,18 @@ HTTP 返回的 `run_id`、`run_state`、`run_error` 来自真实运行记录；`
 
 Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话后获得同样的会话内报告能力，仍遵守运行时工具允许/禁止列表。模型不能建立任务、改换归属、读取其他会话的任务或宣告用户已验收。报告须先读取版本，成果和完成说明应有可核验依据。
 
+## 定时任务
+
+定时任务归属一个业务 Agent（`agent_id`）或专家团（`team_id`），二者必选其一；保存在当前主机的 `agents/agents.sqlite`，服务重启后继续按计划执行，不会过期。会话内的 `/loop` 是另一套轻量机制，不受影响。
+
+- `POST /schedules`：`{"name":"每日巡检","prompt":"检查 CI 和新 issue","agent_id":"...","every":"2h"}` 或用 `"daily_at":"09:00"`（主机本地时间）代替 `every`，二者必选其一；`every` 介于 `5m` 与 `744h` 之间。返回 201。
+- `GET /schedules`、`GET /schedules/{id}`：返回定义及 `next_run_at`、`last_run`（`started_at`、`session_id`、`work_id`、`error`）和来自真实运行记录的 `run_state`。
+- `PUT /schedules/{id}`：提交完整定义和当前 `version`，冲突返回 409；保存后从当前时间重新计算下次执行。`disabled: true` 停止后续执行。
+- `DELETE /schedules/{id}`：删除定义，返回 204；已产生的会话和任务跟进保留。
+- `POST /schedules/{id}/run`：立即执行一次，不改变计划，返回 202 和本次 `last_run`；上一次运行仍在进行或等待审批时返回 409。
+
+每次执行都新建一个会话（专家团为负责人会话），并自动登记为[持续任务](#持续任务)，标题为「名称 · 月-日 时:分」。提示词末尾附加无人值守说明，要求 Agent 用 `work_report` 把结果报告为 `waiting_review`、`waiting_answer` 或 `blocked`，因此产出统一出现在任务跟进的待处理视图中。执行使用默认工具权限；需要审批的工具调用会停在审批，并在任务跟进中提示。同一定时任务不会重叠执行，到点时上一次仍未结束则跳过本次；服务停机期间错过的执行在恢复后只补一次。调度只在 `easyagent serve` 中运行。
+
 ## 个人管家与主机只读查询
 
 `POST /agents/steward`，请求体 `{}`，按需创建或返回 `agent-steward`。重复打开保留用户已编辑的说明、工具、记忆设置与版本；已停用返回 409，不自动重新启用。接口沿用主机认证。首次创建采用独立工作区和记忆，不绑定知识来源或写文件、Shell、委派工具。随后可通过普通业务 Agent API 编辑。

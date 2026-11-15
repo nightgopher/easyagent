@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Added
+- 持久化定时任务：新增 `/schedules` 接口，定时任务归属业务 Agent 或专家团，按 `every`（5m–744h）或 `daily_at`（主机本地时间）执行，保存在 `agents.sqlite`，服务重启后继续、不过期。每次执行新开会话并自动登记为任务跟进，Agent 用 `work_report` 把产出报告为待验收；同一定时任务不重叠执行，停机错过的执行只补一次；支持立即执行。会话内 `/loop` 不变。详见 docs/API.md「定时任务」与 docs/decisions/personal-command-center.md 第一阶段调整。
+
 ## [v0.47.0] - 2026-11-13
 
 ### Added

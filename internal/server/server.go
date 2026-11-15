@@ -40,6 +40,7 @@ type Server struct {
 	workspaceSnapshot func(string) (map[string]fileState, []string) // nil uses the default scanner
 	marketJobs        *marketJobRegistry
 	queueMu           sync.Mutex
+	scheduleMu        sync.Mutex // serializes schedule firings
 	queues            map[string]*messageQueue
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -227,6 +228,12 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /work", s.workItems)
 	restMux.HandleFunc("GET /work/{work}", s.workItems)
 	restMux.HandleFunc("PUT /work/{work}", s.workItems)
+	restMux.HandleFunc("GET /schedules", s.schedules)
+	restMux.HandleFunc("POST /schedules", s.schedules)
+	restMux.HandleFunc("GET /schedules/{schedule}", s.schedules)
+	restMux.HandleFunc("PUT /schedules/{schedule}", s.schedules)
+	restMux.HandleFunc("DELETE /schedules/{schedule}", s.schedules)
+	restMux.HandleFunc("POST /schedules/{schedule}/run", s.runScheduleNow)
 	restMux.HandleFunc("GET /knowledge/sources", s.knowledgeSources)
 	restMux.HandleFunc("POST /knowledge/sources", s.knowledgeSources)
 	restMux.HandleFunc("GET /knowledge/sources/{source}", s.knowledgeSources)
@@ -337,6 +344,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/applications", restHandler)
 	topMux.Handle("/work", restHandler)
 	topMux.Handle("/work/", restHandler)
+	topMux.Handle("/schedules", restHandler)
+	topMux.Handle("/schedules/", restHandler)
 	topMux.Handle("/agents", restHandler)
 	topMux.Handle("/agents/", restHandler)
 	topMux.Handle("/teams", restHandler)
