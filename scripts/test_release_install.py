@@ -104,13 +104,17 @@ pathlib.Path(args[args.index('-o')+1]).write_bytes(source.read_bytes())
         self.assertIn('pi-agent v1.2.3', (self.install / 'easyagent').read_text())
 
     def test_mirror_is_used_when_github_is_unreachable(self):
+        # 镜像自 v0.47.x 起 opt-in（内置默认镜像已失效，死镜像比诚实的
+        # GitHub 错误更糟）；配置 EA_MIRROR_REPO 后发现与下载都会回退。
         self.env.pop('EA_VERSION') # Discovery must also fall back.
         self.env['EA_TEST_BLOCK'] = 'github.com'
+        self.env['EA_MIRROR_REPO'] = 'fixture/mirror'
         result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
         self.assertTrue((self.install / 'easyagent-bridge').exists())
 
     def test_single_asset_falls_back_to_mirror_and_is_still_verified(self):
+        self.env['EA_MIRROR_REPO'] = 'fixture/mirror'
         self.env['EA_TEST_BLOCK'] = 'github.com/fixture/repo/releases/download/v1.2.3/easyagent-linux-amd64'
         result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
