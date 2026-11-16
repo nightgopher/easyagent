@@ -630,23 +630,79 @@ func (h *Handler) messageRequestID(messageID string) string {
 	return "feishu_" + hex.EncodeToString(sum[:])
 }
 
-// maybeDeliverBroadcast 在 tool_end SSE 事件中识别 send_message 工具，
-// 把消息正文作为独立聊天消息投递（卡片流式更新不受影响）。
+// maybeDeliverBroadcast 在 tool_end SSE 事件中识别 send_message / send_file
+// 工具：播报正文作为独立聊天消息投递，交付文件上传后以文件消息发送（卡片
+// 流式更新不受影响）。
 func (h *Handler) maybeDeliverBroadcast(ctx context.Context, chatKey, messageID, data string) {
 	var ev struct {
-		ToolName   string `json:"tool_name"`
-		ToolResult string `json:"tool_result"`
+		ToolName    string         `json:"tool_name"`
+		ToolResult  string         `json:"tool_result"`
+		ToolDetails map[string]any `json:"tool_details"`
 	}
-	if json.Unmarshal([]byte(data), &ev) != nil || ev.ToolName != "send_message" {
+	if json.Unmarshal([]byte(data), &ev) != nil || chatKey == "" || h.client == nil {
 		return
 	}
-	message := strings.TrimSpace(ev.ToolResult)
-	if message == "" || chatKey == "" || h.client == nil {
+	switch ev.ToolName {
+	case "send_message":
+		message := strings.TrimSpace(ev.ToolResult)
+		if message == "" {
+			return
+		}
+		if _, err := h.client.SendMarkdown(ctx, chatKey, message, messageID); err != nil {
+			slog.Warn("send_message delivery failed", "error", err)
+		}
+	case "send_file":
+		h.deliverSentFile(ctx, chatKey, ev.ToolDetails)
+	}
+}
+
+// deliverSentFile 上传 send_file 交付的文件并以文件消息发送。Details 里的
+// path 是工作区相对路径；解析到该会话的工作区下，越界或不存在时静默跳过
+// （工具已向 LLM 报错，这里不重复打扰用户）。
+func (h *Handler) deliverSentFile(ctx context.Context, chatKey string, details map[string]any) {
+	rel := strings.TrimSpace(strValue(details["path"]))
+	if rel == "" {
 		return
 	}
-	if _, err := h.client.SendMarkdown(ctx, chatKey, message, messageID); err != nil {
-		slog.Warn("send_message delivery failed", "error", err)
+	workspace := h.workspaceFor(chatKey)
+	resolved := rel
+	if workspace != "" && !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(workspace, resolved)
 	}
+	if workspace != "" && !strings.HasPrefix(filepath.Clean(resolved), filepath.Clean(workspace)) {
+		slog.Warn("send_file delivery skipped outside workspace", "path", rel)
+		return
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() {
+		slog.Warn("send_file delivery skipped", "path", resolved, "error", err)
+		return
+	}
+	if info.Size() > 30<<20 {
+		slog.Warn("send_file delivery skipped: too large", "path", resolved, "size", info.Size())
+		return
+	}
+	fileKey, err := h.client.UploadFile(ctx, resolved, filepath.Base(resolved))
+	if err != nil {
+		slog.Warn("send_file upload failed", "path", resolved, "error", err)
+		return
+	}
+	if _, err := h.client.SendFile(ctx, chatKey, fileKey); err != nil {
+		slog.Warn("send_file message failed", "error", err)
+		return
+	}
+	if caption := strings.TrimSpace(strValue(details["caption"])); caption != "" {
+		_, _ = h.client.SendMarkdown(ctx, chatKey, caption, "")
+	}
+	slog.Info("delivered send_file to feishu", "path", resolved, "chatID", chatKey)
+}
+
+// strValue 是 handler 内的 any→string 便捷转换（str 已在别处使用同名函数）。
+func strValue(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return ""
 }
 
 // chatKey/messageID 用于 send_message 工具的独立播报投递；可为空（不投递）。

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/egoist/mygo/ui"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -628,6 +629,41 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 			})
 			messageActions(key, reveal, func() {
 				iconButton(key, "copy", "复制播报").OnClick(func() { c.WriteClipboard(m.Text); c.Toast("已复制播报") })
+			})
+		})
+	} else if m.Kind == "file" {
+		details := object(m.Details)
+		path := str(details["path"])
+		name := str(details["name"])
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		sizeLabel := humanFileSize(details["size"])
+		if sizeLabel != "" {
+			sizeLabel = " · " + sizeLabel
+		}
+		caption := str(details["caption"])
+		ui.Column(key).Gap(6).MinWidth(0).Children(func() {
+			ui.Row(key).Gap(6).AlignItems(ui.Center).Children(func() {
+				icon(key, "file")
+				ui.Text(key, "交付文件").FontSize(11).FontWeight(600).TextColor(c.Theme().Accent)
+			})
+			ui.Column(key).Padding(10, 14).Gap(4).MinWidth(0).Background(c.Theme().Surface).Border(1, c.Theme().Accent.Alpha(.25)).Radius(10).Children(func() {
+				ui.Row(key).Gap(8).AlignItems(ui.Center).Children(func() {
+					icon(key, "file")
+					ui.Column(key).Gap(2).MinWidth(0).Children(func() {
+						ui.Text(key, name).FontSize(13).FontWeight(500)
+						meta := path + sizeLabel
+						if caption != "" {
+							meta += " — " + caption
+						}
+						ui.Text(key, meta).FontSize(11).TextColor(c.Theme().TextMuted).MaxLines(2)
+					})
+				})
+			})
+			messageActions(key, reveal, func() {
+				iconButton(key, "plus", "打开文件").OnClick(func() { a.openResource("files"); a.openNativeFile(path) })
+				iconButton(key, "copy", "复制路径").OnClick(func() { c.WriteClipboard(path); c.Toast("已复制路径") })
 			})
 		})
 	} else if m.Tool != "" {
