@@ -25,6 +25,33 @@ type feishuBridge struct {
 	running   bool
 	startedAt time.Time
 	lastError string
+	// relay 是当前一代桥接的看门狗转交入口；桥接未运行或该代已结束时为 nil。
+	relay    func(waitCtx context.Context, req feishu.RelayRequest) (feishu.RelayResult, error)
+	relayCtx context.Context
+}
+
+// attach 由桥接 runner 在 handler 就绪后调用，登记转交入口。ctx 是该代的
+// 生命周期：代结束后入口自动失效，旧代不会顶替新代。
+func (b *feishuBridge) attach(ctx context.Context, handler *feishu.Handler) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if ctx.Err() != nil {
+		return
+	}
+	b.relay = func(waitCtx context.Context, req feishu.RelayRequest) (feishu.RelayResult, error) {
+		return handler.StartRelay(ctx, waitCtx, req)
+	}
+	b.relayCtx = ctx
+}
+
+// relayer 返回当前可用的转交入口；桥接未运行时返回 nil。
+func (b *feishuBridge) relayer() func(context.Context, feishu.RelayRequest) (feishu.RelayResult, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.relay == nil || b.relayCtx == nil || b.relayCtx.Err() != nil {
+		return nil
+	}
+	return b.relay
 }
 
 func (b *feishuBridge) status() map[string]any {
@@ -81,12 +108,15 @@ func (s *Server) localBridgeRun() func(ctx context.Context, baseURL string) erro
 	if s.localBridgeRunner != nil {
 		return s.localBridgeRunner
 	}
-	return runFeishuBridgeLocal
+	return func(ctx context.Context, baseURL string) error {
+		return runFeishuBridgeLocal(ctx, baseURL, s.localBridge.attach)
+	}
 }
 
 // runFeishuBridgeLocal 与 cmd/easyagent-bridge 的组装保持一致：核心就是
 // serve 自己，长连接跑在进程内。启动失败（含凭据缺失）作为 error 返回。
-func runFeishuBridgeLocal(ctx context.Context, baseURL string) error {
+// attach 在 handler 就绪后登记看门狗转交入口，可为 nil。
+func runFeishuBridgeLocal(ctx context.Context, baseURL string, attach func(context.Context, *feishu.Handler)) error {
 	creds, _ := feishu.LoadCredentials()
 	if creds == nil || creds.AppID == "" || creds.AppSecret == "" {
 		return errors.New("未找到飞书凭据，请先完成扫码绑定")
@@ -112,6 +142,9 @@ func runFeishuBridgeLocal(ctx context.Context, baseURL string) error {
 	})
 	gateway.SetOwnerAccess(access)
 	gateway.SetCardActionHandler(handler.HandleCardAction)
+	if attach != nil {
+		attach(ctx, handler)
+	}
 
 	if callbackURL != "" {
 		if callbackAddr == "" {

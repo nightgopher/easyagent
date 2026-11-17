@@ -500,6 +500,7 @@ GET /health
 | POST | `/settings/feishu/qr/poll` | 使用 `device_code` 轮询注册结果，不自动保存凭据 |
 | POST | `/settings/feishu/qr/confirm` | 使用当前 `device_code` 确认保存已完成注册的凭据 |
 | POST | `/settings/feishu/bridge/restart` | 非托管主机启动/重启进程内桥接；systemd 托管主机返回 409 |
+| POST | `/feishu/relay` | 看门狗托付任务给进程内桥接：`{session_id, prompt, request_id?, title?, preview?}`，以 `larkwatch` 渠道运行并由扫码绑定的机器人发流式卡片；核心受理即返回 `{"status":"accepted"}`（会话忙转插话时为 `steered`）。桥接未在本进程运行返回 503 `bridge_unavailable`，未受理返回 409 `not_admitted` |
 | POST | `/asr/transcribe` | 上传音频并转写，需配置语音服务 |
 
 飞书管理接口要求服务令牌（`EA_SERVER_API_KEY`，兼容 `EA_API_KEY`）；systemd 托管模式还需要托管文件路径，非托管模式使用已保存本机凭据。扫码注册不用于托管主机。使用前参见 [飞书接入](FEISHU.md)。
