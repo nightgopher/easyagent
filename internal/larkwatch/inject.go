@@ -104,3 +104,40 @@ func (i *Injector) Steer(ctx context.Context, sessionID, prompt string) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 	return fmt.Errorf("post steer: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 }
+
+// ErrRelayUnavailable 表示核心进程内没有运行飞书桥接（或核心版本不支持转交）；
+// 调用方应退回旧的「/chat + lark-cli 转达」方式。
+var ErrRelayUnavailable = errors.New("feishu relay unavailable")
+
+// RelayRequest 是托付给飞书桥接的一次任务，字段与核心 POST /feishu/relay 一致。
+type RelayRequest struct {
+	SessionID string `json:"session_id"`
+	Prompt    string `json:"prompt"`
+	RequestID string `json:"request_id,omitempty"`
+	Title     string `json:"title,omitempty"`
+	Preview   string `json:"preview,omitempty"`
+}
+
+// Relay 把任务托付给核心进程内的飞书桥接：由扫码绑定的机器人以流式卡片
+// 呈现处理过程与结果。阻塞到任务结束，返回 completed / steered / failed。
+func (i *Injector) Relay(ctx context.Context, req RelayRequest) (string, error) {
+	resp, err := i.post(ctx, "/feishu/relay", req)
+	if err != nil {
+		return "", fmt.Errorf("post /feishu/relay: %w", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Status string `json:"status"`
+		Code   string `json:"code"`
+		Error  string `json:"error"`
+	}
+	_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out)
+	switch {
+	case resp.StatusCode == http.StatusOK:
+		return out.Status, nil
+	case resp.StatusCode == http.StatusNotFound || out.Code == "bridge_unavailable":
+		return "", ErrRelayUnavailable
+	default:
+		return "", fmt.Errorf("post /feishu/relay: HTTP %d %s: %s", resp.StatusCode, out.Code, strings.TrimSpace(out.Error))
+	}
+}

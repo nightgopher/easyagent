@@ -279,6 +279,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerKBRoutes(restMux)
 
 	s.registerFeishuSettings(restMux)
+	restMux.HandleFunc("POST /feishu/relay", s.feishuRelay)
 	s.registerMCPRoutes(restMux)
 
 	// Skill marketplace endpoints (no-op when disabled)
@@ -352,6 +353,7 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/inbox", restHandler)
 	topMux.Handle("/profile", restHandler)
 	topMux.Handle("/settings/", restHandler)
+	topMux.Handle("/feishu/relay", restHandler)
 	topMux.Handle("/asr/", restHandler)
 	topMux.Handle("/v1/", restHandler)
 

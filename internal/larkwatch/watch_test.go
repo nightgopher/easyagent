@@ -100,10 +100,27 @@ func (r *serverRecorder) byPath(path string) []posted {
 }
 
 // newTestWatch 构造看门狗与配套 httptest 核心服务。chatStatus 决定 /chat 的响应。
+// 核心不提供 /feishu/relay（404），看门狗走旧的文本转达。
 func newTestWatch(t *testing.T, lark *fakeLark, chatStatus func(path string, body map[string]string) (int, string)) (*Watch, *serverRecorder) {
+	return newTestWatchWithRelay(t, lark, chatStatus, nil)
+}
+
+// newTestWatchWithRelay 额外挂上 /feishu/relay；relay 返回状态码与响应体。
+func newTestWatchWithRelay(t *testing.T, lark *fakeLark, chatStatus func(path string, body map[string]string) (int, string), relay func(body map[string]string) (int, string)) (*Watch, *serverRecorder) {
 	t.Helper()
 	rec := &serverRecorder{}
 	mux := http.NewServeMux()
+	if relay != nil {
+		mux.HandleFunc("POST /feishu/relay", func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			rec.record("relay", body)
+			code, resp := relay(body)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(code)
+			fmt.Fprint(w, resp)
+		})
+	}
 	mux.HandleFunc("POST /chat", func(w http.ResponseWriter, r *http.Request) {
 		var body map[string]string
 		_ = json.NewDecoder(r.Body).Decode(&body)
@@ -476,5 +493,94 @@ func TestBuildPromptCarriesRichTextContentAndChatName(t *testing.T) {
 	}
 	if !strings.Contains(out, "来自会话「韦贺文」") {
 		t.Fatalf("chat name missing:\n%s", out)
+	}
+}
+
+// TestPollRelaysThroughFeishuBridge：核心进程内有飞书桥接时，任务托付给桥接
+// 以卡片呈现，不再走 /chat，也不用 lark-cli 发纯文本。
+func TestPollRelaysThroughFeishuBridge(t *testing.T) {
+	lark := standardLark(msgJSON("om_new", 11, "2026-11-12 09:30", "ou_peer", "王伟", "下午*有空*吗"), 11)
+	watch, rec := newTestWatchWithRelay(t, lark, func(string, map[string]string) (int, string) {
+		t.Error("/chat must not be called when the bridge relay succeeds")
+		return http.StatusOK, ""
+	}, func(map[string]string) (int, string) {
+		return http.StatusOK, `{"status":"accepted"}`
+	})
+	if err := watch.init(context.Background()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	rewind(watch, testPeerChat, 10)
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	relays := rec.byPath("relay")
+	if len(relays) != 1 {
+		t.Fatalf("expected 1 relay, got %d", len(relays))
+	}
+	body := relays[0].body
+	if body["session_id"] != testSession || !strings.HasPrefix(body["request_id"], "larkwatch-") {
+		t.Errorf("relay identity wrong: %+v", body)
+	}
+	if !strings.Contains(body["prompt"], "下午*有空*吗") {
+		t.Errorf("prompt must carry the raw message: %q", body["prompt"])
+	}
+	if body["title"] != "🐕 看门狗 · 1 条新消息" {
+		t.Errorf("title = %q", body["title"])
+	}
+	if !strings.Contains(body["preview"], "**王伟**") || !strings.Contains(body["preview"], `下午\*有空\*吗`) {
+		t.Errorf("preview must show escaped sender and content: %q", body["preview"])
+	}
+	if got := watch.state.Position(testPeerChat); got != 11 {
+		t.Errorf("position after relay = %d, want 11", got)
+	}
+	if sent := lark.sentMessages(); len(sent) != 0 {
+		t.Errorf("no lark-cli text relay expected, got %v", sent)
+	}
+}
+
+// TestRelayUnavailableFallsBackToTextRelay：桥接不在核心进程内（503）时退回旧方式。
+func TestRelayUnavailableFallsBackToTextRelay(t *testing.T) {
+	lark := standardLark(msgJSON("om_new", 11, "2026-11-12 09:30", "ou_peer", "王伟", "在吗"), 11)
+	watch, rec := newTestWatchWithRelay(t, lark, func(string, map[string]string) (int, string) {
+		return http.StatusOK, "已回复"
+	}, func(map[string]string) (int, string) {
+		return http.StatusServiceUnavailable, `{"code":"bridge_unavailable","error":"飞书桥接未在本进程运行"}`
+	})
+	if err := watch.init(context.Background()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	rewind(watch, testPeerChat, 10)
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatalf("poll: %v", err)
+	}
+	if got := len(rec.byPath("chat")); got != 1 {
+		t.Fatalf("expected fallback /chat wake, got %d", got)
+	}
+	if sent := lark.sentMessages(); len(sent) != 1 || !strings.Contains(sent[0], "已回复") {
+		t.Fatalf("expected fallback text relay, got %v", sent)
+	}
+}
+
+// TestRelayRejectedKeepsPositionForRetry：桥接在、但核心未受理时位点不动，下轮重试。
+func TestRelayRejectedKeepsPositionForRetry(t *testing.T) {
+	lark := standardLark(msgJSON("om_new", 11, "2026-11-12 09:30", "ou_peer", "王伟", "在吗"), 11)
+	watch, rec := newTestWatchWithRelay(t, lark, func(string, map[string]string) (int, string) {
+		t.Error("/chat must not be called when the bridge is present")
+		return http.StatusOK, ""
+	}, func(map[string]string) (int, string) {
+		return http.StatusConflict, `{"code":"not_admitted","error":"relay task was not admitted"}`
+	})
+	if err := watch.init(context.Background()); err != nil {
+		t.Fatalf("init: %v", err)
+	}
+	rewind(watch, testPeerChat, 10)
+	if err := watch.Poll(context.Background()); err == nil {
+		t.Fatal("rejected relay must surface an error")
+	}
+	if got := watch.state.Position(testPeerChat); got != 10 {
+		t.Errorf("position must stay for retry, got %d", got)
+	}
+	if got := len(rec.byPath("chat")); got != 0 {
+		t.Errorf("no /chat fallback expected, got %d", got)
 	}
 }
