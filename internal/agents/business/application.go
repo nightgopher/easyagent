@@ -9,6 +9,7 @@ import (
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
 	"github.com/nightgopher/easyagent/internal/hosttools"
+	"github.com/nightgopher/easyagent/internal/stewardtools"
 	"github.com/nightgopher/easyagent/internal/worktools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
@@ -24,6 +25,10 @@ type Application struct {
 	Store      *agentdata.Store
 	Sessions   *sessionmgr.Manager
 	WorkReader hosttools.WorkReader
+	// Dispatch lets the steward spawn independent task sessions. Nil for
+	// regular business agents and for runs without a server (CLI/TUI); the
+	// tool whitelist still gates the steward's use of it.
+	Dispatch stewardtools.Dispatcher
 }
 
 // Keep the host tool settings captured when the session was created, while
@@ -71,6 +76,9 @@ func (a Application) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 	}
 	if a.Store != nil {
 		list = append(list, hosttools.Tools(a.Store, a.Sessions, a.Definition.ID, a.WorkReader)...)
+	}
+	if a.Dispatch != nil {
+		list = append(list, stewardtools.Tools(a.Dispatch)...)
 	}
 	list = append(list, o.ExtensionTools...)
 	tracked := false

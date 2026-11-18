@@ -111,7 +111,12 @@ func (a *preview) businessSettings(c *ui.Context) {
 					a.businessBadge(c, "已停用")
 				}
 				a.action(c, "编辑").Label("编辑 Agent：" + v.Name).OnClick(func() { a.editBusinessAgent(v) })
-				a.primary(c, "开始会话").Label("开始会话：" + v.Name).Disabled(v.Disabled || !a.Live.Connected || a.Live.Loading["create-session"]).OnClick(func() { a.startBusinessSession(v.ID) })
+				if v.ID == desktopStewardID {
+					// 管家会话唯一且受管：从这里进入与侧栏等价。
+					a.primary(c, "打开管家会话").Label("打开管家会话").Disabled(v.Disabled || !a.Live.Connected || a.Live.Loading["steward"]).OnClick(a.openSteward)
+				} else {
+					a.primary(c, "开始会话").Label("开始会话：" + v.Name).Disabled(v.Disabled || !a.Live.Connected || a.Live.Loading["create-session"]).OnClick(func() { a.startBusinessSession(v.ID) })
+				}
 			})
 			ui.Text(c, v.Instructions).FontSize(12).TextColor(c.Theme().TextMuted).MaxLines(2).LineHeight(1.6)
 			ui.Row(c).Wrap().Gap(8).Children(func() {

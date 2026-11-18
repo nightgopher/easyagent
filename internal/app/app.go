@@ -14,6 +14,7 @@ import (
 	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
+	"github.com/nightgopher/easyagent/internal/stewardtools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
 	"github.com/nightgopher/easyagent/sdk/config"
@@ -36,6 +37,7 @@ type App struct {
 	cfg               config.Config
 	discoveryRevision uint64
 	workReader        func(context.Context, string, string, int) (any, error)
+	stewardDispatch   stewardtools.Dispatcher
 	skillDirs         []string
 	sessionMgr        *sessionmgr.Manager
 	registry          *providers.Registry

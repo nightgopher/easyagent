@@ -7,22 +7,37 @@ import (
 	"time"
 )
 
+// desktopStewardID mirrors internal/agentdata.StewardID; the desktop is a
+// separate module and cannot import it.
+const desktopStewardID = "agent-steward"
+
+// openSteward resolves the steward's single managed session through the
+// server (which also consolidates stray duplicates) and opens it. The
+// steward never gets a second conversation.
 func (a *preview) openSteward() {
 	if !a.Live.Connected {
 		return
 	}
 	origin := a.current()
-	a.operation("steward", "POST", "/agents/steward", map[string]any{}, func(v any) {
+	if origin.RemoteID == "" && origin.AgentID != desktopStewardID && (origin.Draft != "" || len(origin.Attachments) > 0 || len(origin.FileReferences) > 0) {
+		// Persist the original conversation's identity first, without sending its
+		// draft to a model or carrying it into the steward conversation.
+		a.createBoundSession("", origin.Workspace, origin.Application, origin.AgentID, func(*session) { a.openSteward() })
+		return
+	}
+	a.operation("steward", "POST", "/agents/steward/session", map[string]any{}, func(v any) {
 		if a.current() != origin {
 			return
 		}
-		definition := businessDecode[nativeBusinessAgent](v)
-		if definition.ID == "" {
+		sessionID := str(object(v)["session_id"])
+		if sessionID == "" {
+			a.Live.Error = "无法打开管家会话"
 			return
 		}
-		a.Live.Notice = "管家权限可在设置 → 业务 Agent 中调整；启用会话检索后，可搜索当前主机全部历史（含归档）。"
-		a.resource("business-agents", "/agents")
-		a.openAgentConversation(definition)
+		a.Live.Notice = "管家是唯一的常驻入口：让它创建任务会话承接具体工作；上下文可在会话内 /clear 清空。"
+		a.Search = ""
+		a.openSessionSearchHit(sessionSearchHit{SessionID: sessionID})
+		a.current().AgentID = desktopStewardID
 	})
 }
 

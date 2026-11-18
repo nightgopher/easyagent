@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
@@ -60,21 +61,21 @@ import kotlinx.coroutines.delay
  * code and links. Text stays selectable; links open in the browser.
  */
 @Composable
-fun MarkdownView(text: String, modifier: Modifier = Modifier) {
+fun MarkdownView(text: String, modifier: Modifier = Modifier, onInternalLink: ((String) -> Unit)? = null) {
     val blocks = remember(text) { parseMarkdown(text) }
     SelectionContainer(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (block in blocks) MarkdownBlock(block)
+            for (block in blocks) MarkdownBlock(block, onInternalLink)
         }
     }
 }
 
 @Composable
-private fun MarkdownBlock(block: MdBlock) {
+private fun MarkdownBlock(block: MdBlock, onInternalLink: ((String) -> Unit)? = null) {
     val type = MaterialTheme.typography
     when (block) {
         is MdBlock.Heading -> Text(
-            annotated(block.spans),
+            annotated(block.spans, onInternalLink),
             style = when (block.level) {
                 1 -> type.titleLarge
                 2 -> type.titleMedium
@@ -82,7 +83,7 @@ private fun MarkdownBlock(block: MdBlock) {
             },
             modifier = Modifier.padding(top = 4.dp),
         )
-        is MdBlock.Paragraph -> Text(annotated(block.spans), style = type.bodyLarge)
+        is MdBlock.Paragraph -> Text(annotated(block.spans, onInternalLink), style = type.bodyLarge)
         is MdBlock.ListItem -> Row(modifier = Modifier.padding(start = (block.depth * 16).dp)) {
             Text(
                 block.marker,
@@ -90,33 +91,33 @@ private fun MarkdownBlock(block: MdBlock) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.widthIn(min = if (block.ordered) 24.dp else 16.dp),
             )
-            Text(annotated(block.spans), style = type.bodyLarge)
+            Text(annotated(block.spans, onInternalLink), style = type.bodyLarge)
         }
         is MdBlock.Quote -> Row(modifier = Modifier.height(IntrinsicSize.Min)) {
             Box(Modifier.width(3.dp).fillMaxHeight().background(MaterialTheme.colorScheme.outlineVariant))
             Text(
-                annotated(block.spans),
+                annotated(block.spans, onInternalLink),
                 style = type.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 10.dp),
             )
         }
         is MdBlock.Code -> CodeBlock(block.text, modifier = Modifier.fillMaxWidth(), language = block.language)
-        is MdBlock.Table -> MarkdownTable(block)
+        is MdBlock.Table -> MarkdownTable(block, onInternalLink)
         MdBlock.Rule -> HorizontalDivider(Modifier.padding(vertical = 4.dp))
     }
 }
 
 /** Laid out column by column so cells line up; wide tables scroll sideways. */
 @Composable
-private fun MarkdownTable(table: MdBlock.Table) {
+private fun MarkdownTable(table: MdBlock.Table, onInternalLink: ((String) -> Unit)? = null) {
     val border = MaterialTheme.colorScheme.outlineVariant
     Surface(shape = RoundedCornerShape(8.dp), color = Color.Transparent, border = BorderStroke(1.dp, border)) {
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             table.header.indices.forEach { col ->
                 Column(Modifier.width(IntrinsicSize.Max)) {
                     Text(
-                        annotated(table.header[col]),
+                        annotated(table.header[col], onInternalLink),
                         style = MaterialTheme.typography.labelLarge,
                         softWrap = false,
                         modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 10.dp, vertical = 6.dp),
@@ -124,7 +125,7 @@ private fun MarkdownTable(table: MdBlock.Table) {
                     table.rows.forEach { row ->
                         HorizontalDivider(color = border)
                         Text(
-                            annotated(row[col]),
+                            annotated(row[col], onInternalLink),
                             style = MaterialTheme.typography.bodyMedium,
                             softWrap = false,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -137,7 +138,7 @@ private fun MarkdownTable(table: MdBlock.Table) {
 }
 
 @Composable
-private fun annotated(spans: List<Span>): AnnotatedString {
+private fun annotated(spans: List<Span>, onInternalLink: ((String) -> Unit)? = null): AnnotatedString {
     val codeBackground = MaterialTheme.colorScheme.surfaceVariant
     val linkStyles = TextLinkStyles(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline))
     return buildAnnotatedString {
@@ -151,7 +152,10 @@ private fun annotated(spans: List<Span>): AnnotatedString {
                 fontSize = if (span.code) 0.9.em else TextUnit.Unspecified,
             )
             val link = span.link
-            if (link != null) {
+            if (link != null && onInternalLink != null && link.startsWith("easyagent:")) {
+                // 应用内链接（管家转达的任务会话等）不走浏览器，回调给宿主处理。
+                withLink(LinkAnnotation.Url(link, linkStyles, LinkInteractionListener { onInternalLink(link) })) { withStyle(style) { append(span.text) } }
+            } else if (link != null) {
                 withLink(LinkAnnotation.Url(link, linkStyles)) { withStyle(style) { append(span.text) } }
             } else {
                 withStyle(style) { append(span.text) }

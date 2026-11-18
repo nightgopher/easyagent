@@ -18,14 +18,8 @@ func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
-		case r.URL.Path == "/agents/steward":
-			fmt.Fprint(w, `{"id":"agent-steward","name":"个人管家"}`)
-		case r.URL.Path == "/sessions" && r.Method == "GET":
-			if creates.Load() >= 2 {
-				fmt.Fprint(w, `[{"id":"new-2","agent_id":"agent-steward","workspace":"/steward"}]`)
-			} else {
-				fmt.Fprint(w, `[]`)
-			}
+		case r.URL.Path == "/agents/steward/session" && r.Method == "POST":
+			fmt.Fprint(w, `{"session_id":"steward-1","created":false}`)
 		case r.URL.Path == "/sessions" && r.Method == "POST":
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -33,7 +27,7 @@ func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 			n := creates.Add(1)
 			fmt.Fprintf(w, `{"id":"new-%d"}`, n)
 		case strings.HasSuffix(r.URL.Path, "/info"):
-			if strings.Contains(r.URL.Path, "new-2") {
+			if strings.Contains(r.URL.Path, "steward-1") {
 				fmt.Fprint(w, `{"workspace":"/steward","agent_id":"agent-steward"}`)
 			} else {
 				fmt.Fprint(w, `{"workspace":"/workspace"}`)
@@ -49,10 +43,11 @@ func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 	a.Live.Connected = true
 	a.current().Draft = "给编程 Agent 的未发送需求"
 	a.openSteward()
-	waitNative(t, a, func() bool { return a.current().RemoteID == "new-2" && !a.Live.Loading["create-session"] })
-	first, second := <-bodies, <-bodies
-	if first["agent_id"] != nil || len(second) != 1 || second["agent_id"] != "agent-steward" {
-		t.Fatalf("wrong identities: %#v %#v", first, second)
+	waitNative(t, a, func() bool { return a.current().RemoteID == "steward-1" && !a.Live.Loading["steward"] && !a.Live.Loading["create-session"] })
+	// 原对话的草稿先落为一个真实会话，不会被带给管家。
+	first := <-bodies
+	if first["agent_id"] != nil {
+		t.Fatalf("wrong identity: %#v", first)
 	}
 	var original *session
 	for _, s := range a.Sessions {
@@ -68,8 +63,8 @@ func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 	a.current().Draft = "管家自己的草稿"
 	a.selectSession(original.ID)
 	a.openSteward()
-	waitNative(t, a, func() bool { return a.current().RemoteID == "new-2" && !a.Live.Loading["steward"] })
-	if creates.Load() != 2 || a.current().Draft != "管家自己的草稿" || original.Draft == "" {
+	waitNative(t, a, func() bool { return a.current().RemoteID == "steward-1" && !a.Live.Loading["steward"] })
+	if creates.Load() != 1 || a.current().Draft != "管家自己的草稿" || original.Draft == "" {
 		t.Fatal("reopening did not reuse the steward conversation")
 	}
 }
@@ -142,7 +137,7 @@ func TestNativeCoreStewardEntryAndRevocation(t *testing.T) {
 	a.current().Draft = "管家草稿"
 	a.openSteward()
 	waitNative(t, a, func() bool {
-		return !a.Live.Loading["steward"] && !a.Live.Loading["agent-session"] && !a.Live.Loading["create-session"]
+		return !a.Live.Loading["steward"] && !a.Live.Loading["create-session"]
 	})
 	if a.current().RemoteID != id || a.current().Draft != "管家草稿" || calls.Load() != 0 {
 		t.Fatal("entry did not reuse state or sent a prompt")

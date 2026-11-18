@@ -14,6 +14,7 @@ public final class AppModel {
     public var errorMessage: String?
     public var projection = ChatProjection()
     public var activeSessionID: String?
+    public private(set) var stewardSessionID: String?
 
     public private(set) var client: APIClient?
     private var socket: ChatSocket?
@@ -76,6 +77,7 @@ public final class AppModel {
         guard generation == connectionGeneration else { await socket.disconnect(); return }
         if let id = activeSessionID { await socket.subscribe(sessionID: id) }
         if generation == connectionGeneration { await reloadSessions() }
+        if generation == connectionGeneration { await resolveSteward() }
     }
 
     public func disconnect() async {
@@ -88,6 +90,7 @@ public final class AppModel {
         relayTransport?.close()
         relayTransport = nil
         linkOnline = false
+        stewardSessionID = nil
         await previous?.disconnect()
     }
 
@@ -121,6 +124,35 @@ public final class AppModel {
         projection = ChatProjection()
         guard let socket else { return }
         await socket.subscribe(sessionID: sessionID)
+    }
+
+    /// 打开管家的唯一常驻会话；未解析时静默重试一次。
+    public func openSteward() async {
+        if stewardSessionID == nil { await resolveSteward() }
+        guard let id = stewardSessionID else {
+            if errorMessage == nil { errorMessage = "无法打开管家会话" }
+            return
+        }
+        await open(sessionID: id)
+    }
+
+    /// 真清空上下文：同一会话、不生成摘要，随后重放空投影。
+    public func clearContext(sessionID: String) async {
+        guard let client else { return }
+        do {
+            try await client.clearContext(sessionID: sessionID)
+            if sessionID == activeSessionID { projection = ChatProjection() }
+            errorMessage = nil
+        } catch let error as APIError {
+            errorMessage = describe(error)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func resolveSteward() async {
+        guard let client else { return }
+        stewardSessionID = (try? await client.stewardSession())?.sessionID
     }
 
     public func send(draft: String) async -> Bool {

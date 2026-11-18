@@ -158,20 +158,16 @@ class AgentClientTest {
     }
 
     @Test
-    fun `created sessions default to full access`() = withClient { server, client ->
-        server.enqueue(MockResponse().setBody("""{"id":"new1"}"""))
-        server.enqueue(MockResponse().setBody("""{"access_mode":"full"}"""))
+    fun `steward session resolves the managed session`() = withClient { server, client ->
+        server.enqueue(MockResponse().setBody("""{"session_id":"steward-1","created":false}"""))
         server.enqueue(MockResponse().setBody("[]"))
         client.link.value = LinkStatus.CONNECTED
-        var created = ""
-        client.createSession { created = it }
-        withTimeout(5_000) { while (created.isEmpty()) delay(10) }
-        withTimeout(5_000) { while (server.requestCount < 3) delay(10) }
-        val permission = withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS)!! }
-        assertEquals("/sessions", permission.path)
-        val grant = withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS)!! }
-        assertEquals("/sessions/new1/permissions", grant.path)
-        assertTrue(grant.body.readUtf8().contains("\"mode\":\"full\""))
+        var resolved = ""
+        client.stewardSession(onResolved = { resolved = it })
+        withTimeout(5_000) { while (resolved.isEmpty()) delay(10) }
+        val request = withContext(Dispatchers.IO) { server.takeRequest(5, TimeUnit.SECONDS)!! }
+        assertEquals("/agents/steward/session", request.path)
+        assertEquals("steward-1", resolved)
     }
 
     @Test

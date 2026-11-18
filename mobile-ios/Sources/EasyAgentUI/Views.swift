@@ -151,6 +151,20 @@ public struct SessionListView: View {
 
     public var body: some View {
         List {
+            Section {
+                // 管家是唯一的常驻入口，固定在会话列表最上方。
+                NavigationLink(value: model.stewardSessionID ?? "") {
+                    HStack {
+                        Image(systemName: "face.smiling")
+                        Text("管家")
+                        Spacer()
+                        if model.activeSessionID == model.stewardSessionID {
+                            Image(systemName: "checkmark").foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .disabled(model.stewardSessionID == nil)
+            }
             ForEach(model.sessions) { session in
                 NavigationLink(value: session.id) {
                     row(session)
@@ -192,6 +206,7 @@ public struct ChatView: View {
     @Environment(AppModel.self) private var model
     @State private var draft = ""
     @State private var sending = false
+    @State private var clearConfirm = false
     private let sessionID: String
 
     public init(sessionID: String) {
@@ -226,6 +241,21 @@ public struct ChatView: View {
             .padding()
         }
         .navigationTitle(model.sessions.first { $0.id == sessionID }?.title ?? "会话")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    clearConfirm = true
+                } label: { Image(systemName: "eraser") }
+            }
+        }
+        .confirmationDialog("清空上下文", isPresented: $clearConfirm, titleVisibility: .visible) {
+            Button("清空（不保留历史）", role: .destructive) {
+                Task { await model.clearContext(sessionID: sessionID) }
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("同一会话继续使用，但全部上下文会被清空；要保留要点请改用压缩。")
+        }
         .task { await model.open(sessionID: sessionID) }
     }
 
