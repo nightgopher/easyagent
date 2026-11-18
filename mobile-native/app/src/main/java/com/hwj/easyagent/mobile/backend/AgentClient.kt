@@ -407,8 +407,8 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
                 refreshSessions()
                 onResolved(id)
             } catch (e: Exception) {
-                // 旧版核心没有该端点：静默回退会话列表，不当作致命错误。
-                error.value = if (e is ApiException) e.message else "管家会话不可用"
+                // 旧版核心没有该端点是预期状态：静默回退会话列表。弹错误
+                // Snackbar 会遮住输入区，也不代表主机有问题。
                 onFailure()
             }
         }
