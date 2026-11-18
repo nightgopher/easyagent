@@ -10,6 +10,7 @@ import (
 	"github.com/nightgopher/easyagent/internal/agentdata"
 	"github.com/nightgopher/easyagent/internal/agents/business"
 	"github.com/nightgopher/easyagent/internal/hosttools"
+	"github.com/nightgopher/easyagent/internal/stewardtools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/operations"
@@ -24,6 +25,21 @@ func (a *App) SetWorkReader(reader hosttools.WorkReader) {
 	a.cfgMu.Lock()
 	defer a.cfgMu.Unlock()
 	a.workReader = reader
+}
+
+// SetStewardDispatch binds the server-side session spawner the steward's
+// host_session_create tool calls through. Nil (CLI/TUI) simply leaves the
+// dispatch tool out of the steward's toolset.
+func (a *App) SetStewardDispatch(dispatch stewardtools.Dispatcher) {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	a.stewardDispatch = dispatch
+}
+
+func (a *App) stewardDispatcher() stewardtools.Dispatcher {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	return a.stewardDispatch
 }
 func (a *App) readWork(ctx context.Context, query, view string, offset int) (any, error) {
 	a.cfgMu.Lock()
@@ -88,9 +104,9 @@ func (a *App) SessionSetup(ctx context.Context, application, agentID string, cfg
 		if err != nil || currentWorkspace != workspace {
 			return nil, fmt.Errorf("agent workspace changed; start a new session")
 		}
-		return business.Application{Definition: current, Config: a.Config(), Store: store, Sessions: a.sessionMgr, WorkReader: a.readWork}, nil
+		return business.Application{Definition: current, Config: a.Config(), Store: store, Sessions: a.sessionMgr, WorkReader: a.readWork, Dispatch: a.stewardDispatcher()}, nil
 	}
-	deps.Application = business.Application{Definition: definition, Config: cfg, Store: store, Sessions: a.sessionMgr, WorkReader: a.readWork}
+	deps.Application = business.Application{Definition: definition, Config: cfg, Store: store, Sessions: a.sessionMgr, WorkReader: a.readWork, Dispatch: a.stewardDispatcher()}
 	deps.ToolDiscoveryPolicy = func() (agent.ToolSearchMode, uint64) {
 		mode, revision := a.toolDiscoveryPolicy()
 		current, err := store.GetAgent(context.Background(), agentID)

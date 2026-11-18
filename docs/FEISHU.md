@@ -64,7 +64,7 @@ EA_SERVER_API_KEY=your-agent-server-key
 
 ## 看门狗：巡查用户自己的新消息
 
-长连接只覆盖「发给机器人」的消息。别人发给用户本人的私聊没有推送通道，由 `easyagent watch serve` 用 lark-cli 用户身份低频巡查、有事才唤醒会话并以机器人身份转达结果。配置、安全边界与部署见 [lark 看门狗](LARK_WATCH.md)。
+长连接只覆盖「发给机器人」的消息。别人发给用户本人的私聊没有推送通道，由 `easyagent watch serve` 用 lark-cli 用户身份低频巡查、有事才唤醒会话。桥接跑在核心进程内时，看门狗把任务托付给桥接（`POST /feishu/relay`），处理过程与结果由扫码绑定的机器人以带标题栏的流式卡片发到主人私聊，可直接回复、审批；否则退回以 lark-cli 应用的机器人发纯文本。配置、安全边界与部署见 [lark 看门狗](LARK_WATCH.md)。
 
 ## 首次配对
 

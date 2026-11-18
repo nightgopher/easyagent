@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Stop
@@ -121,8 +122,15 @@ private sealed interface Entry {
 }
 
 @Composable
-fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
-    BackHandler(onBack = onBack)
+fun ChatScreen(
+    client: AgentClient,
+    sessionId: String,
+    onBack: () -> Unit,
+    isHome: Boolean = false,
+    onOpenSessions: (() -> Unit)? = null,
+    onOpenSession: ((String) -> Unit)? = null,
+) {
+    if (!isHome) BackHandler(onBack = onBack)
     LaunchedEffect(sessionId) { client.open(sessionId) }
 
     val rev by client.revision.collectAsStateWithLifecycle()
@@ -150,6 +158,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
     var sessionMenu by remember { mutableStateOf(false) }
     var modelDialog by remember { mutableStateOf(false) }
     var compactConfirm by remember { mutableStateOf(false) }
+    var clearConfirm by remember { mutableStateOf(false) }
     if (modelDialog) ModelPickerDialog(client, session) { modelDialog = false }
     if (compactConfirm) {
         AlertDialog(
@@ -160,6 +169,17 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                 Button(onClick = { client.compact(session); compactConfirm = false }) { Text("开始压缩") }
             },
             dismissButton = { TextButton(onClick = { compactConfirm = false }) { Text("取消") } },
+        )
+    }
+    if (clearConfirm) {
+        AlertDialog(
+            onDismissRequest = { clearConfirm = false },
+            title = { Text("清空上下文") },
+            text = { Text("同一会话继续使用，但全部上下文会被清空、不保留摘要。要保留要点请改用「压缩上下文」。") },
+            confirmButton = {
+                Button(onClick = { client.clearContext(session); clearConfirm = false }) { Text("清空") }
+            },
+            dismissButton = { TextButton(onClick = { clearConfirm = false }) { Text("取消") } },
         )
     }
     val title = sessions.firstOrNull { it.id == sessionId }?.displayTitle ?: "会话"
@@ -209,9 +229,14 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                     }
                 },
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                    if (!isHome) {
+                        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
+                    }
                 },
                 actions = {
+                    if (onOpenSessions != null) {
+                        IconButton(onClick = onOpenSessions) { Icon(Icons.Filled.Face, contentDescription = "会话列表") }
+                    }
                     TextButton(enabled = !busy && session.accessMode.isNotEmpty(), onClick = {
                         client.setAccessMode(session, if (session.accessMode == "full") "ask" else "full")
                     }) { Text(when (session.accessMode) { "full" -> "全权限"; "ask" -> "需审批"; else -> "权限未知" }) }
@@ -247,6 +272,11 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                             DropdownMenuItem(
                                 text = { Text("压缩上下文") },
                                 onClick = { sessionMenu = false; compactConfirm = true },
+                                enabled = !busy,
+                            )
+                            DropdownMenuItem(
+                                text = { Text("清空上下文（不保留历史）") },
+                                onClick = { sessionMenu = false; clearConfirm = true },
                                 enabled = !busy,
                             )
                         }
@@ -296,7 +326,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
                                     if (group.size > 1) ToolGroup(group) { client.touch() }
                                     else {
                                         val message = group.first()
-                                        MessageRow(message, session.running && message === session.messages.lastOrNull(), { client.touch() }) { MessageImages(client, sessionId, it) }
+                                        MessageRow(message, session.running && message === session.messages.lastOrNull(), { client.touch() }, onOpenSession = onOpenSession, images = { MessageImages(client, sessionId, it) })
                                     }
                                 }
                             }
@@ -321,7 +351,7 @@ fun ChatScreen(client: AgentClient, sessionId: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit, images: @Composable (List<HistoryImage>) -> Unit) {
+private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit, images: @Composable (List<HistoryImage>) -> Unit, onOpenSession: ((String) -> Unit)? = null) {
     when {
         m.user -> Column(horizontalAlignment = Alignment.End, modifier = Modifier.fillMaxWidth()) {
             if (m.images.isNotEmpty()) {
@@ -335,7 +365,11 @@ private fun MessageRow(m: ChatMessage, generating: Boolean, onToggle: () -> Unit
         m.kind == "error" -> ErrorCard(m.text)
         m.kind == "compaction" -> Note("上下文已压缩", m.text)
         m.isWaiting -> WaitingRow()
-        else -> MarkdownView(m.text, Modifier.fillMaxWidth())
+        else -> MarkdownView(m.text, Modifier.fillMaxWidth(), onInternalLink = { href ->
+            // 管家转达的任务会话链接直接在应用内打开。
+            val id = Regex("^easyagent://session/([A-Za-z0-9][A-Za-z0-9_-]{0,127})$").find(href)?.groupValues?.get(1)
+            if (id != null) onOpenSession?.invoke(id)
+        })
     }
 }
 

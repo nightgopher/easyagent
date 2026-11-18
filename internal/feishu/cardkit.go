@@ -33,6 +33,13 @@ type FooterMetrics struct {
 	ContextPercentage float64
 }
 
+// CardHeader is an optional colored title bar (CardKit header template such as
+// "blue", "turquoise", "orange", "red").
+type CardHeader struct {
+	Title    string
+	Template string
+}
+
 // StreamingCardHandle manages a CardKit 2.0 streaming card session.
 type StreamingCardHandle struct {
 	MessageID string
@@ -40,6 +47,69 @@ type StreamingCardHandle struct {
 	client    *Client
 	sequence  int
 	mu        sync.Mutex
+
+	header *CardHeader // 非空时每次渲染都带标题栏
+	prefix string      // 固定在正文前的内容（如看门狗收到的新消息摘要）
+	// deferredChat 非空表示卡片尚未发出：首次渲染时才创建并发送，
+	// 任务未被受理时不会留下空卡片。
+	deferredChat string
+}
+
+// newDeferredStreamingCard returns a handle whose card is created and sent to
+// chatID on the first update or finalize.
+func (c *Client) newDeferredStreamingCard(chatID, prefix string, header *CardHeader) *StreamingCardHandle {
+	return &StreamingCardHandle{client: c, deferredChat: chatID, prefix: prefix, header: header}
+}
+
+// decorate applies the handle's header and fixed prefix to a built card body.
+func (h *StreamingCardHandle) decorate(content string) string {
+	if h.prefix == "" {
+		return content
+	}
+	if strings.TrimSpace(content) == "" {
+		return h.prefix
+	}
+	return h.prefix + "\n\n---\n\n" + content
+}
+
+func (h *StreamingCardHandle) withHeader(card map[string]any) map[string]any {
+	if h.header != nil && h.header.Title != "" {
+		template := h.header.Template
+		if template == "" {
+			template = "blue"
+		}
+		card["header"] = map[string]any{
+			"title":    map[string]any{"tag": "plain_text", "content": h.header.Title},
+			"template": template,
+		}
+	}
+	return card
+}
+
+// render sends the card: the first render of a deferred handle creates and
+// sends it, later renders replace it. Callers hold h.mu.
+func (h *StreamingCardHandle) render(ctx context.Context, card map[string]any) error {
+	card = h.withHeader(card)
+	if h.CardID == "" && h.deferredChat != "" {
+		chatID := h.deferredChat
+		h.deferredChat = "" // 创建只尝试一次；失败后由调用方回退
+		cardID, err := h.client.createCardKitCard(ctx, card)
+		if err != nil {
+			return err
+		}
+		h.CardID = cardID
+		messageID, err := h.client.sendCardKitMessage(ctx, chatID, cardID, "")
+		if err != nil {
+			return err
+		}
+		h.MessageID, h.sequence = messageID, 1
+		return nil
+	}
+	if !h.HasCard() {
+		return fmt.Errorf("streaming card is unavailable")
+	}
+	h.sequence++
+	return h.client.updateCardKitCard(ctx, h.CardID, card, h.sequence)
 }
 
 // HasCard reports whether the card was successfully created and sent.
@@ -52,17 +122,14 @@ func (h *StreamingCardHandle) HasCard() bool {
 func (h *StreamingCardHandle) PushUpdate(ctx context.Context, content string, metrics FooterMetrics) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sequence++
-	card := BuildStreamingCard(content, RenderFooterMarkdown(metrics))
-	return h.client.updateCardKitCard(ctx, h.CardID, card, h.sequence)
+	return h.render(ctx, BuildStreamingCard(h.decorate(content), RenderFooterMarkdown(metrics)))
 }
 
 // Finalize writes the complete response after the update worker has stopped.
 func (h *StreamingCardHandle) Finalize(ctx context.Context, content string, metrics *FooterMetrics) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.sequence++
-	return h.client.updateCardKitCard(ctx, h.CardID, BuildFinalCard(content, metrics), h.sequence)
+	return h.render(ctx, BuildFinalCard(h.decorate(content), metrics))
 }
 
 // RenderFooterMarkdown renders footer metrics as a single markdown line.

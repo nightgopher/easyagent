@@ -541,6 +541,26 @@ func (s *AgentSession) Compact(ctx context.Context, customInstructions string) (
 	return ag.CompactNow(ctx, customInstructions)
 }
 
+// ClearContext empties the live context in place, keeping the session ID and
+// its stored transcript. The next turn starts from a blank context. No LLM
+// call is involved. Returns the number of dropped messages.
+func (s *AgentSession) ClearContext(ctx context.Context) (int, error) {
+	s.mu.Lock()
+	if s.busyLocked() {
+		s.mu.Unlock()
+		return 0, agent.ErrAgentBusy
+	}
+	if s.agent == nil {
+		s.mu.Unlock()
+		return 0, fmt.Errorf("no active agent")
+	}
+	s.running = true
+	ag := s.agent
+	s.mu.Unlock()
+	defer s.finishPrompt()
+	return ag.ClearContextNow(ctx)
+}
+
 // Profile returns the current profile name.
 // Delegates to SessionExt if available.
 func (s *AgentSession) Profile() string {

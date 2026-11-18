@@ -145,6 +145,9 @@ func New(application *app.App, slashCmds *slashcmd.Registry) *Server {
 	application.SetWorkReader(func(ctx context.Context, query, view string, offset int) (any, error) {
 		return srv.readWorkItems(ctx, query, view, "", 20, offset)
 	})
+	// The steward's host_session_create tool spawns sessions through the
+	// server so the optional first prompt rides the session queue.
+	application.SetStewardDispatch(srv.dispatchStewardSession)
 
 	// Wire loop trigger: when a /loop fires, inject the prompt into the target session
 	if application.LoopManager() != nil {
@@ -245,6 +248,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /agents", s.businessAgents)
 	restMux.HandleFunc("POST /agents", s.businessAgents)
 	restMux.HandleFunc("POST /agents/steward", s.ensureSteward)
+	restMux.HandleFunc("POST /agents/steward/session", s.stewardSession)
 	restMux.HandleFunc("GET /agents/{agent}", s.businessAgents)
 	restMux.HandleFunc("PUT /agents/{agent}", s.businessAgents)
 	restMux.HandleFunc("GET /teams", s.businessTeams)
@@ -252,6 +256,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("GET /teams/{team}", s.businessTeams)
 	restMux.HandleFunc("PUT /teams/{team}", s.businessTeams)
 	restMux.HandleFunc("POST /sessions/{id}/compact", s.compactSession)
+	restMux.HandleFunc("POST /sessions/{id}/clear-context", s.clearSessionContext)
 	restMux.HandleFunc("GET /sessions/{id}/context", s.getContextSnapshot)
 	restMux.HandleFunc("POST /sessions/{id}/command", s.executeCommand)
 	restMux.HandleFunc("GET /sessions/{id}/loop", s.getSessionLoop)
@@ -279,6 +284,7 @@ func (s *Server) Handler() http.Handler {
 	s.registerKBRoutes(restMux)
 
 	s.registerFeishuSettings(restMux)
+	restMux.HandleFunc("POST /feishu/relay", s.feishuRelay)
 	s.registerMCPRoutes(restMux)
 
 	// Skill marketplace endpoints (no-op when disabled)
@@ -352,6 +358,7 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/inbox", restHandler)
 	topMux.Handle("/profile", restHandler)
 	topMux.Handle("/settings/", restHandler)
+	topMux.Handle("/feishu/relay", restHandler)
 	topMux.Handle("/asr/", restHandler)
 	topMux.Handle("/v1/", restHandler)
 

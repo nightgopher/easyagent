@@ -705,13 +705,26 @@ func strValue(v any) string {
 	return ""
 }
 
+// notAdmittedError 标记核心没有受理任务的失败（请求没发出或被拒绝）：
+// 没有任务开始运行，调用方可以安全地稍后重试。
+type notAdmittedError struct{ err error }
+
+func (e notAdmittedError) Error() string { return e.err.Error() }
+func (e notAdmittedError) Unwrap() error { return e.err }
+
 // chatKey/messageID 用于 send_message 工具的独立播报投递；可为空（不投递）。
 func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID, prompt string, card *StreamingCardHandle, requestIDs ...string) (string, error) {
+	return h.streamChatOn(ctx, "feishu", chatKey, messageID, sessionID, prompt, card, requestIDs...)
+}
+
+// streamChatOn 与 streamChat 相同，但以指定渠道提交任务（如看门狗的 larkwatch），
+// 使渠道对应的权限模式生效。
+func (h *Handler) streamChatOn(ctx context.Context, channel, chatKey, messageID, sessionID, prompt string, card *StreamingCardHandle, requestIDs ...string) (string, error) {
 	startTime := time.Now()
 	values := map[string]string{
 		"prompt":     prompt,
 		"session_id": sessionID,
-		"channel":    "feishu",
+		"channel":    channel,
 	}
 	if len(requestIDs) > 0 && requestIDs[0] != "" {
 		values["request_id"] = requestIDs[0]
@@ -722,7 +735,7 @@ func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID,
 	slog.Debug("SSE request", "url", url, "sessionID", sessionID)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", notAdmittedError{fmt.Errorf("create request: %w", err)}
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
@@ -730,7 +743,7 @@ func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID,
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
+		return "", notAdmittedError{fmt.Errorf("do request: %w", err)}
 	}
 	defer resp.Body.Close()
 
@@ -744,13 +757,13 @@ func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID,
 			// /new 后旧消息重投仍应回放原任务，不能拿新会话再执行。
 			// 只去掉会话约束；原身份与内容仍由核心校验，最多查询一次。
 			resp.Body.Close()
-			return h.streamChat(ctx, chatKey, messageID, "", prompt, card, values["request_id"])
+			return h.streamChatOn(ctx, channel, chatKey, messageID, "", prompt, card, values["request_id"])
 		}
 		if resp.StatusCode == http.StatusConflict && failure.Code == "busy" {
 			// 会话有任务在跑：交给上层转插话，而不是当错误抛给用户。
 			return "", errAgentBusy
 		}
-		return "", fmt.Errorf("agent stream HTTP %d", resp.StatusCode)
+		return "", notAdmittedError{fmt.Errorf("agent stream HTTP %d", resp.StatusCode)}
 	}
 	if strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]) != "text/event-stream" {
 		return "", errors.New("agent response is not an event stream")
@@ -790,6 +803,7 @@ func (h *Handler) streamChat(ctx context.Context, chatKey, messageID, sessionID,
 				if json.Unmarshal([]byte(data), &ev) == nil {
 					sessionID, runID = ev.SessionID, ev.RunID
 				}
+				notifyAccepted(ctx)
 			case "text_delta":
 				var ev struct {
 					TextDelta string `json:"text_delta"`

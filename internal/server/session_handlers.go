@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nightgopher/easyagent/internal/agentdata"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
@@ -70,6 +71,12 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
 		writeError(w, 400, "expected one session request")
+		return
+	}
+	// The steward owns exactly one managed session; clients must resolve it
+	// through POST /agents/steward/session instead of spawning copies.
+	if req.AgentID == agentdata.StewardID {
+		writeError(w, http.StatusConflict, "steward session is managed; use POST /agents/steward/session")
 		return
 	}
 
@@ -425,6 +432,38 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request) {
 		TrimmedFrom: trimmedFrom,
 		TrimmedTo:   trimmedTo,
 	})
+}
+
+// ─── POST /sessions/{id}/clear-context ────────────────────────────────────────
+
+// clearSessionContext empties the live context in place: the session keeps
+// its ID and stored transcript, and the next turn starts from a blank
+// context. Unlike /compact no summary is generated and history is not kept.
+func (s *Server) clearSessionContext(w http.ResponseWriter, r *http.Request) {
+	sessionID := r.PathValue("id")
+	if s.rejectActiveRun(w, sessionID) {
+		return
+	}
+
+	sess, err := s.app.LoadSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	dropped, err := sess.ClearContext(r.Context())
+	if err != nil {
+		if errors.Is(err, agent.ErrAgentBusy) {
+			writeError(w, http.StatusConflict, "会话仍在执行任务，请先取消或等待完成")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "clear context failed: "+err.Error())
+		return
+	}
+	s.invalidateRunSnapshot(sessionID)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int{"dropped": dropped})
 }
 
 // ─── POST /sessions/{id}/command ──────────────────────────────────────────────

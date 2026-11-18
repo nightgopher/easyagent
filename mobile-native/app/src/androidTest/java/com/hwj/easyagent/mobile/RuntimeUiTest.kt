@@ -238,9 +238,18 @@ class RuntimeUiTest {
         fill("服务地址", host.url)
         fill("服务令牌", token)
         ui.onNodeWithText("保存并连接").performScrollTo().performClick()
-        waitText(host.title)
+        if (host.stewardEnabled) {
+            // 新核心首屏即管家对话，顶栏副标题显示连接状态。
+            waitText("已连接")
+        } else {
+            waitText(host.title)
+        }
     }
     private fun openChat(host: RuntimeFixture) {
+        if (host.stewardEnabled) {
+            ui.onNodeWithContentDescription("会话列表").performClick()
+            ui.waitUntil(10_000) { ui.onAllNodesWithText(host.title).fetchSemanticsNodes().isNotEmpty() }
+        }
         ui.onNodeWithText(host.title).performClick()
         waitText("已保存的历史")
         waitText("已连接")
@@ -323,27 +332,26 @@ class RuntimeUiTest {
         screenshot("independent-drafts")
     }
 
-    @Test fun newSessionRequestsFullModeAndExistingSessionDoesNot() {
+    @Test fun stewardHomeSkipsPermissionsAndSessionsScreenHasNoNewSession() {
         val host = host("权限主机")
-        connect(host); openChat(host)
+        host.stewardEnabled = true
+        connect(host)
+        waitText("已连接")
+        ui.waitUntil(10_000) { host.calls.any { it.path == "/agents/steward/session" } }
+        // 管家首屏不授予权限；派生会话的权限由核心默认模式管理。
+        assertFalse(host.calls.any { it.path?.endsWith("/permissions") == true })
+        // 会话列表不再提供「新会话」入口；任务会话由管家派生。
+        ui.onNodeWithContentDescription("会话列表").performClick()
+        waitText(host.title)
+        assertTrue(ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        screenshot("sessions-without-new-session")
+        // 从列表回到管家对话。
+        ui.onNodeWithContentDescription("回到管家对话").performClick()
+        waitText("已连接")
+        // 打开既有任务会话同样不触发权限写入。
+        openChat(host)
         waitText("需审批")
         assertFalse(host.calls.any { it.path?.endsWith("/permissions") == true })
-        ui.onNodeWithContentDescription("返回").performClick()
-        ui.waitUntil(10000) { ui.onAllNodesWithText("新会话", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        ui.onNodeWithText("新会话", useUnmergedTree = true).performClick()
-        // 模型异步加载后，小屏弹窗仍需将所选项滚动到可点击区域。
-        waitText("fixture-model", useUnmergedTree = true)
-        ui.onNodeWithText("fixture-model", useUnmergedTree = true).performScrollTo().performClick()
-        ui.onNodeWithText("创建", substring = false).performClick()
-        // The create dialog already mentions full access. Wait for the host
-        // write and the exact permission badge, not that explanatory text.
-        ui.waitUntil(10_000) {
-            host.accessMode == "full" && ui.onAllNodesWithText("全权限", substring = false).fetchSemanticsNodes().isNotEmpty()
-        }
-        assertEquals("full", host.accessMode)
-        val created = host.calls.first { it.path == "/sessions" && it.method == "POST" }
-        assertEquals("fixture-model", JSONObject(created.body.clone().readUtf8()).getString("model"))
-        screenshot("new-session-full-mode")
     }
 
     @Test fun sharedTextRequiresReviewAndBecomesRecoverableDraft() {
@@ -729,6 +737,8 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
     @Volatile private var runState = ""
     private val running: Boolean get() = runState == "running" || runState == "waiting_confirmation"
     @Volatile var completeNextConfirmationInSnapshot = false
+    /** 打开后模拟新核心：管家解析端点可用，首屏即管家对话。 */
+    @Volatile var stewardEnabled = false
     private var runPrompt = ""
     private var requestId = ""
     private var events = JSONArray()
@@ -791,6 +801,9 @@ private class RuntimeFixture(val name: String) : AutoCloseable {
                         json("""{"access_mode":"$accessMode"}""")
                     }
                     path == "/models" -> json("""{"models":[{"id":"fixture-model"}]}""")
+                    path == "/agents/steward/session" && request.method == "POST" ->
+                        if (stewardEnabled) json("""{"session_id":"steward-session","created":false}""")
+                        else json("{}").setResponseCode(404)
                     path == "/sessions" && request.method == "POST" -> json("""{"id":"qa-session"}""")
                     path == "/inbox" && request.method == "POST" -> json(request.body.clone().readUtf8())
                     path == "/sessions" && request.method == "GET" -> json(JSONArray().put(sessionSummary()).toString())
