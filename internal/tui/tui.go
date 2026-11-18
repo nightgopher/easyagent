@@ -340,6 +340,14 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 		}
+		// send_file 交付：独立提示行上屏（📎 前缀便于扫读），工具行照常收尾。
+		if msg.Name == "send_file" && !msg.IsError {
+			if text := strings.TrimSpace(fmt.Sprintf("%v", msg.Result)); text != "" && text != "<nil>" {
+				m.messages = append(m.messages, ChatMessage{Role: "assistant", Content: "📎 " + text, Timestamp: time.Now()})
+				m.viewport.SetMessages(m.messages)
+				m.viewport.GotoBottom()
+			}
+		}
 		// Find the matching tool call by ID (primary) or name (fallback).
 		// Search from the last message backwards.
 		found := false

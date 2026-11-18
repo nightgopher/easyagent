@@ -195,6 +195,13 @@ func (s *session) history(records []storedMessage) {
 						s.Messages = append(s.Messages, &message{Kind: "broadcast", CallID: call.ID, Text: body})
 					}
 				}
+				// send_file 交付：历史重载时按 args 重导文件卡片，与运行时投影一致
+				// （args 只含 path/caption，name/size 由渲染层从 path 兜底）。
+				if call.Name == "send_file" {
+					if path := strings.TrimSpace(str(object(args)["path"])); path != "" {
+						s.Messages = append(s.Messages, &message{Kind: "file", CallID: call.ID, Details: map[string]any{"kind": "file", "path": path, "caption": str(object(args)["caption"])}})
+					}
+				}
 			}
 		case "tool":
 			if tool := tools[m.ToolID]; tool != nil {
@@ -306,6 +313,22 @@ func (s *session) event(e agentEvent) {
 					if body := displayText(result); body != "" && !s.hasBroadcast(e.ToolID) {
 						rest := make([]*message, 0, len(s.Messages)-i)
 						rest = append(rest, &message{Kind: "broadcast", CallID: e.ToolID, RunID: s.runID(), Text: body})
+						rest = append(rest, s.Messages[i+1:]...)
+						s.Messages = append(s.Messages[:i+1], rest...)
+					}
+				}
+				// send_file 交付：Details 携带结构化文件信息，独立文件卡片紧贴工具行；
+				// CallID 去重防 snapshot 回放叠加。
+				if e.Type == "tool_end" && m.Tool == "send_file" && !e.Error {
+					if str(object(e.Details)["path"]) != "" && !s.hasFileCard(e.ToolID) {
+						details := map[string]any{"kind": "file", "path": str(object(e.Details)["path"])}
+						for _, key := range []string{"name", "size", "mime", "caption"} {
+							if v := object(e.Details)[key]; v != nil {
+								details[key] = v
+							}
+						}
+						rest := make([]*message, 0, len(s.Messages)-i)
+						rest = append(rest, &message{Kind: "file", CallID: e.ToolID, RunID: s.runID(), Details: details})
 						rest = append(rest, s.Messages[i+1:]...)
 						s.Messages = append(s.Messages[:i+1], rest...)
 					}
@@ -565,6 +588,17 @@ func (s *session) hasBroadcast(callID string) bool {
 	return false
 }
 
+// hasFileCard reports whether a send_file card for the given tool call is
+// already on screen; guards against snapshot replay double-insert.
+func (s *session) hasFileCard(callID string) bool {
+	for _, m := range s.Messages {
+		if m.Kind == "file" && m.CallID == callID {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *session) syncAnchors(records []storedMessage) {
 	byKey := map[string][]*message{}
 	for _, m := range s.Messages {
@@ -596,5 +630,32 @@ func (s *session) syncAnchors(records []storedMessage) {
 			queue[0].EntryID = r.EntryID
 			byKey[key] = queue[1:]
 		}
+	}
+}
+
+// humanFileSize renders a byte count from tool details as a compact size
+// label; "" when absent or not a number.
+func humanFileSize(v any) string {
+	var n int64
+	switch size := v.(type) {
+	case int64:
+		n = size
+	case int:
+		n = int64(size)
+	case float64:
+		n = int64(size)
+	default:
+		return ""
+	}
+	if n <= 0 {
+		return ""
+	}
+	switch {
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
 	}
 }
