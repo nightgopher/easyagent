@@ -110,6 +110,7 @@ func (s *Server) serveUntilSignal(addr string) error {
 	srv := &http.Server{Addr: addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second, BaseContext: func(net.Listener) context.Context { return s.ctx }}
 	exited := make(chan error, 1)
 	go func() { exited <- srv.ListenAndServe() }()
+	go s.runSchedules()
 	select {
 	case err := <-exited:
 		return err
