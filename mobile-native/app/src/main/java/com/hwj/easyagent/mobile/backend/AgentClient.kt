@@ -406,8 +406,9 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
                 if (id.isEmpty()) throw ApiException("服务未返回管家会话 ID")
                 refreshSessions()
                 onResolved(id)
-            } catch (e: ApiException) {
-                error.value = e.message
+            } catch (e: Exception) {
+                // 旧版核心没有该端点：静默回退会话列表，不当作致命错误。
+                error.value = if (e is ApiException) e.message else "管家会话不可用"
                 onFailure()
             }
         }
