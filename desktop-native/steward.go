@@ -34,7 +34,6 @@ func (a *preview) openSteward() {
 			a.Live.Error = "无法打开管家会话"
 			return
 		}
-		a.Live.Notice = "管家是唯一的常驻入口：让它创建任务会话承接具体工作；上下文可在会话内 /clear 清空。"
 		a.Search = ""
 		a.openSessionSearchHit(sessionSearchHit{SessionID: sessionID})
 		a.current().AgentID = desktopStewardID
