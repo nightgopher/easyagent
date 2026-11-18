@@ -69,6 +69,8 @@ func copyNativeConversation(s *session) string {
 			}
 		case m.Kind == "broadcast":
 			name = "Agent 播报"
+		case m.Kind == "file":
+			name = "交付文件"
 		case m.Kind != "":
 			name = m.Kind
 		}

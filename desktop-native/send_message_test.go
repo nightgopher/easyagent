@@ -91,3 +91,74 @@ func TestNativeSendMessageBubbleRender(t *testing.T) {
 		t.Fatal("broadcast bubble not rendered with label and body")
 	}
 }
+
+// ─── send_file 交付卡片 ─────────────────────────────────────────────────────────
+
+// TestNativeSendFileCardFromEvent：tool_end 的 Details 驱动文件卡片紧贴工具行
+// 上屏；同一 CallID 的回放不叠加；非 send_file 工具不触发。
+func TestNativeSendFileCardFromEvent(t *testing.T) {
+	s := &session{Run: &runInfo{ID: "run"}}
+	s.event(agentEvent{Type: "tool_start", ToolID: "sf1", ToolName: "send_file", Args: map[string]any{"path": "report.md"}})
+	s.event(agentEvent{Type: "tool_end", ToolID: "sf1", ToolName: "send_file", Result: "已交付文件：report.md（1.5 KB）",
+		Details: map[string]any{"kind": "file", "path": "report.md", "name": "report.md", "size": 1500}})
+	if len(s.Messages) != 2 {
+		t.Fatalf("tool row + file card expected: %d", len(s.Messages))
+	}
+	if s.Messages[0].Kind != "tool" || s.Messages[0].Tool != "send_file" {
+		t.Fatalf("tool row must stay: %+v", s.Messages[0])
+	}
+	card := s.Messages[1]
+	if card.Kind != "file" || card.CallID != "sf1" || str(object(card.Details)["path"]) != "report.md" {
+		t.Fatalf("file card wrong: %+v", card)
+	}
+	s.event(agentEvent{Type: "tool_end", ToolID: "sf1", ToolName: "send_file", Details: map[string]any{"kind": "file", "path": "report.md"}})
+	if len(s.Messages) != 2 {
+		t.Fatal("replayed tool_end must not duplicate the file card")
+	}
+
+	s2 := &session{Run: &runInfo{ID: "run"}}
+	s2.event(agentEvent{Type: "tool_start", ToolID: "w1", ToolName: "write", Args: map[string]any{"path": "a.txt"}})
+	s2.event(agentEvent{Type: "tool_end", ToolID: "w1", ToolName: "write", Details: map[string]any{"kind": "file", "path": "a.txt"}})
+	if len(s2.Messages) != 1 || s2.Messages[0].Kind != "tool" {
+		t.Fatalf("non-send_file tools must not create a card: %+v", s2.Messages)
+	}
+}
+
+// TestNativeSendFileCardFromHistory：历史重载按 args 重导文件卡片。
+func TestNativeSendFileCardFromHistory(t *testing.T) {
+	s := &session{}
+	s.history([]storedMessage{
+		{Role: "user", Content: "生成周报"},
+		{Role: "assistant", Content: "", StopReason: "tool_calls", ToolCalls: []struct {
+			ID, Name string
+			Args     any
+		}{{ID: "sf9", Name: "send_file", Args: map[string]any{"path": "周报.md", "caption": "本周总结"}}}},
+		{Role: "tool", ToolID: "sf9", Content: "File delivered: 周报.md (1200 bytes)"},
+		{Role: "assistant", Content: "已交付", StopReason: "stop"},
+	})
+	if len(s.Messages) != 4 {
+		t.Fatalf("user/tool/card/assistant expected: %d", len(s.Messages))
+	}
+	card := s.Messages[2]
+	if card.Kind != "file" || card.CallID != "sf9" || str(object(card.Details)["path"]) != "周报.md" {
+		t.Fatalf("history file card wrong: %+v", card)
+	}
+}
+
+// TestNativeSendFileCardRender：文件卡片带区分性标签、文件名与动作。
+func TestNativeSendFileCardRender(t *testing.T) {
+	a := newPreview()
+	a.Live = &liveState{Workbench: newNativeWorkbench()}
+	s := a.current()
+	s.Messages = []*message{
+		{User: true, Text: "生成周报"},
+		{Kind: "file", CallID: "sf1", Details: map[string]any{"kind": "file", "path": "report.md", "name": "report.md", "size": 1500}},
+	}
+	s.Run = &runInfo{ID: "r1", State: "completed"}
+	s.Seq = 2
+	tt := ui.NewTester(a.View, 1240, 820)
+	tt.Frame()
+	if !tt.HasText("交付文件") || !tt.HasText("report.md") {
+		t.Fatal("file card not rendered with label and name")
+	}
+}
