@@ -62,7 +62,19 @@ Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话
 
 ## 个人管家与主机只读查询
 
-`POST /agents/steward`，请求体 `{}`，按需创建或返回 `agent-steward`。重复打开保留用户已编辑的说明、工具、记忆设置与版本；已停用返回 409，不自动重新启用。接口沿用主机认证。首次创建采用独立工作区和记忆，不绑定知识来源或写文件、Shell、委派工具。随后可通过普通业务 Agent API 编辑。
+`POST /agents/steward`，请求体 `{}`，按需创建或返回 `agent-steward`。管家是用户唯一的常驻入口：预设在 v2 起定位为统筹者（`PresetVersion` 记录预设版本，升级只替换角色说明并追加新预设工具，保留用户的停用状态、记忆设置、自定义技能/知识与工具授权）。已停用返回 409，不自动重新启用。接口沿用主机认证。首次创建采用独立工作区和记忆，不绑定知识来源或写文件、Shell 工具。随后可通过普通业务 Agent API 编辑。
+
+### 管家唯一会话
+
+`POST /agents/steward/session`，请求体 `{}`，返回 `{"session_id", "created"}`：解析管家当前唯一会话——复用最新未归档会话，把其余未归档管家会话就地归档（历史遗留副本收敛），一个都没有时按管家身份新建。客户端（桌面侧栏、移动端首屏、看门狗）一律经此端点进入管家，不再各自创建。直接 `POST /sessions` 指定 `agent_id=agent-steward` 返回 409。
+
+### 派生任务会话
+
+`host_session_create`（仅管家，需服务器注入；CLI/TUI 无此工具）：参数 `title?`, `cwd?`, `application?`（默认 coding，可选 business）, `agent_id?`（business 必填，不能是管家自己）, `model?`, `prompt?`（可选首条任务消息，经会话队列投递并在空闲即开始运行）。同步创建完全独立的任务会话并返回 `session_id` 与 `easyagent://session/{id}` 链接。派生会话使用核心默认权限模式，不自动提升。
+
+### 上下文清除
+
+`POST /sessions/{id}/clear-context`，请求体 `{}`：就地清空会话上下文——同一 session id、不生成摘要、历史不保留，下一条消息从零开始；返回 `{"dropped": N}`。运行中返回 409。需要保留要点时改用 `POST /sessions/{id}/compact`（LLM 压缩）。
 
 以下工具仅向明确选中它们的业务 Agent 提供，并在每次执行时再次校验权限：
 
@@ -512,6 +524,7 @@ GET /health
 | POST | `/settings/feishu/qr/poll` | 使用 `device_code` 轮询注册结果，不自动保存凭据 |
 | POST | `/settings/feishu/qr/confirm` | 使用当前 `device_code` 确认保存已完成注册的凭据 |
 | POST | `/settings/feishu/bridge/restart` | 非托管主机启动/重启进程内桥接；systemd 托管主机返回 409 |
+| POST | `/feishu/relay` | 看门狗托付任务给进程内桥接：`{session_id, prompt, request_id?, title?, preview?}`，以 `larkwatch` 渠道运行并由扫码绑定的机器人发流式卡片；核心受理即返回 `{"status":"accepted"}`（会话忙转插话时为 `steered`）。桥接未在本进程运行返回 503 `bridge_unavailable`，未受理返回 409 `not_admitted` |
 | POST | `/asr/transcribe` | 上传音频并转写，需配置语音服务 |
 
 飞书管理接口要求服务令牌（`EA_SERVER_API_KEY`，兼容 `EA_API_KEY`）；systemd 托管模式还需要托管文件路径，非托管模式使用已保存本机凭据。扫码注册不用于托管主机。使用前参见 [飞书接入](FEISHU.md)。

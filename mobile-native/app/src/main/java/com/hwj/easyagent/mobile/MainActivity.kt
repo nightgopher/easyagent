@@ -13,7 +13,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hwj.easyagent.mobile.ui.ChatScreen
@@ -161,6 +166,9 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
         else -> key(current) {
             val client = requireNotNull(current)
             var chatId by rememberSaveable { mutableStateOf("") }
+            var stewardId by rememberSaveable { mutableStateOf("") }
+            var stewardFailed by rememberSaveable { mutableStateOf(false) }
+            var showSessions by rememberSaveable { mutableStateOf(false) }
             var commanding by rememberSaveable { mutableStateOf(false) }
             if (commanding) {
                 CommandScreen(client = client.api, onBack = { commanding = false })
@@ -182,10 +190,21 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                 onDone = { dismissedShares = dismissedShares + capture.id; app.shares.value = loadShares(app) },
                 onOpen = { chatId = it },
             )
-            if (chatId.isNotEmpty()) {
-                ChatScreen(client = client, sessionId = chatId, onBack = { chatId = "" })
-            } else {
-                SessionsScreen(
+            // 管家是唯一的常驻入口：进入主机先解析它的会话；旧版核心没有该
+            // 端点时回退到会话列表。
+            LaunchedEffect(client.config.id) {
+                if (stewardId.isEmpty() && !stewardFailed) {
+                    client.stewardSession(onResolved = { stewardId = it }, onFailure = { stewardFailed = true })
+                }
+            }
+            when {
+                chatId.isNotEmpty() -> ChatScreen(
+                    client = client,
+                    sessionId = chatId,
+                    onBack = { chatId = "" },
+                    onOpenSession = { chatId = it },
+                )
+                showSessions || (stewardId.isEmpty() && stewardFailed) -> SessionsScreen(
                     client = client,
                     connections = connections,
                     onOpen = { chatId = it },
@@ -201,7 +220,21 @@ private fun Root(app: EasyAgentApp, onInstall: () -> Unit) {
                     onShares = { dismissedShares = emptyList() },
                     pendingShares = shares.size,
                     onCommand = { commanding = true },
+                    onOpenSteward = {
+                        showSessions = false
+                        stewardFailed = false
+                        if (stewardId.isEmpty()) client.stewardSession(onResolved = { stewardId = it }, onFailure = { stewardFailed = true })
+                    },
                 )
+                stewardId.isNotEmpty() -> ChatScreen(
+                    client = client,
+                    sessionId = stewardId,
+                    onBack = {},
+                    isHome = true,
+                    onOpenSessions = { showSessions = true },
+                    onOpenSession = { chatId = it },
+                )
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
             }
         }

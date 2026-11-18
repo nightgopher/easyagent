@@ -234,6 +234,25 @@ func (w *Watch) Poll(ctx context.Context) error {
 		prompt = fmt.Sprintf("（另有 %d 条较早消息未列出）\n\n%s", total-shown, prompt)
 	}
 
+	// 优先托付给核心进程内的飞书桥接：扫码绑定的机器人在主人平时的对话里
+	// 发流式卡片（含审批卡片与按钮回调），主人可直接回复接着聊。
+	status, err := w.inject.Relay(ctx, RelayRequest{
+		SessionID: w.cfg.SessionID,
+		Prompt:    prompt,
+		RequestID: requestID(selected),
+		Title:     relayTitle(total),
+		Preview:   relayPreview(selected, total-shown),
+	})
+	if err == nil {
+		w.log.Info("relayed to feishu bridge", "status", status)
+		w.advanceAndSave(maxPos)
+		return nil
+	}
+	if !errors.Is(err, ErrRelayUnavailable) {
+		return fmt.Errorf("relay to feishu bridge: %w", err) // 位点不动，下轮重试
+	}
+	w.log.Debug("feishu bridge relay unavailable; falling back to text relay")
+
 	text, err := w.inject.Inject(ctx, w.cfg.SessionID, prompt, requestID(selected))
 	if errors.Is(err, ErrBusy) {
 		w.log.Info("session busy; steering interjection instead")
@@ -339,6 +358,49 @@ func buildPrompt(items []sighting, total int) string {
 	}
 	b.WriteString("\n请按 butler-rules 铁律处理：先判断是否需要回复；能直接回的以我的身份直接回复；涉及承诺、钱、合同、人事或拿不准的，先把拟稿发给我确认。完成后给出一句话处理摘要。")
 	return b.String()
+}
+
+// relayTitle 是看门狗卡片的标题栏。
+func relayTitle(total int) string {
+	return fmt.Sprintf("🐕 看门狗 · %d 条新消息", total)
+}
+
+// maxPreviewRunes 是卡片里每条新消息摘要的长度上限；完整内容在提示词里交给模型。
+const maxPreviewRunes = 80
+
+// relayPreview 把新消息渲染成卡片顶部的 Markdown 摘要，让主人先看到「谁说了什么」。
+func relayPreview(items []sighting, hidden int) string {
+	var b strings.Builder
+	for _, s := range items {
+		chatLabel := s.chat.Name
+		if chatLabel == "" {
+			chatLabel = s.chat.ChatID
+		}
+		for _, m := range s.msgs {
+			content := strings.Join(strings.Fields(m.Content), " ")
+			if content == "" {
+				kind := m.MsgType
+				if kind == "" {
+					kind = "unknown"
+				}
+				content = "[" + kind + " 消息]"
+			}
+			label := senderLabel(m)
+			if label != chatLabel {
+				label += " · " + chatLabel
+			}
+			fmt.Fprintf(&b, "**%s**　%s\n%s\n", escapeMarkdown(label), m.Time, escapeMarkdown(truncateRunes(content, maxPreviewRunes)))
+		}
+	}
+	if hidden > 0 {
+		fmt.Fprintf(&b, "（另有 %d 条较早消息未列出）\n", hidden)
+	}
+	return strings.TrimSpace(b.String())
+}
+
+// escapeMarkdown 转义他人消息里的 Markdown 控制字符，避免摘要排版被打乱。
+func escapeMarkdown(s string) string {
+	return strings.NewReplacer("\\", "\\\\", "*", "\\*", "_", "\\_", "`", "\\`", "[", "\\[", "]", "\\]", "<", "&lt;", ">", "&gt;").Replace(s)
 }
 
 func senderLabel(m Message) string {

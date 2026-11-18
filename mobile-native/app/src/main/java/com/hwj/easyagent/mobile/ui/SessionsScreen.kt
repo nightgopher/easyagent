@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
@@ -31,7 +32,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +78,7 @@ fun SessionsScreen(
     onShares: () -> Unit = {},
     pendingShares: Int = 0,
     onCommand: () -> Unit = {},
+    onOpenSteward: () -> Unit = {},
 ) {
     val hosts by connections.state.collectAsStateWithLifecycle()
     val taskStates by client.taskStates.collectAsStateWithLifecycle()
@@ -92,8 +93,6 @@ fun SessionsScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var hostMenuOpen by remember { mutableStateOf(false) }
     val host = hosts.hosts.firstOrNull { it.id == client.config.id } ?: client.config
-    var creating by rememberSaveable { mutableStateOf(false) }
-    if (creating) NewSessionDialog(client, { creating = false }, onOpen)
     var inbox by rememberSaveable { mutableStateOf(false) }
     if (inbox) InboxDialog(client, { inbox = false }, onOpen)
     var renaming by remember { mutableStateOf<SessionSummary?>(null) }
@@ -153,6 +152,7 @@ fun SessionsScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onOpenSteward) { Icon(Icons.Filled.Face, contentDescription = "回到管家对话") }
                     IconButton(onClick = { client.refreshSessions() }) { Icon(Icons.Filled.Refresh, contentDescription = "刷新会话") }
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "更多") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -174,13 +174,6 @@ fun SessionsScreen(
                         DropdownMenuItem(text = { Text("检查更新") }, onClick = { menuOpen = false; onUpdates() })
                     }
                 },
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { creating = true },
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("新会话") },
             )
         },
         snackbarHost = { SnackbarHost(snackbar) },

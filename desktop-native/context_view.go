@@ -129,7 +129,31 @@ func (a *preview) contextWorkbench(c *ui.Context) {
 				label = "正在生成摘要…"
 			}
 			a.primary(c, label).AlignSelf(ui.End).Disabled(l.Loading["compact/"+s.RemoteID] || len(list(m["messages"])) < 2).OnClick(func() { a.compactNativeSession(s, w.CompactInstructions) })
+			clearLabel := "清空上下文"
+			if l.Loading["clear-context/"+s.RemoteID] {
+				clearLabel = "正在清空…"
+			}
+			a.note(c, "清空会丢弃全部上下文（同一会话、不生成摘要）；要保留要点请用压缩。")
+			a.primary(c, clearLabel).AlignSelf(ui.End).Disabled(l.Loading["clear-context/"+s.RemoteID] || len(list(m["messages"])) == 0).OnClick(func() { a.clearNativeSessionContext(s) })
 		})
+	})
+}
+
+func (a *preview) clearNativeSessionContext(s *session) {
+	if s.Running || s.Pending || a.Live.configBusy() || s.RemoteID == "" {
+		return
+	}
+	sid := s.RemoteID
+	a.run("clear-context/"+sid, func(ctx context.Context, b *backendClient) (any, error) {
+		var result any
+		err := b.request(ctx, http.MethodPost, sessionPath(sid)+"/clear-context", map[string]any{}, &result)
+		return result, err
+	}, func(any) {
+		a.loadSession(s)
+		if a.current() == s {
+			a.resource("context", sessionPath(sid)+"/context")
+		}
+		a.Live.Notice = "上下文已清空，同一会话从零开始。"
 	})
 }
 func (a *preview) compactNativeSession(s *session, instructions string) {

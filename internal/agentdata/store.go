@@ -37,6 +37,10 @@ type Agent struct {
 	Disabled      bool               `json:"disabled"`
 	Version       int64              `json:"version"`
 	UpdatedAt     string             `json:"updated_at"`
+	// PresetVersion tracks which revision of a built-in preset (steward) the
+	// definition was written from, independent of the per-record Version that
+	// increments on every save. Zero for user-created agents.
+	PresetVersion int64 `json:"preset_version,omitempty"`
 }
 
 type Store struct{ dataDir string }
