@@ -29,11 +29,12 @@ fun InboxDialog(client: AgentClient, onDismiss: () -> Unit, onOpen: (String) -> 
                     Text(text, maxLines = 8)
                     Text(record.obj().getString("source"), style = MaterialTheme.typography.labelSmall)
                     TextButton(onClick = {
-                        client.createSession { id ->
-                            client.chat(id).draft = "请根据以下材料整理成笔记：\n\n$text"
+                        // 材料交给管家统筹：在其唯一会话里带着整理指令的草稿打开。
+                        client.stewardSession(onResolved = { id ->
+                            client.chat(id).draft = "请根据以下材料整理成笔记，需要建任务会话时告诉我：\n\n$text"
                             client.touch(); onDismiss(); onOpen(id)
-                        }
-                    }) { Text("带入新会话整理") }
+                        })
+                    }) { Text("交给管家整理") }
                 }
             }
         }

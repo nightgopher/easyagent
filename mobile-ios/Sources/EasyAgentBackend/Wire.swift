@@ -150,6 +150,62 @@ public actor APIClient {
         try await get("sessions")
     }
 
+    public func stewardSession() async throws -> StewardSessionResponse {
+        try await postJSON("agents/steward/session", body: Data("{}".utf8))
+    }
+
+    public func clearContext(sessionID: String) async throws {
+        try await post("sessions/\(sessionID)/clear-context", body: Data("{}".utf8))
+    }
+
+    private func postJSON<T: Decodable>(_ path: String, body: Data) async throws -> T {
+        var request = URLRequest(url: host.baseURL.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKeyProvider())", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        do {
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse(-1)
+            }
+            switch http.statusCode {
+            case 200, 201:
+                do { return try JSONDecoder().decode(T.self, from: data) }
+                catch { throw APIError.decode(String(describing: T.self)) }
+            case 401, 403: throw APIError.unauthorized
+            default: throw APIError.invalidResponse(http.statusCode)
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.unreachable(error.localizedDescription)
+        }
+    }
+
+    private func post(_ path: String, body: Data) async throws {
+        var request = URLRequest(url: host.baseURL.appendingPathComponent(path))
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKeyProvider())", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse(-1)
+            }
+            switch http.statusCode {
+            case 200, 201: return
+            case 401, 403: throw APIError.unauthorized
+            default: throw APIError.invalidResponse(http.statusCode)
+            }
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.unreachable(error.localizedDescription)
+        }
+    }
+
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var request = URLRequest(url: host.baseURL.appendingPathComponent(path))
         request.setValue("Bearer \(apiKeyProvider())", forHTTPHeaderField: "Authorization")
@@ -170,5 +226,15 @@ public actor APIClient {
         } catch {
             throw APIError.unreachable(error.localizedDescription)
         }
+    }
+}
+
+public struct StewardSessionResponse: Decodable {
+    public let sessionID: String
+    public let created: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionID = "session_id"
+        case created
     }
 }

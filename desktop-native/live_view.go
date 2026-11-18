@@ -117,7 +117,7 @@ func (a *preview) liveSidebar(c *ui.Context) {
 	l := a.Live
 	ui.Column(c).Width(260).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Padding(14).Gap(12).Children(func() {
-			flatButton(c, "user", "管家").Justify(ui.Start).Disabled(!l.Connected || l.Loading["steward"] || l.Loading["agent-session"] || l.Loading["create-session"]).Tooltip("查找当前主机的任务和历史会话，直接返回原 Agent").OnClick(a.openSteward)
+			flatButton(c, "user", "管家").Justify(ui.Start).Disabled(!l.Connected || l.Loading["steward"] || l.Loading["create-session"]).Tooltip("唯一的常驻对话：统筹目标、创建任务会话、跟踪结果").OnClick(a.openSteward)
 			flatButton(c, "activity", "任务跟进").Justify(ui.Start).OnClick(a.openWork)
 			ui.Row(c).Gap(8).Children(func() {
 				a.text(c, "对话").Bold()
@@ -140,13 +140,16 @@ func (a *preview) liveSidebar(c *ui.Context) {
 						menuOption(c, item.Icon, item.Name, false).OnClick(func() { a.NewMenu = false; a.createLiveSessionIn("", a.current().Workspace, item.Application) })
 					}
 					ui.Divider(c)
-					ui.Scroll(c).MaxHeight(240).MinHeight(0).Children(func() {
-						for _, role := range a.businessAgents() {
-							if !role.Disabled {
-								menuOption(c.Key(role.ID), "user", role.Name, false).OnClick(func() { a.NewMenu = false; a.startBusinessSession(role.ID) })
+						ui.Scroll(c).MaxHeight(240).MinHeight(0).Children(func() {
+							for _, role := range a.businessAgents() {
+								if role.ID == desktopStewardID {
+									continue // 管家走侧栏专属入口，永不新建副本
+								}
+								if !role.Disabled {
+									menuOption(c.Key(role.ID), "user", role.Name, false).OnClick(func() { a.NewMenu = false; a.startBusinessSession(role.ID) })
+								}
 							}
-						}
-					})
+						})
 					menuOption(c, "settings", "管理业务 Agent", false).OnClick(func() { a.openSettings("agents") })
 				})
 				if popup.Valid() {
@@ -237,14 +240,23 @@ func (a *preview) liveSidebar(c *ui.Context) {
 				if collapsed {
 					continue
 				}
+				var stewardSession *session
 				var pinned []*session
 				buckets := [3][]*session{}
 				for _, s := range byGroup[group] {
+					if s.AgentID == desktopStewardID && !s.Archived {
+						stewardSession = s
+						continue
+					}
 					if s.Pinned {
 						pinned = append(pinned, s)
 						continue
 					}
 					buckets[sessionBucket(s.UpdatedAt)] = append(buckets[sessionBucket(s.UpdatedAt)], s)
+				}
+				// 管家会话是唯一常驻入口，固定显示在分组最上方。
+				if stewardSession != nil {
+					a.sessionRow(c, stewardSession)
 				}
 				for _, s := range pinned {
 					a.sessionRow(c, s)
@@ -717,7 +729,7 @@ func (a *preview) liveModals(c *ui.Context) {
 
 type nativeCommand struct{ Name, Description string }
 
-var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/skills", "本项目技能"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
+var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/skills", "本项目技能"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/clear", "清空上下文（同一会话，不保留历史）"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
 
 func (a *preview) commandMatches(text string) []nativeCommand {
 	if !strings.HasPrefix(text, "/") {
@@ -775,6 +787,8 @@ func (a *preview) executeLiveCommand(text string) bool {
 		}
 	case "/compact":
 		a.operation("compact", "POST", sessionPath(s.RemoteID)+"/compact", map[string]any{"custom_instructions": args}, func(any) { a.loadSession(s) })
+	case "/clear":
+		a.clearNativeSessionContext(s)
 	case "/help":
 		l.Notice = "⌘N 新会话 · ⌘, 设置 · ⌘P 工作台 · /model 切换模型 · /compact 压缩上下文"
 	default:

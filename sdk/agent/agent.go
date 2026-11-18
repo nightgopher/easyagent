@@ -465,6 +465,39 @@ func (a *Agent) CompactNow(ctx context.Context, customInstructions string) (stri
 	return summary, trimmedFrom, trimmedTo, nil
 }
 
+// ClearContextNow empties the live context in place: the session keeps its ID
+// and stored transcript, but the next turn starts from a blank context with a
+// single boundary note. No summarizer or LLM call is involved. Returns the
+// number of messages that were dropped.
+func (a *Agent) ClearContextNow(ctx context.Context) (int, error) {
+	if a.session == nil {
+		return 0, fmt.Errorf("no session for context clear")
+	}
+
+	history, err := a.session.BuildContext(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("build context: %w", err)
+	}
+	if len(history) == 0 {
+		return 0, fmt.Errorf("context is already empty")
+	}
+
+	const note = "上下文已清空"
+	info := compactionInfo("clear", "", history, note, nil, a.model)
+	if err := a.session.AppendCompaction(ctx, note); err != nil {
+		return 0, fmt.Errorf("persist context clear: %w", err)
+	}
+
+	a.emit(ctx, EventCompacted{
+		Info:        info,
+		Summary:     note,
+		TrimmedFrom: len(history),
+		TrimmedTo:   0,
+	})
+
+	return len(history), nil
+}
+
 func (a *Agent) Steer(ctx context.Context, msg ai.Message) {
 	a.steeringQueue.Enqueue(msg)
 }

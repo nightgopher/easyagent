@@ -397,21 +397,18 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         }
     }
 
-    fun createSession(cwd: String = "", model: String = "", onCreated: (String) -> Unit) {
+    /** 解析管家唯一的常驻会话（服务端负责复用/收敛/首建）。 */
+    fun stewardSession(onResolved: (String) -> Unit, onFailure: () -> Unit = {}) {
         scope.launch {
             try {
-                val raw = api.post("/sessions", buildJsonObject { put("cwd", cwd); put("model", model) })
-                val id = raw.obj().getString("id")
-                if (id.isEmpty()) throw ApiException("服务未返回会话 ID")
-                // Only newly created mobile sessions opt into full mode.
-                try {
-                    val mode = api.post(ApiClient.sessionPath(id) + "/permissions", buildJsonObject { put("mode", "full") })
-                    chat(id).accessMode = mode.obj().getString("access_mode")
-                } catch (e: ApiException) { error.value = "会话已创建，但全权限设置失败：" + e.message }
+                val raw = api.post("/agents/steward/session", buildJsonObject {})
+                val id = raw.obj().getString("session_id")
+                if (id.isEmpty()) throw ApiException("服务未返回管家会话 ID")
                 refreshSessions()
-                onCreated(id)
+                onResolved(id)
             } catch (e: ApiException) {
                 error.value = e.message
+                onFailure()
             }
         }
     }
@@ -458,6 +455,18 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
         scope.launch {
             try {
                 api.post(ApiClient.sessionPath(s.id) + "/compact")
+                loadSessionInfo(s)
+            } catch (e: ApiException) {
+                error.value = e.message
+            }
+        }
+    }
+
+    /** 真清空上下文：同一会话、不生成摘要，下一条消息从零开始。 */
+    fun clearContext(s: ChatSession) {
+        scope.launch {
+            try {
+                api.post(ApiClient.sessionPath(s.id) + "/clear-context")
                 loadSessionInfo(s)
             } catch (e: ApiException) {
                 error.value = e.message
