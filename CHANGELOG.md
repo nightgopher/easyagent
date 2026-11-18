@@ -4,11 +4,14 @@
 
 ## [Unreleased]
 
+## [v0.49.0] - 2026-11-18
+
 ### Added
 - 持久化定时任务：新增 `/schedules` 接口，定时任务归属业务 Agent 或专家团，按 `every`（5m–744h）或 `daily_at`（主机本地时间）执行，保存在 `agents.sqlite`，服务重启后继续、不过期。每次执行新开会话并自动登记为任务跟进，Agent 用 `work_report` 把产出报告为待验收；同一定时任务不重叠执行，停机错过的执行只补一次；支持立即执行。会话内 `/loop` 不变。详见 docs/API.md「定时任务」与 docs/decisions/personal-command-center.md 第一阶段调整。
 - 管家单会话化：管家成为唯一常驻入口。新增 `POST /agents/steward/session` 解析管家唯一会话（复用最新未归档会话、自动归档历史遗留副本、首次按需创建），直接 `POST /sessions` 指定管家 agent 返回 409；桌面端「管家」按钮、移动端首屏一律经此端点进入。管家的预设角色升级到 v2（`PresetVersion` 门控，保留停用/记忆/技能与工具授权）：从"可选的只读助手"改为"统筹规划者"，新增 `host_session_create` 工具——按需创建完全独立的编程（默认）或业务 Agent 任务会话，可选首条任务消息经队列投递、空闲即开始运行，并把 `easyagent://session/{id}` 链接转达给用户；派生会话使用核心默认权限模式。
 - 新增 `POST /sessions/{id}/clear-context`：真清空会话上下文——同一 session id、不生成摘要、历史不保留，下一条消息从零开始（区别于 `/compact` 的 LLM 压缩）；桌面上下文工作台新增「清空上下文」按钮与 `/clear` 命令，移动端会话菜单新增对应入口。
 - 移动端（Android）：首屏直接进入管家对话（旧版核心无端点时回退会话列表）；移除「新会话」入口，任务会话经管家创建或从会话列表进入；管家转达的 `easyagent://session/{id}` 链接可在应用内直接打开。iOS：会话列表顶部固定管家入口，会话内新增清空上下文。
+- 新增 `send_file` 工具（`{path, caption?}`）：agent 显式交付生成的文件到聊天。桌面呈现文件卡片（文件名/路径/大小 + caption，可从工作台打开或复制路径，历史重载自动重导）；飞书桥把工作区内文件上传为文件消息直达聊天并跟发 caption；TUI 显示交付提示行。路径策略与 read/write 一致（`--allow-outside-workspace` 生效），25MB 上限；与 `send_message` 一致排除出子 agent。Android 文件卡片随后续 PR 跟进。
 
 ## [v0.48.0] - 2026-11-17
 
