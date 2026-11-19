@@ -4,11 +4,17 @@
 
 ## [Unreleased]
 
+## [v0.50.0] - 2026-11-19
+
+### Added
+- 技能使用统计：coding agent 会话中模型经 `read` 工具读取已加载技能文件时，向 `~/.easyagent/usage.jsonl` 追加一行 JSONL（时间、技能名、路径、会话 ID），写入失败静默、不影响正常会话。新增 `easyagent skills-stats [--json]` 子命令汇总使用排行与从未读取清单（对照会话同一目录逻辑加载的已安装技能），回答"装了一堆技能到底用过哪些"。business agent 的 `read_skill` 显式工具暂未接入埋点，远端多机部署的 usage 文件各自落地，汇总需另行处理。
+
 ### Fixed
 - 修复保存管家 Agent 后预设被重复升级的问题：桌面端的 Agent 定义不含 `preset_version` 字段，GET→改→PUT 回写会把管家预设版本静默抹成 0，下次打开管家时触发一次多余升级——修订号无谓自增，用户自定义的管家名称与说明文字被预设文案覆盖。现在 `SaveAgent` 更新时以服务端存量 `PresetVersion` 为准，客户端不再需要（也无法）携带该字段；v0.48 旧记录的正常升级路径不受影响。
 
 ### Changed
 - 桌面客户端底层框架 MyGo 从 v0.8.3 升级到 v0.10.0（取代「暂不追 v0.9.x」的表态）：获得 iOS/Android 目标（桌面构建不受影响，仍无需 cgo 与手机工具链）、布局提速约 12%、大 Markdown 编辑重解析约省三分之二时间、弹窗不再超出窗口边界、更新器对瞬时网络失败自动重试等能力。v0.9.0 移除 `sqlite.LibraryPath` 为本区间唯一 Go API 破坏性变更，本客户端不用 plugins/sqlite，不受影响；`RequestSingleInstanceLock`、`OnDOMReady`、tray 相关变化均不涉及本客户端未使用的 API。
+- release-check 的原生构建 job 支持仓库变量 `EASYAGENT_MACOS_ARM_RUNNER` 指定的托管回退镜像（`macos-15` / `xcode-27`），`macos-26` 容量紧张时可 defer 排队，避免发布检查长时间滞留（v0.49.1 发布失败的根因）。
 
 ## [v0.49.0] - 2026-11-18
 
