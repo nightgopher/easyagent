@@ -170,17 +170,32 @@ func (s *Store) SaveAgent(ctx context.Context, a Agent) (Agent, error) {
 		seenSources[binding.SourceID] = true
 	}
 	previous := a.Version
+	db, err := s.open(ctx)
+	if err != nil {
+		return Agent{}, err
+	}
+	defer func() { _ = db.Close() }()
+	if !create {
+		// PresetVersion 是服务端管理的预设元数据（见 EnsureSteward），客户端不必
+		// 携带它——桌面/移动端的定义结构就不含这个字段。回写时以存量值为准，避免
+		// 一次普通保存把预设版本抹成 0，下次 EnsureSteward 再触发一次升级：修订号
+		// 无谓自增、预设覆盖用户自定义的角色文本。
+		var stored string
+		if err = db.QueryRowContext(ctx, "SELECT definition FROM business_agents WHERE id=?", a.ID).Scan(&stored); err == nil {
+			var existing Agent
+			if json.Unmarshal([]byte(stored), &existing) == nil && existing.PresetVersion > a.PresetVersion {
+				a.PresetVersion = existing.PresetVersion
+			}
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return Agent{}, err
+		}
+	}
 	a.Version++
 	a.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	data, err := json.Marshal(a)
 	if err != nil {
 		return Agent{}, err
 	}
-	db, err := s.open(ctx)
-	if err != nil {
-		return Agent{}, err
-	}
-	defer func() { _ = db.Close() }()
 	if create {
 		_, err = db.ExecContext(ctx, "INSERT INTO business_agents(id,definition,version) VALUES(?,?,?)", a.ID, string(data), a.Version)
 	} else {

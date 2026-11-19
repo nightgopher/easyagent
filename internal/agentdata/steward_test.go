@@ -89,6 +89,30 @@ func TestStewardPresetStableAfterUpgrade(t *testing.T) {
 	require.Len(t, all, 1)
 }
 
+func TestStewardPresetSurvivesClientSaveWithoutPresetVersion(t *testing.T) {
+	// 桌面/移动端的定义结构不携带 preset_version；GET→改→PUT 回写不得把预设版本
+	// 抹成 0，否则下次 EnsureSteward 会再触发一次升级，覆盖用户自定义的角色文本。
+	ctx, dir := context.Background(), t.TempDir()
+	store := New(dir)
+	base, err := store.EnsureSteward(ctx)
+	require.NoError(t, err)
+
+	saved := base
+	saved.PresetVersion = 0 // 模拟不含 preset_version 字段的客户端回写
+	saved.Instructions = "用户自定义说明"
+	saved.Disabled = true
+	saved, err = store.SaveAgent(ctx, saved)
+	require.NoError(t, err)
+	require.Equal(t, int64(stewardPresetVersion), saved.PresetVersion)
+	require.Equal(t, "用户自定义说明", saved.Instructions)
+
+	reopened, err := store.EnsureSteward(ctx)
+	require.NoError(t, err)
+	require.Equal(t, saved, reopened)
+	require.True(t, reopened.Disabled)
+	require.Equal(t, "用户自定义说明", reopened.Instructions)
+}
+
 func TestStewardPresetMentionsSessionLifecycleRules(t *testing.T) {
 	// 角色文案与单会话产品语义互相锁定，防止无意回退。
 	text := stewardPreset().Instructions
