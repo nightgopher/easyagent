@@ -1,6 +1,6 @@
 # EasyAgent 原生桌面客户端
 
-MyGo v0.6.2 的原生界面，直接复用现有 EasyAgent Go 核心的 REST/WebSocket 协议。UI 不使用 React、HTML、JavaScript 或 WebView；电脑控制继续使用原有系统助手并随包提供。
+MyGo v0.10.0 的原生界面，直接复用现有 EasyAgent Go 核心的 REST/WebSocket 协议。UI 不使用 React、HTML、JavaScript 或 WebView；电脑控制继续使用原有系统助手并随包提供。
 
 正式桌面客户端，Bundle ID 为 `com.hwj.easyagent`。安装产物随正式 Release 发布（`easyagent-native-darwin-arm64.dmg`）；本机构建产物只进入 `build.noindex/`，不自动替换 `/Applications/EasyAgent.app`。
 
@@ -19,7 +19,7 @@ Go / MyGo 是唯一维护中的桌面客户端，不依赖 Electron、React、No
 
 旧 `desktop/`（含 Capacitor Android 外壳）已退役，完整历史可从 `archive/workflow` 查看；退役前精确源码见提交 `e4b4088`。旧客户端的用户数据、已安装应用和签名身份不会自动删除或迁移。原生客户端使用 MyGo 原生签名更新器，从正式 Release 检查和安装更新。
 
-**MyGo 上游升级说明（2026-11-12）**：本客户端已从 MyGo v0.6.4 升级到 v0.8.3（取代 2026-11-08 的暂缓决策）。v0.8.0 按键模型重构（`InputEvent.Code` 按物理键位命名、`HandleInput` 可见系统报告的每一个按键）对本客户端无影响：全部 3 处 `HandleInput` 均按具体 `ev.Key` 匹配、未命中返回 false，属上游确认无需改动的模式；快捷键 API 未变。上游暂不追 v0.9.x（native modules 实验性）。后续升级时一并评估：`ui/richtext`/`ui/markdown` 能否替代会话流的自有渲染路径，以及 `mygo-automation` 是否纳入桌面验收工具链。
+**MyGo 上游升级说明（2026-11-19）**：本客户端已从 MyGo v0.8.3 升级到 v0.10.0（取代 2026-11-12「暂不追 v0.9.x」的表态）。v0.9.0 是本区间唯一的 Go API 破坏性变更（移除 `sqlite.LibraryPath`，改走 native module），本客户端不用 plugins/sqlite，不受影响；v0.9.1 新增的构建期校验（更新 URL 带 query、`fileAssociations[].mimeType`）对本客户端的 `mygo.json` 均不适用；v0.9.2 起单实例锁持有到进程退出、v0.10.0 三击选中整段、弹窗不超过窗口边界、`OnDOMReady` 对 back/forward cache 生效——本客户端未使用 `RequestSingleInstanceLock`/`OnDOMReady`/tray，前两项为行为级变化，GUI 验收覆盖。升级后一并评估项不变：`ui/richtext`/`ui/markdown` 能否替代会话流的自有渲染路径，以及 `mygo-automation` 是否纳入桌面验收工具链。另：v0.10.0 新增 iOS/Android 目标（同一 Go 代码库，桌面构建仍无需 cgo 与手机工具链），是评估移动端是否统一 Go 的技术前提；`ui/mobile`、手机插件等包为纯增量，桌面构建不引入。
 
 ## 实际功能
 
