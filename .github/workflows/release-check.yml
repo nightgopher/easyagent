@@ -84,8 +84,10 @@ jobs:
     # session the preview windows contend with real use and time out, so this
     # job always stays on hosted Apple Silicon regardless of
     # EASYAGENT_MACOS_ARM_RUNNER (release.yml native keeps using that var; it
-    # builds, signs and smoke-checks one bundle without the UI suite).
-    runs-on: macos-26
+    # builds, signs and smoke-checks one bundle without the UI suite). It does
+    # honor the documented hosted fallback labels so a macos-26 capacity
+    # squeeze can defer to macos-15 / xcode-27 instead of queueing.
+    runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || 'macos-26' }}
     steps:
       - uses: actions/checkout@v7
         with:
