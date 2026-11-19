@@ -85,12 +85,14 @@ func (r *UsageRecorder) RecordSkillRead(path string) {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	f, err := os.OpenFile(r.logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(r.logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return
 	}
 	defer f.Close()
-	f.Write(append(line, '\n'))
+	if _, err := f.Write(append(line, '\n')); err != nil {
+		return
+	}
 }
 
 // withinDir 判断 path 是否位于 dir 之内（含 dir 自身）。
@@ -110,7 +112,7 @@ func withinDir(dir, path string) bool {
 func AggregateUsage(logPath string) (map[string]int, map[string]int64, error) {
 	counts := map[string]int{}
 	last := map[string]int64{}
-	f, err := os.Open(logPath)
+	f, err := os.Open(logPath) // #nosec G304 -- logPath 是应用自身 DataDir 下的埋点文件路径，来自配置而非用户输入。
 	if err != nil {
 		if os.IsNotExist(err) {
 			return counts, last, nil
