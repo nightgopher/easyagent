@@ -81,6 +81,13 @@ func main() {
 		runUpdateCLI(os.Args[2:])
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "skills-stats" {
+		if err := runSkillsStatsCLI(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {

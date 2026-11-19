@@ -14,9 +14,11 @@ import (
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/skill"
 	"github.com/nightgopher/easyagent/sdk/slashcmd"
 	basetools "github.com/nightgopher/easyagent/sdk/tools"
 	"log/slog"
+	"path/filepath"
 	"time"
 )
 
@@ -86,6 +88,12 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 	extensions := append([]agent.Tool{}, opts.ExtensionTools...)
 	extensions = append(extensions, capture.Tool{Store: capture.New(a.Cfg.DataDir), Source: "session:" + opts.SessionID})
 	extensions = append(extensions, worktools.Tools(agentdata.New(a.Cfg.DataDir), opts.SessionID)...)
+	// 技能读取埋点：模型通过 read 命中本会话加载的技能文件时记录一行 JSONL，
+	// 供 `easyagent skills-stats` 统计技能使用情况。任何失败都不影响主流程。
+	var skillUsage basetools.SkillAccessLogger
+	if len(opts.Skills) > 0 && a.Cfg.DataDir != "" {
+		skillUsage = skill.NewUsageRecorder(filepath.Join(a.Cfg.DataDir, "usage.jsonl"), opts.SessionID, opts.Skills)
+	}
 	return codingtools.BuildList(codingtools.ListOptions{
 		TodoDataDir:            a.Cfg.DataDir,
 		SessionID:              opts.SessionID,
@@ -109,6 +117,7 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 		FileMutationQueue:      mutationQueue,
 		BackupManager:          backupMgr,
 		ReadTracker:            readTracker,
+		SkillUsage:             skillUsage,
 		BackgroundTasks:        backgroundTasks,
 	})
 }

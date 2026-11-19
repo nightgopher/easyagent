@@ -21,6 +21,13 @@ type ReadTool struct {
 	maxOutputLen int    // 最大输出长度，0 表示使用 DefaultMaxOutputLen
 	ops          operations.FileOperations
 	readTracker  *ReadTracker
+	skillUsage   SkillAccessLogger // 可选：技能读取埋点，用于技能使用统计
+}
+
+// SkillAccessLogger 记录模型读取技能文件的事件（技能使用统计的数据源）。
+// 由 sdk/skill.UsageRecorder 实现；sdk/tools 不依赖 sdk/skill，保持单向依赖。
+type SkillAccessLogger interface {
+	RecordSkillRead(path string)
 }
 
 type ReadParams struct {
@@ -37,6 +44,11 @@ type ReadToolOption func(*ReadTool)
 // WithReadTracker sets the ReadTracker to record read files.
 func WithReadTracker(tracker *ReadTracker) ReadToolOption {
 	return func(t *ReadTool) { t.readTracker = tracker }
+}
+
+// WithReadSkillUsage sets the logger that records reads of skill files.
+func WithReadSkillUsage(logger SkillAccessLogger) ReadToolOption {
+	return func(t *ReadTool) { t.skillUsage = logger }
 }
 
 // WithReadPathPolicy explicitly controls access outside the workspace.
@@ -129,6 +141,10 @@ func (t *ReadTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 			modTime = stat.ModTime
 		}
 		t.readTracker.Record(cleanPath, data, modTime)
+	}
+
+	if t.skillUsage != nil {
+		t.skillUsage.RecordSkillRead(cleanPath)
 	}
 
 	// PDF 按 %PDF- 魔数分流：按页提取文本，含损坏文件与扫描页的明确说明。
