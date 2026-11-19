@@ -4,6 +4,9 @@
 
 ## [Unreleased]
 
+### Changed
+- 桌面客户端底层框架 MyGo 从 v0.8.3 升级到 v0.10.0（取代「暂不追 v0.9.x」的表态）：获得 iOS/Android 目标（桌面构建不受影响，仍无需 cgo 与手机工具链）、布局提速约 12%、大 Markdown 编辑重解析约省三分之二时间、弹窗不再超出窗口边界、更新器对瞬时网络失败自动重试等能力。v0.9.0 移除 `sqlite.LibraryPath` 为本区间唯一 Go API 破坏性变更，本客户端不用 plugins/sqlite，不受影响；`RequestSingleInstanceLock`、`OnDOMReady`、tray 相关变化均不涉及本客户端未使用的 API。
+
 ## [v0.49.0] - 2026-11-18
 
 ### Added
