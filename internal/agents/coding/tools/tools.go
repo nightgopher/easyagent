@@ -28,10 +28,11 @@ type ListOptions struct {
 	ExtensionTools         []agent.Tool
 	AllowedTools           []string
 	BlockedTools           []string
-	FileMutationQueue      *FileMutationQueue         // 可选：per-file 写操作串行化
-	BackupManager          *basetools.BackupManager   // 可选：操作前自动快照
-	ReadTracker            *basetools.ReadTracker     // 可选：读后外部修改保护
-	BackgroundTasks        *basetools.BackgroundTasks // 可选：bash 后台任务，提供时注册 bash_output / bash_kill
+	FileMutationQueue      *FileMutationQueue          // 可选：per-file 写操作串行化
+	BackupManager          *basetools.BackupManager    // 可选：操作前自动快照
+	ReadTracker            *basetools.ReadTracker      // 可选：读后外部修改保护
+	SkillUsage             basetools.SkillAccessLogger // 可选：技能读取埋点（技能使用统计）
+	BackgroundTasks        *basetools.BackgroundTasks  // 可选：bash 后台任务，提供时注册 bash_output / bash_kill
 }
 
 // BaseToolNames returns the canonical coding-agent tool names before extension tools.
@@ -92,6 +93,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithReadMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithReadOperations(opts.FileOps),
 			basetools.WithReadTracker(opts.ReadTracker),
+			basetools.WithReadSkillUsage(opts.SkillUsage),
 		),
 		basetools.NewWriteTool(
 			basetools.WithWriteWorkspace(opts.Workspace),
