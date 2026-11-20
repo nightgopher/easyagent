@@ -2,12 +2,13 @@
 
 每次发布记录候选 SHA、APK 版本/签名、测试设备/API、检查结果和报告链接。失败项修复后重跑，未执行项标为未执行；构建成功不等于 UI 验收通过。
 
-## v0.50.0 发布候选
+## v0.51.0 发布候选
 
-本轮变化在 Go 核心（技能使用统计埋点与 `skills-stats` 子命令、管家预设保存修复）与桌面端（MyGo v0.10.0 底座），`mobile-native/` 源码与 v0.49.0 相同，APK 代码内容一致。候选版本为 `0.50.0`，versionCode 为 `5000300`；最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
+本轮变化在 Go 核心（技能使用统计埋点与 `skills-stats` 子命令、管家预设保存修复）、桌面端（MyGo v0.10.0 底座）与新增的 MyGo Android 客户端（`easyagent-mygo-android.apk`，与 Kotlin APK 并存分发，暂为调试签名）。Kotlin 工程的 `mobile-native/` 源码与 v0.49.0 相同，Kotlin APK 代码内容一致；Kotlin versionCode 为 `5100300`，MyGo APK versionCode 由 MyGo 按同版本号推导。最终提交、APK 签名和摘要以附注 tag 与 Release 的 `release.json` / `checksums.txt` 为准。
 
 - 发布流水线要求对候选 SHA 重新运行 API 31 / 34 / 35 界面矩阵、单测、lint 和构建，结果以对应的 [Release 工作流](https://github.com/nightgopher/easyagent/actions/workflows/release.yml)为准；流水线完成前不记为通过。
-- 本轮未执行实体手机、实体相机、蜂窝网络或正式 APK 跨版本覆盖安装验收；此前版本的验收记录不计为本轮通过。
+- MyGo Android 客户端已在 Android 17 API 36 模拟器实测：远程主机（HTTP + 无令牌 loopback）自动连接、历史会话加载、发送消息与流式回复渲染（回复 "MyGo Android works" 原样呈现）、斜杠命令面板、用量统计与草稿恢复均通过；未执行实体手机与正式 APK 跨版本覆盖安装验收，带令牌主机在真机上的凭据保存（mygo.Secrets 路径）待真机复核。
+- 此前版本的验收记录不计为本轮通过。
 
 ## v0.47.0 发布候选
 

@@ -84,6 +84,13 @@ def android_assets(tag):
     return ()
 
 
+def mygo_android_assets(tag):
+    # MyGo 单代码库的 Android 客户端从 v0.51.0 起与 Kotlin APK 并存分发。
+    if version_key(tag) >= version_key("v0.51.0-alpha.1"):
+        return ("easyagent-mygo-android.apk",)
+    return ()
+
+
 def verify_android_archive(apk, archive):
     try:
         with zipfile.ZipFile(archive) as bundle:
@@ -120,7 +127,7 @@ def required_assets(tag):
     required = ASSETS
     if version_key(tag) >= version_key("v0.2.0-alpha.1"):
         required = required + desktop_assets(tag)
-    return required + native_assets(tag) + android_assets(tag) + server_assets(tag)
+    return required + native_assets(tag) + android_assets(tag) + mygo_android_assets(tag) + server_assets(tag)
 
 
 def check_next(tag, tags):

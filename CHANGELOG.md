@@ -4,9 +4,10 @@
 
 ## [Unreleased]
 
-## [v0.50.0] - 2026-11-19
+## [v0.51.0] - 2026-11-19
 
 ### Added
+- **MyGo Android 客户端（与 Kotlin APK 并存分发）**：desktop-native 同一份 Go 代码经 MyGo v0.10.0 构建为 Android 应用（`easyagent-mygo-android.apk`，arm64），完整工作台原生 UI 在手机 GPU 渲染。远程客户端形态：配置远程 EasyAgent 服务器地址后即可管理会话、流式对话与工具审批；本地核心与终端面板为桌面专属（手机端隐藏或提示暂不可用）。凭据经 mygo.Secrets 存入系统凭据库（Android 为应用存储并用系统密钥库加密）。Release APK 暂为调试签名，正式签名单独跟进；会话列表空 workspace 分组改用当前主机名显示。
 - 技能使用统计：coding agent 会话中模型经 `read` 工具读取已加载技能文件时，向 `~/.easyagent/usage.jsonl` 追加一行 JSONL（时间、技能名、路径、会话 ID），写入失败静默、不影响正常会话。新增 `easyagent skills-stats [--json]` 子命令汇总使用排行与从未读取清单（对照会话同一目录逻辑加载的已安装技能），回答"装了一堆技能到底用过哪些"。business agent 的 `read_skill` 显式工具暂未接入埋点，远端多机部署的 usage 文件各自落地，汇总需另行处理。
 
 ### Fixed

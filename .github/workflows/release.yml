@@ -251,10 +251,50 @@ jobs:
           path: dist/*
           if-no-files-found: error
           retention-days: 3
+  mygo-android:
+    # MyGo 单代码库的 Android 客户端（与 Kotlin APK 并存分发）。
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop-native/go.mod
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install the Android NDK and platform
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36'
+      - name: Install the MyGo CLI
+        run: go install github.com/egoist/mygo/cmd/mygo@v0.10.0
+      - name: Build the MyGo Android APK
+        env:
+          TAG: ${{ needs.validate.outputs.version }}
+        run: |
+          cd desktop-native
+          "$(go env GOPATH)/bin/mygo" build -platform android/arm64
+          mkdir -p "${GITHUB_WORKSPACE}/dist"
+          cp "build.noindex/android/easyagent-${TAG#v}.apk" "${GITHUB_WORKSPACE}/dist/easyagent-mygo-android.apk"
+      - name: Verify the APK identity
+        run: |
+          badging=$("$ANDROID_HOME/build-tools/35.0.1/aapt2" dump badging dist/easyagent-mygo-android.apk | head -1)
+          echo "$badging"
+          echo "$badging" | grep -F "package: name='com.hwj.easyagent' versionName='${TAG#v}'"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-mygo-android
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 3
   publish:
     # Builds share only the validated revision, not each other's outputs.
     # The publication barrier still requires every test and functional check.
-    needs: [validate, verify, android-ui, core, native, native-linux, native-windows, android]
+    needs: [validate, verify, android-ui, core, native, native-linux, native-windows, android, mygo-android]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
