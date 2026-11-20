@@ -39,6 +39,9 @@ func main() {
 		return
 	}
 	cfg := config.Default()
+	// Capture the host-owned hook directory before loading project dotenv files.
+	// A repository must not redirect executable hooks through its .env.
+	cfg.HooksDir = config.HomeDir()
 	// A provider explicitly supplied by the invoking shell wins over the saved
 	// CLI selection. Values loaded from .env remain the fallback configuration.
 	explicitProvider := strings.TrimSpace(os.Getenv("EA_PROVIDER"))

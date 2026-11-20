@@ -3,6 +3,7 @@ package sessionmgr
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,9 +20,18 @@ import (
 // It handles file-based session storage: create, open, fork, list, delete.
 // This is the storage/indexing layer — NOT the runtime behavior layer.
 type Manager struct {
-	dataDir  string
-	metaMu   sync.Mutex
-	searchMu sync.Mutex
+	dataDir   string
+	metaMu    sync.Mutex
+	searchMu  sync.Mutex
+	listMu    sync.Mutex
+	listCache map[string]sessionListCache
+}
+
+type sessionListCache struct {
+	info         os.FileInfo
+	count        int
+	lastActive   int64
+	firstUserMsg string
 }
 
 // SessionInfo holds metadata about a session for listing/indexing.
@@ -42,7 +52,7 @@ type SessionInfo struct {
 }
 
 // NewManager creates a new session manager rooted at dataDir.
-// Sessions are stored under {dataDir}/sessions/{sessionID}/session.jsonl.
+// Sessions are stored under {dataDir}/sessions/{sessionID}/session.sqlite.
 func NewManager(dataDir string) *Manager {
 	return &Manager{dataDir: dataDir}
 }
@@ -52,9 +62,32 @@ func (m *Manager) SessionsDir() string {
 	return filepath.Join(m.dataDir, "sessions")
 }
 
-// SessionPath returns the JSONL file path for a given session ID.
+// SessionPath returns the SQLite file path for a given session ID.
 func (m *Manager) SessionPath(id string) string {
+	return filepath.Join(m.SessionsDir(), id, "session.sqlite")
+}
+
+func (m *Manager) legacySessionPath(id string) string {
 	return filepath.Join(m.SessionsDir(), id, "session.jsonl")
+}
+
+func (m *Manager) existingSessionPath(id string) string {
+	path := m.SessionPath(id)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return m.legacySessionPath(id)
+	}
+	if _, err := os.Stat(m.legacySessionPath(id)); err == nil {
+		db, err := openSQLiteReadOnly(path)
+		if err == nil {
+			var marker string
+			err = db.QueryRow("SELECT value FROM state WHERE key='initialized'").Scan(&marker)
+			_ = db.Close()
+			if err == sql.ErrNoRows {
+				return m.legacySessionPath(id)
+			}
+		}
+	}
+	return path
 }
 
 // Create creates a new session directory and initializes the storage.
@@ -67,7 +100,7 @@ func (m *Manager) Create(ctx context.Context) (string, string, error) {
 	}
 
 	sessionPath := m.SessionPath(id)
-	storage := session.NewJSONLStorage(sessionPath)
+	storage := session.NewSQLiteStorage(sessionPath, m.legacySessionPath(id))
 	if err := storage.Init(); err != nil {
 		return "", "", fmt.Errorf("init session storage: %w", err)
 	}
@@ -172,7 +205,7 @@ func (m *Manager) Open(ctx context.Context, id string) (*session.Session, string
 		return nil, "", fmt.Errorf("session %q not found: %w", id, err)
 	}
 
-	storage := session.NewJSONLStorage(sessionPath)
+	storage := session.NewSQLiteStorage(sessionPath, m.legacySessionPath(id))
 	if err := storage.Init(); err != nil {
 		return nil, "", fmt.Errorf("init storage for session %q: %w", id, err)
 	}
@@ -211,7 +244,7 @@ func (m *Manager) ForkAt(ctx context.Context, sourceID string, entryID *string) 
 	if sourceID == "" || strings.ContainsAny(sourceID, `/\\`) || sourceID == "." || sourceID == ".." {
 		return "", "", fmt.Errorf("invalid source session")
 	}
-	storage := session.NewJSONLStorage(m.SessionPath(sourceID))
+	storage := session.NewSQLiteStorage(m.SessionPath(sourceID), m.legacySessionPath(sourceID))
 	if !m.Exists(sourceID) {
 		return "", "", fmt.Errorf("source session not found")
 	}
@@ -254,7 +287,7 @@ func (m *Manager) copyMeta(sourceID, newID string, application *string) error {
 	if strings.TrimSpace(title) == "" {
 		// Match List()'s fallback title derivation so forks of untitled
 		// sessions still read as "源标题 (分叉)" once the source gets named.
-		_, _, firstUserMsg, err := countMessages(m.SessionPath(sourceID))
+		_, _, firstUserMsg, err := m.countMessagesCached(m.existingSessionPath(sourceID))
 		if err == nil && firstUserMsg != "" {
 			title = strings.SplitN(firstUserMsg, "\n", 2)[0]
 		}
@@ -315,13 +348,15 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 	}
 
 	var infos []SessionInfo
+	seen := make(map[string]bool, len(entries))
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
 		id := entry.Name()
-		sessionPath := m.SessionPath(id)
+		sessionPath := m.existingSessionPath(id)
+		seen[sessionPath] = true
 
 		info := SessionInfo{
 			ID: id,
@@ -333,8 +368,8 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			info.LastActive = fi.ModTime().Unix()
 		}
 
-		// Count messages and extract title by scanning JSONL
-		msgCount, lastActive, firstUserMsg, err := countMessages(sessionPath)
+		// Use SQLite or the legacy log to count messages and derive the title.
+		msgCount, lastActive, firstUserMsg, err := m.countMessagesCached(sessionPath)
 		if err == nil {
 			info.MessageCount = msgCount
 			if lastActive > info.LastActive {
@@ -362,6 +397,13 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 		infos = append(infos, info)
 	}
 
+	m.listMu.Lock()
+	for path := range m.listCache {
+		if !seen[path] {
+			delete(m.listCache, path)
+		}
+	}
+	m.listMu.Unlock()
 	// Sort by LastActive descending
 	sort.Slice(infos, func(i, j int) bool {
 		return infos[i].LastActive > infos[j].LastActive
@@ -370,12 +412,56 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 	return infos, nil
 }
 
+// countMessagesCached avoids rescanning unchanged histories on every list.
+// The transcript remains authoritative; errors and concurrent changes are never cached.
+func (m *Manager) countMessagesCached(path string) (int, int64, string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	m.listMu.Lock()
+	cached, ok := m.listCache[path]
+	m.listMu.Unlock()
+	if ok && sameTranscript(info, cached.info) {
+		return cached.count, cached.lastActive, cached.firstUserMsg, nil
+	}
+	var count int
+	var last int64
+	var first string
+	if strings.HasSuffix(path, ".sqlite") {
+		count, last, first, err = countSQLiteMessages(path)
+	} else {
+		count, last, first, err = countMessages(path)
+	}
+	if err != nil {
+		return count, last, first, err
+	}
+	after, err := os.Stat(path)
+	if err == nil && sameTranscript(info, after) {
+		m.listMu.Lock()
+		if m.listCache == nil {
+			m.listCache = make(map[string]sessionListCache)
+		}
+		m.listCache[path] = sessionListCache{info: after, count: count, lastActive: last, firstUserMsg: first}
+		m.listMu.Unlock()
+	}
+	return count, last, first, nil
+}
+
+func sameTranscript(a, b os.FileInfo) bool {
+	return a != nil && b != nil && os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
+}
+
 // Delete removes a session directory entirely.
 func (m *Manager) Delete(id string) error {
 	sessionDir := filepath.Join(m.SessionsDir(), id)
 	if err := os.RemoveAll(sessionDir); err != nil {
 		return fmt.Errorf("delete session %q: %w", id, err)
 	}
+	m.listMu.Lock()
+	delete(m.listCache, m.SessionPath(id))
+	delete(m.listCache, m.legacySessionPath(id))
+	m.listMu.Unlock()
 	return nil
 }
 
@@ -444,6 +530,70 @@ func countMessages(path string) (int, int64, string, error) {
 		lastTS /= 1000
 	}
 	return count, lastTS, firstUserMsg, scanner.Err()
+}
+
+func countSQLiteMessages(path string) (int, int64, string, error) {
+	db, err := openSQLiteReadOnly(path)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	defer db.Close()
+	var count int
+	var last int64
+	if err = db.QueryRow("SELECT COUNT(*) FILTER (WHERE type='message'), COALESCE(MAX(timestamp),0) FROM entries").Scan(&count, &last); err != nil {
+		return 0, 0, "", err
+	}
+	rows, err := db.Query("SELECT payload FROM entries WHERE type='message' AND json_type(payload, '$.user') IS NOT NULL ORDER BY seq")
+	if err != nil {
+		return 0, 0, "", err
+	}
+	defer rows.Close()
+	var first string
+	for rows.Next() {
+		var data []byte
+		if err = rows.Scan(&data); err != nil {
+			return 0, 0, "", err
+		}
+		var entry session.Entry
+		if err = json.Unmarshal(data, &entry); err != nil {
+			return 0, 0, "", err
+		}
+		if entry.User != nil {
+			first = entry.User.DisplayText
+			for _, block := range entry.User.Content {
+				if first == "" && block.Type == "text" {
+					first = block.Text
+				}
+			}
+		}
+		if first != "" {
+			break
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return 0, 0, "", err
+	}
+	if last > 1e12 {
+		last /= 1000
+	}
+	return count, last, first, nil
+}
+
+func openSQLiteReadOnly(path string) (*sql.DB, error) {
+	uri, err := session.SQLiteFileURI(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", uri+"?mode=ro")
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if _, err = db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 // forkPrefix extends an assistant cut through its complete tool-result group.

@@ -76,6 +76,9 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 		result.Index = len(result.Config.Hosts)
 		result.Config.Hosts = append(result.Config.Hosts, host)
 	}
+	if previous.Relay != nil && host.ID == previous.ID && previous.URL != b.URL {
+		return result, errors.New("配对主机地址不能修改，请重新配对")
+	}
 	host.Name, host.URL = strings.TrimSpace(form.HostName), b.URL
 	freshCredential := key != "" && host.ID != previous.ID
 	if freshCredential || repairing {

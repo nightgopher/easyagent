@@ -2,10 +2,8 @@ package sessionmgr
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/nightgopher/easyagent/sdk/session"
@@ -46,15 +44,6 @@ func (m *Manager) ForkSnapshotWithStats(ctx context.Context, sourceID string, en
 			result.KeptUserMessages++
 		}
 	}
-	var data []byte
-	for _, entry := range entries {
-		encoded, encodeErr := json.Marshal(entry)
-		if encodeErr != nil {
-			return ForkResult{}, encodeErr
-		}
-		data = append(data, encoded...)
-		data = append(data, '\n')
-	}
 	newID, newPath, err := m.Create(ctx)
 	if err != nil {
 		return ForkResult{}, err
@@ -64,7 +53,17 @@ func (m *Manager) ForkSnapshotWithStats(ctx context.Context, sourceID string, en
 			_ = m.Delete(newID)
 		}
 	}()
-	if err = os.WriteFile(newPath, data, 0o600); err != nil {
+	store := session.NewSQLiteStorage(newPath, "")
+	if err = store.Init(); err != nil {
+		return ForkResult{}, err
+	}
+	for _, entry := range entries {
+		if err = store.Append(ctx, entry); err != nil {
+			_ = store.Close()
+			return ForkResult{}, err
+		}
+	}
+	if err = store.Close(); err != nil {
 		return ForkResult{}, err
 	}
 	if err = m.copyMeta(sourceID, newID, application); err != nil {

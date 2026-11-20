@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -51,6 +52,22 @@ class AgentClientTest {
             main.close()
             server.shutdown()
         }
+    }
+
+    @Test
+    fun `background refresh retries a transient failure but reports HTTP errors`() = withClient { server, client ->
+        client.link.value = LinkStatus.CONNECTED
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        server.enqueue(MockResponse().setBody("[]"))
+        client.refreshSessions(background = true)
+        withTimeout(8_000) { while (client.sessionsLoading.value) delay(10) }
+        assertEquals(2, server.requestCount)
+        assertEquals(null, client.error.value)
+        server.enqueue(MockResponse().setResponseCode(401).setBody("{}"))
+        client.refreshSessions(background = true)
+        withTimeout(5_000) { while (client.sessionsLoading.value) delay(10) }
+        assertEquals(3, server.requestCount)
+        assertTrue(client.error.value.orEmpty().contains("401"))
     }
 
     @Test

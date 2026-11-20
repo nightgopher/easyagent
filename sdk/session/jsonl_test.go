@@ -2,13 +2,57 @@ package session
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOversizedEntryDoesNotDamageSession(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONLStorage(path)
+	require.NoError(t, store.Init())
+	sess := New(store)
+	require.NoError(t, sess.AppendMessage(ctx, ai.NewTextUserMessage("preserved")))
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	err = sess.AppendMessage(ctx, ai.AssistantMessage{Text: strings.Repeat("x", 17*1024*1024)})
+	require.ErrorContains(t, err, "storage record limit")
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	require.NoError(t, store.Close())
+	reopened := NewJSONLStorage(path)
+	require.NoError(t, reopened.Init())
+	defer reopened.Close()
+	restored := New(reopened)
+	require.NoError(t, restored.InitFromStorage(ctx))
+	messages, err := restored.BuildContext(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	require.Equal(t, "preserved", messages[0].(ai.UserMessage).Content[0].Text)
+}
+
+func TestLargeEntryBelowLimitRemainsReadable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	store := NewJSONLStorage(path)
+	require.NoError(t, store.Init())
+	want := strings.Repeat("x", maxJSONLRecordBytes-1024)
+	require.NoError(t, store.Append(context.Background(), Entry{ID: "large", Type: EntryTypeMessage, Assistant: &ai.AssistantMessage{Text: want}}))
+	require.NoError(t, store.Close())
+	reopened := NewJSONLStorage(path)
+	require.NoError(t, reopened.Init())
+	defer reopened.Close()
+	entries, err := reopened.GetPathToRoot(context.Background(), "")
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, want, entries[0].Assistant.Text)
+}
 
 // TestSession_PersistenceAcrossReload 验证会话持久化后重载能恢复完整历史。
 func TestSession_PersistenceAcrossReload(t *testing.T) {

@@ -67,7 +67,11 @@ func main() {
 			}
 		}()
 		win.Show()
-		state.connectLive()
+		if phoneClient && state.Settings.host().URL == "" {
+			state.openSettings("connections")
+		} else {
+			state.connectLive()
+		}
 	})
 	if err := app.Run(); err != nil {
 		log.Fatal(err)

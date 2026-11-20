@@ -198,6 +198,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /settings/tool-discovery", s.setToolDiscovery)
 	restMux.HandleFunc("GET /settings/builtin-tools", s.getBuiltinTools)
 	restMux.HandleFunc("POST /settings/builtin-tools", s.setBuiltinTools)
+	restMux.HandleFunc("GET /settings/hooks", s.getHookSettings)
+	restMux.HandleFunc("PUT /settings/hooks", s.setHookSettings)
 	restMux.HandleFunc("POST /computer/settings", s.updateComputerSettings)
 	restMux.HandleFunc("POST /computer/permissions", s.requestComputerPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/messages", s.getSessionMessages)

@@ -14,6 +14,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/nightgopher/easyagent/sdk/session"
 	_ "modernc.org/sqlite"
 )
 
@@ -56,8 +57,9 @@ type HistoryMessage struct {
 
 var ErrHistoryNotFound = errors.New("history message not found")
 
-// Search uses a rebuildable, host-local SQLite index. JSONL remains the source
-// of truth. Unchanged transcripts are never read on subsequent searches; changed
+// Search uses a rebuildable, host-local SQLite index. The session database (or
+// legacy JSONL before migration) remains authoritative. Unchanged transcripts
+// are never read on subsequent searches; changed
 // sessions are replaced atomically, including metadata-only changes and deletes.
 func (m *Manager) Search(ctx context.Context, opts SearchOptions) (SearchResults, error) {
 	result := SearchResults{Hits: []SearchHit{}}
@@ -217,7 +219,11 @@ func (m *Manager) searchDB(ctx context.Context) (*sql.DB, error) {
 	if err = f.Close(); err != nil {
 		return nil, err
 	}
-	db, err := sql.Open("sqlite", path)
+	uri, err := session.SQLiteFileURI(path)
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", uri)
 	if err != nil {
 		return nil, err
 	}
@@ -327,14 +333,14 @@ func (m *Manager) syncSearch(ctx context.Context, db *sql.DB) (int, error) {
 }
 
 func (m *Manager) transcriptStamp(id string) (string, error) {
-	info, err := os.Lstat(m.SessionPath(id))
+	info, err := os.Lstat(m.existingSessionPath(id))
 	if err != nil {
 		return "", err
 	}
 	if !info.Mode().IsRegular() {
 		return "", errors.New("not a regular transcript")
 	}
-	stamp := fmt.Sprintf("%d/%d", info.Size(), info.ModTime().UnixNano())
+	stamp := fmt.Sprintf("%s/%d/%d", filepath.Ext(m.existingSessionPath(id)), info.Size(), info.ModTime().UnixNano())
 	meta, err := os.Lstat(filepath.Join(m.SessionsDir(), id, "meta.json"))
 	if os.IsNotExist(err) {
 		return stamp + "/no-meta", nil
@@ -383,7 +389,8 @@ func (m *Manager) indexTranscript(ctx context.Context, tx *sql.Tx, id, stamp str
 	if err = meta.decodeField("archived", &archived); err != nil {
 		return err
 	}
-	f, err := os.Open(m.SessionPath(id))
+	path := m.existingSessionPath(id)
+	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
@@ -440,22 +447,51 @@ func (m *Manager) indexTranscript(ctx context.Context, tx *sql.Tx, id, stamp str
 		_, err := stmt.ExecContext(ctx, id, entry.ID, role, entry.Timestamp, body, strings.Map(unicode.ToLower, body))
 		return err
 	}
-	scanner := bufio.NewScanner(io.NewSectionReader(f, 0, info.Size()))
-	scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
-	for scanner.Scan() {
-		if err = ctx.Err(); err != nil {
+	if strings.HasSuffix(path, ".sqlite") {
+		source, err := openSQLiteReadOnly(path)
+		if err != nil {
 			return err
 		}
-		var entry searchEntry
-		if err = json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+		defer source.Close()
+		rows, err := source.QueryContext(ctx, "SELECT payload FROM entries ORDER BY seq")
+		if err != nil {
 			return err
 		}
-		if err = add(entry); err != nil {
+		defer rows.Close()
+		for rows.Next() {
+			var data []byte
+			if err = rows.Scan(&data); err != nil {
+				return err
+			}
+			var entry searchEntry
+			if err = json.Unmarshal(data, &entry); err != nil {
+				return err
+			}
+			if err = add(entry); err != nil {
+				return err
+			}
+		}
+		if err = rows.Err(); err != nil {
 			return err
 		}
-	}
-	if err = scanner.Err(); err != nil {
-		return err
+	} else {
+		scanner := bufio.NewScanner(io.NewSectionReader(f, 0, info.Size()))
+		scanner.Buffer(make([]byte, 64*1024), 16*1024*1024)
+		for scanner.Scan() {
+			if err = ctx.Err(); err != nil {
+				return err
+			}
+			var entry searchEntry
+			if err = json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+				return err
+			}
+			if err = add(entry); err != nil {
+				return err
+			}
+		}
+		if err = scanner.Err(); err != nil {
+			return err
+		}
 	}
 	// If the file changed while reading, use this consistent snapshot now and
 	// force a refresh next query instead of declaring the newer file indexed.

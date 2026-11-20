@@ -236,13 +236,20 @@ func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "会话仍在执行另一入口的任务，请先取消或等待完成")
 		return
 	}
+	// Close SQLite handles before deleting the directory; Windows cannot remove
+	// an open database file. If removal fails, the session can be reopened.
+	if _, ok := s.app.SessionStore().Get(sessionID); ok {
+		if err := s.app.SessionStore().Delete(sessionID); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
 	mgr := s.app.SessionManager()
 	if err := mgr.Delete(sessionID); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	_ = s.app.SessionStore().Delete(sessionID)
 	delete(s.runs.sessions, sessionID)
 	for requestID, run := range s.runs.requests {
 		if run.SessionID == sessionID {

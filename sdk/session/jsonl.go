@@ -13,6 +13,10 @@ import (
 	"time"
 )
 
+// Keep every newly written record readable by the JSONL scanners, including
+// the trailing newline and a margin for future fields.
+const maxJSONLRecordBytes = 16*1024*1024 - 1024
+
 type JSONLStorage struct {
 	path       string
 	file       *os.File
@@ -152,6 +156,9 @@ func (s *JSONLStorage) Append(ctx context.Context, entry Entry) error {
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return err
+	}
+	if len(line) >= maxJSONLRecordBytes {
+		return fmt.Errorf("session entry exceeds storage record limit")
 	}
 	if _, err := s.file.Write(append(line, '\n')); err != nil {
 		return err

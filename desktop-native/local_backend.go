@@ -28,6 +28,7 @@ type hostConfig struct {
 	ID, Name, URL, Workspace string
 	Local                    bool
 	HasToken                 bool
+	Relay                    *relayConfig `json:",omitempty"`
 }
 type modelConfig struct {
 	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
