@@ -131,7 +131,7 @@ class AssetsTest(unittest.TestCase):
         self.assertEqual(release.native_assets('v0.15.12'), ('easyagent-native-darwin-arm64.dmg',))
         self.assertEqual(
             release.required_assets('v1.2.3'),
-            release.ASSETS + release.native_assets(self.tag) + release.android_assets(self.tag) + release.server_assets(self.tag),
+            release.ASSETS + release.native_assets(self.tag) + release.android_assets(self.tag) + release.mygo_android_assets('v1.2.3') + release.server_assets(self.tag),
         )
 
     def test_linux_native_and_server_assets_start_at_v0_21_0(self):
@@ -173,7 +173,7 @@ class AssetsTest(unittest.TestCase):
         self.assertEqual(release.desktop_assets('v0.15.12'), ('EasyAgent-0.15.12-arm64.dmg',))
         for tag in ('v0.16.0-alpha.1', 'v0.16.0', 'v1.0.0'):
             self.assertEqual(release.desktop_assets(tag), ())
-            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag) + release.android_assets(tag) + release.server_assets(tag))
+            self.assertEqual(release.required_assets(tag), release.ASSETS + release.native_assets(tag) + release.android_assets(tag) + release.mygo_android_assets(tag) + release.server_assets(tag))
 
     def test_each_missing_client_asset_rejects_manifest_and_publish(self):
         release.manifest(self.directory, self.tag, self.sha)
@@ -205,7 +205,7 @@ class AssetsTest(unittest.TestCase):
     def test_core_only_manifest_is_never_publishable(self):
         # Server debs join the partial core-only manifest from v0.21.0; older
         # tags must not see them, so each iteration stages only its own set.
-        client = release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag)
+        client = release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag) + release.mygo_android_assets(self.tag)
         for name in client: (self.directory / name).unlink()
         for tag in (self.tag, 'v0.1.0'):
             with self.subTest(tag=tag):
@@ -251,7 +251,7 @@ class AssetsTest(unittest.TestCase):
         api.assert_not_called()
 
     def test_manifest_cli_requires_explicit_core_only(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag) + release.mygo_android_assets(self.tag): (self.directory / name).unlink()
         command = ['python3', str(Path(release.__file__)), 'manifest', self.tag, self.sha, str(self.directory)]
         result = subprocess.run(command, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
@@ -261,7 +261,7 @@ class AssetsTest(unittest.TestCase):
         self.assertTrue(json.loads((self.directory / 'release.json').read_text())['core_only'])
 
     def test_old_release_manifest_remains_compatible(self):
-        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag) + release.server_assets(self.tag): (self.directory / name).unlink()
+        for name in release.desktop_assets(self.tag) + release.native_assets(self.tag) + release.android_assets(self.tag) + release.mygo_android_assets(self.tag) + release.server_assets(self.tag): (self.directory / name).unlink()
         tag = 'v0.1.0'
         release.manifest(self.directory, tag, self.sha)
         data = json.loads((self.directory / 'release.json').read_text())
