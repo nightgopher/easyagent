@@ -154,6 +154,9 @@ func filterEnvironment(overrides map[string]string) []string {
 	return env
 }
 func (m *localBackend) start(ctx context.Context, dir string, model modelConfig, secrets secretStore) (*backendClient, error) {
+	if phoneClient {
+		return nil, errors.New("手机版不支持本地核心：请在设置 → 连接中配置远程 EasyAgent 服务器")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed {

@@ -14,6 +14,8 @@ Thumbs.db
 # Build
 /tmp/
 /dist/
+# MyGo Android 构建工作区（每次构建重新生成）
+desktop-native/.mygo/
 
 # Easy Code
 .easycode/

@@ -37,9 +37,12 @@ class AndroidPolicyTest(unittest.TestCase):
         for tag in ['v0.21.0-alpha.1']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
             self.assertEqual(len(release.required_assets(tag)) + 2, 27)
+        for tag in ['v0.51.0-alpha.1']:
+            self.assertEqual(release.mygo_android_assets(tag), ('easyagent-mygo-android.apk',))
         for tag in ['v1.0.0']:
             self.assertEqual(release.android_assets(tag), ('easyagent-android.apk', 'easyagent-android.zip'))
-            self.assertEqual(len(release.required_assets(tag)) + 2, 28)
+            # v0.51.0 起新增 MyGo Android APK（与 Kotlin APK 并存），资产数 26 -> 27。
+            self.assertEqual(len(release.required_assets(tag)) + 2, 29)
 
 
 class AndroidArchiveTest(unittest.TestCase):
