@@ -281,6 +281,8 @@ jobs:
           mkdir -p "${GITHUB_WORKSPACE}/dist"
           cp "build.noindex/android/easyagent-${TAG#v}.apk" "${GITHUB_WORKSPACE}/dist/easyagent-mygo-android.apk"
       - name: Verify the APK identity
+        env:
+          TAG: ${{ needs.validate.outputs.version }}
         run: |
           badging=$("$ANDROID_HOME/build-tools/35.0.1/aapt2" dump badging dist/easyagent-mygo-android.apk | head -1)
           echo "$badging"
