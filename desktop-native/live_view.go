@@ -202,17 +202,28 @@ func (a *preview) liveSidebar(c *ui.Context) {
 			}
 			groups := []string{}
 			byGroup := map[string][]*session{}
+			emptyByGroup := map[string]bool{}
 			for _, s := range a.Sessions {
 				if s.Archived != a.Archived {
 					continue
 				}
 				group := s.Workspace
+				emptyWorkspaceGroup := false
 				if group == "" {
+					// 空 workspace 的会话按当前主机归组；标题用主机名而不是
+					// 「此 Mac/此电脑」文案——远程主机上它读起来指向错误设备。
+					emptyWorkspaceGroup = true
 					group = localHostName()
+					if index := a.Settings.Host; index >= 0 && index < len(l.Config.Hosts) {
+						if name := l.Config.Hosts[index].Name; name != "" {
+							group = name
+						}
+					}
 				}
 				if _, ok := byGroup[group]; !ok {
 					groups = append(groups, group)
 				}
+				emptyByGroup[group] = emptyWorkspaceGroup
 				byGroup[group] = append(byGroup[group], s)
 			}
 			for _, group := range groups {
@@ -233,7 +244,7 @@ func (a *preview) liveSidebar(c *ui.Context) {
 							ui.Text(c, fmt.Sprint(n)).FontSize(11).Padding(1, 5).Radius(8).Background(c.Theme().SurfaceHover).TextColor(c.Theme().TextMuted)
 						}
 					})
-					if group != localHostName() {
+					if !emptyByGroup[group] {
 						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Tooltip("在 "+filepath.Base(group)+" 中新建会话").Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
 					}
 				})
