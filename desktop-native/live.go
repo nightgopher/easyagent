@@ -118,7 +118,12 @@ func newConnectedPreview(dir string) *preview {
 	a := newPreview()
 	ctx, cancel := context.WithCancel(context.Background())
 	l := &liveState{Dir: dir, Secrets: systemSecrets{dir: dir}, Core: &localBackend{}, ctx: ctx, cancel: cancel, epoch: 1, results: make(chan liveResult, 1024), Models: []string{}, ResourceErrors: map[string]string{}, Data: map[string]any{}, Loading: map[string]bool{}, Versions: map[string]uint64{}, Drafts: map[string]string{}, DraftInputs: map[string]draftInputState{}, CollapsedProjects: map[string]bool{}, CollapsedBuckets: map[string]bool{}, Workbench: newNativeWorkbench()}
-	l.Config = clientConfig{Hosts: []hostConfig{{ID: "local", Name: localHostName(), Local: true}}, ActiveHost: "local", Model: modelConfig{Mode: "inherit"}}
+	// 手机端无法 spawn 本地核心：默认种一个待填的远程主机，连接设置里补地址与令牌。
+	if phoneClient {
+		l.Config = clientConfig{Hosts: []hostConfig{{ID: "remote", Name: "远程主机"}}, ActiveHost: "remote", Model: modelConfig{Mode: "inherit"}}
+	} else {
+		l.Config = clientConfig{Hosts: []hostConfig{{ID: "local", Name: localHostName(), Local: true}}, ActiveHost: "local", Model: modelConfig{Mode: "inherit"}}
+	}
 	l.hostCtx = ctx
 	l.Store = &nativeStore{dir: dir}
 	l.Images = map[string]ui.ImageSource{}
@@ -128,7 +133,13 @@ func newConnectedPreview(dir string) *preview {
 		}
 	}
 	if len(l.Config.Hosts) == 0 {
-		l.Config.Hosts = []hostConfig{{ID: "local", Name: localHostName(), Local: true}}
+		if phoneClient {
+			l.Config.Hosts = []hostConfig{{ID: "remote", Name: "远程主机"}}
+			l.Config.ActiveHost = "remote"
+		} else {
+			l.Config.Hosts = []hostConfig{{ID: "local", Name: localHostName(), Local: true}}
+			l.Config.ActiveHost = "local"
+		}
 	}
 	if l.Config.Model.Mode == "" {
 		l.Config.Model.Mode = "inherit"

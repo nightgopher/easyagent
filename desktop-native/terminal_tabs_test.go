@@ -53,14 +53,14 @@ func TestTerminalTabsCoexistAcrossSessions(t *testing.T) {
 	w := &a.Live.Workbench
 	a.toggleTerminal()
 	a.newTerminal()
-	waitNative(t, a, func() bool { return open.Load() == 2 && w.Terminals[0].Term != nil && w.Terminals[1].Term != nil })
+	waitNative(t, a, func() bool { return open.Load() == 2 && w.Terminals[0].view != nil && w.Terminals[1].view != nil })
 	if w.ActiveTerminal != 2 || !w.TerminalOpen {
 		t.Fatalf("new tab not selected: %+v", w)
 	}
 
 	a.Active = 2 // switch session
 	a.liveTick()
-	if len(w.Terminals) != 2 || w.Terminals[0].Term == nil {
+	if len(w.Terminals) != 2 || w.Terminals[0].view == nil {
 		t.Fatal("switching sessions closed a shell")
 	}
 

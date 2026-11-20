@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/plugins/terminal"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
 	"github.com/gorilla/websocket"
@@ -260,16 +259,16 @@ func (a *preview) liveTerminal(c *ui.Context) {
 		})
 		if active == nil {
 			ui.Row(c).Padding(4, 12).Children(func() { a.note(c, "没有打开的终端") })
-		} else if active.Term != nil {
+		} else if active.view != nil {
 			select {
-			case <-active.Term.Done():
+			case <-active.view.done():
 				ui.Row(c).Gap(8).Padding(4, 12).Children(func() {
 					a.note(c, "终端已断开")
 					a.action(c, "重新连接终端").OnClick(func() { w.closeTerminal(active); a.newTerminal() })
 				})
 			default:
 			}
-			terminal.View(c.Key(active.ID), active.Term).Grow(1).FillWidth()
+			active.view.render(c.Key(active.ID))
 		} else if active.Error != "" {
 			ui.Column(c).Gap(6).Padding(4, 12).Children(func() {
 				a.note(c, active.Error)
