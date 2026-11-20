@@ -656,6 +656,8 @@ func (a *preview) settingsFormDirty() bool {
 	}
 	s, l := &a.Settings, a.Live
 	switch s.Tab {
+	case "hooks":
+		return s.HookFormOpen || s.HookRevision != "" && s.HookDraft != s.HookSaved
 	case "models":
 		want, form := l.SavedModelForm, s.modelForm
 		return form.Mode != want.Mode || form.Provider != want.Provider || form.BaseURL != want.BaseURL || form.Model != want.Model ||
@@ -700,6 +702,10 @@ func (a *preview) discardSettingsForms() {
 	s, l := &a.Settings, a.Live
 	s.Business.closeEditors()
 	s.Teams.closeEditors()
+	if s.Tab == "hooks" {
+		s.HookDraft = s.HookSaved
+		s.HookFormOpen = false
+	}
 	if s.Tab == "models" && (s.modelForm != l.SavedModelForm || s.APIKey != "") {
 		a.clearModelCheck()
 	}

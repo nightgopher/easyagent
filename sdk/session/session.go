@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
@@ -250,15 +249,6 @@ func (s *Session) AppendCompactionKeeping(ctx context.Context, summary string, r
 	entry := Entry{Type: EntryTypeCompaction, ParentID: s.leafID, Summary: summary, Retained: retained, Compaction: info}
 	if len(retained) > 0 {
 		entry.FirstKeptEntryID = retained[0].ID
-	}
-	// JSONL readers have a 16 MiB record limit. Reject before writing, rather
-	// than producing a session that cannot be reopened (e.g. large image tails).
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-	if len(data) >= 16*1024*1024-1024 {
-		return fmt.Errorf("retained compaction context exceeds storage record limit")
 	}
 	if err := s.storage.Append(ctx, entry); err != nil {
 		return err

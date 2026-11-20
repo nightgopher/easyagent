@@ -24,10 +24,11 @@ import (
 // The native client uses the authenticated core REST/WS protocol.
 // The UI owns all projections; background work only delivers immutable results.
 type backendClient struct {
-	URL, Token string
-	HTTP       *http.Client
-	mu         sync.Mutex
-	ws         *websocket.Conn
+	URL, Token   string
+	HTTP         *http.Client
+	socketDialer *websocket.Dialer
+	mu           sync.Mutex
+	ws           *websocket.Conn
 }
 
 var errUnauthorized = errors.New("服务拒绝访问（HTTP 401），请重新填写访问令牌")
@@ -68,6 +69,10 @@ func (b *backendClient) execute(req *http.Request, out any) error {
 	}
 	res, err := b.HTTP.Do(req)
 	if err != nil {
+		var relayErr *relayConnectError
+		if errors.As(err, &relayErr) {
+			return errors.New(relayErr.message)
+		}
 		if errors.Is(err, context.DeadlineExceeded) {
 			return errors.New("服务处理超时，草稿已保留。目录操作请检查 macOS 文件与文件夹访问提示，或用浏览目录重新选择项目")
 		}
@@ -172,7 +177,11 @@ func (b *backendClient) observe(ctx context.Context, emit func(envelope), status
 		if b.Token != "" {
 			h.Set("Authorization", "Bearer "+b.Token)
 		}
-		conn, response, err := websocket.DefaultDialer.DialContext(ctx, u.String(), h)
+		dialer := b.socketDialer
+		if dialer == nil {
+			dialer = websocket.DefaultDialer
+		}
+		conn, response, err := dialer.DialContext(ctx, u.String(), h)
 		if err != nil && response != nil {
 			if response.Body != nil {
 				_ = response.Body.Close()

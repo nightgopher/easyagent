@@ -41,7 +41,7 @@ func TestPreferencesRejectUnsafeOrMissingSession(t *testing.T) {
 	}
 	id, _, err := m.Create(context.Background())
 	require.NoError(t, err)
-	require.NoError(t, os.Remove(filepath.Join(m.SessionsDir(), id, "session.jsonl")))
+	require.NoError(t, os.Remove(m.SessionPath(id)))
 	require.NoError(t, os.Remove(filepath.Join(m.SessionsDir(), id)))
 	require.NoError(t, os.Symlink(t.TempDir(), filepath.Join(m.SessionsDir(), id)))
 	require.Error(t, m.UpdatePreferences(id, PreferencePatch{Pinned: &yes}))

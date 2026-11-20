@@ -71,6 +71,7 @@ type session struct {
 	RejectReason string
 }
 type preview struct {
+	PhonePair                                                                      phonePairState
 	UpdaterReady                                                                   bool
 	Window                                                                         *mygo.Window
 	Live                                                                           *liveState
@@ -82,6 +83,7 @@ type preview struct {
 	Search                                                                         string
 	Archived                                                                       bool
 	Sidebar                                                                        bool
+	MobileSettingsMenu                                                             bool
 	Workbench                                                                      bool
 	ModelMenu, PermissionMenu, MoreMenu, HostMenu, SlashMenu, NewMenu, ContextMenu bool
 	ModelSearch                                                                    string
@@ -131,6 +133,9 @@ func (a *preview) selectSession(id int) {
 		a.Live.Workbench.close()
 	}
 	a.Active = id
+	if phoneClient {
+		a.Sidebar = false
+	}
 	a.current().Unread = 0
 	if a.Live != nil {
 		a.Live.EditQueueID = ""

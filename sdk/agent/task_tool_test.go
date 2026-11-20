@@ -191,6 +191,25 @@ func TestTaskToolIsolatesSubagentContext(t *testing.T) {
 	assert.Equal(t, int32(1), safe.executed.Load())
 }
 
+func TestTaskToolAppliesChildLifecycleHooks(t *testing.T) {
+	p := &recordingProvider{inner: &mockTestProvider{responses: []mockTestResponse{
+		{toolCalls: []ai.ToolCall{{ID: "child", Name: "safe", Args: `{}`}}, stop: ai.StopReasonToolUse},
+		{text: "finished", stop: ai.StopReasonStop},
+	}}}
+	registry := providers.NewRegistry()
+	registry.Register(p)
+	tool := &concurrentSafeTool{}
+	hookCalls := 0
+	task := NewTaskTool(TaskToolOptions{Model: ai.Model{ID: "t", Provider: "mock_test"}, Registry: registry, Tools: []Tool{tool}, LifecycleHooks: LifecycleHooks{Before: []BeforeToolCallHook{func(_ context.Context, call ToolCallContext) (ToolCallContext, error) {
+		hookCalls++
+		return call, errors.New("blocked")
+	}}}})
+	_, err := task.Execute(context.Background(), json.RawMessage(`{"description":"child","prompt":"run"}`), nil)
+	require.NoError(t, err)
+	require.Equal(t, 1, hookCalls)
+	require.EqualValues(t, 0, tool.executed.Load(), "child tool must not bypass the hook")
+}
+
 func TestTaskToolReadonlyLimitsTools(t *testing.T) {
 	p := &recordingProvider{inner: &mockTestProvider{responses: []mockTestResponse{{text: "ok", stop: ai.StopReasonStop}}}}
 	_, task := newTaskTestAgent(p, nil, &concurrentSafeTool{}, &concurrentDangerTool{})

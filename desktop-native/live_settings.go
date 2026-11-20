@@ -72,6 +72,8 @@ func (a *preview) loadSettingsPage() {
 	}
 	s := &a.Settings
 	switch s.Tab {
+	case "hooks":
+		a.loadHookSettings(false)
 	case "remote-access":
 		if s.host().Local {
 			a.resource("remote-access", "/remote-access")
@@ -134,7 +136,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "permissions" && tab != "agents" && tab != "teams" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
+	if tab != "hooks" && tab != "permissions" && tab != "agents" && tab != "teams" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -142,6 +144,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		})
 	}
 	switch tab {
+	case "hooks":
+		a.liveHookSettings(c)
 	case "remote-access":
 		a.liveRemoteAccessSettings(c)
 	case "agents":
@@ -596,6 +600,9 @@ func (a *preview) applyLiveModel() {
 func (a *preview) liveConnectionSettings(c *ui.Context) {
 	l := a.Live
 	s := &a.Settings
+	if phoneClient {
+		a.phonePairView(c)
+	}
 	a.note(c, "管理本机与远程连接。会话、文件和工具保存在各自主机上。")
 	for index, h := range l.Config.Hosts {
 		ui.Row(c.Key(h.ID)).Gap(10).AlignItems(ui.Center).Padding(16, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {

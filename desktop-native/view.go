@@ -108,6 +108,10 @@ func (a *preview) View(c *ui.Context) {
 			ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
 				width, _ := c.Size()
 				if a.Sidebar && (!a.Workbench || width >= 1100) {
+					if phoneClient && a.Live != nil {
+						a.phoneSessions(c)
+						return
+					}
 					a.sidebar(c)
 				}
 				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -122,7 +126,7 @@ func (a *preview) View(c *ui.Context) {
 						a.liveTerminal(c)
 					}
 				})
-				if a.Workbench && (a.Live == nil || !a.Live.Work.Open) {
+				if a.Workbench && !phoneClient && (a.Live == nil || !a.Live.Work.Open) {
 					a.workbench(c)
 				}
 			})
@@ -347,10 +351,17 @@ func (a *preview) transcript(c *ui.Context) {
 					title := "开始一段新对话"
 					if a.Live != nil {
 						size = 58
+						if phoneClient {
+							size = 42
+						}
 						title = "今天，想一起完成什么？"
 					}
 					ui.Text(c, "ea·").FontSize(size).FontWeight(600).TextColor(c.Theme().Accent)
-					a.text(c, title).FontSize(29).FontWeight(500).Margin(20, 0, 4, 0)
+					titleSize := float32(29)
+					if phoneClient {
+						titleSize = 23
+					}
+					a.text(c, title).FontSize(titleSize).FontWeight(500).Margin(20, 0, 4, 0)
 					if a.Live == nil {
 						a.text(c, "在下方输入消息，或用 /approval 体验工具审批。").TextColor(c.Theme().TextMuted)
 					} else {

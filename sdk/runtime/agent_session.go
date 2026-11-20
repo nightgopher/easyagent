@@ -16,6 +16,7 @@ import (
 	"github.com/nightgopher/easyagent/sdk/compaction"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/extensions"
+	"github.com/nightgopher/easyagent/sdk/hooks"
 	"github.com/nightgopher/easyagent/sdk/operations"
 	"github.com/nightgopher/easyagent/sdk/prompt"
 	"github.com/nightgopher/easyagent/sdk/session"
@@ -821,6 +822,13 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	if s.extRegistry != nil {
 		lifecycleHooks = s.extRegistry.LifecycleHooks()
 	}
+	beforeCommand, afterCommand := hooks.CommandHooks(cfg.HooksDir, cwd)
+	lifecycleHooks.Before = append(lifecycleHooks.Before, beforeCommand)
+	lifecycleHooks.After = append(lifecycleHooks.After, afterCommand)
+	startCommand, endCommand, compactCommand := hooks.CommandObservers(cfg.HooksDir, cwd)
+	lifecycleHooks.SessionStart = append(lifecycleHooks.SessionStart, startCommand)
+	lifecycleHooks.SessionEnd = append(lifecycleHooks.SessionEnd, endCommand)
+	lifecycleHooks.PreCompress = append(lifecycleHooks.PreCompress, compactCommand)
 
 	// Register the auto-synopsis hook: large tool outputs are automatically
 	// replaced with a structural synopsis, saving context window tokens.
@@ -867,6 +875,8 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 			childTools = append(childTools, tool)
 		}
 	}
+	beforeCommand, afterCommand := hooks.CommandHooks(s.cfg.HooksDir, s.workspaceLocked())
+	startCommand, endCommand, compactCommand := hooks.CommandObservers(s.cfg.HooksDir, s.workspaceLocked())
 	return agent.NewTaskTool(agent.TaskToolOptions{
 		ResolveModel: func(id, provider string) (ai.Model, error) {
 			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: models.MaxOutput(id)}), nil
@@ -876,6 +886,7 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 		Tools:          childTools,
 		ToolSearchMode: searchMode,
 		ConfirmFunc:    s.wrapConfirm(s.confirmFunc),
+		LifecycleHooks: agent.LifecycleHooks{Before: []agent.BeforeToolCallHook{beforeCommand}, After: []agent.AfterToolCallHook{afterCommand}, SessionStart: []agent.SessionStartHook{startCommand}, SessionEnd: []agent.SessionEndHook{endCommand}, PreCompress: []agent.PreCompressHook{compactCommand}},
 	})
 }
 

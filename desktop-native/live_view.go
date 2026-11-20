@@ -36,6 +36,10 @@ func (a *preview) liveNotices(c *ui.Context) {
 }
 func (a *preview) liveChrome(c *ui.Context) {
 	l := a.Live
+	if phoneClient {
+		a.phoneChrome(c)
+		return
+	}
 	bar := c.TitleBar()
 	viewportWidth, _ := c.Size()
 	sidebarVisible := a.Sidebar && (!a.Workbench || viewportWidth >= 1100)
@@ -115,10 +119,21 @@ const sidebarBucketThreshold = 8
 
 func (a *preview) liveSidebar(c *ui.Context) {
 	l := a.Live
-	ui.Column(c).Width(260).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+	sidebar := ui.Column(c).Background(c.Theme().Surface)
+	if phoneClient {
+		sidebar.FillWidth()
+	} else {
+		sidebar.Width(260)
+	}
+	sidebar.BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
 		ui.Column(c).Padding(14).Gap(12).Children(func() {
 			flatButton(c, "user", "管家").Justify(ui.Start).Disabled(!l.Connected || l.Loading["steward"] || l.Loading["create-session"]).Tooltip("唯一的常驻对话：统筹目标、创建任务会话、跟踪结果").OnClick(a.openSteward)
-			flatButton(c, "activity", "任务跟进").Justify(ui.Start).OnClick(a.openWork)
+			flatButton(c, "activity", "任务跟进").Justify(ui.Start).OnClick(func() {
+				a.openWork()
+				if phoneClient {
+					a.Sidebar = false
+				}
+			})
 			ui.Row(c).Gap(8).Children(func() {
 				a.text(c, "对话").Bold()
 				ui.Spacer(c)
@@ -140,16 +155,16 @@ func (a *preview) liveSidebar(c *ui.Context) {
 						menuOption(c, item.Icon, item.Name, false).OnClick(func() { a.NewMenu = false; a.createLiveSessionIn("", a.current().Workspace, item.Application) })
 					}
 					ui.Divider(c)
-						ui.Scroll(c).MaxHeight(240).MinHeight(0).Children(func() {
-							for _, role := range a.businessAgents() {
-								if role.ID == desktopStewardID {
-									continue // 管家走侧栏专属入口，永不新建副本
-								}
-								if !role.Disabled {
-									menuOption(c.Key(role.ID), "user", role.Name, false).OnClick(func() { a.NewMenu = false; a.startBusinessSession(role.ID) })
-								}
+					ui.Scroll(c).MaxHeight(240).MinHeight(0).Children(func() {
+						for _, role := range a.businessAgents() {
+							if role.ID == desktopStewardID {
+								continue // 管家走侧栏专属入口，永不新建副本
 							}
-						})
+							if !role.Disabled {
+								menuOption(c.Key(role.ID), "user", role.Name, false).OnClick(func() { a.NewMenu = false; a.startBusinessSession(role.ID) })
+							}
+						}
+					})
 					menuOption(c, "settings", "管理业务 Agent", false).OnClick(func() { a.openSettings("agents") })
 				})
 				if popup.Valid() {
@@ -507,7 +522,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 						ev.SetText(s.Draft)
 						return true
 					}
-					if ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+					if !phoneClient && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
 						a.submit()
 						ev.SetText(s.Draft)
 						return true
@@ -603,8 +618,20 @@ func (a *preview) liveComposer(c *ui.Context) {
 					if s.Running || s.Pending {
 						label = "加入发送队列"
 					}
-					iconButton(c, "send", label).Size(36, 36).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
+					if !phoneClient {
+						iconButton(c, "send", label).Size(36, 36).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
+					}
 				})
+				if phoneClient {
+					ui.Row(c).FillWidth().Children(func() {
+						ui.Spacer(c)
+						label := "发送消息"
+						if s.Running || s.Pending {
+							label = "加入发送队列"
+						}
+						iconButton(c, "send", label).Size(40, 40).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
+					})
+				}
 			})
 			if value, ok := ui.Drop[fileReference](box); ok {
 				a.addFileReference(s, value)
@@ -628,15 +655,17 @@ func (a *preview) liveComposer(c *ui.Context) {
 			if popup.Valid() {
 				popup.Label("命令菜单").AttachTo(box, ui.AnchorTopLeft, ui.AnchorBottomLeft).Width(max(240, box.Bounds().W)).Margin(0, 0, 8, 0)
 			}
-			ui.Row(c).Gap(10).Children(func() {
-				ui.Text(c, "Enter 发送 · Shift+Enter 换行").FontSize(11).TextColor(c.Theme().TextMuted)
-				ui.Spacer(c)
-				newSessionShortcut := a.shortcutLabel("新会话")
-				if newSessionShortcut == "" {
-					newSessionShortcut = "⌘ N"
-				}
-				ui.Text(c, newSessionShortcut+" "+a.tr("新会话")).FontSize(11).TextColor(c.Theme().TextMuted)
-			})
+			if !phoneClient {
+				ui.Row(c).Gap(10).Children(func() {
+					ui.Text(c, "Enter 发送 · Shift+Enter 换行").FontSize(11).TextColor(c.Theme().TextMuted)
+					ui.Spacer(c)
+					newSessionShortcut := a.shortcutLabel("新会话")
+					if newSessionShortcut == "" {
+						newSessionShortcut = "⌘ N"
+					}
+					ui.Text(c, newSessionShortcut+" "+a.tr("新会话")).FontSize(11).TextColor(c.Theme().TextMuted)
+				})
+			}
 		})
 	})
 }

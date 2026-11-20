@@ -17,6 +17,7 @@ require (
 	github.com/cloudflare/circl v1.6.2 // indirect
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
+	github.com/makiuchi-d/gozxing v0.1.1 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
@@ -25,4 +26,5 @@ require (
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
