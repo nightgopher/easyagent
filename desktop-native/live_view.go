@@ -348,6 +348,10 @@ func (a *preview) liveToolbar(c *ui.Context) {
 	s := a.current()
 	l := a.Live
 	ui.Row(c).Height(52).Padding(0, 20).Gap(10).AlignItems(ui.Center).Children(func() {
+		width, height := c.Size()
+		if phoneClient && width > height {
+			iconButton(c, "panel", "会话列表").OnClick(func() { a.Sidebar = true; a.Workbench = false })
+		}
 		ui.Row(c).Grow(1).MinWidth(0).Gap(14).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, s.Title).FontSize(14).FontWeight(500).MinWidth(0).SingleLine()
 			ui.Row(c).MaxWidth(160).MinWidth(0).Gap(5).AlignItems(ui.Center).TextColor(c.Theme().TextMuted).Children(func() {
@@ -355,6 +359,9 @@ func (a *preview) liveToolbar(c *ui.Context) {
 				ui.Text(c, s.Project).FontSize(11).SingleLine().MinWidth(0).Tooltip(s.Workspace)
 			})
 		})
+		if phoneClient && width > height && a.livePermission() == "完全权限" {
+			ui.Text(c, "完全权限").FontSize(11).TextColor(c.Theme().Warning)
+		}
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
 			// Without a host the run state is unknown; say so instead of 「就绪」.
 			status, dot := s.statusText(), c.Theme().Accent
@@ -468,79 +475,102 @@ func (a *preview) liveComposer(c *ui.Context) {
 			box.Children(func() {
 				a.inputReferences(c, s)
 				a.attachmentChips(c, s)
-				minLines, maxLines := 2, 6
-				if compactPhone {
-					minLines, maxLines = 1, 3
-				}
-				input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
-				services := c.Services()
-				input.OnPaste(func(string) bool { return a.pasteAttachments(services, s) })
-				composing := input.Composing()
-				if input.Changed() && !composing {
-					l.CommandIndex = 0
-					l.CommandJump = true
-					s.MentionIndex = 0
-					s.MentionJump = true
-					a.SlashMenu = strings.HasPrefix(s.Draft, "/") && !strings.ContainsAny(s.Draft, " \n") && len(a.commandMatches(s.Draft)) > 0
-				}
-				input.OnTextKey(func(ev ui.TextKey) bool {
-					if composing || a.current() != s || s.Archived {
-						return false
+				renderInput := func() {
+					minLines, maxLines := 2, 6
+					if compactPhone {
+						minLines, maxLines = 1, 3
 					}
-					s.Draft = ev.Text()
-					if _, mention := mentionQuery(s.Draft); mention && s.MentionDismissed != s.Draft {
-						matches := a.mentionMatches(s)
-						if ev.Key == ui.KeyEscape {
-							s.MentionDismissed = s.Draft
+					input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Grow(1).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
+					services := c.Services()
+					input.OnPaste(func(string) bool { return a.pasteAttachments(services, s) })
+					composing := input.Composing()
+					if input.Changed() && !composing {
+						l.CommandIndex = 0
+						l.CommandJump = true
+						s.MentionIndex = 0
+						s.MentionJump = true
+						a.SlashMenu = strings.HasPrefix(s.Draft, "/") && !strings.ContainsAny(s.Draft, " \n") && len(a.commandMatches(s.Draft)) > 0
+					}
+					input.OnTextKey(func(ev ui.TextKey) bool {
+						if composing || a.current() != s || s.Archived {
+							return false
+						}
+						s.Draft = ev.Text()
+						if _, mention := mentionQuery(s.Draft); mention && s.MentionDismissed != s.Draft {
+							matches := a.mentionMatches(s)
+							if ev.Key == ui.KeyEscape {
+								s.MentionDismissed = s.Draft
+								return true
+							}
+							if len(matches) > 0 {
+								if ev.Key == ui.KeyUp || ev.Key == ui.KeyDown {
+									step := 1
+									if ev.Key == ui.KeyUp {
+										step = -1
+									}
+									s.MentionIndex = (s.MentionIndex + step + len(matches)) % len(matches)
+									s.MentionJump = true
+									return true
+								}
+								if ev.Key == ui.KeyTab || ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+									a.completeMention(s)
+									ev.SetText(s.Draft)
+									return true
+								}
+							}
+						}
+						if a.SlashMenu && (ev.Key == ui.KeyDown || ev.Key == ui.KeyUp) {
+							l.CommandJump = true
+							count := len(a.commandMatches(s.Draft))
+							if count > 0 {
+								if ev.Key == ui.KeyDown {
+									l.CommandIndex = (l.CommandIndex + 1) % count
+								} else {
+									l.CommandIndex = (l.CommandIndex + count - 1) % count
+								}
+							}
 							return true
 						}
-						if len(matches) > 0 {
-							if ev.Key == ui.KeyUp || ev.Key == ui.KeyDown {
-								step := 1
-								if ev.Key == ui.KeyUp {
-									step = -1
-								}
-								s.MentionIndex = (s.MentionIndex + step + len(matches)) % len(matches)
-								s.MentionJump = true
-								return true
-							}
-							if ev.Key == ui.KeyTab || ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
-								a.completeMention(s)
-								ev.SetText(s.Draft)
-								return true
-							}
+						if a.SlashMenu && (ev.Key == ui.KeyTab || ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0) {
+							a.completeLiveCommand()
+							ev.SetText(s.Draft)
+							return true
 						}
-					}
-					if a.SlashMenu && (ev.Key == ui.KeyDown || ev.Key == ui.KeyUp) {
-						l.CommandJump = true
-						count := len(a.commandMatches(s.Draft))
-						if count > 0 {
-							if ev.Key == ui.KeyDown {
-								l.CommandIndex = (l.CommandIndex + 1) % count
-							} else {
-								l.CommandIndex = (l.CommandIndex + count - 1) % count
-							}
+						if !phoneClient && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+							a.submit()
+							ev.SetText(s.Draft)
+							return true
 						}
-						return true
+						return false
+					})
+				}
+				ui.Row(c).FillWidth().Gap(4).AlignItems(ui.Center).Children(func() {
+					if compactPhone {
+						iconButton(c, "plus", "更多输入工具").OnClick(func() { a.LandscapeTools = !a.LandscapeTools })
 					}
-					if a.SlashMenu && (ev.Key == ui.KeyTab || ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0) {
-						a.completeLiveCommand()
-						ev.SetText(s.Draft)
-						return true
+					renderInput()
+					if compactPhone {
+						a.voiceControls(c, s)
+						if s.Running {
+							iconButton(c, "stop", "停止任务").OnClick(a.stop)
+						}
+						label := "发送消息"
+						if s.Running || s.Pending {
+							label = "加入发送队列"
+						}
+						iconButton(c, "send", label).Size(44, 44).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
 					}
-					if !phoneClient && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
-						a.submit()
-						ev.SetText(s.Draft)
-						return true
-					}
-					return false
 				})
 				if phoneClient && !l.Connected {
 					ui.Text(c, "主机未连接，草稿已保留；连接恢复后可发送").FontSize(12).TextColor(c.Theme().Warning).Role(ui.RoleStatus)
 				} else if phoneClient && s.Sending {
 					ui.Text(c, "正在发送…").FontSize(12).TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
 				}
-				ui.Row(c).Gap(3).AlignItems(ui.Center).Wrap().Children(func() {
+				tools := ui.Row(c).Gap(3).AlignItems(ui.Center).Wrap()
+				if compactPhone && !a.LandscapeTools {
+					tools.Height(0).Clip()
+				}
+				tools.Children(func() {
 					iconButton(c, "plus", "添加附件").Disabled(!l.Connected || s.Archived || s.Sending || l.Loading["create-session"] || l.Loading["attachments/"+s.RemoteID]).OnClick(a.pickAttachments)
 					permission := flatButton(c, "shield", a.livePermission()).Disabled(s.Running || s.Pending || s.Sending || l.configBusy()).OnClick(func() { a.toggleMenu(&a.PermissionMenu) })
 					if a.livePermission() == "完全权限" {
@@ -602,18 +632,18 @@ func (a *preview) liveComposer(c *ui.Context) {
 					a.liveModelPicker(c, model)
 					iconButton(c, "file", "先记下来").Disabled(strings.TrimSpace(s.Draft) == "" || s.Sending || len(s.Attachments) > 0 || len(s.FileReferences) > 0 || l.Loading["capture-save"]).OnClick(func() { a.saveDraftToInbox(s) })
 					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
-					if !phoneClient || compactPhone {
+					if !phoneClient {
 						ui.Spacer(c)
 						a.voiceControls(c, s)
 					}
-					if s.Running {
+					if s.Running && !compactPhone {
 						iconButton(c, "stop", "停止任务").Size(34, 34).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).OnClick(a.stop)
 					}
 					label := "发送消息"
 					if s.Running || s.Pending {
 						label = "加入发送队列"
 					}
-					if !phoneClient || compactPhone {
+					if !phoneClient {
 						size := float32(36)
 						if phoneClient {
 							size = 44

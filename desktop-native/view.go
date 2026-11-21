@@ -105,7 +105,8 @@ func (a *preview) View(c *ui.Context) {
 	c.SetTheme(&theme)
 	_, _, bottomInset, _ := c.SafeArea()
 	width, height := c.Size()
-	keyboardCompact := phoneClient && bottomInset > 80 && width > height && !a.Settings.Open && !a.Sidebar && a.Live != nil && !a.Live.Work.Open
+	landscapeChat := phoneClient && width > height && !a.Settings.Open && !a.Sidebar && a.Live != nil && !a.Live.Work.Open
+	keyboardCompact := landscapeChat && bottomInset > 80
 	a.dispatchNativeShortcuts(c)
 	ui.Box(c).Fill().Background(c.Theme().Background).Children(func() {
 		a.wallpaperLayer(c)
@@ -117,7 +118,7 @@ func (a *preview) View(c *ui.Context) {
 		}
 		content.Children(func() {
 			chrome := ui.Column(c)
-			if keyboardCompact {
+			if landscapeChat {
 				chrome.Height(0).Clip()
 			}
 			chrome.Children(func() { a.chrome(c) })
@@ -376,7 +377,12 @@ func (a *preview) transcript(c *ui.Context) {
 		ui.Column(c).FillWidth().MaxWidth(816).MinWidth(0).Margin(0, ui.Auto).Padding(28, 20, 12, 20).Gap(24).Selectable().Children(func() {
 			a.teamRoster(c, s)
 			if len(s.Messages) == 0 {
-				ui.Column(c).Padding(80, 0).Gap(12).Children(func() {
+				empty := ui.Column(c).Padding(80, 0).Gap(12)
+				width, height := c.Size()
+				if phoneClient && width > height {
+					empty.Padding(8, 0).Gap(4)
+				}
+				empty.Children(func() {
 					size := float32(38)
 					title := "开始一段新对话"
 					if a.Live != nil {
@@ -391,7 +397,10 @@ func (a *preview) transcript(c *ui.Context) {
 					if phoneClient {
 						titleSize = 23
 					}
-					a.text(c, title).FontSize(titleSize).FontWeight(500).Margin(20, 0, 4, 0)
+					heading := a.text(c, title).FontSize(titleSize).FontWeight(500).Margin(20, 0, 4, 0)
+					if phoneClient && width > height {
+						heading.Margin(2, 0, 2, 0)
+					}
 					if a.Live == nil {
 						a.text(c, "在下方输入消息，或用 /approval 体验工具审批。").TextColor(c.Theme().TextMuted)
 					} else {
@@ -401,7 +410,7 @@ func (a *preview) transcript(c *ui.Context) {
 						a.text(c, "此预览只使用演示数据。").FontSize(12).TextColor(c.Theme().TextMuted)
 					} else if !a.Live.Connected {
 						a.disconnectedHint(c)
-					} else {
+					} else if !(phoneClient && width > height) {
 						ui.Row(c).Wrap().Gap(12).Margin(18, 0, 0, 0).Children(func() {
 							for _, suggestion := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
 								ui.ButtonBase(c).Label(a.tr(suggestion)).Gap(8).Radius(6).TextColor(c.Theme().TextMuted).Padding(8, 12).Border(1, c.Theme().Border).Children(func() { a.text(c, suggestion); icon(c, "arrow-right") }).OnClick(func() {

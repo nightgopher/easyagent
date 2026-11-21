@@ -86,6 +86,7 @@ type preview struct {
 	Archived                                                                       bool
 	Sidebar                                                                        bool
 	MobileSettingsMenu                                                             bool
+	LandscapeTools                                                                 bool
 	Workbench                                                                      bool
 	ModelMenu, PermissionMenu, MoreMenu, HostMenu, SlashMenu, NewMenu, ContextMenu bool
 	ModelSearch                                                                    string
