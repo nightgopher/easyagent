@@ -10,6 +10,8 @@ import (
 type draftInputState struct {
 	Attachments []map[string]any `json:"attachments"`
 	Files       []fileReference  `json:"files"`
+	ExpertID    string           `json:"expert_id,omitempty"`
+	ExpertName  string           `json:"expert_name,omitempty"`
 }
 
 func (a *preview) loadDraftInputs() {
@@ -22,6 +24,7 @@ func (a *preview) restoreDraftInputs(s *session) {
 	value := a.Live.DraftInputs[a.Live.Config.ActiveHost+"/"+s.RemoteID]
 	s.Attachments = append([]map[string]any{}, value.Attachments[:min(8, len(value.Attachments))]...)
 	s.FileReferences = append([]fileReference{}, value.Files[:min(12, len(value.Files))]...)
+	s.SelectedExpertID, s.SelectedExpertName = value.ExpertID, value.ExpertName
 	for i := range s.FileReferences {
 		s.FileReferences[i].Host = a.Live.Config.ActiveHost
 	}
@@ -29,7 +32,7 @@ func (a *preview) restoreDraftInputs(s *session) {
 func (a *preview) captureDraftInputs() json.RawMessage {
 	l := a.Live
 	for _, s := range a.Sessions {
-		l.DraftInputs[l.Config.ActiveHost+"/"+s.RemoteID] = draftInputState{Attachments: s.Attachments, Files: s.FileReferences}
+		l.DraftInputs[l.Config.ActiveHost+"/"+s.RemoteID] = draftInputState{Attachments: s.Attachments, Files: s.FileReferences, ExpertID: s.SelectedExpertID, ExpertName: s.SelectedExpertName}
 	}
 	data, _ := json.Marshal(l.DraftInputs)
 	return data

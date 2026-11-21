@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nightgopher/easyagent/sdk/slashcmd"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,6 +20,50 @@ type capabilitySkill struct {
 	Origin          string `json:"origin"`
 	Overrides       string `json:"overrides"`
 	ModelInvocation bool   `json:"model_invocation"`
+}
+
+func TestSkillSlashCommandRefreshesNewProjectSkill(t *testing.T) {
+	home, workspace := t.TempDir(), t.TempDir()
+	srv := newSkillsServer(t, home, nil)
+	srv.slashCmds = slashcmd.NewRegistry()
+	id := createSkillsSession(t, srv, workspace)
+	writeTestSkill(t, filepath.Join(workspace, ".agents", "skills"), "audit", "audit", "Audit the project")
+	body := bytes.NewBufferString(`{"command":"/audit 检查配置"}`)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, localReq(http.MethodPost, "/sessions/"+id+"/command", body))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var result CommandResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&result))
+	require.True(t, result.ShouldQuery)
+	require.Equal(t, "audit", result.Skill)
+	require.Equal(t, "/audit 检查配置", result.QueryPrompt)
+	sess, err := srv.resolveSession(t.Context(), id)
+	require.NoError(t, err)
+	message, err := srv.buildPromptMessage(sess, result.QueryPrompt, promptInputs{Skill: result.Skill})
+	require.NoError(t, err)
+	require.Equal(t, result.QueryPrompt, message.DisplayText)
+	require.Contains(t, message.Content[0].Text, `<skill name="audit"`)
+	require.Contains(t, message.Content[0].Text, "检查配置")
+}
+
+func TestLocalSkillSuggestionsIncludeProjectBeforeSessionCreation(t *testing.T) {
+	home, workspace := t.TempDir(), t.TempDir()
+	writeTestSkill(t, filepath.Join(home, ".agents", "skills"), "shared", "shared", "Personal")
+	writeTestSkill(t, filepath.Join(workspace, ".agents", "skills"), "shared", "shared", "Project")
+	srv := newSkillsServer(t, home, nil)
+	w := httptest.NewRecorder()
+	req := localReq(http.MethodGet, "/skills/local", nil)
+	q := req.URL.Query()
+	q.Set("workspace", workspace)
+	req.URL.RawQuery = q.Encode()
+	srv.Handler().ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var out localSkillsResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&out))
+	require.Len(t, out.Skills, 2)
+	require.Equal(t, "Project", out.Skills[0].Description)
+	require.Empty(t, out.Skills[0].ShadowedBy)
+	require.Equal(t, out.Skills[0].Path, out.Skills[1].ShadowedBy)
 }
 
 func createSkillsSession(t *testing.T, srv *Server, cwd string) string {

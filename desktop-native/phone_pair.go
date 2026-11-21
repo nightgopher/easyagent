@@ -22,6 +22,7 @@ type phonePairState struct {
 	Camera     *camera.Camera
 	Generation uint64
 	Scanning   bool
+	Failures   int
 	Pending    *phonePairPending
 }
 type phonePairPending struct {
@@ -49,6 +50,22 @@ func (a *preview) beginPairCamera() {
 		return
 	}
 	p.Camera = cam
+	p.Failures = 0
+	a.schedulePairCapture(p.Generation, 1500*time.Millisecond)
+}
+
+func (a *preview) schedulePairCapture(generation uint64, delay time.Duration) {
+	time.AfterFunc(delay, func() {
+		if a.Window == nil {
+			return
+		}
+		a.Window.Update(func() {
+			p := &a.PhonePair
+			if p.Generation == generation && p.Camera != nil && p.Pending == nil {
+				a.capturePairCode()
+			}
+		})
+	})
 }
 func (a *preview) capturePairCode() {
 	p := &a.PhonePair
@@ -62,10 +79,9 @@ func (a *preview) capturePairCode() {
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		path, err := cam.TakePhoto(ctx)
-		stage := "拍摄失败，请检查相机权限后重试"
+		captureFailed := err != nil
 		var raw string
 		if err == nil {
-			stage = "未识别到二维码，请保持手机稳定并完整对准二维码"
 			func() {
 				defer os.Remove(path)
 				f, e := os.Open(path)
@@ -88,11 +104,22 @@ func (a *preview) capturePairCode() {
 			}
 			p.Scanning = false
 			if err != nil {
-				a.Live.Error = stage
+				if captureFailed {
+					p.Failures++
+					if p.Failures >= 5 {
+						a.Live.Error = "无法读取相机，请检查权限后重新打开相机"
+						a.closePairCamera()
+						return
+					}
+				} else {
+					p.Failures = 0
+				}
+				a.schedulePairCapture(generation, time.Second)
 				return
 			}
 			if _, err = parseRelayPair(raw, time.Now()); err != nil {
 				a.Live.Error = err.Error()
+				a.schedulePairCapture(generation, 2*time.Second)
 				return
 			}
 			p.Code = raw
@@ -237,7 +264,7 @@ func (a *preview) phonePairView(c *ui.Context) {
 		if p.Camera != nil {
 			ui.Box(c).FillWidth().Height(240).Children(func() { ui.WebView(c, p.Camera).Fill() })
 			ui.Row(c).Gap(8).Children(func() {
-				a.primary(c, "识别二维码").Disabled(p.Scanning).OnClick(a.capturePairCode)
+				a.note(c, "将电脑二维码放入画面，识别后自动连接。")
 				a.action(c, "关闭相机").OnClick(a.closePairCamera)
 			})
 		} else {
