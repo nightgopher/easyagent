@@ -529,6 +529,11 @@ func (a *preview) liveComposer(c *ui.Context) {
 					}
 					return false
 				})
+				if phoneClient && !l.Connected {
+					ui.Text(c, "主机未连接，草稿已保留；连接恢复后可发送").FontSize(12).TextColor(c.Theme().Warning).Role(ui.RoleStatus)
+				} else if phoneClient && s.Sending {
+					ui.Text(c, "正在发送…").FontSize(12).TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
+				}
 				ui.Row(c).Gap(3).AlignItems(ui.Center).Wrap().Children(func() {
 					iconButton(c, "plus", "添加附件").Disabled(!l.Connected || s.Archived || s.Sending || l.Loading["create-session"] || l.Loading["attachments/"+s.RemoteID]).OnClick(a.pickAttachments)
 					permission := flatButton(c, "shield", a.livePermission()).Disabled(s.Running || s.Pending || s.Sending || l.configBusy()).OnClick(func() { a.toggleMenu(&a.PermissionMenu) })
@@ -591,25 +596,9 @@ func (a *preview) liveComposer(c *ui.Context) {
 					a.liveModelPicker(c, model)
 					iconButton(c, "file", "先记下来").Disabled(strings.TrimSpace(s.Draft) == "" || s.Sending || len(s.Attachments) > 0 || len(s.FileReferences) > 0 || l.Loading["capture-save"]).OnClick(func() { a.saveDraftToInbox(s) })
 					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
-					ui.Spacer(c)
-					if l.Voice != nil {
-						ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
-							ui.Row(c).Gap(2).AlignItems(ui.Center).Height(18).Children(func() {
-								levels := [6]float32{.2, .3, .2, .4, .3, .2}
-								if l.Voice != nil {
-									levels = l.Voice.Levels()
-								}
-								for _, lvl := range levels {
-									h := max(4, lvl*16)
-									ui.Box(c).Width(3).Height(h).Radius(1.5).Background(c.Theme().Accent)
-								}
-							})
-							ui.Text(c, fmt.Sprintf("录音 %ds", int(time.Since(l.VoiceStarted).Seconds()))).FontSize(11).TextColor(c.Theme().Accent)
-						})
-						iconButton(c, "x", "取消录音").OnClick(a.cancelVoice)
-						iconButton(c, "stop", "结束录音并转写").OnClick(a.startVoice)
-					} else {
-						iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+					if !phoneClient {
+						ui.Spacer(c)
+						a.voiceControls(c, s)
 					}
 					if s.Running {
 						iconButton(c, "stop", "停止任务").Size(34, 34).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).OnClick(a.stop)
@@ -623,13 +612,14 @@ func (a *preview) liveComposer(c *ui.Context) {
 					}
 				})
 				if phoneClient {
-					ui.Row(c).FillWidth().Children(func() {
+					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+						a.voiceControls(c, s)
 						ui.Spacer(c)
 						label := "发送消息"
 						if s.Running || s.Pending {
 							label = "加入发送队列"
 						}
-						iconButton(c, "send", label).Size(40, 40).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
+						iconButton(c, "send", label).Size(44, 44).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
 					})
 				}
 			})
@@ -668,6 +658,31 @@ func (a *preview) liveComposer(c *ui.Context) {
 			}
 		})
 	})
+}
+
+func (a *preview) voiceControls(c *ui.Context, s *session) {
+	l := a.Live
+	if l.Voice != nil {
+		ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Gap(2).AlignItems(ui.Center).Height(18).Children(func() {
+				for _, lvl := range l.Voice.Levels() {
+					ui.Box(c).Width(3).Height(max(4, lvl*16)).Radius(1.5).Background(c.Theme().Accent)
+				}
+			})
+			ui.Text(c, fmt.Sprintf("录音 %ds", int(time.Since(l.VoiceStarted).Seconds()))).FontSize(11).TextColor(c.Theme().Accent)
+		})
+		if phoneClient {
+			flatButton(c, "x", "取消").Label("取消录音").Height(44).OnClick(a.cancelVoice)
+			flatButton(c, "stop", "转写").Label("结束录音并转写").Height(44).OnClick(a.startVoice)
+		} else {
+			iconButton(c, "x", "取消录音").OnClick(a.cancelVoice)
+			iconButton(c, "stop", "结束录音并转写").OnClick(a.startVoice)
+		}
+	} else if phoneClient {
+		flatButton(c, "mic", "语音输入").Height(44).Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+	} else {
+		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+	}
 }
 func (a *preview) queueAction(s *session, action, id, text string, done ...func()) {
 	if s == nil || a.Live.configBusy() {

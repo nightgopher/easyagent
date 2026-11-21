@@ -116,7 +116,7 @@ func (a *preview) startVoice() {
 			l.Voice = recorder
 			l.VoiceOwner = owner
 			l.VoiceStarted = time.Now()
-			l.Notice = "正在录音，再次点击麦克风结束并转写。"
+			l.Notice = "正在录音，点击停止按钮结束并转写。"
 		})
 		return
 	}
@@ -160,8 +160,14 @@ func (a *preview) startVoice() {
 				break
 			}
 		}
+		text := str(object(v)["text"])
+		if strings.TrimSpace(text) == "" {
+			l.Notice = ""
+			l.Error = "没有识别到语音，请检查麦克风并重试。"
+			return
+		}
 		l.Notice = "语音转写完成。"
-		s.Draft += str(object(v)["text"])
+		s.Draft += text
 		if a.current() == s {
 			a.ReturnToComposer = true
 		}
@@ -180,4 +186,7 @@ func (a *preview) cancelVoice() {
 		go recorder.Stop()
 	}
 	l.VoiceOwner = nil
+	if strings.HasPrefix(l.Notice, "正在录音") || strings.HasPrefix(l.Notice, "正在转写语音") {
+		l.Notice = ""
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"path/filepath"
 	"runtime/debug"
@@ -41,7 +42,11 @@ func flatButton(c *ui.Context, name, label string) ui.Element {
 	return e
 }
 func iconButton(c *ui.Context, name, label string) ui.Element {
-	e := ui.ButtonBase(c).Label(label).Size(30, 30).Center().Radius(6).TextColor(c.Theme().TextMuted)
+	size := float32(30)
+	if phoneClient {
+		size = 44
+	}
+	e := ui.ButtonBase(c).Label(label).Size(size, size).Center().Radius(6).TextColor(c.Theme().TextMuted)
 	if e.Hovered() {
 		e.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
 	}
@@ -87,6 +92,16 @@ func menuCaption(c *ui.Context, label string) {
 
 func (a *preview) View(c *ui.Context) {
 	theme := previewTheme(c.Theme(), a.Settings.Preferences)
+	if phoneClient {
+		style := mygo.BarStyleDark
+		if theme.Dark {
+			style = mygo.BarStyleLight
+		}
+		if a.phoneBarStyle != style {
+			a.phoneBarStyle = style
+			mygo.SystemBars.SetStyle(style)
+		}
+	}
 	c.SetTheme(&theme)
 	a.dispatchNativeShortcuts(c)
 	ui.Box(c).Fill().Background(c.Theme().Background).Children(func() {

@@ -615,6 +615,8 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 				value := h.URL
 				if h.Local {
 					value = "应用管理的本地核心"
+				} else if h.Relay != nil {
+					value = "加密中继连接"
 				}
 				a.note(c, value)
 			})

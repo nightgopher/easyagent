@@ -72,6 +72,7 @@ type session struct {
 	RejectReason string
 }
 type preview struct {
+	phoneBarStyle                                                                  mygo.BarStyle
 	PhonePair                                                                      phonePairState
 	UpdaterReady                                                                   bool
 	Window                                                                         *mygo.Window

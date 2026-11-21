@@ -1,9 +1,9 @@
-//go:build !darwin
+//go:build !darwin && !android
 
 package main
 
 import "errors"
 
 func startMicrophone() (voiceRecorder, error) {
-	return nil, errors.New("此原生试用版的录音目前仅支持 macOS")
+	return nil, errors.New("当前系统的麦克风录音尚未接入")
 }
