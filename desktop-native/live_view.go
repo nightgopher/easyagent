@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -209,6 +210,13 @@ func (a *preview) liveSidebar(c *ui.Context) {
 					return c.Theme().TextMuted
 				}()).OnClick(func() { a.Archived = true })
 			})
+			if len(l.HiddenProjects) > 0 {
+				label := "显示已移除项目"
+				if l.ShowHiddenProjects {
+					label = "隐藏已移除项目"
+				}
+				flatButton(c, "", label).OnClick(func() { l.ShowHiddenProjects = !l.ShowHiddenProjects })
+			}
 		})
 		ui.Scroll(c).Grow(1).MinHeight(0).Padding(0, 10).Children(func() {
 			if strings.TrimSpace(a.Search) != "" {
@@ -223,6 +231,9 @@ func (a *preview) liveSidebar(c *ui.Context) {
 					continue
 				}
 				group := s.Workspace
+				if group != "" && l.HiddenProjects[l.Config.ActiveHost+"\x00"+group] && !l.ShowHiddenProjects {
+					continue
+				}
 				emptyWorkspaceGroup := false
 				if group == "" {
 					// 空 workspace 的会话按当前主机归组；标题用主机名而不是
@@ -261,6 +272,14 @@ func (a *preview) liveSidebar(c *ui.Context) {
 					})
 					if !emptyByGroup[group] {
 						iconButton(c, "plus", "在项目中新建对话："+filepath.Base(group)).Tooltip("在 "+filepath.Base(group)+" 中新建会话").Size(24, 28).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(func() { a.createLiveSessionIn("", group, a.current().Application) })
+						key := l.Config.ActiveHost + "\x00" + group
+						if l.HiddenProjects[key] {
+							iconButton(c, "plus", "恢复项目："+filepath.Base(group)).Size(24, 28).OnClick(func() { a.setProjectHidden(key, false) })
+						} else {
+							iconButton(c, "x", "移除项目："+filepath.Base(group)).Size(24, 28).OnClick(func() {
+								l.Confirm = &nativeConfirmation{"移除项目？", "项目将从侧边栏隐藏；文件与会话都会保留。可通过显示已移除项目恢复。", func() { a.setProjectHidden(key, true) }}
+							})
+						}
 					}
 				})
 				if collapsed {
@@ -483,6 +502,12 @@ func (a *preview) liveComposer(c *ui.Context) {
 			}
 			box := ui.Column(c).Label("输入面板").Padding(13, 14, 10, 14).Gap(6).Radius(12).Background(composerSurface(c)).Border(1, c.Theme().Accent.Alpha(.32))
 			box.Children(func() {
+				if s.SelectedExpertID != "" {
+					ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+						ui.Text(c, "发给专家："+s.SelectedExpertName).FontSize(12).TextColor(c.Theme().Accent)
+						iconButton(c, "x", "移除专家").Size(22, 22).OnClick(func() { s.SelectedExpertID, s.SelectedExpertName = "", "" })
+					})
+				}
 				a.inputReferences(c, s)
 				a.attachmentChips(c, s)
 				renderInput := func() {
@@ -490,7 +515,11 @@ func (a *preview) liveComposer(c *ui.Context) {
 					if phoneClient {
 						minLines, maxLines = 1, 3
 					}
-					input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Grow(1).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
+					placeholder := "描述你想完成的事…"
+					if !phoneClient {
+						placeholder = "描述你想完成的事…  / 技能和命令 · @ 专家 · # 文件"
+					}
+					input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Grow(1).Label("消息输入").Placeholder(placeholder).Disabled(s.Archived)
 					services := c.Services()
 					input.OnPaste(func(string) bool { return a.pasteAttachments(services, s) })
 					composing := input.Composing()
@@ -499,13 +528,44 @@ func (a *preview) liveComposer(c *ui.Context) {
 						l.CommandJump = true
 						s.MentionIndex = 0
 						s.MentionJump = true
-						a.SlashMenu = strings.HasPrefix(s.Draft, "/") && !strings.ContainsAny(s.Draft, " \n") && len(a.commandMatches(s.Draft)) > 0
+						if _, fileQuery := mentionQuery(s.Draft); fileQuery && s.RemoteID == "" && s.Workspace != "" && l.Connected && !l.Loading["create-session"] {
+							// File search is scoped to a server session. Bind the draft without
+							// sending it so a new conversation can use # immediately too.
+							a.createBoundSession("", s.Workspace, s.Application, s.AgentID)
+						}
+						if strings.HasPrefix(s.Draft, "/") && !strings.ContainsAny(s.Draft, " \n") && !a.SlashMenu {
+							a.refreshComposerSkills(s)
+						}
+						a.SlashMenu = strings.HasPrefix(s.Draft, "/") && !strings.ContainsAny(s.Draft, " \n")
 					}
 					input.OnTextKey(func(ev ui.TextKey) bool {
 						if composing || a.current() != s || s.Archived {
 							return false
 						}
 						s.Draft = ev.Text()
+						if _, mention := expertQuery(s.Draft); mention && s.MentionDismissed != s.Draft {
+							matches := a.expertMatches(s)
+							if ev.Key == ui.KeyEscape {
+								s.MentionDismissed = s.Draft
+								return true
+							}
+							if len(matches) > 0 {
+								if ev.Key == ui.KeyUp || ev.Key == ui.KeyDown {
+									step := 1
+									if ev.Key == ui.KeyUp {
+										step = -1
+									}
+									s.MentionIndex = (s.MentionIndex + step + len(matches)) % len(matches)
+									s.MentionJump = true
+									return true
+								}
+								if ev.Key == ui.KeyTab || ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+									a.completeExpert(s)
+									ev.SetText(s.Draft)
+									return true
+								}
+							}
+						}
 						if _, mention := mentionQuery(s.Draft); mention && s.MentionDismissed != s.Draft {
 							matches := a.mentionMatches(s)
 							if ev.Key == ui.KeyEscape {
@@ -670,6 +730,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 				a.addFileReference(s, value)
 			}
 			a.promptFileMentions(c, box, s)
+			a.promptExpertMentions(c, box, s)
 			if paths := box.DroppedFiles(); len(paths) > 0 {
 				a.attachNativeFiles(s, paths)
 			}
@@ -839,7 +900,51 @@ func (a *preview) commandMatches(text string) []nativeCommand {
 			found = append(found, cmd)
 		}
 	}
+	key := "composer-skills/" + a.current().RemoteID
+	seen := map[string]bool{}
+	for _, cmd := range nativeCommands {
+		seen[strings.ToLower(cmd.Name)] = true
+	}
+	for _, raw := range list(object(a.Live.Data[key])["skills"]) {
+		item := object(raw)
+		if enabled, ok := item["enabled"]; ok && !boolean(enabled) {
+			continue
+		}
+		if str(item["shadowed_by"]) != "" {
+			continue
+		}
+		name := "/" + str(item["name"])
+		if name == "/" || seen[strings.ToLower(name)] {
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		if strings.Contains(strings.ToLower(name), strings.ToLower(text)) {
+			found = append(found, nativeCommand{name, "技能 · " + str(item["description"])})
+		}
+	}
 	return found
+}
+
+func (a *preview) refreshComposerSkills(s *session) {
+	if !a.Live.Connected {
+		return
+	}
+	key := "composer-skills/" + s.RemoteID
+	if s.RemoteID == "" {
+		endpoint := "/skills/local"
+		if s.Workspace != "" {
+			endpoint += "?workspace=" + url.QueryEscape(s.Workspace)
+		}
+		a.resource(key, endpoint)
+		return
+	}
+	if s.Running || s.Pending {
+		a.resource(key, sessionPath(s.RemoteID)+"/capabilities")
+		return
+	}
+	a.operation("composer-refresh/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/skills/refresh", nil, func(any) {
+		a.resource(key, sessionPath(s.RemoteID)+"/capabilities")
+	})
 }
 func (a *preview) completeLiveCommand() {
 	matches := a.commandMatches(a.current().Draft)
@@ -904,7 +1009,11 @@ func (a *preview) executeLiveCommand(text string) bool {
 				}
 			}
 			if boolean(m["should_query"]) {
-				a.sendLivePrompt(s, str(m["query_prompt"]), original, nil)
+				inputs := promptInputMap(s, s.Attachments)
+				if selected := str(m["skill"]); selected != "" {
+					inputs["skill"] = selected
+				}
+				a.sendLivePrompt(s, str(m["query_prompt"]), original, s.Attachments, inputs)
 			} else if s.Draft == original {
 				s.Draft = ""
 			}

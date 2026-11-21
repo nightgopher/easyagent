@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
@@ -53,7 +54,7 @@ func skillRootOrigin(root string) string {
 // listLocalSkills serves GET /skills/local: every skill found in the host's global skill
 // directories, whoever put it there. The market's own "installed" list only knows skills it
 // installed, so hand-written ones and ones from other tools would otherwise never show up.
-func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) listLocalSkills(w http.ResponseWriter, r *http.Request) {
 	disabled, err := config.DisabledSkillPaths(s.app.Config().DataDir)
 	if err != nil {
 		writeError(w, 500, "读取技能开关失败："+err.Error())
@@ -77,7 +78,15 @@ func (s *Server) listLocalSkills(w http.ResponseWriter, _ *http.Request) {
 	roots := []localSkillRootJSON{}
 	problems := []localSkillProblemJSON{}
 	winner := map[string]string{}
-	for _, root := range s.app.GlobalSkillDirs() {
+	searchRoots := s.app.GlobalSkillDirs()
+	if workspace := r.URL.Query().Get("workspace"); workspace != "" {
+		if !filepath.IsAbs(workspace) {
+			writeError(w, 400, "workspace must be an absolute path")
+			return
+		}
+		searchRoots = append(runtime.ProjectSkillDirs(workspace), searchRoots...)
+	}
+	for _, root := range searchRoots {
 		origin := skillRootOrigin(root)
 		roots = append(roots, localSkillRootJSON{Path: root, Origin: origin})
 		result := skill.LoadFromDirs(root)

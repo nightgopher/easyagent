@@ -16,7 +16,80 @@ type fileReference struct {
 	Host      string `json:"-"`
 }
 
-var fileMention = regexp.MustCompile(`(?:^|\s)@([^\s@]*)$`)
+var fileMention = regexp.MustCompile(`(?:^|\s)#([^\s#]*)$`)
+var expertMention = regexp.MustCompile(`(?:^|\s)@([^\s@]*)$`)
+
+func expertQuery(text string) (string, bool) {
+	m := expertMention.FindStringSubmatch(text)
+	if len(m) == 0 {
+		return "", false
+	}
+	return m[1], true
+}
+
+func (a *preview) expertMatches(s *session) []nativeBusinessAgent {
+	query, open := expertQuery(s.Draft)
+	if !open || s.MentionDismissed == s.Draft || !a.Live.Connected {
+		return nil
+	}
+	if a.Live.Data["business-agents"] == nil && !a.Live.Loading["business-agents"] {
+		a.resource("business-agents", "/agents")
+	}
+	var matches []nativeBusinessAgent
+	for _, expert := range a.businessAgents() {
+		if !expert.Disabled && expert.ID != desktopStewardID && strings.Contains(strings.ToLower(expert.Name), strings.ToLower(query)) {
+			matches = append(matches, expert)
+		}
+	}
+	return matches
+}
+
+func (a *preview) completeExpert(s *session) {
+	matches := a.expertMatches(s)
+	if len(matches) == 0 {
+		return
+	}
+	expert := matches[(s.MentionIndex%len(matches)+len(matches))%len(matches)]
+	if at := strings.LastIndex(s.Draft, "@"); at >= 0 {
+		s.Draft = s.Draft[:at]
+	}
+	s.SelectedExpertID, s.SelectedExpertName = expert.ID, expert.Name
+	a.ReturnToComposer = true
+}
+
+func (a *preview) promptExpertMentions(c *ui.Context, anchor ui.Element, s *session) {
+	_, open := expertQuery(s.Draft)
+	open = open && s.MentionDismissed != s.Draft && a.Live.Connected
+	matches := a.expertMatches(s)
+	popup := a.menuPanel(c, anchor, &open, func() {
+		menuCaption(c, "选择专家 · Enter/Tab 选择")
+		if a.Live.Loading["business-agents"] {
+			a.note(c, "正在加载专家…")
+		}
+		if err := a.Live.ResourceErrors["business-agents"]; err != "" {
+			a.note(c, err)
+		}
+		if len(matches) == 0 && !a.Live.Loading["business-agents"] && a.Live.ResourceErrors["business-agents"] == "" {
+			a.note(c, "没有匹配的专家")
+		}
+		ui.Scroll(c).Label("专家列表").MaxHeight(260).Children(func() {
+			for i, expert := range matches {
+				row := menuOption(c.Key(expert.ID), "", expert.Name, i == s.MentionIndex%len(matches)).OnClick(func() { s.MentionIndex = i; a.completeExpert(s) })
+				if s.MentionJump && i == s.MentionIndex%len(matches) {
+					row.ScrollIntoView()
+				}
+			}
+		})
+	})
+	if popup.Valid() {
+		popup.AttachTo(anchor, ui.AnchorTopLeft, ui.AnchorBottomLeft).Width(max(260, anchor.Bounds().W)).Margin(0, 0, 8, 0)
+	}
+	if !open {
+		if _, active := expertQuery(s.Draft); active {
+			s.MentionDismissed = s.Draft
+		}
+	}
+}
 
 func mentionQuery(text string) (string, bool) {
 	m := fileMention.FindStringSubmatch(text)
@@ -74,7 +147,7 @@ func (a *preview) completeMention(s *session) {
 	}
 	selected := matches[(s.MentionIndex%len(matches)+len(matches))%len(matches)]
 	a.addFileReference(s, fileReference{Path: path.Join(strings.ReplaceAll(s.Workspace, "\\", "/"), selected), Workspace: s.Workspace, Host: a.Live.Config.ActiveHost})
-	if at := strings.LastIndex(s.Draft, "@"); at >= 0 {
+	if at := strings.LastIndex(s.Draft, "#"); at >= 0 {
 		s.Draft = s.Draft[:at]
 	}
 }

@@ -500,6 +500,7 @@ type CommandResponse struct {
 	ShouldQuery bool   `json:"should_query"`
 	QueryPrompt string `json:"query_prompt,omitempty"`
 	SessionID   string `json:"session_id,omitempty"`
+	Skill       string `json:"skill,omitempty"`
 }
 
 func (s *Server) executeCommand(w http.ResponseWriter, r *http.Request) {
@@ -565,6 +566,19 @@ func (s *Server) executeCommand(w http.ResponseWriter, r *http.Request) {
 		Ctx:     ctx,
 		Session: sess,
 		App:     s.app,
+	}
+	name, _ := slashcmd.ParseSlashCommand(req.Command)
+	if s.slashCmds.Command(name).Handler == nil {
+		if err := sess.RefreshTools(ctx); err != nil {
+			writeError(w, http.StatusConflict, "无法刷新技能："+err.Error())
+			return
+		}
+		for _, selected := range sess.LoadedSkills() {
+			if selected.Name == name {
+				jsonResponse(w, CommandResponse{ShouldQuery: true, QueryPrompt: req.Command, Skill: name})
+				return
+			}
+		}
 	}
 
 	result, err := s.slashCmds.Execute(cmdCtx, req.Command)

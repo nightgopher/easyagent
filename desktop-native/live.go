@@ -31,6 +31,9 @@ type liveState struct {
 	SessionSearch                                                          nativeSessionSearch
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
+	HiddenProjects                                                         map[string]bool
+	ShowHiddenProjects                                                     bool
+	HiddenProjectsInvalid                                                  bool
 	CollapsedBuckets                                                       map[string]bool
 	SavedModelForm                                                         modelForm
 	SavedMCPForm                                                           mcpForm
@@ -134,6 +137,14 @@ func newConnectedPreview(dir string) *preview {
 	}
 	l.hostCtx = ctx
 	l.Store = &nativeStore{dir: dir}
+	l.HiddenProjects = map[string]bool{}
+	if data, err := os.ReadFile(filepath.Join(dir, "hidden-projects.json")); err == nil {
+		if json.Unmarshal(data, &l.HiddenProjects) != nil || l.HiddenProjects == nil {
+			l.HiddenProjects = map[string]bool{}
+			l.HiddenProjectsInvalid = true
+			l.Error = "移除项目列表无法读取，已保留原文件"
+		}
+	}
 	l.Images = map[string]ui.ImageSource{}
 	if data, err := os.ReadFile(filepath.Join(dir, "connections.json")); err == nil {
 		if json.Unmarshal(data, &l.Config) != nil {
@@ -840,6 +851,20 @@ func (a *preview) submitLive() {
 	}
 	if !l.Connected {
 		l.Error = "尚未连接，草稿已保留"
+		return
+	}
+	if s.SelectedExpertID != "" {
+		if len(s.Attachments) > 0 || len(s.FileReferences) > 0 {
+			l.Error = "专家使用独立会话，请先移除附件和文件引用，打开专家对话后重新添加。"
+			return
+		}
+		id, original := s.SelectedExpertID, s.Draft
+		a.createBoundSession(original, "", "business", id, func(target *session) {
+			if s.Draft == original {
+				s.Draft = ""
+				s.SelectedExpertID, s.SelectedExpertName = "", ""
+			}
+		})
 		return
 	}
 	if s.RemoteID == "" {

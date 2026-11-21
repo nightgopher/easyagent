@@ -98,7 +98,7 @@ func TestCompletionMenusKeepKeyboardSelectionVisible(t *testing.T) {
 				a.SlashMenu = true
 			} else {
 				label = "文件引用列表"
-				s.Draft = "@"
+				s.Draft = "#"
 				files := []any{}
 				for i := 0; i < 40; i++ {
 					files = append(files, fmt.Sprintf("file-%02d.go", i))
