@@ -197,13 +197,18 @@ func (m *Manager) Metadata(id string) (workspace, application string) {
 // Open opens an existing session by ID.
 // Returns the Session object and the session file path.
 func (m *Manager) Open(ctx context.Context, id string) (*session.Session, string, error) {
-	sessionPath := m.SessionPath(id)
-
-	// Check existence
+	if !filepath.IsLocal(id) || id == "." || strings.ContainsAny(id, `/\`) {
+		return nil, "", fmt.Errorf("invalid session id")
+	}
 	sessionDir := filepath.Join(m.SessionsDir(), id)
-	if _, err := os.Stat(sessionDir); os.IsNotExist(err) {
+	info, err := os.Lstat(sessionDir)
+	if err != nil {
 		return nil, "", fmt.Errorf("session %q not found: %w", id, err)
 	}
+	if !info.IsDir() {
+		return nil, "", fmt.Errorf("session directory is not a regular directory")
+	}
+	sessionPath := m.SessionPath(id)
 
 	storage := session.NewSQLiteStorage(sessionPath, m.legacySessionPath(id))
 	if err := storage.Init(); err != nil {
@@ -467,8 +472,11 @@ func (m *Manager) Delete(id string) error {
 
 // Exists checks whether a session with the given ID exists.
 func (m *Manager) Exists(id string) bool {
+	if !filepath.IsLocal(id) || id == "." || strings.ContainsAny(id, `/\`) {
+		return false
+	}
 	sessionDir := filepath.Join(m.SessionsDir(), id)
-	fi, err := os.Stat(sessionDir)
+	fi, err := os.Lstat(sessionDir)
 	return err == nil && fi.IsDir()
 }
 

@@ -218,3 +218,26 @@ func TestForkRetainedSnapshotKeepsClearedToolsAndIndependentPreferences(t *testi
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
 }
+
+func TestOpenRejectsTraversalAndSymlinkSessionDirectories(t *testing.T) {
+	root := t.TempDir()
+	mgr := NewManager(root)
+	require.NoError(t, os.MkdirAll(mgr.SessionsDir(), 0700))
+	outside := filepath.Join(root, "outside")
+	require.NoError(t, os.Mkdir(outside, 0700))
+	for _, id := range []string{"", ".", "..", "../outside", `..\outside`} {
+		_, _, err := mgr.Open(context.Background(), id)
+		require.ErrorContains(t, err, "invalid session id")
+		require.False(t, mgr.Exists(id))
+	}
+	_, err := os.Stat(filepath.Join(outside, "session.sqlite"))
+	require.True(t, os.IsNotExist(err), "invalid IDs must not create a database outside sessions")
+	if err := os.Symlink(outside, filepath.Join(mgr.SessionsDir(), "linked")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	_, _, err = mgr.Open(context.Background(), "linked")
+	require.ErrorContains(t, err, "not a regular directory")
+	require.False(t, mgr.Exists("linked"))
+	_, err = os.Stat(filepath.Join(outside, "session.sqlite"))
+	require.True(t, os.IsNotExist(err), "a symlink must not create a database outside sessions")
+}
