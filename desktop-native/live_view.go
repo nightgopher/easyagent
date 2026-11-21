@@ -474,6 +474,13 @@ func (a *preview) liveComposer(c *ui.Context) {
 					}
 				})
 			}
+			if l.PendingVoice != nil {
+				ui.Row(c).Gap(8).AlignItems(ui.Center).Wrap().Children(func() {
+					ui.Text(c, "录音未转写").FontSize(12).TextColor(c.Theme().Warning).Grow(1)
+					a.action(c, "重试转写").Disabled(!l.Connected || l.Config.ActiveHost != l.PendingVoice.Host || l.Loading["voice"]).OnClick(a.retryVoice)
+					a.action(c, "放弃录音").Disabled(l.Loading["voice"]).OnClick(a.discardPendingVoice)
+				})
+			}
 			box := ui.Column(c).Label("输入面板").Padding(13, 14, 10, 14).Gap(6).Radius(12).Background(composerSurface(c)).Border(1, c.Theme().Accent.Alpha(.32))
 			box.Children(func() {
 				a.inputReferences(c, s)
@@ -715,9 +722,9 @@ func (a *preview) voiceControls(c *ui.Context, s *session) {
 			iconButton(c, "stop", "结束录音并转写").OnClick(a.startVoice)
 		}
 	} else if phoneClient {
-		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"] || l.PendingVoice != nil).OnClick(a.startVoice)
 	} else {
-		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"] || l.PendingVoice != nil).OnClick(a.startVoice)
 	}
 }
 func (a *preview) queueAction(s *session, action, id, text string, done ...func()) {

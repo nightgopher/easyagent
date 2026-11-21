@@ -81,6 +81,7 @@ type liveState struct {
 	RemoteAccess                                                           nativeRemoteAccess
 	Voice                                                                  voiceRecorder
 	VoiceOwner                                                             *session
+	PendingVoice                                                           *pendingVoice
 	VoiceStarted                                                           time.Time
 	VoiceGeneration                                                        uint64
 	QRGeneration                                                           uint64

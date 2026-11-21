@@ -13,6 +13,17 @@ import (
 	"github.com/egoist/mygo"
 )
 
+type pendingVoice struct {
+	Data  []byte
+	Owner *session
+	Host  string
+}
+
+type voiceTranscription struct {
+	Text string
+	Err  error
+}
+
 type voiceRecorder interface {
 	Stop() ([]byte, error)
 	Levels() [6]float32
@@ -100,6 +111,9 @@ func (a *preview) startVoice() {
 		return
 	}
 	if l.Voice == nil {
+		if l.PendingVoice != nil {
+			return
+		}
 		if !l.Connected || a.current().Archived {
 			return
 		}
@@ -122,56 +136,109 @@ func (a *preview) startVoice() {
 	}
 	voice := l.Voice
 	l.Voice = nil
-	l.Notice = "正在转写语音…"
-	s, generation := l.VoiceOwner, l.VoiceGeneration
+	l.Notice = "正在处理录音…"
+	owner, generation, host := l.VoiceOwner, l.VoiceGeneration, l.Config.ActiveHost
 	l.VoiceOwner = nil
-	a.run("voice", func(ctx context.Context, b *backendClient) (any, error) {
-		data, err := voice.Stop()
-		if err != nil {
-			return nil, err
+	a.run("voice", func(context.Context, *backendClient) (any, error) { return voice.Stop() }, func(v any) {
+		if generation != l.VoiceGeneration || owner == nil {
+			return
 		}
+		data, _ := v.([]byte)
+		if len(data) == 0 {
+			l.Notice = ""
+			l.Error = "录音为空，请重试。"
+			return
+		}
+		l.PendingVoice = &pendingVoice{Data: data, Owner: owner, Host: host}
+		a.retryVoice()
+	})
+}
+
+func (a *preview) retryVoice() {
+	l := a.Live
+	pending := l.PendingVoice
+	if pending == nil || l.Loading["voice"] {
+		return
+	}
+	if !l.Connected || l.Config.ActiveHost != pending.Host {
+		l.Error = "请连接录音时使用的主机后重试转写。"
+		return
+	}
+	owner := pending.Owner
+	found := false
+	for _, current := range a.Sessions {
+		if current == owner || owner.RemoteID != "" && current.RemoteID == owner.RemoteID {
+			owner = current
+			found = true
+			break
+		}
+	}
+	if !found {
+		l.Error = "原对话暂不可用，请返回录音时的主机和对话后重试。"
+		return
+	}
+	l.Notice = "正在转写语音…"
+	l.Error = ""
+	a.run("voice", func(ctx context.Context, b *backendClient) (any, error) {
+		result := voiceTranscription{}
 		if b == nil {
-			return nil, errors.New("尚未连接运行主机")
+			result.Err = errors.New("尚未连接运行主机")
+			return result, nil
 		}
 		var body bytes.Buffer
 		w := multipart.NewWriter(&body)
 		part, err := w.CreateFormFile("file", "voice.wav")
-		if err != nil {
-			return nil, err
+		if err == nil {
+			_, err = part.Write(pending.Data)
 		}
-		_, _ = part.Write(data)
-		_ = w.Close()
+		if err == nil {
+			err = w.Close()
+		}
+		if err != nil {
+			result.Err = err
+			return result, nil
+		}
 		req, err := http.NewRequestWithContext(ctx, "POST", b.URL+"/asr/transcribe", &body)
 		if err != nil {
-			return nil, err
+			result.Err = err
+			return result, nil
 		}
 		req.Header.Set("Content-Type", w.FormDataContentType())
-		var v map[string]any
-		err = b.execute(req, &v)
-		return v, err
+		var value map[string]any
+		result.Err = b.execute(req, &value)
+		result.Text = str(value["text"])
+		return result, nil
 	}, func(v any) {
-		l.Loading["voice"] = false
-		if generation != l.VoiceGeneration || s == nil {
+		if l.PendingVoice != pending {
 			return
 		}
-		for _, current := range a.Sessions {
-			if current.ID == s.ID {
-				s = current
-				break
-			}
-		}
-		text := str(object(v)["text"])
-		if strings.TrimSpace(text) == "" {
-			l.Notice = ""
-			l.Error = "没有识别到语音，请检查麦克风并重试。"
+		result := v.(voiceTranscription)
+		l.Notice = ""
+		if result.Err != nil {
+			l.Error = "语音转写失败，录音已暂存，可重试。"
 			return
 		}
+		if strings.TrimSpace(result.Text) == "" {
+			l.Error = "没有识别到语音，录音已暂存，可重试。"
+			return
+		}
+		l.PendingVoice = nil
+
+		owner.Draft += result.Text
 		l.Notice = "语音转写完成。"
-		s.Draft += text
-		if a.current() == s {
+		if a.current() == owner {
 			a.ReturnToComposer = true
 		}
 	})
+}
+
+func (a *preview) discardPendingVoice() {
+	if a.Live == nil || a.Live.Loading["voice"] {
+		return
+	}
+	a.Live.PendingVoice = nil
+	a.Live.Error = ""
+	a.Live.Notice = "录音已放弃。"
 }
 
 func (a *preview) cancelVoice() {
