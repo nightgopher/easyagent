@@ -3,7 +3,8 @@
 # EasyAgent 一键安装脚本
 #
 # 用法:
-#   curl -fsSL https://raw.githubusercontent.com/nightgopher/easyagent/main/scripts/install.sh | bash
+#   curl -fsSL https://dl.hwj123hwj.asia/dl/easyagent/install.sh | bash
+#   （等价直连源: https://raw.githubusercontent.com/nightgopher/easyagent/main/scripts/install.sh）
 #
 # 脚本会自动完成:
 #   1. 检测系统 → 下载并校验指定 Release（默认最新正式版）
@@ -85,12 +86,17 @@ fi
 download_release() (
     set -euo pipefail
     tag=${EA_VERSION:-}
-    # GitHub is the only source by default. Set EA_MIRROR_REPO=<owner>/<repo>
-    # (e.g. a synced Gitee mirror) to add a fallback source; do not ship a
-    # default mirror — dead mirrors fail harder than an honest GitHub error.
+    # The dl gateway (dl.hwj123hwj.asia) is the preferred source: it records
+    # anonymous download stats, geo-routes mainland users to the synced Gitee
+    # mirror and everyone else to GitHub, and serves release.json for tag
+    # resolution where api.github.com is unreachable. It is an enhancement
+    # layer, not a single point: on failure the script falls back to GitHub,
+    # then to EA_MIRROR_REPO when set. Do not ship a default Gitee mirror —
+    # dead mirrors fail harder than an honest GitHub error.
+    dl_root="https://dl.hwj123hwj.asia/dl/easyagent"
     mirror_repo=${EA_MIRROR_REPO:-}
-    latest_urls=("https://api.github.com/repos/${REPO}/releases/latest")
-    release_roots=("https://github.com/${REPO}/releases/download")
+    latest_urls=("$dl_root/latest/release.json" "https://api.github.com/repos/${REPO}/releases/latest")
+    release_roots=("$dl_root" "https://github.com/${REPO}/releases/download")
     if [ -n "$mirror_repo" ]; then
         latest_urls+=("https://gitee.com/api/v5/repos/${mirror_repo}/releases/latest")
         release_roots+=("https://gitee.com/${mirror_repo}/releases/download")
@@ -98,8 +104,17 @@ download_release() (
     if [ -z "$tag" ]; then
         info "Fetching latest stable release..."
         for url in "${latest_urls[@]}"; do
-            tag=$(curl -fsSL --connect-timeout 10 --max-time 60 "$url" \
-                | sed -nE 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/p') || tag=""
+            # release.json carries "version" without the leading v; the GitHub
+            # API reports tag_name with it. Match the exact key and take the
+            # first hit only, so notes text mentioning "version" cannot leak
+            # into the tag. Normalize to the v-prefixed tag below.
+            raw=$(curl -fsSL --connect-timeout 10 --max-time 60 "$url" \
+                | awk -F'"' '/"(tag_name|version)"/ {for (i = 2; i < NF; i++) if ($i == "tag_name" || $i == "version") {print $(i + 2); exit}}') || raw=""
+            case "$raw" in
+                v[0-9]*) tag="$raw" ;;
+                [0-9]*)  tag="v$raw" ;;
+                *)       tag="" ;;
+            esac
             [ -z "$tag" ] || break
             info "Cannot read the latest release from $url"
         done
