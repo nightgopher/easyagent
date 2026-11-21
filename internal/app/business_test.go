@@ -106,14 +106,14 @@ func TestStewardUsesOnlySelectedHostToolsAndOwnMemory(t *testing.T) {
 	require.NoError(t, err)
 	sess, err := a.SessionStore().Create(ctx, runtime.AgentSessionOptions{Config: cfg}, deps)
 	require.NoError(t, err)
-	for _, name := range []string{"host_work_search", "host_session_search", "host_agents_list", "memory_search", "memory_save"} {
+	for _, name := range []string{"host_work_search", "host_session_search", "host_agents_list", "host_work_close", "memory_search", "memory_save"} {
 		require.Contains(t, sess.ToolNames(), name)
 	}
 	for _, name := range []string{"task", "bash", "read", "write", "web_fetch", "kb_search"} {
 		require.NotContains(t, sess.ToolNames(), name)
 	}
 	require.Equal(t, a.Agents().Workspace(definition), cfg.Workspace)
-	other, err := a.Agents().SaveAgent(ctx, agentdata.Agent{Name: "专属", Instructions: "自己的职责", MemoryEnabled: true})
+	other, err := a.Agents().SaveAgent(ctx, agentdata.Agent{Name: "专属", Instructions: "自己的职责", MemoryEnabled: true, Tools: []string{"host_work_close"}})
 	require.NoError(t, err)
 	_, err = a.Agents().SaveMemory(ctx, other.ID, "", "user", "", agentdata.Memory{Key: "偏好", Content: "不要泄露"})
 	require.NoError(t, err)
@@ -123,6 +123,6 @@ func TestStewardUsesOnlySelectedHostToolsAndOwnMemory(t *testing.T) {
 	_, otherDeps, err := a.SessionSetup(ctx, "", other.ID, a.Config())
 	require.NoError(t, err)
 	for _, tool := range otherDeps.Application.BuildTools(runtime.ToolBuildOptions{Workspace: t.TempDir()}) {
-		require.NotContains(t, []string{"host_work_search", "host_session_search", "host_agents_list"}, tool.Name())
+		require.NotContains(t, []string{"host_work_search", "host_session_search", "host_agents_list", "host_work_close"}, tool.Name())
 	}
 }

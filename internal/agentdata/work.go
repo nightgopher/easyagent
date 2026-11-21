@@ -190,6 +190,28 @@ func (s *Store) ListWork(ctx context.Context, query, sessionID string, limit, of
 // A model can report only its session's open work; only a user can close or
 // reopen it. Optimistic versions prevent a late report overwriting user edits.
 func (s *Store) UpdateWork(ctx context.Context, id, sessionID string, v WorkUpdate) (WorkItem, error) {
+	return s.updateWork(ctx, id, sessionID, v, "")
+}
+
+// CloseWorkAsSteward records a user-requested closure without impersonating the user.
+// The caller must enforce steward identity and tool permission.
+func (s *Store) CloseWorkAsSteward(ctx context.Context, id string, version int64, state string) (WorkItem, error) {
+	if state != "completed" && state != "cancelled" {
+		return WorkItem{}, fmt.Errorf("invalid closure state")
+	}
+	w, err := s.GetWork(ctx, id)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	if w.Closed() {
+		return WorkItem{}, fmt.Errorf("work is already closed")
+	}
+	v := w.WorkUpdate
+	v.State, v.Version = state, version
+	return s.updateWork(ctx, id, "", v, "steward")
+}
+
+func (s *Store) updateWork(ctx context.Context, id, sessionID string, v WorkUpdate, actor string) (WorkItem, error) {
 	if err := normalizeWork(&v); err != nil {
 		return WorkItem{}, err
 	}
@@ -214,6 +236,9 @@ func (s *Store) UpdateWork(ctx context.Context, id, sessionID string, v WorkUpda
 	w.WorkUpdate = v
 	w.Version++
 	w.UpdatedBy = "user"
+	if actor != "" {
+		w.UpdatedBy = actor
+	}
 	if sessionID != "" {
 		w.UpdatedBy = "agent"
 	}

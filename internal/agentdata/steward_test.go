@@ -89,6 +89,32 @@ func TestStewardPresetStableAfterUpgrade(t *testing.T) {
 	require.Len(t, all, 1)
 }
 
+func TestStewardV2UpgradePreservesCustomizationsAndRevocations(t *testing.T) {
+	ctx := context.Background()
+	store := New(t.TempDir())
+	first, err := store.EnsureSteward(ctx)
+	require.NoError(t, err)
+	first.PresetVersion = 2
+	first.Instructions = "用户自定义管家职责"
+	first.Name = "我的管家"
+	first.Tools = []string{"host_work_search", "local_time"}
+	data, err := json.Marshal(first)
+	require.NoError(t, err)
+	db, err := store.open(ctx)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "UPDATE business_agents SET definition=? WHERE id=?", string(data), first.ID)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
+	upgraded, err := store.EnsureSteward(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "我的管家", upgraded.Name)
+	require.Contains(t, upgraded.Instructions, "用户自定义管家职责")
+	require.Contains(t, upgraded.Instructions, "host_work_close")
+	require.Contains(t, upgraded.Tools, "host_work_close")
+	require.NotContains(t, upgraded.Tools, "host_session_create")
+	require.NotContains(t, upgraded.Tools, "host_session_search")
+}
+
 func TestStewardPresetSurvivesClientSaveWithoutPresetVersion(t *testing.T) {
 	// 桌面/移动端的定义结构不携带 preset_version；GET→改→PUT 回写不得把预设版本
 	// 抹成 0，否则下次 EnsureSteward 会再触发一次升级，覆盖用户自定义的角色文本。

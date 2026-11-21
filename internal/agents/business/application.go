@@ -76,6 +76,9 @@ func (a Application) BuildTools(o runtime.ToolBuildOptions) []agent.Tool {
 	}
 	if a.Store != nil {
 		list = append(list, hosttools.Tools(a.Store, a.Sessions, a.Definition.ID, a.WorkReader)...)
+		if a.Definition.ID == agentdata.StewardID {
+			list = append(list, stewardtools.WorkCloseTool{Store: a.Store})
+		}
 	}
 	if a.Dispatch != nil {
 		list = append(list, stewardtools.Tools(a.Dispatch)...)
