@@ -403,14 +403,14 @@ func (a *preview) transcript(c *ui.Context) {
 					}
 					if a.Live == nil {
 						a.text(c, "在下方输入消息，或用 /approval 体验工具审批。").TextColor(c.Theme().TextMuted)
-					} else {
+					} else if !phoneClient {
 						a.text(c, "说说你的任务。回复、工具执行和每一步结果，都留在这段对话里。").FontSize(14).LineHeight(1.85).TextColor(c.Theme().TextMuted)
 					}
 					if a.Live == nil {
 						a.text(c, "此预览只使用演示数据。").FontSize(12).TextColor(c.Theme().TextMuted)
 					} else if !a.Live.Connected {
 						a.disconnectedHint(c)
-					} else if !(phoneClient && width > height) {
+					} else if !phoneClient {
 						ui.Row(c).Wrap().Gap(12).Margin(18, 0, 0, 0).Children(func() {
 							for _, suggestion := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
 								ui.ButtonBase(c).Label(a.tr(suggestion)).Gap(8).Radius(6).TextColor(c.Theme().TextMuted).Padding(8, 12).Border(1, c.Theme().Border).Children(func() { a.text(c, suggestion); icon(c, "arrow-right") }).OnClick(func() {

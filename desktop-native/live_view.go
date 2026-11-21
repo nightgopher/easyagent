@@ -359,7 +359,7 @@ func (a *preview) liveToolbar(c *ui.Context) {
 				ui.Text(c, s.Project).FontSize(11).SingleLine().MinWidth(0).Tooltip(s.Workspace)
 			})
 		})
-		if phoneClient && width > height && a.livePermission() == "完全权限" {
+		if phoneClient && a.livePermission() == "完全权限" {
 			ui.Text(c, "完全权限").FontSize(11).TextColor(c.Theme().Warning)
 		}
 		ui.Row(c).Gap(5).AlignItems(ui.Center).Children(func() {
@@ -480,7 +480,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 				a.attachmentChips(c, s)
 				renderInput := func() {
 					minLines, maxLines := 2, 6
-					if compactPhone {
+					if phoneClient {
 						minLines, maxLines = 1, 3
 					}
 					input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Grow(1).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
@@ -548,15 +548,15 @@ func (a *preview) liveComposer(c *ui.Context) {
 					})
 				}
 				ui.Row(c).FillWidth().Gap(4).AlignItems(ui.Center).Children(func() {
-					if compactPhone {
+					if phoneClient {
 						_, _, keyboardBottom, _ := c.SafeArea()
-						if keyboardBottom > 80 {
+						if compactPhone && keyboardBottom > 80 {
 							a.phoneStewardButton(c)
 						}
-						iconButton(c, "plus", "更多输入工具").OnClick(func() { a.LandscapeTools = !a.LandscapeTools })
+						iconButton(c, "plus", "更多输入工具").OnClick(func() { a.PhoneTools = !a.PhoneTools })
 					}
 					renderInput()
-					if compactPhone {
+					if phoneClient {
 						a.voiceControls(c, s)
 						if s.Running {
 							iconButton(c, "stop", "停止任务").OnClick(a.stop)
@@ -574,7 +574,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 					ui.Text(c, "正在发送…").FontSize(12).TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
 				}
 				tools := ui.Row(c).Gap(3).AlignItems(ui.Center).Wrap()
-				if compactPhone && !a.LandscapeTools {
+				if phoneClient && !a.PhoneTools {
 					tools.Height(0).Clip()
 				}
 				tools.Children(func() {
@@ -643,7 +643,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 						ui.Spacer(c)
 						a.voiceControls(c, s)
 					}
-					if s.Running && !compactPhone {
+					if s.Running && !phoneClient {
 						iconButton(c, "stop", "停止任务").Size(34, 34).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).OnClick(a.stop)
 					}
 					label := "发送消息"
@@ -658,17 +658,6 @@ func (a *preview) liveComposer(c *ui.Context) {
 						iconButton(c, "send", label).Size(size, size).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
 					}
 				})
-				if phoneClient && !compactPhone {
-					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
-						a.voiceControls(c, s)
-						ui.Spacer(c)
-						label := "发送消息"
-						if s.Running || s.Pending {
-							label = "加入发送队列"
-						}
-						iconButton(c, "send", label).Size(44, 44).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
-					})
-				}
 			})
 			if value, ok := ui.Drop[fileReference](box); ok {
 				a.addFileReference(s, value)
@@ -726,7 +715,7 @@ func (a *preview) voiceControls(c *ui.Context, s *session) {
 			iconButton(c, "stop", "结束录音并转写").OnClick(a.startVoice)
 		}
 	} else if phoneClient {
-		flatButton(c, "mic", "语音输入").Height(44).Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
+		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
 	} else {
 		iconButton(c, "mic", "语音输入").Disabled(!l.Connected || s.Archived || l.Loading["voice"]).OnClick(a.startVoice)
 	}
