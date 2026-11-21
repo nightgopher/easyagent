@@ -6,6 +6,8 @@ import (
 	"errors"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/gorilla/websocket"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,6 +22,8 @@ type liveResult struct {
 	discard func()
 }
 type liveState struct {
+	WorkflowNext                                                           time.Time
+	WorkflowSelected                                                       string
 	EasyCode                                                               nativeEasyCodeState
 	Codex                                                                  nativeCodexState
 	MCPStatus                                                              nativeMCPStatus
@@ -116,6 +120,9 @@ func localHostName() string {
 
 func newConnectedPreview(dir string) *preview {
 	a := newPreview()
+	if phoneClient {
+		a.Sidebar = true
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	l := &liveState{Dir: dir, Secrets: systemSecrets{dir: dir}, Core: &localBackend{}, ctx: ctx, cancel: cancel, epoch: 1, results: make(chan liveResult, 1024), Models: []string{}, ResourceErrors: map[string]string{}, Data: map[string]any{}, Loading: map[string]bool{}, Versions: map[string]uint64{}, Drafts: map[string]string{}, DraftInputs: map[string]draftInputState{}, CollapsedProjects: map[string]bool{}, CollapsedBuckets: map[string]bool{}, Workbench: newNativeWorkbench()}
 	// 手机端无法 spawn 本地核心：默认种一个待填的远程主机，连接设置里补地址与令牌。
@@ -251,6 +258,14 @@ func (a *preview) liveTick() bool {
 	}
 	a.tickMCPStatus()
 	a.tickWork()
+	if a.Settings.Open && a.Settings.Tab == "workflows" && l.Client != nil && time.Now().After(l.WorkflowNext) && !l.Loading["workflows"] {
+		l.WorkflowNext = time.Now().Add(3 * time.Second)
+		a.resource("workflows", "/dynamic-workflows")
+		if l.WorkflowSelected != "" && !l.Loading["workflow-detail"] {
+			a.resource("workflow-detail", "/dynamic-workflows/"+url.PathEscape(l.WorkflowSelected))
+		}
+	}
+
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true
@@ -451,7 +466,14 @@ func (a *preview) connectLive() {
 			token, credentialErr := hostCredential(secrets, h)
 			err = credentialErr
 			if err == nil {
-				b, err = newBackendClient(h.URL, token)
+				if h.Relay != nil {
+					b, err = newRelayBackend(*h.Relay, token, websocket.DefaultDialer)
+					if err == nil && b.URL != h.URL {
+						err = errors.New("配对主机身份不匹配，请重新配对")
+					}
+				} else {
+					b, err = newBackendClient(h.URL, token)
+				}
 			}
 			if err == nil {
 				err = b.request(ctx, "GET", "/health", nil, nil)
@@ -461,7 +483,6 @@ func (a *preview) connectLive() {
 			a.post(epoch, func() { l.Connecting = false; a.reportLiveError(err) })
 			return
 		}
-		b, _ = newBackendClient(b.URL, b.Token)
 		a.post(epoch, func() {
 			l.Client = b
 			l.Connecting = false
@@ -780,6 +801,9 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 			a.Sessions = append([]*session{s}, a.Sessions...)
 		}
 		a.Active = s.ID
+		if phoneClient {
+			a.Sidebar = false
+		}
 		a.Archived = false
 		a.Search = ""
 		a.loadSession(s)
@@ -1001,6 +1025,9 @@ func (a *preview) closeLive() {
 		return
 	}
 	l := a.Live
+	if phoneClient {
+		a.closePairCamera()
+	}
 	a.cancelMCPStatus()
 	a.closeWork()
 	if l.Voice != nil {

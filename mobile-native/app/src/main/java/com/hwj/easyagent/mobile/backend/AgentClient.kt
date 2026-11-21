@@ -95,7 +95,7 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
             while (isActive) {
                 // Poll faster while a session works so list badges stay current.
                 delay(if (sessions.value.any { it.running }) 10_000 else 60_000)
-                if (link.value == LinkStatus.CONNECTED) refreshSessions()
+                if (link.value == LinkStatus.CONNECTED) refreshSessions(background = true)
             }
         }
     }
@@ -377,12 +377,19 @@ class AgentClient(val config: HostConfig, private val drafts: DraftStore = NoDra
     suspend fun models(): ModelsResponse =
         wireJson.decodeFromJsonElement(ModelsResponse.serializer(), api.get("/models"))
 
-    fun refreshSessions() {
+    fun refreshSessions(background: Boolean = false) {
         if (sessionsLoading.value) return
         sessionsLoading.value = true
         scope.launch {
             try {
-                val raw = api.get("/sessions")
+                val raw = try {
+                    api.get("/sessions")
+                } catch (first: ApiException) {
+                    // Retry one transient background I/O failure; persistent failures stay visible.
+                    if (!background || first.status != 0 || link.value != LinkStatus.CONNECTED) throw first
+                    delay(1_000)
+                    api.get("/sessions")
+                }
                 val list = wireJson.decodeFromJsonElement(ListSerializer(SessionSummary.serializer()), raw)
                 val finished = sessions.value.filter { it.running && list.none { next -> next.id == it.id && next.running } }.map { it.id }
                 val reconcile = if (reconcileOnRefresh) list.filter { !it.archived }.sortedByDescending { it.lastActive }.take(12).map { it.id } else emptyList()

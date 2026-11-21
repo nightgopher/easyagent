@@ -2,6 +2,7 @@ package sessionmgr
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,11 +107,14 @@ func TestSearchReconcilesAppendRenameArchiveDeleteAndFilters(t *testing.T) {
 func TestSearchPartialFileRepairAndTruncation(t *testing.T) {
 	ctx := context.Background()
 	m := NewManager(t.TempDir())
-	id, _ := searchFixture(t, m, ai.NewTextUserMessage("valid message"))
+	id := "legacy"
+	require.NoError(t, os.MkdirAll(filepath.Join(m.SessionsDir(), id), 0700))
+	legacy := m.legacySessionPath(id)
+	require.NoError(t, os.WriteFile(legacy, []byte(`{"id":"old","type":"message","user":{"content":[{"type":"text","text":"valid message"}]}}`+"\n"), 0600))
 	result, err := m.Search(ctx, SearchOptions{Query: "valid message"})
 	require.NoError(t, err)
 	require.NotEmpty(t, result.Hits)
-	f, err := os.OpenFile(m.SessionPath(id), os.O_APPEND|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(legacy, os.O_APPEND|os.O_WRONLY, 0600)
 	require.NoError(t, err)
 	_, err = f.WriteString(`{"id":"repair","type":"message","assistant":{"text":"repaired`)
 	require.NoError(t, err)
@@ -125,7 +129,7 @@ func TestSearchPartialFileRepairAndTruncation(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, result.Unavailable)
 	require.Len(t, result.Hits, 1)
-	require.NoError(t, os.WriteFile(m.SessionPath(id), []byte(""), 0600))
+	require.NoError(t, os.WriteFile(legacy, []byte(""), 0600))
 	result, err = m.Search(ctx, SearchOptions{Query: "repaired"})
 	require.NoError(t, err)
 	require.Empty(t, result.Hits)
@@ -148,10 +152,11 @@ func TestSearchLiteralUnicodeAndRetainedDeduplication(t *testing.T) {
 		require.Equal(t, strings.ToLower(q), strings.ToLower(string([]rune(hit.Snippet)[hit.MatchStart:hit.MatchEnd])))
 	}
 	// Rewriting a session replaces its indexed documents, even at the same size.
-	raw, err := os.ReadFile(m.SessionPath(id))
+	db, err := sql.Open("sqlite", m.SessionPath(id))
 	require.NoError(t, err)
-	raw = []byte(strings.ReplaceAll(string(raw), "中文测试", "替换内容"))
-	require.NoError(t, os.WriteFile(m.SessionPath(id), raw, 0600))
+	_, err = db.Exec(`UPDATE entries SET payload=CAST(replace(CAST(payload AS TEXT), '中文测试', '替换内容') AS BLOB)`)
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
 	result, err := m.Search(ctx, SearchOptions{Query: "中文测试"})
 	require.NoError(t, err)
 	require.Empty(t, result.Hits)
@@ -169,7 +174,10 @@ func TestSearchBackfillCheckpointsAndDeletion(t *testing.T) {
 	for range 65 {
 		id, _, err := m.Create(ctx)
 		require.NoError(t, err)
-		require.NoError(t, os.WriteFile(m.SessionPath(id), []byte(`{"id":"answer","type":"message","assistant":{"text":"checkpoint needle"}}`+"\n"), 0600))
+		store := session.NewSQLiteStorage(m.SessionPath(id), "")
+		require.NoError(t, store.Init())
+		require.NoError(t, store.Append(ctx, session.Entry{ID: "answer", Type: session.EntryTypeMessage, Assistant: &ai.AssistantMessage{Text: "checkpoint needle"}}))
+		require.NoError(t, store.Close())
 		ids = append(ids, id)
 	}
 	result, err := m.Search(ctx, SearchOptions{Query: "needle", Limit: 100})

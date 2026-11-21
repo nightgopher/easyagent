@@ -82,6 +82,7 @@ func newFileRunTestServer(t *testing.T, toolFile string, dataInside ...bool) (*S
 	}))
 	cfg := config.Default()
 	cfg.DataDir, cfg.Workspace = t.TempDir(), t.TempDir()
+	cfg.HooksDir = t.TempDir()
 	if len(dataInside) > 0 && dataInside[0] {
 		cfg.DataDir = filepath.Join(cfg.Workspace, "service-state")
 		require.NoError(t, os.MkdirAll(cfg.DataDir, 0700))

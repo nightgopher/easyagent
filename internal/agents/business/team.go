@@ -23,6 +23,7 @@ import (
 	"github.com/nightgopher/easyagent/sdk/ai/models"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
 	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/hooks"
 	"github.com/nightgopher/easyagent/sdk/operations"
 	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/nightgopher/easyagent/sdk/sessionmgr"
@@ -399,11 +400,14 @@ func (m *MemberAssembler) memberAgent(def agentdata.Agent, teamWorkspace string,
 	if err != nil {
 		return nil, ai.Model{}, err
 	}
+	before, after := hooks.CommandHooks(m.Config.HooksDir, parts.workspace)
+	start, end, compact := hooks.CommandObservers(m.Config.HooksDir, parts.workspace)
 	child := agent.New(agent.Options{
 		Model:              parts.model,
 		Registry:           m.Registry,
 		System:             parts.system,
 		Tools:              parts.tools,
+		LifecycleHooks:     agent.LifecycleHooks{Before: []agent.BeforeToolCallHook{before}, After: []agent.AfterToolCallHook{after}, SessionStart: []agent.SessionStartHook{start}, SessionEnd: []agent.SessionEndHook{end}, PreCompress: []agent.PreCompressHook{compact}},
 		MaxTurns:           maxTurns,
 		LoopDetectSettings: agent.DefaultLoopDetectSettings(),
 		// Member tools are read-only in this version; if a future tool asks

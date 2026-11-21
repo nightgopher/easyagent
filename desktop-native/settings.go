@@ -193,51 +193,64 @@ func (a *preview) dirtySuffix() string {
 func (a *preview) settingsView(c *ui.Context) {
 	s := &a.Settings
 	page := s.page()
+	if phoneClient && a.MobileSettingsMenu {
+		a.phoneSettingsMenu(c)
+		return
+	}
 	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
-		ui.Column(c).Width(240).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Padding(16, 12, 14, 12).Children(func() {
-			flatButton(c, "arrow-left", a.tr("返回工作区")).Justify(ui.Start).Padding(6, 10).Height(32).TextColor(c.Theme().Text).OnClick(a.closeSettings)
-			ui.TextInput(c, &s.Search).Label(a.tr("搜索设置")).Placeholder(a.tr("搜索设置…")).FontSize(12).Padding(7, 9).Background(searchSurface(c)).Border(1, c.Theme().Border)
-			ui.Scroll(c).Grow(1).MinHeight(0).Padding(14, 0).Children(func() {
-				total := 0
-				for group, title := range []string{"基础设置", "连接与能力", "业务能力"} {
-					count := 0
-					for _, p := range settingsPages {
-						if p.Group == group && settingsPageMatches(p, s.Search) {
-							count++
+		if !phoneClient {
+			ui.Column(c).Width(240).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Padding(16, 12, 14, 12).Children(func() {
+				flatButton(c, "arrow-left", a.tr("返回工作区")).Justify(ui.Start).Padding(6, 10).Height(32).TextColor(c.Theme().Text).OnClick(a.closeSettings)
+				ui.TextInput(c, &s.Search).Label(a.tr("搜索设置")).Placeholder(a.tr("搜索设置…")).FontSize(12).Padding(7, 9).Background(searchSurface(c)).Border(1, c.Theme().Border)
+				ui.Scroll(c).Grow(1).MinHeight(0).Padding(14, 0).Children(func() {
+					total := 0
+					for group, title := range []string{"基础设置", "连接与能力", "业务能力"} {
+						count := 0
+						for _, p := range settingsPages {
+							if p.Group == group && settingsPageMatches(p, s.Search) {
+								count++
+							}
 						}
-					}
-					if count == 0 {
-						continue
-					}
-					total += count
-					a.text(c, title).FontSize(11).TextColor(c.Theme().TextMuted).Padding(8, 8, 6, 8)
-					for _, p := range settingsPages {
-						if p.Group != group || !settingsPageMatches(p, s.Search) {
+						if count == 0 {
 							continue
 						}
-						item := ui.ButtonBase(c.Key(p.ID)).Label(a.tr(p.Label)).Height(34).Justify(ui.Start).Gap(9).Padding(6, 10).Radius(6).TextColor(c.Theme().TextMuted).FontSize(13).Selected(p.ID == s.Tab).OnClick(func() { a.openSettings(p.ID) })
-						if s.Tab == p.ID {
-							item.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
-						} else if item.Hovered() {
-							item.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
+						total += count
+						a.text(c, title).FontSize(11).TextColor(c.Theme().TextMuted).Padding(8, 8, 6, 8)
+						for _, p := range settingsPages {
+							if p.Group != group || !settingsPageMatches(p, s.Search) {
+								continue
+							}
+							item := ui.ButtonBase(c.Key(p.ID)).Label(a.tr(p.Label)).Height(34).Justify(ui.Start).Gap(9).Padding(6, 10).Radius(6).TextColor(c.Theme().TextMuted).FontSize(13).Selected(p.ID == s.Tab).OnClick(func() { a.openSettings(p.ID) })
+							if s.Tab == p.ID {
+								item.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+							} else if item.Hovered() {
+								item.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
+							}
+							item.Children(func() { icon(c, p.Icon); a.text(c, p.Label).SingleLine() })
 						}
-						item.Children(func() { icon(c, p.Icon); a.text(c, p.Label).SingleLine() })
 					}
-				}
-				if total == 0 {
-					a.note(c, "没有匹配的设置分区。")
-				}
-			})
-			ui.Row(c).Gap(8).Padding(10).Children(func() {
-				ui.Text(c, "ea·").FontSize(20).FontWeight(600).TextColor(c.Theme().Accent)
-				ui.Column(c).Gap(2).Children(func() {
-					ui.Text(c, "EasyAgent").FontSize(12)
-					version := "Go 原生 · " + nativeAppVersion()
-					a.text(c, version).FontSize(10).TextColor(c.Theme().TextMuted)
+					if total == 0 {
+						a.note(c, "没有匹配的设置分区。")
+					}
+				})
+				ui.Row(c).Gap(8).Padding(10).Children(func() {
+					ui.Text(c, "ea·").FontSize(20).FontWeight(600).TextColor(c.Theme().Accent)
+					ui.Column(c).Gap(2).Children(func() {
+						ui.Text(c, "EasyAgent").FontSize(12)
+						version := "Go 原生 · " + nativeAppVersion()
+						a.text(c, version).FontSize(10).TextColor(c.Theme().TextMuted)
+					})
 				})
 			})
-		})
-		ui.Scroll(c.Key(s.Tab)).Grow(1).MinWidth(0).Padding(24, 32, 40, 32).Children(func() {
+		}
+		padding := float32(32)
+		if phoneClient {
+			padding = 16
+		}
+		ui.Scroll(c.Key(s.Tab)).Grow(1).MinWidth(0).Padding(24, padding, 40, padding).Children(func() {
+			if phoneClient {
+				flatButton(c, "arrow-left", "设置目录").OnClick(func() { a.MobileSettingsMenu = true })
+			}
 			ui.Column(c).FillWidth().MaxWidth(780).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
 				ui.Column(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
@@ -253,7 +266,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 					})
 					a.note(c, page.Description)
-					if page.ID == "agents" || page.ID == "teams" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" {
+					if page.ID == "agents" || page.ID == "teams" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" || page.ID == "hooks" || page.ID == "workflows" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
 							kind := "laptop"
 							if !s.host().Local {
@@ -274,7 +287,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else if page.ID == "permissions" {
 						a.note(c, "权限配置应用于当前主机，选择后自动保存。")
-					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" {
+					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -282,6 +295,10 @@ func (a *preview) settingsView(c *ui.Context) {
 					a.liveSettingsPage(c)
 				} else {
 					switch page.ID {
+					case "workflows":
+						a.note(c, "连接运行主机后可查看动态工作流。")
+					case "hooks":
+						a.note(c, "连接运行主机后可配置工具执行 hooks。")
 					case "remote-access":
 						a.note(c, "连接此 Mac 的本地核心后，可生成手机配对二维码并管理设备。")
 					case "agents":

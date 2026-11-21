@@ -198,6 +198,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /settings/tool-discovery", s.setToolDiscovery)
 	restMux.HandleFunc("GET /settings/builtin-tools", s.getBuiltinTools)
 	restMux.HandleFunc("POST /settings/builtin-tools", s.setBuiltinTools)
+	restMux.HandleFunc("GET /settings/hooks", s.getHookSettings)
+	restMux.HandleFunc("PUT /settings/hooks", s.setHookSettings)
 	restMux.HandleFunc("POST /computer/settings", s.updateComputerSettings)
 	restMux.HandleFunc("POST /computer/permissions", s.requestComputerPermissions)
 	restMux.HandleFunc("GET /sessions/{id}/messages", s.getSessionMessages)
@@ -305,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Personal command center endpoints (spaces/goals/results/inbox)
 	s.registerCommandRoutes(restMux)
+	s.registerDynamicWorkflowRoutes(restMux)
 
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
@@ -332,6 +335,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/remote-access", restHandler)
 	topMux.Handle("/remote-access/", restHandler)
 	topMux.Handle("/admin/deploy", restHandler)
+	topMux.Handle("/dynamic-workflows", restHandler)
+	topMux.Handle("/dynamic-workflows/", restHandler)
 	topMux.Handle("/chat", restHandler)
 	topMux.Handle("/chat/", restHandler)
 	topMux.Handle("/sessions", restHandler)

@@ -41,6 +41,7 @@ type TaskToolOptions struct {
 	ToolSearchMode ToolSearchMode
 	BuildPrompt    func([]Tool) (string, error)
 	ConfirmFunc    ConfirmFunc
+	LifecycleHooks LifecycleHooks
 	MaxTurns       int
 	// ResolveModel optionally supplies catalog metadata for an overridden model.
 	ResolveModel func(modelID, provider string) (ai.Model, error)
@@ -194,6 +195,7 @@ func (t *TaskTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 		ToolSearchMode:     t.opts.ToolSearchMode,
 		MaxTurns:           maxTurns,
 		ConfirmFunc:        t.childConfirm(params.Description),
+		LifecycleHooks:     t.opts.LifecycleHooks,
 		LoopDetectSettings: DefaultLoopDetectSettings(),
 	})
 

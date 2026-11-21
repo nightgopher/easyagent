@@ -51,6 +51,18 @@ jobs:
           cache-dependency-path: |
             go.sum
             third_party/bubbletea/go.sum
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Verify workflow engine and embedded bundle
+        shell: bash
+        run: |
+          cd workflow-runtime
+          npm ci --ignore-scripts
+          npm run build
+          npm test
+          cmp <(gzip -dc ../internal/dynamicflow/workflow-runtime.mjs.gz) output/workflow-runtime.mjs
       - run: go test ./...
       - run: go vet ./...
       - run: go test ./...

@@ -2,12 +2,129 @@ package sessionmgr
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/session"
 	"github.com/stretchr/testify/require"
 )
+
+func TestListCacheTracksHistoryAndMetadataChanges(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewManager(t.TempDir())
+	id, s := searchFixture(t, mgr, ai.NewTextUserMessage("first"))
+	list, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, list[0].MessageCount)
+	require.Equal(t, "first", list[0].Title)
+	require.Len(t, mgr.listCache, 1)
+
+	require.NoError(t, s.AppendMessage(ctx, ai.AssistantMessage{Text: "answer"}))
+	list, err = mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, list[0].MessageCount)
+	title := "renamed"
+	require.NoError(t, mgr.UpdatePreferences(id, PreferencePatch{Title: &title}))
+	list, err = mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, title, list[0].Title)
+
+	// Replacing a transcript with identical size and timestamp must still
+	// invalidate the cached file identity.
+	path := mgr.SessionPath(id)
+	old, err := os.Stat(path)
+	require.NoError(t, err)
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	replacement := filepath.Join(filepath.Dir(path), "replacement")
+	require.NoError(t, os.WriteFile(replacement, data, 0600))
+	require.NoError(t, os.Chtimes(replacement, old.ModTime(), old.ModTime()))
+	require.NoError(t, os.Rename(replacement, path))
+	_, err = mgr.List(ctx)
+	require.NoError(t, err)
+	newInfo, err := os.Stat(path)
+	require.NoError(t, err)
+	require.True(t, os.SameFile(newInfo, mgr.listCache[path].info))
+	require.False(t, os.SameFile(old, mgr.listCache[path].info))
+
+	require.NoError(t, os.RemoveAll(filepath.Dir(path)))
+	list, err = mgr.List(ctx)
+	require.NoError(t, err)
+	require.Empty(t, list)
+	require.Empty(t, mgr.listCache)
+}
+
+func TestLegacyMigrationKeepsHistorySearchAndBackup(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewManager(t.TempDir())
+	id := "legacy"
+	legacy := mgr.legacySessionPath(id)
+	old := session.NewJSONLStorage(legacy)
+	require.NoError(t, old.Init())
+	s := session.New(old)
+	require.NoError(t, s.AppendMessage(ctx, ai.NewTextUserMessage("historic task")))
+	require.NoError(t, s.AppendMessage(ctx, ai.AssistantMessage{Text: "historic result"}))
+	require.NoError(t, old.Close())
+	backup, err := os.ReadFile(legacy)
+	require.NoError(t, err)
+	before, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, before[0].MessageCount)
+	hits, err := mgr.Search(ctx, SearchOptions{Query: "historic result"})
+	require.NoError(t, err)
+	require.Len(t, hits.Hits, 1)
+	migrated, path, err := mgr.Open(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, mgr.SessionPath(id), path)
+	history, err := migrated.BuildContext(ctx)
+	require.NoError(t, err)
+	require.Len(t, history, 2)
+	require.NoError(t, migrated.AppendMessage(ctx, ai.AssistantMessage{Text: "new sqlite result"}))
+	require.NoError(t, migrated.Storage().Close())
+	unchanged, err := os.ReadFile(legacy)
+	require.NoError(t, err)
+	require.Equal(t, backup, unchanged)
+	list, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 3, list[0].MessageCount)
+	hits, err = mgr.Search(ctx, SearchOptions{Query: "new sqlite result"})
+	require.NoError(t, err)
+	require.Len(t, hits.Hits, 1)
+	mgr = NewManager(mgr.dataDir)
+	migrated, _, err = mgr.Open(ctx, id)
+	require.NoError(t, err)
+	defer migrated.Storage().Close()
+	history, err = migrated.BuildContext(ctx)
+	require.NoError(t, err)
+	require.Len(t, history, 3)
+}
+
+func TestSQLiteSessionAndSearchUseLiteralDataPath(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewManager(filepath.Join(t.TempDir(), "folder ?#% 中文"))
+	id, _, err := mgr.Create(ctx)
+	require.NoError(t, err)
+	s, _, err := mgr.Open(ctx, id)
+	require.NoError(t, err)
+	require.NoError(t, s.AppendMessage(ctx, ai.NewTextUserMessage("unique special path phrase")))
+	require.NoError(t, s.Storage().Close())
+	list, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, list, 1)
+	require.Equal(t, 1, list[0].MessageCount)
+	search, err := mgr.Search(ctx, SearchOptions{Query: "unique special path phrase"})
+	require.NoError(t, err)
+	require.NotEmpty(t, search.Hits)
+	require.Equal(t, id, search.Hits[0].SessionID)
+	s, _, err = mgr.Open(ctx, id)
+	require.NoError(t, err)
+	defer s.Storage().Close()
+	messages, err := s.BuildContext(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+}
 
 func TestForkInheritsMicroCompactionWithoutChangingSourceOrOriginalOutput(t *testing.T) {
 	ctx := context.Background()
@@ -100,4 +217,27 @@ func TestForkRetainedSnapshotKeepsClearedToolsAndIndependentPreferences(t *testi
 	infos, err = mgr.List(ctx)
 	require.NoError(t, err)
 	require.Len(t, infos, 2)
+}
+
+func TestOpenRejectsTraversalAndSymlinkSessionDirectories(t *testing.T) {
+	root := t.TempDir()
+	mgr := NewManager(root)
+	require.NoError(t, os.MkdirAll(mgr.SessionsDir(), 0700))
+	outside := filepath.Join(root, "outside")
+	require.NoError(t, os.Mkdir(outside, 0700))
+	for _, id := range []string{"", ".", "..", "../outside", `..\outside`} {
+		_, _, err := mgr.Open(context.Background(), id)
+		require.ErrorContains(t, err, "invalid session id")
+		require.False(t, mgr.Exists(id))
+	}
+	_, err := os.Stat(filepath.Join(outside, "session.sqlite"))
+	require.True(t, os.IsNotExist(err), "invalid IDs must not create a database outside sessions")
+	if err := os.Symlink(outside, filepath.Join(mgr.SessionsDir(), "linked")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	_, _, err = mgr.Open(context.Background(), "linked")
+	require.ErrorContains(t, err, "not a regular directory")
+	require.False(t, mgr.Exists("linked"))
+	_, err = os.Stat(filepath.Join(outside, "session.sqlite"))
+	require.True(t, os.IsNotExist(err), "a symlink must not create a database outside sessions")
 }

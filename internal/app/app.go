@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/nightgopher/easyagent/internal/agents/business"
 	"github.com/nightgopher/easyagent/internal/agents/coding"
 	"github.com/nightgopher/easyagent/internal/codex"
 	"github.com/nightgopher/easyagent/internal/command"
+	"github.com/nightgopher/easyagent/internal/dynamicflow"
 	"github.com/nightgopher/easyagent/internal/easycode"
 	"github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
@@ -30,6 +32,8 @@ import (
 // It assembles dependencies (providers, session manager, runtime registry, etc.)
 // but does NOT carry session-specific behavior — that belongs to AgentSession.
 type App struct {
+	flows             *dynamicflow.Manager
+	workflowConfirmMu sync.Mutex
 	mcpState          mcpState
 	skillMarket       *skillMarketState
 	expertMarket      *expertMarketState
@@ -131,6 +135,15 @@ func New(opts AppOptions) (*App, error) {
 		command:           opts.Command,
 		loopMgr:           scheduler.NewLoopManager(),
 	}
+	runtimePath, err := dynamicflow.InstallRuntime(cfg.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	flows, err := dynamicflow.New(filepath.Join(cfg.DataDir, "dynamic-workflows"), runtimePath, workflowHost{app: result})
+	if err != nil {
+		return nil, err
+	}
+	result.flows = flows
 	result.initMCP()
 	result.skillMarket = initSkillMarket(cfg)
 	result.expertMarket = initExpertMarket(cfg)
@@ -192,6 +205,9 @@ func (a *App) NewSession(ctx context.Context) (*runtime.AgentSession, error) {
 // LoadSession loads an existing AgentSession by ID.
 // If already loaded in the registry, returns the cached instance.
 func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.AgentSession, error) {
+	if a.flows != nil && a.flows.ActorSession(sessionID) {
+		return a.loadWorkflowActor(ctx, sessionID)
+	}
 	if loaded, ok := a.sessionStore.Get(sessionID); ok {
 		return loaded, nil
 	}
@@ -272,6 +288,9 @@ func (a *App) SessionDepsWithApp(appName string) runtime.Dependencies {
 	d := a.deps()
 	if appName != "" {
 		d.Application = a.ResolveApplication(appName)
+		if appName == "coding" {
+			d.Application = workflowApplication{Application: d.Application, app: a}
+		}
 	}
 	return d
 }
@@ -350,6 +369,9 @@ func (a *App) LoopManager() *scheduler.LoopManager {
 
 // Close cleans up all resources.
 func (a *App) Close() error {
+	if a.flows != nil {
+		a.flows.Close()
+	}
 	a.closeMCP()
 	basetools.StopBackgroundTasks()
 	if a.loopMgr != nil {
@@ -375,7 +397,7 @@ func (a *App) deps() runtime.Dependencies {
 		Registry:            a.registry,
 		SessionMgr:          a.sessionMgr,
 		ExtRegistry:         a.extRegistry,
-		Application:         a.ResolveApplication(""),
+		Application:         workflowApplication{Application: a.ResolveApplication(""), app: a},
 		ExternalTools:       a.extraTools,
 		AdditionalTools:     func(workspace string) []agent.Tool { return a.additionalTools(workspace) },
 		ToolRevision:        a.combinedToolRevision,

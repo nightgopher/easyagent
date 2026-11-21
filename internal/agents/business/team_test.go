@@ -3,6 +3,7 @@ package business
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,9 +15,45 @@ import (
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
 	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/hooks"
 	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/stretchr/testify/require"
 )
+
+func TestTeamHookHelper(t *testing.T) {
+	if len(os.Args) == 0 || os.Args[len(os.Args)-1] != "deny-team-hook" {
+		return
+	}
+	fmt.Print(`{"decision":"deny","reason":"team hook blocked"}`)
+	os.Exit(0)
+}
+
+func TestTeamMemberRunsConfiguredToolHooks(t *testing.T) {
+	store, _, member, _ := teamFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(member.Workspace, "secret.txt"), []byte("should-not-reach-model"), 0600))
+	provider := &scriptedProvider{responses: []scriptedResponse{
+		{toolCalls: []ai.ToolCall{{ID: "read-1", Name: "read", Args: `{"path":"secret.txt"}`}}, stop: ai.StopReasonToolUse},
+		{text: "done", stop: ai.StopReasonStop},
+	}}
+	assembler := testAssembler(store, provider)
+	assembler.Config.HooksDir = t.TempDir()
+	command, err := os.Executable()
+	require.NoError(t, err)
+	require.NoError(t, hooks.SaveCommandSettings(assembler.Config.HooksDir, hooks.CommandSettings{Hooks: []hooks.CommandHook{{Event: "before_tool", Tool: "read", Command: command, Args: []string{"-test.run=^TestTeamHookHelper$", "deny-team-hook"}, Enabled: true}}}))
+	child, _, err := assembler.memberAgent(member, "", nil, 0, 5)
+	require.NoError(t, err)
+	_, err = child.Prompt(context.Background(), ai.NewTextUserMessage("read"))
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 2)
+	var result ai.ToolResultMessage
+	for _, message := range provider.calls[1].Messages {
+		if item, ok := message.(ai.ToolResultMessage); ok {
+			result = item
+		}
+	}
+	require.Contains(t, result.Content, "team hook blocked")
+	require.NotContains(t, result.Content, "should-not-reach-model")
+}
 
 // scriptedProvider replays fixed responses in order and records requests.
 type scriptedProvider struct {

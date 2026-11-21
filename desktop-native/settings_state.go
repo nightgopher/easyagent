@@ -50,11 +50,13 @@ var settingsPages = []settingsPage{
 	{"remote-access", "手机远程访问", "globe", "扫码配对手机，通过加密中继访问这台电脑。", "立即生效", 1},
 	{"models", "模型连接", "cpu", "配置当前主机的模型服务与默认模型。", "需重启核心", 1},
 	{"permissions", "工具权限", "shield", "管理内置工具和默认审批权限。", "新会话生效", 1},
+	{"hooks", "Hooks", "wrench", "配置任务和工具事件触发的主机命令。", "下次事件生效", 1},
 	{"mcp", "MCP 工具", "link", "为当前主机接入工具服务，管理信任与授权。", "立即生效", 1},
 	{"capabilities", "技能", "code", "管理主机上的全局技能，或从市场安装新技能。", "新会话生效", 1},
 	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 	{"agents", "业务 Agent", "user", "创建可持续使用的角色，管理它的工具、技能与知识。", "下次执行生效", 2},
+	{"workflows", "动态工作流", "activity", "查看多角色协作的运行状态与执行步骤。", "", 2},
 	{"teams", "专家团", "user", "由负责人 Agent 按需委派多名业务 Agent 协作完成任务。", "新会话生效", 2},
 	{"memory-knowledge", "记忆与知识", "book", "管理知识来源、Agent 独立记忆与人工整理发布。", "", 2},
 }
@@ -115,9 +117,14 @@ type feishuForm struct {
 	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
 }
 type settingsState struct {
-	RelayURL, RelayRegistrationKey string
-	Business                       businessSettingsState
-	Teams                          teamSettingsState
+	HookDraft, HookSaved, HookRevision                      string
+	HookEvent, HookTool, HookCommand, HookArgs, HookTimeout string
+	HookFormOpen, HookEnabled                               bool
+	HookEditIndex                                           int
+	HookEpoch                                               uint64
+	RelayURL, RelayRegistrationKey                          string
+	Business                                                businessSettingsState
+	Teams                                                   teamSettingsState
 	modelForm
 	hostForm
 	mcpForm
@@ -199,6 +206,7 @@ func (a *preview) openSettings(tab string) {
 		a.cancelSettingsTransient()
 	}
 	a.Settings.Open = true
+	a.MobileSettingsMenu = false
 	a.Settings.Heading.Focus()
 	a.Settings.Tab = tab
 	a.Settings.Notice = ""
@@ -214,6 +222,12 @@ func (a *preview) openSettings(tab string) {
 	}
 }
 func (a *preview) closeSettings() {
+	if phoneClient && a.Live != nil && (a.Live.Loading["host-save"] || a.PhonePair.Pending != nil) {
+		return
+	}
+	if phoneClient {
+		a.closePairCamera()
+	}
 	if a.Live != nil && a.Live.Loading["business-save"] {
 		return
 	}
@@ -234,7 +248,7 @@ func (a *preview) closeSettings() {
 	a.Settings.AppSecret = ""
 	a.Settings.APIKey = ""
 	a.Settings.HostToken = ""
-	a.ReturnToComposer = true
+	a.ReturnToComposer = !phoneClient
 }
 func (s *settingsState) page() settingsPage {
 	for _, p := range settingsPages {

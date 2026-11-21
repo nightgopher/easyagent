@@ -53,8 +53,11 @@ type Config struct {
 	Host                          string
 	Port                          int
 	DataDir                       string
-	MaxTurns                      int
-	Timeout                       time.Duration
+	// HooksDir is a trusted host-owned directory supplied by the entrypoint;
+	// an empty value disables command hooks for embedded SDK users.
+	HooksDir string
+	MaxTurns int
+	Timeout  time.Duration
 
 	// Provider
 	Provider string // anthropic / openai / deepv / codex
