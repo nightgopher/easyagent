@@ -210,9 +210,12 @@ func (a *preview) businessAgentEditor(c *ui.Context) {
 	}
 	flatButton(c, glyph, a.tr("工具与技能")).Justify(ui.Start).Padding(10, 0).OnClick(func() { s.Advanced = !s.Advanced })
 	if s.Advanced {
-		labels := []string{"读取工作区文件", "写入工作区文件", "向用户提问", "获取当前时间", "按需发现已授权工具", "读取网页（需主机开启）", "搜索网页（需主机开启）", "查询当前主机全部跟进任务", "搜索当前主机全部会话（含归档）", "查看当前主机 Agent 目录"}
+		labels := []string{"读取工作区文件", "写入工作区文件", "向用户提问", "获取当前时间", "按需发现已授权工具", "读取网页（需主机开启）", "搜索网页（需主机开启）", "查询当前主机全部跟进任务", "搜索当前主机全部会话（含归档）", "查看当前主机 Agent 目录", "按用户要求结束跟进任务（管家）"}
 		ui.Row(c).Wrap().Gap(12).Children(func() {
 			for i, name := range businessBaseTools {
+				if name == "host_work_close" && v.ID != "agent-steward" {
+					continue
+				}
 				on := slices.Contains(v.Tools, name)
 				if ui.Checkbox(c.Key(name), &on, a.tr(labels[i])).Changed() {
 					v.Tools = slices.DeleteFunc(v.Tools, func(x string) bool { return x == name })

@@ -40,7 +40,7 @@ curl -H "Authorization: Bearer $EA_API_KEY" http://127.0.0.1:8080/health
 - `PUT /work/{id}`：提交 `title`、`state`、`summary`、`question`、`artifacts` 和当前 `version`，冲突返回 409。所属会话不可改写。
 
 工作状态：`active`、`waiting_answer`、`waiting_review`、`blocked`、`completed`、`cancelled`。
-等待回答或受阻必须填写 `question`；其他状态自动清空旧问题。仅用户可结束或重新打开工作。
+等待回答或受阻必须填写 `question`；其他状态自动清空旧问题。用户可结束或重新打开工作；管家也可在用户明确要求时结束指定工作，普通任务会话仍不能自行关闭或重新打开工作。
 成果为 `{"title":"演示文稿","kind":"file","value":"output/demo.pdf"}` 或 `kind:url` 的 HTTP/S 地址，最多 16 项。
 文件路径相对于任务工作区，登记成果不会读取文件、执行命令或打开链接。
 
@@ -62,7 +62,7 @@ Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话
 
 ## 个人管家与主机只读查询
 
-`POST /agents/steward`，请求体 `{}`，按需创建或返回 `agent-steward`。管家是用户唯一的常驻入口：预设在 v2 起定位为统筹者（`PresetVersion` 记录预设版本，升级只替换角色说明并追加新预设工具，保留用户的停用状态、记忆设置、自定义技能/知识与工具授权）。已停用返回 409，不自动重新启用。接口沿用主机认证。首次创建采用独立工作区和记忆，不绑定知识来源或写文件、Shell 工具。随后可通过普通业务 Agent API 编辑。
+`POST /agents/steward`，请求体 `{}`，按需创建或返回 `agent-steward`。管家是用户唯一的常驻入口：预设在 v2 起定位为统筹者（`PresetVersion` 记录预设版本，v3 升级保留已有角色说明并追加任务管理说明及新工具，保留用户的停用状态、记忆设置、自定义技能/知识与已有工具授权）。已停用返回 409，不自动重新启用。接口沿用主机认证。首次创建采用独立工作区和记忆，不绑定知识来源或写文件、Shell 工具。随后可通过普通业务 Agent API 编辑。
 
 ### 管家唯一会话
 
@@ -71,6 +71,8 @@ Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话
 ### 派生任务会话
 
 `host_session_create`（仅管家，需服务器注入；CLI/TUI 无此工具）：参数 `title?`, `cwd?`, `application?`（默认 coding，可选 business）, `agent_id?`（business 必填，不能是管家自己）, `model?`, `prompt?`（可选首条任务消息，经会话队列投递并在空闲即开始运行）。同步创建完全独立的任务会话并返回 `session_id` 与 `easyagent://session/{id}` 链接。派生会话使用核心默认权限模式，不自动提升。
+
+`host_work_close`（仅管家，工具授权可在桌面业务 Agent 设置中关闭）：按用户明确要求，把指定跟进任务标为完成或取消。参数为 `work_id`、通过 `host_work_search` 获取的当前 `version` 和 `state`（`completed` 或 `cancelled`）；版本过期时拒绝覆盖。仅更新跟进状态，不停止运行、不归档或删除会话，保留原有成果与摘要。
 
 ### 上下文清除
 
