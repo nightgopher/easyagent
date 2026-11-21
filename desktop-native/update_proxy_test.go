@@ -95,6 +95,42 @@ func TestProxyUpdateSourceServesFeedAndAssets(t *testing.T) {
 	}
 }
 
+func TestProxyUpdateSourceFallsBackToGitHub(t *testing.T) {
+	manifest := `{"version":"0.46.0","url":"ASSET_URL","signature":"sig"}`
+	dlServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "gateway down", http.StatusBadGateway)
+	}))
+	defer dlServer.Close()
+	fallback := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, ".json") {
+			t.Errorf("fallback should only serve the manifest, got %s", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(manifest))
+	}))
+	defer fallback.Close()
+
+	oldBase, oldFallback := updateFeedBase, updateFeedFallbackBase
+	updateFeedBase, updateFeedFallbackBase = dlServer.URL, fallback.URL
+	defer func() { updateFeedBase, updateFeedFallbackBase = oldBase, oldFallback }()
+
+	transport, err := updaterTransport(updateProxyDirect, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := proxyUpdateSource{get: proxyGet(transport)}
+	body, err := source.Manifest(context.Background(), false)
+	if err != nil {
+		t.Fatalf("manifest should fall back to GitHub: %v", err)
+	}
+	data, err := io.ReadAll(body)
+	body.Close()
+	if err != nil || !strings.Contains(string(data), `"version":"0.46.0"`) {
+		t.Fatalf("fallback manifest = %s, err = %v", data, err)
+	}
+}
+
 func TestProxyGetRejectsNonHTTPS(t *testing.T) {
 	transport, err := updaterTransport(updateProxyDirect, "")
 	if err != nil {

@@ -106,8 +106,9 @@ pathlib.Path(args[args.index('-o')+1]).write_bytes(source.read_bytes())
     def test_mirror_is_used_when_github_is_unreachable(self):
         # 镜像自 v0.47.x 起 opt-in（内置默认镜像已失效，死镜像比诚实的
         # GitHub 错误更糟）；配置 EA_MIRROR_REPO 后发现与下载都会回退。
+        # dl 层（v0.52 起为内置首选源）与 GitHub 一并 block，才真正走到 mirror。
         self.env.pop('EA_VERSION') # Discovery must also fall back.
-        self.env['EA_TEST_BLOCK'] = 'github.com'
+        self.env['EA_TEST_BLOCK'] = 'github.com,dl.hwj123hwj.asia'
         self.env['EA_MIRROR_REPO'] = 'fixture/mirror'
         result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
@@ -115,17 +116,18 @@ pathlib.Path(args[args.index('-o')+1]).write_bytes(source.read_bytes())
 
     def test_single_asset_falls_back_to_mirror_and_is_still_verified(self):
         self.env['EA_MIRROR_REPO'] = 'fixture/mirror'
-        self.env['EA_TEST_BLOCK'] = 'github.com/fixture/repo/releases/download/v1.2.3/easyagent-linux-amd64'
+        self.env['EA_TEST_BLOCK'] = 'dl.hwj123hwj.asia/dl/easyagent/v1.2.3/easyagent-linux-amd64,github.com/fixture/repo/releases/download/v1.2.3/easyagent-linux-amd64'
         result = self.run_install(); self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('v1.2.3', (self.install / 'easyagent').read_text())
 
     def test_mirror_can_be_disabled(self):
-        self.env['EA_TEST_BLOCK'] = 'github.com'
+        # dl 层是内置默认源、无需 opt-in；禁用 mirror 后仅 dl+GitHub 仍可用。
+        self.env['EA_TEST_BLOCK'] = 'github.com,dl.hwj123hwj.asia'
         self.env['EA_MIRROR_REPO'] = ''
         self.assert_unchanged(self.run_install())
 
     def test_unreachable_everywhere_keeps_previous_install(self):
-        self.env['EA_TEST_BLOCK'] = 'github.com,gitee.com'
+        self.env['EA_TEST_BLOCK'] = 'github.com,gitee.com,dl.hwj123hwj.asia'
         self.assert_unchanged(self.run_install())
 
     def test_partial_install_error_rolls_back_all_components(self):
