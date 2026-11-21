@@ -20491,7 +20491,7 @@ THE SOFTWARE.
 
 ````text
 License
-=======
+ =======
 
 [MIT](LICENSE).
 
