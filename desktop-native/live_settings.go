@@ -607,7 +607,11 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 	if phoneClient {
 		a.phonePairView(c)
 	}
-	a.note(c, "管理本机与远程连接。会话、文件和工具保存在各自主机上。")
+	if phoneClient {
+		a.note(c, "已连接的电脑；会话和文件保存在对应电脑上。")
+	} else {
+		a.note(c, "管理本机与远程连接。会话、文件和工具保存在各自主机上。")
+	}
 	for index, h := range l.Config.Hosts {
 		ui.Row(c.Key(h.ID)).Gap(10).AlignItems(ui.Center).Padding(16, 0).BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -615,6 +619,8 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 				value := h.URL
 				if h.Local {
 					value = "应用管理的本地核心"
+				} else if h.Relay != nil {
+					value = "加密中继连接"
 				}
 				a.note(c, value)
 			})
@@ -624,24 +630,33 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 			}
 			a.action(c, label).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
 			if !h.Local {
-				a.action(c, "编辑").OnClick(func() { s.hostForm = hostForm{EditHost: h.ID, HostName: h.Name, HostURL: h.URL} })
+				a.action(c, "编辑").OnClick(func() {
+					s.hostForm = hostForm{EditHost: h.ID, HostName: h.Name, HostURL: h.URL}
+					a.PhoneHostEditor = true
+				})
 				a.danger(c, "移除").OnClick(func() {
 					l.Confirm = &nativeConfirmation{"移除主机连接？", h.Name + "；不会删除主机上的会话或文件。", func() { a.removeLiveHost(index) }}
 				})
 			}
 		})
 	}
-	a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
-	a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
-	a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
-	a.input(c, "访问令牌", &s.HostToken, "原地址留空保留令牌；新连接留空表示无令牌", true).Bind(&s.HostTokenField)
-	ui.Row(c).Gap(8).Children(func() {
-		a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
-		if a.settingsFormDirty() {
-			a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
-		}
-		a.action(c, "新增连接").OnClick(func() { s.hostForm = hostForm{} })
-	})
+	if phoneClient && !a.PhoneHostEditor {
+		a.action(c, "手动添加连接").AlignSelf(ui.Start).OnClick(func() { a.PhoneHostEditor = true; s.hostForm = hostForm{} })
+	}
+	if !phoneClient || a.PhoneHostEditor {
+		a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
+		a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
+		a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
+		a.input(c, "访问令牌", &s.HostToken, "原地址留空保留令牌；新连接留空表示无令牌", true).Bind(&s.HostTokenField)
+		ui.Row(c).Gap(8).Children(func() {
+			a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
+			if a.settingsFormDirty() {
+				a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
+			}
+			a.action(c, "新增连接").OnClick(func() { s.hostForm = hostForm{} })
+		})
+	}
+
 	a.action(c, "重连当前主机").AlignSelf(ui.Start).Disabled(l.Connecting).OnClick(a.connectLive)
 }
 func (a *preview) selectLiveHost(index int) {

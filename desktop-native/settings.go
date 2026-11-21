@@ -193,6 +193,10 @@ func (a *preview) dirtySuffix() string {
 func (a *preview) settingsView(c *ui.Context) {
 	s := &a.Settings
 	page := s.page()
+	if phoneClient && page.ID == "connections" {
+		page.Label = "连接电脑"
+		page.Description = "扫码配对、切换或管理已连接的电脑。"
+	}
 	if phoneClient && a.MobileSettingsMenu {
 		a.phoneSettingsMenu(c)
 		return
@@ -251,7 +255,12 @@ func (a *preview) settingsView(c *ui.Context) {
 			if phoneClient {
 				flatButton(c, "arrow-left", "设置目录").OnClick(func() { a.MobileSettingsMenu = true })
 			}
-			ui.Column(c).FillWidth().MaxWidth(780).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
+			maxContent := float32(780)
+			width, height := c.Size()
+			if phoneClient && width > height {
+				maxContent = 560
+			}
+			ui.Column(c).FillWidth().MaxWidth(maxContent).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
 				ui.Column(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 						a.text(c, page.Label).Bind(&s.Heading).Focusable().Role(ui.RoleHeading).FontSize(22).FontWeight(600)
@@ -287,7 +296,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else if page.ID == "permissions" {
 						a.note(c, "权限配置应用于当前主机，选择后自动保存。")
-					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" {
+					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" && !(phoneClient && page.ID == "connections") {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -390,6 +399,10 @@ func (a *preview) generalSettings(c *ui.Context) {
 			})
 		})
 		version := "EasyAgent " + nativeAppVersion()
+		if phoneClient {
+			a.preferenceRow(c, "应用版本", version, func() {})
+			return
+		}
 		a.preferenceRow(c, "桌面版本", version, func() {
 			a.action(c, "检查更新").Disabled(!a.UpdaterReady).OnClick(updater.CheckForUpdates)
 		})
@@ -397,6 +410,9 @@ func (a *preview) generalSettings(c *ui.Context) {
 			a.commandLineRow(c)
 		}
 	})
+	if phoneClient {
+		return
+	}
 	if a.UpdaterReady {
 		checks := updater.AutomaticChecks()
 		if ui.Checkbox(c, &checks, "自动检查更新").Changed() {

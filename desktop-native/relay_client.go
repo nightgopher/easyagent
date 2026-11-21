@@ -95,9 +95,19 @@ func (r relayConfig) dialTLS(ctx context.Context, outer *websocket.Dialer) (net.
 	q := u.Query()
 	q.Set("route_id", r.RouteID)
 	u.RawQuery = q.Encode()
-	ws, res, err := outer.DialContext(ctx, u.String(), nil)
-	if res != nil && res.Body != nil {
-		_ = res.Body.Close()
+	var ws *websocket.Conn
+	var res *http.Response
+	for attempt := 0; attempt < 3; attempt++ {
+		attemptCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+		ws, res, err = outer.DialContext(attemptCtx, u.String(), nil)
+		cancel()
+		if res != nil && res.Body != nil {
+			_ = res.Body.Close()
+		}
+		var netErr net.Error
+		if err == nil || res != nil || ctx.Err() != nil || !(errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())) {
+			break
+		}
 	}
 	if err != nil {
 		if res != nil {
@@ -148,6 +158,7 @@ func newRelayBackend(r relayConfig, token string, outer *websocket.Dialer) (*bac
 		return r.dialTLS(ctx, outer)
 	}
 	b.HTTP.Transport = &http.Transport{DialTLSContext: dial, MaxConnsPerHost: 8, ForceAttemptHTTP2: false}
+	b.viaRelay = true
 	b.socketDialer = &websocket.Dialer{NetDialTLSContext: dial, HandshakeTimeout: 15 * time.Second}
 	return b, nil
 }
