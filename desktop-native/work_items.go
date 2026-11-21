@@ -176,13 +176,21 @@ func workLabel(item nativeWorkItem) string {
 }
 func (a *preview) workItemsView(c *ui.Context) {
 	l, s := a.Live, &a.Live.Work
-	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Padding(24).Gap(16).Children(func() {
+	width, height := c.Size()
+	compact := phoneClient && width > height
+	padding, gap := float32(24), float32(16)
+	if compact {
+		padding, gap = 12, 8
+	}
+	ui.Column(c).Grow(1).MinWidth(0).MinHeight(0).Padding(padding).Gap(gap).Children(func() {
 		ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 			a.text(c, "任务跟进").FontSize(20).FontWeight(600).Grow(1)
 			a.action(c, "刷新任务").Disabled(l.Loading["work"] || l.Loading["work-save"]).OnClick(func() { a.loadWorkPage(false) })
 			a.action(c, "返回对话").OnClick(a.closeWork)
 		})
-		a.note(c, a.Settings.host().Name+" · 查看需要你处理的事，回到原 Agent 继续。")
+		if !compact {
+			a.note(c, a.Settings.host().Name+" · 查看需要你处理的事，回到原 Agent 继续。")
+		}
 		ui.Row(c).Wrap().Gap(8).Children(func() {
 			for _, choice := range []businessChoice{{"attention", "待处理"}, {"open", "跟进中"}, {"all", "全部任务"}} {
 				button := a.action(c, choice.Label).OnClick(func() { s.View, s.Offset = choice.ID, 0; a.loadWorkPage(false) })

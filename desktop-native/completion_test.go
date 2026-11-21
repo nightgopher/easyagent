@@ -174,6 +174,47 @@ func TestNativeVoiceTranscriptReturnsToOrigin(t *testing.T) {
 		t.Fatal("transcript contaminated active session")
 	}
 }
+
+func TestNativeVoiceEmptyTranscriptKeepsDraft(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"text":"  "}`)
+	}))
+	defer srv.Close()
+	a := alignmentPreview(t)
+	a.Live.Client, _ = newBackendClient(srv.URL, "test")
+	a.Live.Connected = true
+	s := a.current()
+	s.Draft = "existing draft"
+	a.Live.Voice = &fixtureVoice{pcmWAV([]byte{0, 0})}
+	a.Live.VoiceOwner = s
+	a.startVoice()
+	waitNative(t, a, func() bool { return !a.Live.Loading["voice"] })
+	if s.Draft != "existing draft" || a.Live.Error == "" || a.Live.Notice != "" {
+		t.Fatal("empty transcription must preserve the draft and show an error")
+	}
+}
+
+func TestNativeVoiceFailureClearsRecordingNotice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	a := alignmentPreview(t)
+	a.Live.Client, _ = newBackendClient(srv.URL, "test")
+	a.Live.Connected = true
+	a.Live.Voice = &fixtureVoice{pcmWAV([]byte{0, 0})}
+	a.Live.VoiceOwner = a.current()
+	a.startVoice()
+	waitNative(t, a, func() bool { return !a.Live.Loading["voice"] })
+	if a.Live.Error == "" || a.Live.Notice != "" {
+		t.Fatal("failed transcription must not leave a recording notice")
+	}
+	a.Live.Notice = "正在录音"
+	a.cancelVoice()
+	if a.Live.Notice != "" {
+		t.Fatal("cancelling recording must clear its notice")
+	}
+}
 func TestNativeQRAndPairingLifecycle(t *testing.T) {
 	now := time.Now()
 	valid := map[string]any{"command": "/pair abc_12-3", "expires": now.Add(time.Minute).Format(time.RFC3339)}

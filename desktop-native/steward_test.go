@@ -43,7 +43,9 @@ func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 	a.Live.Connected = true
 	a.current().Draft = "给编程 Agent 的未发送需求"
 	a.openSteward()
-	waitNative(t, a, func() bool { return a.current().RemoteID == "steward-1" && !a.Live.Loading["steward"] && !a.Live.Loading["create-session"] })
+	waitNative(t, a, func() bool {
+		return a.current().RemoteID == "steward-1" && !a.Live.Loading["steward"] && !a.Live.Loading["create-session"]
+	})
 	// 原对话的草稿先落为一个真实会话，不会被带给管家。
 	first := <-bodies
 	if first["agent_id"] != nil {
@@ -182,5 +184,24 @@ func TestNativeCoreStewardEntryAndRevocation(t *testing.T) {
 	}
 	if !reopened.Disabled || reopened.Version != definition.Version+1 {
 		t.Fatal("opening reset the disabled agent")
+	}
+}
+
+func TestPhoneStewardGuardsUnsavedSettingsAndOffline(t *testing.T) {
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Settings.Open = true
+	a.Settings.Tab = "hooks"
+	a.Settings.HookFormOpen = true
+	a.Live.Connected = true
+	a.openPhoneSteward()
+	if a.Live.Confirm == nil || !a.Settings.Open || !a.Settings.HookFormOpen {
+		t.Fatal("unsaved settings should remain open until confirmed")
+	}
+	a.Live.Confirm = nil
+	a.Live.Connected = false
+	a.openPhoneSteward()
+	if !a.Settings.Open || a.Live.Error == "" {
+		t.Fatal("offline entry must preserve settings and explain the connection")
 	}
 }

@@ -72,6 +72,7 @@ type session struct {
 	RejectReason string
 }
 type preview struct {
+	phoneBarStyle                                                                  mygo.BarStyle
 	PhonePair                                                                      phonePairState
 	UpdaterReady                                                                   bool
 	Window                                                                         *mygo.Window
@@ -85,6 +86,8 @@ type preview struct {
 	Archived                                                                       bool
 	Sidebar                                                                        bool
 	MobileSettingsMenu                                                             bool
+	PhoneHostEditor                                                                bool
+	PhoneTools                                                                     bool
 	Workbench                                                                      bool
 	ModelMenu, PermissionMenu, MoreMenu, HostMenu, SlashMenu, NewMenu, ContextMenu bool
 	ModelSearch                                                                    string

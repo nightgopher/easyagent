@@ -1,0 +1,10 @@
+{
+  "mobile": {
+    "id": "easyagent_audio",
+    "android": {
+      "sources": ["android/*.kt"],
+      "class": "EasyAgentAudioPlugin",
+      "permissions": ["RECORD_AUDIO"]
+    }
+  }
+}

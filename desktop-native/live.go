@@ -81,6 +81,7 @@ type liveState struct {
 	RemoteAccess                                                           nativeRemoteAccess
 	Voice                                                                  voiceRecorder
 	VoiceOwner                                                             *session
+	PendingVoice                                                           *pendingVoice
 	VoiceStarted                                                           time.Time
 	VoiceGeneration                                                        uint64
 	QRGeneration                                                           uint64
@@ -340,6 +341,9 @@ func (a *preview) run(key string, work func(context.Context, *backendClient) (an
 				l.Loading[key] = false
 			}
 			if err != nil {
+				if key == "voice" {
+					l.Notice = ""
+				}
 				a.reportLiveError(err)
 				return
 			}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"path/filepath"
 	"runtime/debug"
@@ -41,7 +42,11 @@ func flatButton(c *ui.Context, name, label string) ui.Element {
 	return e
 }
 func iconButton(c *ui.Context, name, label string) ui.Element {
-	e := ui.ButtonBase(c).Label(label).Size(30, 30).Center().Radius(6).TextColor(c.Theme().TextMuted)
+	size := float32(30)
+	if phoneClient {
+		size = 44
+	}
+	e := ui.ButtonBase(c).Label(label).Size(size, size).Center().Radius(6).TextColor(c.Theme().TextMuted)
 	if e.Hovered() {
 		e.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
 	}
@@ -87,14 +92,36 @@ func menuCaption(c *ui.Context, label string) {
 
 func (a *preview) View(c *ui.Context) {
 	theme := previewTheme(c.Theme(), a.Settings.Preferences)
+	if phoneClient {
+		style := mygo.BarStyleDark
+		if theme.Dark {
+			style = mygo.BarStyleLight
+		}
+		if a.phoneBarStyle != style {
+			a.phoneBarStyle = style
+			mygo.SystemBars.SetStyle(style)
+		}
+	}
 	c.SetTheme(&theme)
+	_, _, bottomInset, _ := c.SafeArea()
+	width, height := c.Size()
+	landscapeChat := phoneClient && width > height && !a.Settings.Open && !a.Sidebar && a.Live != nil && !a.Live.Work.Open
+	keyboardCompact := landscapeChat && bottomInset > 80
 	a.dispatchNativeShortcuts(c)
 	ui.Box(c).Fill().Background(c.Theme().Background).Children(func() {
 		a.wallpaperLayer(c)
 		// MyGo paints absolute siblings last, in declaration order. Keep both
 		// layers absolute so the image stays behind opaque content surfaces.
-		ui.Column(c).Absolute().Fill().TextColor(c.Theme().Text).FontSize(14).Children(func() {
-			a.chrome(c)
+		content := ui.Column(c).Absolute().Fill().TextColor(c.Theme().Text).FontSize(14)
+		if keyboardCompact {
+			content.Padding(0, 0, bottomInset, 0)
+		}
+		content.Children(func() {
+			chrome := ui.Column(c)
+			if landscapeChat {
+				chrome.Height(0).Clip()
+			}
+			chrome.Children(func() { a.chrome(c) })
 			if a.Live != nil {
 				a.liveNotices(c)
 			}
@@ -119,7 +146,11 @@ func (a *preview) View(c *ui.Context) {
 						a.workItemsView(c)
 						return
 					}
-					a.toolbar(c)
+					toolbar := ui.Column(c)
+					if keyboardCompact {
+						toolbar.Height(0).Clip()
+					}
+					toolbar.Children(func() { a.toolbar(c) })
 					a.transcript(c)
 					a.composer(c)
 					if a.Live != nil {
@@ -346,7 +377,12 @@ func (a *preview) transcript(c *ui.Context) {
 		ui.Column(c).FillWidth().MaxWidth(816).MinWidth(0).Margin(0, ui.Auto).Padding(28, 20, 12, 20).Gap(24).Selectable().Children(func() {
 			a.teamRoster(c, s)
 			if len(s.Messages) == 0 {
-				ui.Column(c).Padding(80, 0).Gap(12).Children(func() {
+				empty := ui.Column(c).Padding(80, 0).Gap(12)
+				width, height := c.Size()
+				if phoneClient && width > height {
+					empty.Padding(8, 0).Gap(4)
+				}
+				empty.Children(func() {
 					size := float32(38)
 					title := "开始一段新对话"
 					if a.Live != nil {
@@ -361,17 +397,20 @@ func (a *preview) transcript(c *ui.Context) {
 					if phoneClient {
 						titleSize = 23
 					}
-					a.text(c, title).FontSize(titleSize).FontWeight(500).Margin(20, 0, 4, 0)
+					heading := a.text(c, title).FontSize(titleSize).FontWeight(500).Margin(20, 0, 4, 0)
+					if phoneClient && width > height {
+						heading.Margin(2, 0, 2, 0)
+					}
 					if a.Live == nil {
 						a.text(c, "在下方输入消息，或用 /approval 体验工具审批。").TextColor(c.Theme().TextMuted)
-					} else {
+					} else if !phoneClient {
 						a.text(c, "说说你的任务。回复、工具执行和每一步结果，都留在这段对话里。").FontSize(14).LineHeight(1.85).TextColor(c.Theme().TextMuted)
 					}
 					if a.Live == nil {
 						a.text(c, "此预览只使用演示数据。").FontSize(12).TextColor(c.Theme().TextMuted)
 					} else if !a.Live.Connected {
 						a.disconnectedHint(c)
-					} else {
+					} else if !phoneClient {
 						ui.Row(c).Wrap().Gap(12).Margin(18, 0, 0, 0).Children(func() {
 							for _, suggestion := range []string{"梳理一个想法", "一起看看代码", "排查一个问题"} {
 								ui.ButtonBase(c).Label(a.tr(suggestion)).Gap(8).Radius(6).TextColor(c.Theme().TextMuted).Padding(8, 12).Border(1, c.Theme().Border).Children(func() { a.text(c, suggestion); icon(c, "arrow-right") }).OnClick(func() {
@@ -392,7 +431,9 @@ func (a *preview) transcript(c *ui.Context) {
 			}
 		})
 	})
-	if s.Scroll.MaxY > 0 && s.Scroll.Y < s.Scroll.MaxY-48 {
+	_, _, bottomInset, _ := c.SafeArea()
+	width, height := c.Size()
+	if !(phoneClient && bottomInset > 80 && width > height) && s.Scroll.MaxY > 0 && s.Scroll.Y < s.Scroll.MaxY-48 {
 		ui.Overlay(c, func() {
 			flatButton(c, "chevron-down", "回到最新").AttachTo(scroll, ui.AnchorBottom, ui.AnchorBottom).Margin(0, 0, 12, 0).Background(c.Theme().Surface).Border(1, c.Theme().Border).OnClick(func() { follow(s) })
 		})
