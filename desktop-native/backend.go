@@ -27,6 +27,7 @@ type backendClient struct {
 	URL, Token   string
 	HTTP         *http.Client
 	socketDialer *websocket.Dialer
+	viaRelay     bool
 	mu           sync.Mutex
 	ws           *websocket.Conn
 }
@@ -74,6 +75,9 @@ func (b *backendClient) execute(req *http.Request, out any) error {
 			return errors.New(relayErr.message)
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
+			if b.viaRelay {
+				return errors.New("中继请求超时，请检查手机网络和电脑的远程访问连接")
+			}
 			return errors.New("服务处理超时，草稿已保留。目录操作请检查 macOS 文件与文件夹访问提示，或用浏览目录重新选择项目")
 		}
 		return errors.New("无法连接服务，请检查主机地址和网络")
