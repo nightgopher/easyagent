@@ -37,6 +37,7 @@ async function run(request) {
   if(diagnostics.length)throw Error(diagnostics.map(d=>d.message).join('\n'));
   if (existsSync(directory+'/journal.jsonl') && !existsSync(directory+'/journal.sqlite')) throw Error('旧版工作流日志需要迁移，不能安全恢复');
   const journal=openJournal(directory+'/journal.sqlite');
+  if (analysis.causality && Buffer.byteLength(JSON.stringify(analysis.causality)) <= 1024*1024) send({type:'graph',graph:analysis.causality});
   const snapshot=()=>send({type:'snapshot',state:{run:journal.port.getRun(runId),actors:journal.port.listActors(runId),nodes:journal.port.listNodes(runId),events:journal.port.listEvents(runId).slice(-100)}});
   const asks=new Map();
   try {

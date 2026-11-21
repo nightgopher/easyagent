@@ -40,6 +40,7 @@ type Run struct {
 	Updated     int64             `json:"updated_at"`
 	Actors      map[string]string `json:"sessions"`
 	State       json.RawMessage   `json:"state,omitempty"`
+	Graph       json.RawMessage   `json:"graph,omitempty"`
 	Result      json.RawMessage   `json:"result,omitempty"`
 }
 type activeRun struct {
@@ -244,6 +245,7 @@ func (m *Manager) List() []*Run {
 		c := clone(r)
 		c.Script = ""
 		c.State = nil
+		c.Graph = nil
 		c.Result = nil
 		runs = append(runs, c)
 	}

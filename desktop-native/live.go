@@ -258,6 +258,7 @@ func (a *preview) liveTick() bool {
 	}
 	a.tickMCPStatus()
 	a.tickWork()
+	a.tickConversationWorkflows()
 	if a.Settings.Open && a.Settings.Tab == "workflows" && l.Client != nil && time.Now().After(l.WorkflowNext) && !l.Loading["workflows"] {
 		l.WorkflowNext = time.Now().Add(3 * time.Second)
 		a.resource("workflows", "/dynamic-workflows")
@@ -383,6 +384,12 @@ func (a *preview) resource(key, path string) {
 				a.reportLiveError(err)
 				l.ResourceErrors[key] = l.Error
 				return
+			}
+			if strings.HasPrefix(key, "workflow-card/") {
+				old, next := object(l.Data[key]), object(value)
+				if next["graph"] == nil && old["graph"] != nil && str(old["id"]) == str(next["id"]) && str(old["parent_session_id"]) == str(next["parent_session_id"]) {
+					next["graph"] = old["graph"]
+				}
 			}
 			l.Data[key] = value
 			if key == "remote-access" && remoteGeneration == l.RemoteAccess.Generation && !boolean(object(value)["pairing"]) && !l.Loading["remote-pair"] {

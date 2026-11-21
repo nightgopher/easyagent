@@ -12,7 +12,7 @@ import (
 func (a *preview) liveWorkflowSettings(c *ui.Context) {
 	l := a.Live
 	data := object(l.Data["workflows"])
-	a.note(c, "在对话中输入 /workflow 和任务，Agent 会组织角色协作。运行中的状态每 3 秒更新。")
+	a.note(c, "在编程会话或管家对话中输入 /workflow 和任务；管家会新建编程会话承接。运行主机需要 Node.js 22.13 或更高版本。运行中的状态每 3 秒更新。")
 	if err := str(l.ResourceErrors["workflows"]); err != "" {
 		a.note(c, err)
 		return
@@ -107,6 +107,7 @@ func (a *preview) liveWorkflowSettings(c *ui.Context) {
 }
 func (a *preview) workflowAction(id, action string, body any) {
 	a.operation("workflow-action", "POST", "/dynamic-workflows/"+url.PathEscape(id)+"/"+action, body, func(any) {
+		delete(a.Live.Data, "workflow-card/"+id)
 		a.resource("workflows", "/dynamic-workflows")
 		a.resource("workflow-detail", "/dynamic-workflows/"+url.PathEscape(id))
 	})

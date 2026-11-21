@@ -21,6 +21,9 @@ func (s *Server) registerDynamicWorkflowRoutes(mux *http.ServeMux) {
 			writeError(w, http.StatusNotFound, "workflow not found")
 			return
 		}
+		if r.URL.Query().Get("omit_graph") == "1" {
+			run.Graph = nil
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(run)
 	})

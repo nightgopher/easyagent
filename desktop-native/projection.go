@@ -307,6 +307,11 @@ func (s *session) event(e agentEvent) {
 				if e.Details != nil {
 					m.Details = e.Details
 				}
+				if m.Tool == "create_workflow" {
+					if id := conversationWorkflowID(m); id != "" {
+						m.WorkflowID = id
+					}
+				}
 				// send_message 主动播报：正文作为独立气泡紧贴工具行上屏（与 TUI
 				// 行为一致）；CallID 去重防止 snapshot 回放叠加。
 				if e.Type == "tool_end" && m.Tool == "send_message" && !e.Error {

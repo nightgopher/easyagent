@@ -17,6 +17,7 @@ type wireMessage struct {
 	Type, ID, Op, Key string
 	Args              json.RawMessage
 	State             json.RawMessage
+	Graph             json.RawMessage
 	Result            json.RawMessage
 	Error             string
 }
@@ -77,6 +78,14 @@ func (m *Manager) execute(ctx context.Context, id string) error {
 			break
 		}
 		switch msg.Type {
+		case "graph":
+			m.mu.Lock()
+			m.runs[id].Graph = msg.Graph
+			err = m.save(m.runs[id])
+			m.mu.Unlock()
+			if err != nil {
+				failure = err
+			}
 		case "snapshot":
 			m.mu.Lock()
 			m.runs[id].State = msg.State

@@ -91,11 +91,28 @@ func waitRun(t *testing.T, m *Manager, id string) *Run {
 	return run
 }
 func TestDynamicParallelTypedBranchAndActorContext(t *testing.T) {
-	m, host, _, _ := newManager(t)
+	m, host, dir, path := newManager(t)
 	run, err := m.Start(context.Background(), "parallel", `interface Plan {ok:boolean;items:string[]} const a=agent("author"); const b=agent("reviewer"); const plan=await a.ask<Plan>("plan"); if(!plan.ok) throw new Error("bad plan"); const pieces=await Promise.all(plan.items.map(item=>b.ask(item))); return await a.ask(pieces.join("|"));`, "")
 	require.NoError(t, err)
 	done := waitRun(t, m, run.ID)
 	require.Equal(t, "completed", done.Status, done.Error)
+	var graph struct {
+		Steps []json.RawMessage `json:"steps"`
+		Edges []json.RawMessage `json:"edges"`
+	}
+	require.NoError(t, json.Unmarshal(done.Graph, &graph))
+	require.NotEmpty(t, graph.Steps)
+	require.NotEmpty(t, graph.Edges)
+	reloaded, err := m.Get(run.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, string(done.Graph), string(reloaded.Graph))
+	require.Empty(t, m.List()[0].Graph, "list must not send the full graph")
+	restored, err := New(dir, path, host)
+	require.NoError(t, err)
+	defer restored.Close()
+	persisted, err := restored.Get(run.ID)
+	require.NoError(t, err)
+	require.JSONEq(t, string(done.Graph), string(persisted.Graph))
 	require.Contains(t, string(done.Result), "OUT:A|OUT:B")
 	host.mu.Lock()
 	defer host.mu.Unlock()

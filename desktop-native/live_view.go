@@ -769,7 +769,7 @@ func (a *preview) liveModals(c *ui.Context) {
 
 type nativeCommand struct{ Name, Description string }
 
-var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/skills", "本项目技能"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/clear", "清空上下文（同一会话，不保留历史）"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
+var nativeCommands = []nativeCommand{{"/help", "使用帮助"}, {"/new", "新建会话"}, {"/model", "切换模型"}, {"/sessions", "历史会话"}, {"/tools", "可用工具"}, {"/skills", "本项目技能"}, {"/workflow", "多角色动态工作流"}, {"/context", "检查上下文"}, {"/compact", "压缩上下文"}, {"/clear", "清空上下文（同一会话，不保留历史）"}, {"/stop", "停止任务"}, {"/mcp", "MCP 工具"}, {"/settings", "工作区设置"}}
 
 func (a *preview) commandMatches(text string) []nativeCommand {
 	if !strings.HasPrefix(text, "/") {

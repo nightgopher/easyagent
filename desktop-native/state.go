@@ -16,6 +16,7 @@ type message struct {
 	Details                                      map[string]any
 	Images                                       []messageImage
 	EntryID, CallID, RunID, Kind, Status, Result string
+	WorkflowID                                   string
 	User                                         bool
 	Text                                         string
 	Tool                                         string
