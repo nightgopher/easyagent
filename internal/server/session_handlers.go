@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,12 +56,13 @@ func (s *Server) listSessions(w http.ResponseWriter, r *http.Request) {
 
 // CreateSessionRequest is the request body for creating a session.
 type CreateSessionRequest struct {
-	Channel     string `json:"channel,omitempty"`
-	AgentID     string `json:"agent_id,omitempty"`
-	TeamID      string `json:"team_id,omitempty"`
-	Cwd         string `json:"cwd,omitempty"`
-	Model       string `json:"model,omitempty"`
-	Application string `json:"application,omitempty"` // e.g. "coding", "kb"
+	ParentSessionID string `json:"parent_session_id,omitempty"`
+	Channel         string `json:"channel,omitempty"`
+	AgentID         string `json:"agent_id,omitempty"`
+	TeamID          string `json:"team_id,omitempty"`
+	Cwd             string `json:"cwd,omitempty"`
+	Model           string `json:"model,omitempty"`
+	Application     string `json:"application,omitempty"` // e.g. "coding", "kb"
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +82,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	if req.AgentID == agentdata.StewardID {
 		writeError(w, http.StatusConflict, "steward session is managed; use POST /agents/steward/session")
 		return
+	}
+	if req.ParentSessionID != "" {
+		parent := req.ParentSessionID
+		if req.AgentID == "" || filepath.Base(parent) != parent || parent == "." || parent == ".." || strings.ContainsAny(parent, "/\\") || !s.app.SessionManager().Exists(parent) {
+			writeError(w, http.StatusBadRequest, "invalid parent session")
+			return
+		}
 	}
 
 	cfg := s.app.Config()
@@ -147,6 +156,13 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		_ = s.app.SessionStore().Delete(sess.SessionID())
 		writeError(w, http.StatusInternalServerError, "cannot save session metadata")
 		return
+	}
+	if req.ParentSessionID != "" {
+		if err := s.app.SessionManager().SaveParentSession(sess.SessionID(), req.ParentSessionID); err != nil {
+			_ = s.app.SessionStore().Delete(sess.SessionID())
+			writeError(w, http.StatusInternalServerError, "cannot save parent session")
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

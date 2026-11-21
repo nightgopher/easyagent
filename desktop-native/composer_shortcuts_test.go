@@ -98,6 +98,9 @@ func TestExpertSendCreatesSeparateAgentSession(t *testing.T) {
 	if str(request["agent_id"]) != "expert-1" {
 		t.Fatalf("wrong expert: %v", request)
 	}
+	if str(request["parent_session_id"]) != origin.RemoteID {
+		t.Fatalf("missing parent: %v", request)
+	}
 	waitNative(t, a, func() bool { return a.current() != origin })
 	if a.current().AgentID != "expert-1" || a.current().Draft != "整理记录" {
 		t.Fatalf("expert task was not preserved: %#v", a.current())

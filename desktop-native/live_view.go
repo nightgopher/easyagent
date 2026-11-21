@@ -373,6 +373,16 @@ func (a *preview) liveToolbar(c *ui.Context) {
 		}
 		ui.Row(c).Grow(1).MinWidth(0).Gap(14).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, s.Title).FontSize(14).FontWeight(500).MinWidth(0).SingleLine()
+			if s.ParentSessionID != "" {
+				for _, parent := range a.Sessions {
+					if parent.RemoteID == s.ParentSessionID {
+						flatButton(c, "", "返回："+parent.Title).OnClick(func() {
+							a.openSessionSearchHit(sessionSearchHit{SessionID: parent.RemoteID, Title: parent.Title, Workspace: parent.Workspace})
+						})
+						break
+					}
+				}
+			}
 			ui.Row(c).MaxWidth(160).MinWidth(0).Gap(5).AlignItems(ui.Center).TextColor(c.Theme().TextMuted).Children(func() {
 				icon(c, "folder")
 				ui.Text(c, s.Project).FontSize(11).SingleLine().MinWidth(0).Tooltip(s.Workspace)

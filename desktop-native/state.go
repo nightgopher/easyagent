@@ -42,6 +42,7 @@ type session struct {
 	Plan                                         []nativePlanEntry
 	RemoteID, Workspace, Application, AccessMode string
 	AgentID                                      string
+	ParentSessionID                              string
 	SelectedExpertID, SelectedExpertName         string
 	TeamID, TeamName                             string // set when the session runs a team
 	Home                                         string // the host's home directory, for expanding "~/" in file links

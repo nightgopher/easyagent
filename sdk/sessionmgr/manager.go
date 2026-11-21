@@ -36,19 +36,20 @@ type sessionListCache struct {
 
 // SessionInfo holds metadata about a session for listing/indexing.
 type SessionInfo struct {
-	ID           string `json:"id"`
-	CreatedAt    int64  `json:"created_at"`
-	MessageCount int    `json:"message_count"`
-	LastActive   int64  `json:"last_active"`
-	Workspace    string `json:"workspace,omitempty"`
-	Title        string `json:"title,omitempty"`
-	AgentID      string `json:"agent_id,omitempty"`
-	Application  string `json:"application,omitempty"` // e.g. "coding", "kb"
-	TeamID       string `json:"team_id,omitempty"`     // set when the session runs a team
-	TeamName     string `json:"team_name,omitempty"`
-	Pinned       bool   `json:"pinned"`
-	Archived     bool   `json:"archived"`
-	ForkedFrom   string `json:"forked_from,omitempty"` // source session id when this session is a fork
+	ID              string `json:"id"`
+	CreatedAt       int64  `json:"created_at"`
+	MessageCount    int    `json:"message_count"`
+	LastActive      int64  `json:"last_active"`
+	Workspace       string `json:"workspace,omitempty"`
+	Title           string `json:"title,omitempty"`
+	AgentID         string `json:"agent_id,omitempty"`
+	Application     string `json:"application,omitempty"` // e.g. "coding", "kb"
+	TeamID          string `json:"team_id,omitempty"`     // set when the session runs a team
+	TeamName        string `json:"team_name,omitempty"`
+	Pinned          bool   `json:"pinned"`
+	Archived        bool   `json:"archived"`
+	ForkedFrom      string `json:"forked_from,omitempty"` // source session id when this session is a fork
+	ParentSessionID string `json:"parent_session_id,omitempty"`
 }
 
 // NewManager creates a new session manager rooted at dataDir.
@@ -397,6 +398,7 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			_ = meta.decodeField("pinned", &info.Pinned)
 			_ = meta.decodeField("archived", &info.Archived)
 			_ = meta.decodeField("forked_from", &info.ForkedFrom)
+			_ = meta.decodeField("parent_session_id", &info.ParentSessionID)
 		}
 
 		infos = append(infos, info)
@@ -680,6 +682,11 @@ func forkCut(entries []session.Entry, target string) (int, error) {
 // SaveAgentMeta persists session identity together with its application and workspace.
 func (m *Manager) SaveAgentMeta(id, workspace, agentID string) error {
 	return m.updateMeta(id, map[string]any{"workspace": workspace, "application": "business", "agent_id": agentID})
+}
+
+// SaveParentSession records where an independently configured expert session originated.
+func (m *Manager) SaveParentSession(id, parent string) error {
+	return m.updateMeta(id, map[string]any{"parent_session_id": parent})
 }
 
 // SaveTeamSession persists a team session identity plus the frozen team
