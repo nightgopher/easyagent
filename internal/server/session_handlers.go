@@ -7,9 +7,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/nightgopher/easyagent/internal/agentdata"
+	"github.com/nightgopher/easyagent/internal/stewardtools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
@@ -531,6 +533,32 @@ func (s *Server) executeCommand(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusNotFound, "session not found")
 		return
+	}
+	fields := strings.Fields(req.Command)
+	if len(fields) > 0 && fields[0] == "/workflow" {
+		agentID, err := s.app.SessionManager().AgentID(sessionID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "cannot read session identity")
+			return
+		}
+		if agentID != "" && agentID != agentdata.StewardID {
+			writeError(w, http.StatusBadRequest, "动态工作流请在编程会话或管家对话中使用")
+			return
+		}
+		if agentID == agentdata.StewardID && len(fields) > 1 {
+			task := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(req.Command), "/workflow"))
+			id, queued, err := s.dispatchStewardSession(ctx, stewardtools.DispatchRequest{Application: "coding", Prompt: "/workflow " + task})
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !queued {
+				writeError(w, http.StatusInternalServerError, "已创建编程会话 "+id+"，但任务未能加入队列；请重试或在该会话中发送任务")
+				return
+			}
+			jsonResponse(w, CommandResponse{Output: "已创建编程会话并提交工作流任务。", SessionID: id})
+			return
+		}
 	}
 
 	cmdCtx := slashcmd.Context{

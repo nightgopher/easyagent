@@ -297,6 +297,11 @@ func (a *preview) toolGroup(c *ui.Context, s *session, start, end, selected int)
 			a.action(c, fmt.Sprintf("显示更多调用（还剩 %d 个）", len(tools)-state.Shown)).AlignSelf(ui.Start).OnClick(func() { state.Shown += 25 })
 		}
 	})
+	for i := start; i < end; i++ {
+		if s.Messages[i].Tool == "create_workflow" {
+			a.conversationWorkflow(c.Key(fmt.Sprintf("workflow/%d", i)), s, s.Messages[i])
+		}
+	}
 }
 func toolFilePath(m *message) string {
 	for _, key := range []string{"file_path", "absolute_path", "path", "filename"} {

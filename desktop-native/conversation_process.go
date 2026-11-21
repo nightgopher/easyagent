@@ -80,6 +80,11 @@ func (a *preview) processMessages(c *ui.Context, s *session, p processRange, sel
 			}
 		})
 	}
+	for i := p.Start; i < end; i++ {
+		if s.Messages[i].Kind == "tool" && s.Messages[i].Tool == "create_workflow" {
+			a.conversationWorkflow(c.Key(fmt.Sprintf("workflow/%d", i)), s, s.Messages[i])
+		}
+	}
 	if p.Answer >= 0 {
 		a.conversationRow(c.Key(p.Answer), s, p.Answer, selected)
 	}
