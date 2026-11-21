@@ -35,10 +35,10 @@ func NewSQLiteStorage(path, legacyPath string) *SQLiteStorage {
 }
 
 func (s *SQLiteStorage) Init() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0700); err != nil { // #nosec G703 -- storage paths are explicitly selected by the trusted SDK caller.
 		return err
 	}
-	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_RDWR, 0600)
+	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_RDWR, 0600) // #nosec G703 -- the trusted SDK caller supplies the session database path.
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func (s *SQLiteStorage) migrate() error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var marker string
 	err = tx.QueryRow("SELECT value FROM state WHERE key='initialized'").Scan(&marker)
 	if err == nil {
@@ -117,7 +117,7 @@ func (s *SQLiteStorage) migrate() error {
 	}
 	legacyStamp := "absent"
 	if s.legacyPath != "" {
-		f, err := os.Open(s.legacyPath)
+		f, err := os.Open(s.legacyPath) // #nosec G703 -- the trusted SDK caller selects the legacy session to import.
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -147,7 +147,7 @@ func (s *SQLiteStorage) migrate() error {
 					return readErr
 				}
 			}
-			after, err := os.Stat(s.legacyPath)
+			after, err := os.Stat(s.legacyPath) // #nosec G703 -- this checks the same caller-selected legacy session after import.
 			if err != nil || !os.SameFile(before, after) || before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
 				return fmt.Errorf("legacy session changed during migration")
 			}
@@ -178,7 +178,7 @@ func (s *SQLiteStorage) migrate() error {
 }
 
 func legacySignature(path string) (string, error) {
-	info, err := os.Stat(path)
+	info, err := os.Stat(path) // #nosec G703 -- path is the caller-selected legacy session being checked for changes.
 	if os.IsNotExist(err) {
 		return "absent", nil
 	}
@@ -251,7 +251,7 @@ func (s *SQLiteStorage) Append(ctx context.Context, entry Entry) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if err = sqliteAppend(ctx, tx, entry, !s.forked, true); err != nil {
 		return err
 	}

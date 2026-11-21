@@ -76,7 +76,7 @@ func LoadCommandSettings(dir string) (CommandSettings, error) {
 	if strings.TrimSpace(dir) == "" {
 		return CommandSettings{Hooks: []CommandHook{}}, nil
 	}
-	f, err := os.Open(filepath.Join(dir, "hooks.json"))
+	f, err := os.Open(filepath.Join(dir, "hooks.json")) // #nosec G304 -- dir is the trusted host configuration directory, not a project-discovered path.
 	if os.IsNotExist(err) {
 		return CommandSettings{Hooks: []CommandHook{}}, nil
 	}
@@ -243,7 +243,7 @@ func runCommand(ctx context.Context, hook CommandHook, workspace string, input c
 	}
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(timeout)*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, hook.Command, hook.Args...)
+	cmd := exec.CommandContext(ctx, hook.Command, hook.Args...) // #nosec G204 -- an owner-configured absolute executable and explicit arguments are the purpose of command hooks.
 	cmd.Dir = workspace
 	cmd.Stdin = bytes.NewReader(data)
 	output := &limitedBuffer{max: 16 * 1024}
