@@ -8,6 +8,7 @@ on:
       - 'scripts/publish-release.py'
       - 'scripts/build-release.sh'
       - 'scripts/build-android.py'
+      - 'scripts/sign-mygo-apk.py'
       - 'mobile-native/**'
       - 'scripts/check-release-build.sh'
       - 'scripts/test_cua_helper.py'
@@ -123,6 +124,27 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.1'
       - name: Exercise the release APK builder with a disposable signing key
         run: python3 scripts/build-android.py build dist --test-signing
+  mygo-android-signing:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: desktop-native/go.mod
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android build dependencies
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36' 'build-tools;35.0.1'
+      - name: Build and verify MyGo APK with a disposable key
+        run: |
+          go install github.com/egoist/mygo/cmd/mygo@v0.10.0
+          version=$(python3 -c 'import json; print(json.load(open("desktop-native/mygo.json"))["version"])')
+          (cd desktop-native && "$(go env GOPATH)/bin/mygo" build -platform android/arm64)
+          python3 scripts/sign-mygo-apk.py "desktop-native/build.noindex/android/easyagent-${version}.apk" "$RUNNER_TEMP/signed-mygo.apk" "$version" --test-signing
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-26' && 'macos-26' || (vars.EASYAGENT_MACOS_ARM_RUNNER != '' && vars.EASYAGENT_MACOS_ARM_RUNNER || 'macos-26') }}

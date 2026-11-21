@@ -279,16 +279,13 @@ jobs:
           cd desktop-native
           "$(go env GOPATH)/bin/mygo" build -platform android/arm64
           mkdir -p "${GITHUB_WORKSPACE}/dist"
-          cp "build.noindex/android/easyagent-${TAG#v}.apk" "${GITHUB_WORKSPACE}/dist/easyagent-mygo-android.apk"
-      - name: Verify the APK identity
+          cp "build.noindex/android/easyagent-${TAG#v}.apk" "${RUNNER_TEMP}/easyagent-mygo-unsigned.apk"
+      - name: Sign and verify the MyGo APK
         env:
           TAG: ${{ needs.validate.outputs.version }}
-        run: |
-          badging=$("$ANDROID_HOME/build-tools/35.0.1/aapt2" dump badging dist/easyagent-mygo-android.apk | head -1)
-          echo "$badging"
-          # versionCode 位于 name 与 versionName 之间，分开匹配两个字段。
-          echo "$badging" | grep -F "package: name='com.hwj.easyagent'"
-          echo "$badging" | grep -F "versionName='${TAG#v}'"
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: python3 scripts/sign-mygo-apk.py "$RUNNER_TEMP/easyagent-mygo-unsigned.apk" dist/easyagent-mygo-android.apk "$TAG"
       - uses: actions/upload-artifact@v7
         with:
           name: release-mygo-android
