@@ -528,4 +528,3 @@ function sortEdges(nodes: readonly FlowNode[], edges: FlowEdge[]): void {
       (a.via ?? "").localeCompare(b.via ?? ""),
   );
 }
-

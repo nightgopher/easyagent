@@ -265,7 +265,7 @@ export class Evaluator {
     }
     // Destructuring off a live place aliases each extracted element to a live field. When the
     // place is present, still evaluate the initializer for effect (a join's edges, an awaited
-    // thenable's `then`) — the alias binds to the place, not the discarded snapshot. 
+    // thenable's `then`) — the alias binds to the place, not the discarded snapshot.
     // `const [sec, alias] = await Promise.all([secret, box])` needs both the join edges AND
     // the element aliasing (alias IS box) so a write through `alias` reaches box.
     if (place !== undefined) {

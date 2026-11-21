@@ -111,7 +111,7 @@ func (m *Manager) Available() error {
 	if err != nil {
 		return errors.New("动态工作流需要 Node.js 22.13 或更新版本，请安装后重启服务")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, node, "--version").Output()
 	if err != nil {
