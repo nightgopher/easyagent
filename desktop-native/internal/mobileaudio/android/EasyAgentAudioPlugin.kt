@@ -9,6 +9,14 @@ import java.io.File
 import kotlin.concurrent.thread
 
 class EasyAgentAudioPlugin : MyGoPlugin {
+    init {
+        // A killed process cannot run Stop; remove only this plugin's old
+        // private recordings when the application starts again.
+        PluginHost.context.cacheDir.listFiles()?.forEach { file ->
+            if (file.name.startsWith("easyagent-voice-") && file.name.endsWith(".pcm")) file.delete()
+        }
+    }
+
     private class Recording(val audio: AudioRecord, val file: File) {
         @Volatile var active = true
         @Volatile var error: String? = null
@@ -81,6 +89,8 @@ class EasyAgentAudioPlugin : MyGoPlugin {
                                 }
                             } catch (e: Exception) {
                                 r.error = "录音保存失败"
+                                r.active = false
+                                runCatching { audio.stop() }
                             }
                         }
                         reply.success(null)

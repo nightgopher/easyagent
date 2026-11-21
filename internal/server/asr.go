@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"mime/multipart"
@@ -13,13 +14,6 @@ import (
 
 	"github.com/nightgopher/easyagent/sdk/config"
 )
-
-func truncateResp(b []byte, max int) []byte {
-	if len(b) <= max {
-		return b
-	}
-	return b[:max]
-}
 
 // ASRHandler proxies audio files to SiliconFlow's speech-to-text API.
 // This avoids exposing the API key to the frontend.
@@ -45,11 +39,19 @@ func (h *ASRHandler) transcribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse multipart form (audio file upload, max 25MB)
-	if err := r.ParseMultipartForm(25 << 20); err != nil {
+	// Limit the complete request; ParseMultipartForm's argument alone is only
+	// the in-memory threshold and would spill larger recordings to disk.
+	r.Body = http.MaxBytesReader(w, r.Body, 25<<20)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeError(w, http.StatusRequestEntityTooLarge, "audio upload exceeds 25 MiB")
+			return
+		}
 		writeError(w, http.StatusBadRequest, "failed to parse audio upload: "+err.Error())
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -105,12 +107,14 @@ func (h *ASRHandler) transcribe(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20+1))
+	if err != nil || len(respBody) > 1<<20 {
+		writeError(w, http.StatusBadGateway, "invalid speech-to-text service response")
+		return
+	}
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("ASR upstream returned error",
-			"status", resp.StatusCode,
-			"body", string(respBody))
+		slog.Error("ASR upstream returned error", "status", resp.StatusCode)
 
 		// Parse SiliconFlow error message
 		var sfErr struct {
@@ -152,8 +156,7 @@ func (h *ASRHandler) transcribe(w http.ResponseWriter, r *http.Request) {
 	slog.Info("ASR result",
 		"text_len", len(result.Text),
 		"audio_mime", header.Header.Get("Content-Type"),
-		"audio_size", header.Size,
-		"resp_body_preview", string(truncateResp(respBody, 200)))
+		"audio_size", header.Size)
 
 	result.Text = strings.TrimSpace(result.Text)
 

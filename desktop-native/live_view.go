@@ -406,6 +406,8 @@ func (a *preview) liveToolbar(c *ui.Context) {
 func (a *preview) liveComposer(c *ui.Context) {
 	s := a.current()
 	l := a.Live
+	viewportWidth, viewportHeight := c.Size()
+	compactPhone := phoneClient && viewportWidth > viewportHeight
 	ui.Column(c).Padding(8, 20, 14, 20).Children(func() {
 		ui.Column(c).FillWidth().MaxWidth(776).MinWidth(0).Margin(0, ui.Auto).Gap(9).Children(func() {
 
@@ -466,7 +468,11 @@ func (a *preview) liveComposer(c *ui.Context) {
 			box.Children(func() {
 				a.inputReferences(c, s)
 				a.attachmentChips(c, s)
-				input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(2, 6).FontSize(14).LineHeight(1.75).MinWidth(0).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
+				minLines, maxLines := 2, 6
+				if compactPhone {
+					minLines, maxLines = 1, 3
+				}
+				input := ui.TextAreaBase(c.Key(fmt.Sprintf("draft-%d", s.ID)), &s.Draft).Bind(&a.Composer).Lines(minLines, maxLines).FontSize(14).LineHeight(1.75).MinWidth(0).Label("消息输入").Placeholder("描述你想完成的事…").Disabled(s.Archived)
 				services := c.Services()
 				input.OnPaste(func(string) bool { return a.pasteAttachments(services, s) })
 				composing := input.Composing()
@@ -596,7 +602,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 					a.liveModelPicker(c, model)
 					iconButton(c, "file", "先记下来").Disabled(strings.TrimSpace(s.Draft) == "" || s.Sending || len(s.Attachments) > 0 || len(s.FileReferences) > 0 || l.Loading["capture-save"]).OnClick(func() { a.saveDraftToInbox(s) })
 					flatButton(c, "", "/ 命令").Label("斜杠命令").Tooltip("打开命令菜单（在输入框开头输入 / 也可以）").OnClick(func() { a.toggleMenu(&a.SlashMenu) })
-					if !phoneClient {
+					if !phoneClient || compactPhone {
 						ui.Spacer(c)
 						a.voiceControls(c, s)
 					}
@@ -607,11 +613,15 @@ func (a *preview) liveComposer(c *ui.Context) {
 					if s.Running || s.Pending {
 						label = "加入发送队列"
 					}
-					if !phoneClient {
-						iconButton(c, "send", label).Size(36, 36).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
+					if !phoneClient || compactPhone {
+						size := float32(36)
+						if phoneClient {
+							size = 44
+						}
+						iconButton(c, "send", label).Size(size, size).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || strings.TrimSpace(s.Draft) == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil).OnClick(a.submit)
 					}
 				})
-				if phoneClient {
+				if phoneClient && !compactPhone {
 					ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 						a.voiceControls(c, s)
 						ui.Spacer(c)

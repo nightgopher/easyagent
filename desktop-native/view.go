@@ -103,13 +103,24 @@ func (a *preview) View(c *ui.Context) {
 		}
 	}
 	c.SetTheme(&theme)
+	_, _, bottomInset, _ := c.SafeArea()
+	width, height := c.Size()
+	keyboardCompact := phoneClient && bottomInset > 80 && width > height && !a.Settings.Open && !a.Sidebar && a.Live != nil && !a.Live.Work.Open
 	a.dispatchNativeShortcuts(c)
 	ui.Box(c).Fill().Background(c.Theme().Background).Children(func() {
 		a.wallpaperLayer(c)
 		// MyGo paints absolute siblings last, in declaration order. Keep both
 		// layers absolute so the image stays behind opaque content surfaces.
-		ui.Column(c).Absolute().Fill().TextColor(c.Theme().Text).FontSize(14).Children(func() {
-			a.chrome(c)
+		content := ui.Column(c).Absolute().Fill().TextColor(c.Theme().Text).FontSize(14)
+		if keyboardCompact {
+			content.Padding(0, 0, bottomInset, 0)
+		}
+		content.Children(func() {
+			chrome := ui.Column(c)
+			if keyboardCompact {
+				chrome.Height(0).Clip()
+			}
+			chrome.Children(func() { a.chrome(c) })
 			if a.Live != nil {
 				a.liveNotices(c)
 			}
@@ -134,7 +145,11 @@ func (a *preview) View(c *ui.Context) {
 						a.workItemsView(c)
 						return
 					}
-					a.toolbar(c)
+					toolbar := ui.Column(c)
+					if keyboardCompact {
+						toolbar.Height(0).Clip()
+					}
+					toolbar.Children(func() { a.toolbar(c) })
 					a.transcript(c)
 					a.composer(c)
 					if a.Live != nil {
@@ -407,7 +422,9 @@ func (a *preview) transcript(c *ui.Context) {
 			}
 		})
 	})
-	if s.Scroll.MaxY > 0 && s.Scroll.Y < s.Scroll.MaxY-48 {
+	_, _, bottomInset, _ := c.SafeArea()
+	width, height := c.Size()
+	if !(phoneClient && bottomInset > 80 && width > height) && s.Scroll.MaxY > 0 && s.Scroll.Y < s.Scroll.MaxY-48 {
 		ui.Overlay(c, func() {
 			flatButton(c, "chevron-down", "回到最新").AttachTo(scroll, ui.AnchorBottom, ui.AnchorBottom).Margin(0, 0, 12, 0).Background(c.Theme().Surface).Border(1, c.Theme().Border).OnClick(func() { follow(s) })
 		})
