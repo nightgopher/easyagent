@@ -18,7 +18,8 @@ import (
 // the machine rewrites the system proxy settings. This preference pins
 // update traffic to direct or a fixed proxy URL, applied through
 // mygo.Updater.SetSource so the manifest check and the package download
-// both follow it. 跟随系统 (the default) restores mygo's own feed source.
+// both follow it. Every mode reads the dl manifest feed with a silent
+// GitHub fallback (see applyUpdateProxy).
 
 const (
 	updateProxySystem  = "跟随系统"
@@ -27,20 +28,29 @@ const (
 	updateProxyDefault = updateProxySystem
 )
 
-// updateFeedBase mirrors mygo.json's updates.github; that file stays the
-// source of truth. A var so tests can point it at a stub server.
-var updateFeedBase = "https://github.com/nightgopher/easyagent/releases/latest/download"
+// updateFeedBase is the dl gateway manifest feed: every update check is one
+// anonymous heartbeat (active installs, version spread) in the dl worker's
+// Analytics Engine, and mainland clients resolve it reliably. updateFeedBase
+// and updateFeedFallbackBase are vars so tests can point them at stubs.
+var updateFeedBase = "https://dl.hwj123hwj.asia/upd/easyagent"
+var updateFeedFallbackBase = "https://github.com/nightgopher/easyagent/releases/latest/download"
 
 func updateFeedURL() string {
 	return updateFeedBase + "/update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
 }
 
+func updateFeedFallbackURL() string {
+	return updateFeedFallbackBase + "/update-" + runtime.GOOS + "-" + runtime.GOARCH + ".json"
+}
+
 // updaterTransport returns the HTTP transport for the preference: netproxy
-// as-is for 跟随系统, proxy-free for 直连, and a fixed proxy URL for
-// 自定义代理.
+// as-is for 跟随系统 and the empty default, proxy-free for 直连, and a fixed
+// proxy URL for 自定义代理.
 func updaterTransport(mode, rawURL string) (*http.Transport, error) {
 	t := netproxy.Transport().Clone()
 	switch mode {
+	case "", updateProxySystem:
+		// netproxy as-is; the system proxy applies to the dl feed too.
 	case updateProxyDirect:
 		t.Proxy = nil
 	case updateProxyCustom:
@@ -108,7 +118,14 @@ type proxyUpdateSource struct {
 }
 
 func (s proxyUpdateSource) Manifest(ctx context.Context, prereleases bool) (io.ReadCloser, error) {
-	return s.get(ctx, updateFeedURL())
+	body, err := s.get(ctx, updateFeedURL())
+	if err == nil {
+		return body, nil
+	}
+	// The dl layer is an enhancement, not a single point: a failed manifest
+	// check falls back to GitHub latest silently so an update check never
+	// breaks because of it (the heartbeat is simply not recorded then).
+	return s.get(ctx, updateFeedFallbackURL())
 }
 
 func (s proxyUpdateSource) Open(ctx context.Context, url string) (io.ReadCloser, error) {
@@ -116,18 +133,15 @@ func (s proxyUpdateSource) Open(ctx context.Context, url string) (io.ReadCloser,
 }
 
 // applyUpdateProxy wires the saved proxy preference into mygo's updater.
-// An unusable custom proxy falls back to the system setting rather than
-// disabling update checks. Safe to call again after a preference change.
+// Every mode reads the dl manifest feed (heartbeats into the dl stats) with
+// a silent GitHub fallback: 跟随系统 and the empty default use netproxy as-is,
+// 直连 drops the proxy, 自定义代理 pins the configured URL, and an unusable
+// custom proxy falls back to the system setting rather than disabling update
+// checks. Safe to call again after a preference change.
 func (a *preview) applyUpdateProxy() {
-	mode := a.Settings.Preferences.UpdateProxyMode
-	if mode == "" || mode == updateProxySystem {
-		mygo.Updater.SetSource(nil)
-		return
-	}
-	t, err := updaterTransport(mode, a.Settings.Preferences.UpdateProxyURL)
+	t, err := updaterTransport(a.Settings.Preferences.UpdateProxyMode, a.Settings.Preferences.UpdateProxyURL)
 	if err != nil {
-		mygo.Updater.SetSource(nil)
-		return
+		t = netproxy.Transport().Clone()
 	}
 	mygo.Updater.SetSource(proxyUpdateSource{get: proxyGet(t)})
 }
