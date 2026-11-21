@@ -390,7 +390,7 @@ func (m *Manager) indexTranscript(ctx context.Context, tx *sql.Tx, id, stamp str
 		return err
 	}
 	path := m.existingSessionPath(id)
-	f, err := os.Open(path)
+	f, err := os.Open(path) // #nosec G304 -- path is derived from a session directory enumerated under the configured data directory.
 	if err != nil {
 		return err
 	}
