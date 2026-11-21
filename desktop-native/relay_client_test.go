@@ -7,10 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/gorilla/websocket"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -60,7 +62,13 @@ func TestRelayPairAndPinnedTransport(t *testing.T) {
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(cert)
-	outer := &websocket.Dialer{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}}
+	var attempts atomic.Int32
+	outer := &websocket.Dialer{TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12}, NetDialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+		if attempts.Add(1) <= 2 {
+			return nil, &net.DNSError{IsTimeout: true}
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, address)
+	}}
 	b, err := newRelayBackend(code.relayConfig, "", outer)
 	if err != nil {
 		t.Fatal(err)
@@ -72,6 +80,9 @@ func TestRelayPairAndPinnedTransport(t *testing.T) {
 	}
 	if err = b.request(ctx, "POST", "/pair/claim", map[string]string{"pair_token": code.PairToken, "name": "test phone"}, &paired); err != nil {
 		t.Fatal(err)
+	}
+	if attempts.Load() < 3 {
+		t.Fatal("transient relay connection timeouts were not retried")
 	}
 	if !relaySecretPattern.MatchString(paired.Token) {
 		t.Fatal("invalid device token")
@@ -108,5 +119,56 @@ func TestRelayPairAndPinnedTransport(t *testing.T) {
 	expired := strings.Replace(string(fixture.Code), code.ExpiresAt.Format(time.RFC3339Nano), time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano), 1)
 	if _, err = parseRelayPair(expired, time.Now()); err == nil {
 		t.Fatal("expired code accepted")
+	}
+}
+
+func TestRelayTimeoutExplainsMobileConnection(t *testing.T) {
+	config := relayConfig{
+		RelayURL:    "https://relay.example",
+		RouteID:     strings.Repeat("a", 43),
+		Fingerprint: "sha256:" + base64.StdEncoding.EncodeToString(make([]byte, 32)),
+	}
+	b, err := newRelayBackend(config, "", websocket.DefaultDialer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	err = b.request(ctx, "GET", "/health", nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "中继请求超时") || strings.Contains(err.Error(), "macOS") {
+		t.Fatalf("unexpected relay timeout: %v", err)
+	}
+}
+
+func TestRelayDoesNotRetryCertificateFailure(t *testing.T) {
+	config := relayConfig{RelayURL: "https://relay.example", RouteID: strings.Repeat("a", 43), Fingerprint: "sha256:" + base64.StdEncoding.EncodeToString(make([]byte, 32))}
+	var attempts int
+	outer := &websocket.Dialer{NetDialContext: func(context.Context, string, string) (net.Conn, error) {
+		attempts++
+		return nil, x509.UnknownAuthorityError{}
+	}}
+	_, err := config.dialTLS(context.Background(), outer)
+	if err == nil || attempts != 1 {
+		t.Fatalf("certificate failure: attempts=%d err=%v", attempts, err)
+	}
+}
+
+func TestRelayRetriesAreBoundedAndRespectCancellation(t *testing.T) {
+	config := relayConfig{RelayURL: "https://relay.example", RouteID: strings.Repeat("a", 43), Fingerprint: "sha256:" + base64.StdEncoding.EncodeToString(make([]byte, 32))}
+	var attempts int
+	outer := &websocket.Dialer{NetDialContext: func(context.Context, string, string) (net.Conn, error) {
+		attempts++
+		return nil, &net.DNSError{IsTimeout: true}
+	}}
+	_, err := config.dialTLS(context.Background(), outer)
+	if err == nil || attempts != 3 {
+		t.Fatalf("timeout: attempts=%d err=%v", attempts, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	attempts = 0
+	_, err = config.dialTLS(ctx, outer)
+	if err == nil || attempts > 1 {
+		t.Fatalf("cancelled: attempts=%d err=%v", attempts, err)
 	}
 }
