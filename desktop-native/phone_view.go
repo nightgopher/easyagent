@@ -51,6 +51,11 @@ func (a *preview) phoneSettingsMenu(c *ui.Context) {
 
 // phoneSessions is the phone's home screen; opening a conversation replaces it.
 func (a *preview) phoneSessions(c *ui.Context) {
+	width, height := c.Size()
+	if width > height {
+		a.phoneLandscapeSessions(c)
+		return
+	}
 	l := a.Live
 	ui.Column(c).Grow(1).MinWidth(0).Padding(16).Gap(12).Children(func() {
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
@@ -103,5 +108,66 @@ func (a *preview) phoneSessions(c *ui.Context) {
 			}
 		})
 		flatButton(c, "plus", "新建会话").FillWidth().Height(48).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(a.newSession)
+	})
+}
+
+// In landscape the navigation stays beside the session list, leaving the
+// vertical space for conversations rather than a full-width bottom button.
+func (a *preview) phoneLandscapeSessions(c *ui.Context) {
+	l := a.Live
+	ui.Row(c).Grow(1).MinHeight(0).AlignItems(ui.Stretch).Children(func() {
+		ui.Column(c).Width(190).Padding(12).Gap(8).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+			flatButton(c, "plus", "新建会话").FillWidth().Height(48).Justify(ui.Start).Background(c.Theme().Accent).TextColor(c.Theme().AccentText).Disabled(!l.Connected || l.Loading["create-session"]).OnClick(a.newSession)
+			flatButton(c, "user", "管家").FillWidth().Height(44).Justify(ui.Start).Disabled(!l.Connected || l.Loading["steward"]).OnClick(a.openSteward)
+			flatButton(c, "activity", "任务跟进").FillWidth().Height(44).Justify(ui.Start).OnClick(func() { a.openWork(); a.Sidebar = false })
+			ui.Spacer(c)
+			host := flatButton(c, "laptop", a.Settings.host().Name).Label("切换运行主机").FillWidth().Height(44).MinWidth(0).Clip().Justify(ui.Start).OnClick(func() { a.toggleMenu(&a.HostMenu) })
+			a.menuPanel(c, host, &a.HostMenu, func() {
+				menuCaption(c, "运行主机")
+				for i, h := range l.Config.Hosts {
+					index := i
+					menuOption(c.Key(h.ID), "laptop", h.Name, h.ID == l.Config.ActiveHost).OnClick(func() { a.HostMenu = false; a.selectLiveHost(index) })
+				}
+				menuOption(c, "settings", "管理运行主机", false).OnClick(func() { a.HostMenu = false; a.openSettings("connections") })
+			})
+		})
+		ui.Column(c).Grow(1).MinWidth(0).Padding(12, 16).Gap(8).Children(func() {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				search := ui.TextInputBase(c, &a.Search).Label("搜索会话").Placeholder("搜索会话内容…").Grow(1).MinWidth(0).Height(44).Padding(8, 12).Background(searchSurface(c)).Border(1, c.Theme().Border)
+				l.SessionSearch.Composing = search.Composing()
+				if search.Changed() && !search.Composing() {
+					a.queueSessionSearch()
+				}
+				if search.Submitted() {
+					a.queueSessionSearch()
+					a.searchSessionPage(0)
+				}
+				iconButton(c, "refresh", "刷新会话").Disabled(!l.Connected).OnClick(func() { a.refreshLiveSessions("") })
+			})
+			if strings.TrimSpace(a.Search) != "" {
+				a.sessionSearchControls(c)
+			} else {
+				ui.Row(c).Gap(10).Children(func() {
+					flatButton(c, "", "最近").Height(44).Selected(!a.Archived).OnClick(func() { a.Archived = false })
+					flatButton(c, "", "已归档").Height(44).Selected(a.Archived).OnClick(func() { a.Archived = true })
+				})
+			}
+			ui.Scroll(c).Grow(1).MinHeight(0).Children(func() {
+				if strings.TrimSpace(a.Search) != "" {
+					a.sessionSearchResults(c)
+					return
+				}
+				count := 0
+				for _, s := range a.Sessions {
+					if s.Archived == a.Archived {
+						count++
+						a.sessionRow(c, s)
+					}
+				}
+				if count == 0 {
+					a.note(c, "还没有会话")
+				}
+			})
+		})
 	})
 }
