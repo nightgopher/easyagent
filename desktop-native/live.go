@@ -31,6 +31,9 @@ type liveState struct {
 	SessionSearch                                                          nativeSessionSearch
 	Market                                                                 nativeMarketState
 	CollapsedProjects                                                      map[string]bool
+	HiddenProjects                                                         map[string]bool
+	ShowHiddenProjects                                                     bool
+	HiddenProjectsInvalid                                                  bool
 	CollapsedBuckets                                                       map[string]bool
 	SavedModelForm                                                         modelForm
 	SavedMCPForm                                                           mcpForm
@@ -134,6 +137,14 @@ func newConnectedPreview(dir string) *preview {
 	}
 	l.hostCtx = ctx
 	l.Store = &nativeStore{dir: dir}
+	l.HiddenProjects = map[string]bool{}
+	if data, err := os.ReadFile(filepath.Join(dir, "hidden-projects.json")); err == nil {
+		if json.Unmarshal(data, &l.HiddenProjects) != nil || l.HiddenProjects == nil {
+			l.HiddenProjects = map[string]bool{}
+			l.HiddenProjectsInvalid = true
+			l.Error = "移除项目列表无法读取，已保留原文件"
+		}
+	}
 	l.Images = map[string]ui.ImageSource{}
 	if data, err := os.ReadFile(filepath.Join(dir, "connections.json")); err == nil {
 		if json.Unmarshal(data, &l.Config) != nil {
@@ -653,6 +664,7 @@ func (a *preview) refreshLiveSessions(prefer string) {
 			s.Project = filepath.Base(s.Workspace)
 			s.Application = str(m["application"])
 			s.AgentID = str(m["agent_id"])
+			s.ParentSessionID = str(m["parent_session_id"])
 			s.TeamID = str(m["team_id"])
 			s.TeamName = str(m["team_name"])
 			s.Archived = boolean(m["archived"])
@@ -788,6 +800,9 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 	body := map[string]any{"cwd": workspace, "model": model, "application": application}
 	if agentID != "" {
 		body = map[string]any{"agent_id": agentID}
+		if origin.SelectedExpertID == agentID && origin.RemoteID != "" {
+			body["parent_session_id"] = origin.RemoteID
+		}
 	}
 	a.operation("create-session", "POST", "/sessions", body, func(v any) {
 		id := str(object(v)["id"])
@@ -796,13 +811,14 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 		}
 		a.closeWork()
 		a.Live.Versions["sessions"]++
-		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application, AgentID: agentID}
+		s := &session{ID: a.NextID, RemoteID: id, Title: "新会话", UpdatedAt: sessionActivityTime(object(v)), Workspace: workspace, Project: filepath.Base(workspace), Model: model, Draft: draft, Application: application, AgentID: agentID, ParentSessionID: str(body["parent_session_id"])}
 		a.NextID++
 		if initial {
 			s.ID = origin.ID
 			s.Draft = origin.Draft
 			s.Attachments = origin.Attachments
 			s.FileReferences = origin.FileReferences
+			s.SelectedExpertID, s.SelectedExpertName = origin.SelectedExpertID, origin.SelectedExpertName
 			for i, item := range a.Sessions {
 				if item == origin {
 					a.Sessions[i] = s
@@ -840,6 +856,28 @@ func (a *preview) submitLive() {
 	}
 	if !l.Connected {
 		l.Error = "尚未连接，草稿已保留"
+		return
+	}
+	if s.SelectedExpertID != "" {
+		if len(s.Attachments) > 0 || len(s.FileReferences) > 0 {
+			l.Error = "专家使用独立会话，请先移除附件和文件引用，打开专家对话后重新添加。"
+			return
+		}
+		if s.RemoteID == "" {
+			a.createBoundSession("", s.Workspace, s.Application, s.AgentID, func(target *session) {
+				if a.current() == target {
+					a.submitLive()
+				}
+			})
+			return
+		}
+		id, original := s.SelectedExpertID, s.Draft
+		a.createBoundSession(original, "", "business", id, func(target *session) {
+			if s.Draft == original {
+				s.Draft = ""
+				s.SelectedExpertID, s.SelectedExpertName = "", ""
+			}
+		})
 		return
 	}
 	if s.RemoteID == "" {

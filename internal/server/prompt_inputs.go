@@ -20,6 +20,7 @@ import (
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/runtime"
+	"github.com/nightgopher/easyagent/sdk/skill"
 )
 
 const maxAttachmentBytes = 4 * 1024 * 1024
@@ -31,6 +32,7 @@ type fileReference struct {
 	Workspace string `json:"workspace"`
 }
 type promptInputs struct {
+	Skill         string          `json:"skill,omitempty"`
 	ContinueRunID string          `json:"continue_run_id,omitempty"`
 	Attachments   []string        `json:"attachments,omitempty"`
 	Files         []fileReference `json:"files,omitempty"`
@@ -149,6 +151,18 @@ func (s *Server) buildPromptMessage(sess *runtime.AgentSession, prompt string, i
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	message := ai.NewTextUserMessage(prompt)
+	if inputs.Skill != "" {
+		selected := skill.FindByName(sess.LoadedSkills(), inputs.Skill)
+		if selected == nil {
+			return message, fmt.Errorf("skill is unavailable: %s", inputs.Skill)
+		}
+		name, args := strings.CutPrefix(strings.TrimSpace(prompt), "/"+inputs.Skill)
+		if !args || (name != "" && !strings.HasPrefix(name, " ") && !strings.HasPrefix(name, "\n")) {
+			return message, fmt.Errorf("skill invocation does not match prompt")
+		}
+		message = ai.NewTextUserMessage(skill.FormatInvocation(*selected, strings.TrimSpace(name)))
+		message.DisplayText = prompt
+	}
 	if len(inputs.Attachments)+len(inputs.Files) == 0 {
 		return message, nil
 	}
