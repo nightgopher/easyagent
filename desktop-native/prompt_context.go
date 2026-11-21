@@ -32,7 +32,7 @@ func (a *preview) expertMatches(s *session) []nativeBusinessAgent {
 	if !open || s.MentionDismissed == s.Draft || !a.Live.Connected {
 		return nil
 	}
-	if a.Live.Data["business-agents"] == nil && !a.Live.Loading["business-agents"] {
+	if a.Live.Data["business-agents"] == nil && !a.Live.Loading["business-agents"] && a.Live.ResourceErrors["business-agents"] == "" {
 		a.resource("business-agents", "/agents")
 	}
 	var matches []nativeBusinessAgent
@@ -68,6 +68,7 @@ func (a *preview) promptExpertMentions(c *ui.Context, anchor ui.Element, s *sess
 		}
 		if err := a.Live.ResourceErrors["business-agents"]; err != "" {
 			a.note(c, err)
+			a.action(c, "重试加载专家").OnClick(func() { delete(a.Live.ResourceErrors, "business-agents"); delete(a.Live.Data, "business-agents") })
 		}
 		if len(matches) == 0 && !a.Live.Loading["business-agents"] && a.Live.ResourceErrors["business-agents"] == "" {
 			a.note(c, "没有匹配的专家")
