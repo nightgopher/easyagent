@@ -236,6 +236,12 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 			env["OPENAI_MODEL"] = model.Model
 		}
 	}
+	// GUI-launched processes often omit Homebrew or nvm from PATH.
+	if userHome, err := os.UserHomeDir(); err == nil {
+		if nodeDir := resolveNodeDir(userHome); nodeDir != "" {
+			env["PATH"] = nodeDir + string(os.PathListSeparator) + os.Getenv("PATH")
+		}
+	}
 	cmd := exec.Command(binary, "serve", "--listen", address)
 	cmd.Dir = home
 	cmd.Env = filterEnvironment(env)

@@ -225,6 +225,9 @@ func (s *Server) getSessionMessages(w http.ResponseWriter, r *http.Request) {
 // ─── DELETE /sessions/{id} ────────────────────────────────────────────────────
 
 func (s *Server) deleteSession(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sessionID := r.PathValue("id")
 	s.runs.mu.Lock()
 	defer s.runs.mu.Unlock()
@@ -314,6 +317,9 @@ type SwitchModelRequest struct {
 }
 
 func (s *Server) switchModel(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sessionID := r.PathValue("id")
 
 	var req SwitchModelRequest
@@ -402,6 +408,9 @@ type CompactResponse struct {
 }
 
 func (s *Server) compactSession(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sessionID := r.PathValue("id")
 	if s.rejectActiveRun(w, sessionID) {
 		return
@@ -447,6 +456,9 @@ func (s *Server) compactSession(w http.ResponseWriter, r *http.Request) {
 // its ID and stored transcript, and the next turn starts from a blank
 // context. Unlike /compact no summary is generated and history is not kept.
 func (s *Server) clearSessionContext(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sessionID := r.PathValue("id")
 	if s.rejectActiveRun(w, sessionID) {
 		return
@@ -489,6 +501,9 @@ type CommandResponse struct {
 }
 
 func (s *Server) executeCommand(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sessionID := r.PathValue("id")
 	if s.rejectActiveRun(w, sessionID) {
 		return
@@ -551,6 +566,9 @@ func (s *Server) executeCommand(w http.ResponseWriter, r *http.Request) {
 
 // setSessionPermissions does not resolve an already pending approval or change a busy run.
 func (s *Server) setSessionPermissions(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	id := r.PathValue("id")
 	var req struct {
 		Mode string `json:"mode"`

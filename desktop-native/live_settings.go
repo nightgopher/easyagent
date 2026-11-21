@@ -72,6 +72,8 @@ func (a *preview) loadSettingsPage() {
 	}
 	s := &a.Settings
 	switch s.Tab {
+	case "workflows":
+		a.resource("workflows", "/dynamic-workflows")
 	case "hooks":
 		a.loadHookSettings(false)
 	case "remote-access":
@@ -144,6 +146,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		})
 	}
 	switch tab {
+	case "workflows":
+		a.liveWorkflowSettings(c)
 	case "hooks":
 		a.liveHookSettings(c)
 	case "remote-access":

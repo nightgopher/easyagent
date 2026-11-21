@@ -25,6 +25,9 @@ type forkResponse struct {
 }
 
 func (s *Server) forkSession(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
 	sourceID := r.PathValue("id")
 	var req forkRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))

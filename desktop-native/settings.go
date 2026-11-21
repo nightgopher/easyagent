@@ -266,7 +266,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						}
 					})
 					a.note(c, page.Description)
-					if page.ID == "agents" || page.ID == "teams" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" || page.ID == "hooks" {
+					if page.ID == "agents" || page.ID == "teams" || page.ID == "memory-knowledge" || page.ID == "models" || page.ID == "permissions" || page.ID == "connections" || page.ID == "mcp" || page.ID == "feishu" || page.ID == "capabilities" || page.ID == "hooks" || page.ID == "workflows" {
 						ui.Row(c).Gap(8).Padding(6, 0).TextColor(c.Theme().TextMuted).Children(func() {
 							kind := "laptop"
 							if !s.host().Local {
@@ -287,7 +287,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else if page.ID == "permissions" {
 						a.note(c, "权限配置应用于当前主机，选择后自动保存。")
-					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" {
+					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -295,6 +295,8 @@ func (a *preview) settingsView(c *ui.Context) {
 					a.liveSettingsPage(c)
 				} else {
 					switch page.ID {
+					case "workflows":
+						a.note(c, "连接运行主机后可查看动态工作流。")
 					case "hooks":
 						a.note(c, "连接运行主机后可配置工具执行 hooks。")
 					case "remote-access":

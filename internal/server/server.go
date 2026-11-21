@@ -307,6 +307,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Personal command center endpoints (spaces/goals/results/inbox)
 	s.registerCommandRoutes(restMux)
+	s.registerDynamicWorkflowRoutes(restMux)
 
 	// ASR (speech-to-text) endpoint
 	NewASRHandler(s.app.Config()).Register(restMux)
@@ -334,6 +335,8 @@ func (s *Server) Handler() http.Handler {
 	topMux.Handle("/remote-access", restHandler)
 	topMux.Handle("/remote-access/", restHandler)
 	topMux.Handle("/admin/deploy", restHandler)
+	topMux.Handle("/dynamic-workflows", restHandler)
+	topMux.Handle("/dynamic-workflows/", restHandler)
 	topMux.Handle("/chat", restHandler)
 	topMux.Handle("/chat/", restHandler)
 	topMux.Handle("/sessions", restHandler)

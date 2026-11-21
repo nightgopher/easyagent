@@ -17,6 +17,7 @@ import (
 
 // RegisterBuiltins registers coding-agent slash commands into the shared framework registry.
 func RegisterBuiltins(registry *slashcmd.Registry) {
+	registerWorkflow(registry)
 	registry.Register(slashcmd.Command{
 		Name: "mcp", Description: "管理 MCP 服务、项目授权与工具 (/mcp list)",
 		Subcommands: []slashcmd.Subcommand{{Name: "list", Description: "查看服务与连接状态"}, {Name: "reconnect", Description: "重连服务"}, {Name: "refresh", Description: "刷新工具"}, {Name: "enable", Description: "启用服务"}, {Name: "disable", Description: "停用服务"}, {Name: "trust", Description: "授权服务工具"}, {Name: "untrust", Description: "恢复工具逐次确认"}, {Name: "project", Description: "项目配置 trust|untrust"}},

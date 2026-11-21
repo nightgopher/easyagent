@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/gorilla/websocket"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +22,8 @@ type liveResult struct {
 	discard func()
 }
 type liveState struct {
+	WorkflowNext                                                           time.Time
+	WorkflowSelected                                                       string
 	EasyCode                                                               nativeEasyCodeState
 	Codex                                                                  nativeCodexState
 	MCPStatus                                                              nativeMCPStatus
@@ -255,6 +258,14 @@ func (a *preview) liveTick() bool {
 	}
 	a.tickMCPStatus()
 	a.tickWork()
+	if a.Settings.Open && a.Settings.Tab == "workflows" && l.Client != nil && time.Now().After(l.WorkflowNext) && !l.Loading["workflows"] {
+		l.WorkflowNext = time.Now().Add(3 * time.Second)
+		a.resource("workflows", "/dynamic-workflows")
+		if l.WorkflowSelected != "" && !l.Loading["workflow-detail"] {
+			a.resource("workflow-detail", "/dynamic-workflows/"+url.PathEscape(l.WorkflowSelected))
+		}
+	}
+
 	// Shells survive session switches; only those of another host end.
 	if l.Workbench.closeOtherHosts(l.Config.ActiveHost) {
 		changed = true

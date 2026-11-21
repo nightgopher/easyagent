@@ -56,6 +56,7 @@ var settingsPages = []settingsPage{
 	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
 	{"agents", "业务 Agent", "user", "创建可持续使用的角色，管理它的工具、技能与知识。", "下次执行生效", 2},
+	{"workflows", "动态工作流", "activity", "查看多角色协作的运行状态与执行步骤。", "", 2},
 	{"teams", "专家团", "user", "由负责人 Agent 按需委派多名业务 Agent 协作完成任务。", "新会话生效", 2},
 	{"memory-knowledge", "记忆与知识", "book", "管理知识来源、Agent 独立记忆与人工整理发布。", "", 2},
 }

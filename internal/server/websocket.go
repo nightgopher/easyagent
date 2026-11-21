@@ -222,6 +222,10 @@ func (s *Server) handleWSPrompt(ws *wsConn, msg wsClientMessage) {
 
 // handleWSSwitchModel changes the model for a session.
 func (s *Server) handleWSSwitchModel(ws *wsConn, msg wsClientMessage) {
+	if s.app.DynamicWorkflows().ActiveActorSession(msg.SessionID) {
+		s.writeWSError(ws, msg, &runAdmissionError{code: "conflict", message: "Actor 正由工作流管理"})
+		return
+	}
 	release, ok := s.activity.begin()
 	if !ok {
 		_ = ws.writeJSON(wsServerMessage{Type: "error", SessionID: msg.SessionID, Message: "服务正在更新，请稍后重试"})

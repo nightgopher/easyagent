@@ -1,4 +1,9 @@
-# 工作流：动态 Actor 与 YAML DAG 并存
+# 工作流：动态 Actor 编排
+
+动态工作流重新接入的实现，使用固定版本 ZCode TypeScript 引擎与 Go 会话适配。运行主机自行提供 Node.js；工作流事件写入 SQLite。使用和恢复限制见 [动态工作流](../DYNAMIC_WORKFLOW.md)。原生 YAML 流水线仍保持下线。
+
+以下为历史决策记录；其中入口、发布和依赖描述不代表当前实现。
+
 
 2026-10-17 已实施下线（PR #170）。动态工作流与 YAML 流水线均已从主线移除，不再注册 `/workflow`、`/workflows` 入口；完整代码与文档保留在 [archive/workflow](https://github.com/hwj123hwj/easyagent/tree/archive/workflow) 分支，仅作历史恢复用途，不维护、不合并。本文保留当时的取舍记录。
 
