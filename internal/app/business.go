@@ -69,7 +69,13 @@ func (a *App) SessionSetup(ctx context.Context, application, agentID string, cfg
 		return cfg, deps, fmt.Errorf("agent_id cannot be combined with another application")
 	}
 	store := a.Agents()
-	definition, err := store.GetAgent(ctx, agentID)
+	loadDefinition := func(ctx context.Context) (agentdata.Agent, error) {
+		if agentID == agentdata.StewardID {
+			return store.EnsureSteward(ctx)
+		}
+		return store.GetAgent(ctx, agentID)
+	}
+	definition, err := loadDefinition(ctx)
 	if err != nil {
 		return cfg, deps, err
 	}
@@ -93,7 +99,7 @@ func (a *App) SessionSetup(ctx context.Context, application, agentID string, cfg
 	}
 	deps.BuildOperations = func(config.Config, string) *operations.Operations { return operations.NewLocalOperations() }
 	deps.RefreshApplication = func(ctx context.Context) (runtime.Application, error) {
-		current, err := store.GetAgent(ctx, agentID)
+		current, err := loadDefinition(ctx)
 		if err != nil {
 			return nil, err
 		}
