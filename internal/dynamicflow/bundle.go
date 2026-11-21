@@ -43,7 +43,7 @@ func InstallRuntime(dataDir string) (string, error) {
 		}
 	}
 	path := filepath.Join(dir, fmt.Sprintf("%x.mjs", sum[:]))
-	if current, err := os.ReadFile(path); err == nil && sha256.Sum256(current) == sum {
+	if current, err := os.ReadFile(path); err == nil && sha256.Sum256(current) == sum { // #nosec G304 -- path is a fixed digest under the configured private runtime directory.
 		return path, nil
 	}
 	f, err := os.CreateTemp(dir, ".runtime-*")

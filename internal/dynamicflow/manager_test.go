@@ -197,3 +197,10 @@ func TestIncompleteRunMetadataDoesNotBlockStartup(t *testing.T) {
 	defer m.Close()
 	require.Empty(t, m.List())
 }
+
+func TestSaveRejectsUnsafeRunID(t *testing.T) {
+	dir := t.TempDir()
+	m, err := New(dir, filepath.Join(dir, "runtime.mjs"), nil)
+	require.NoError(t, err)
+	require.ErrorContains(t, m.save(&Run{ID: "../escape"}), "invalid workflow run id")
+}

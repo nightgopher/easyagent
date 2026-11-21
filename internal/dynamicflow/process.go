@@ -26,7 +26,7 @@ func (m *Manager) execute(ctx context.Context, id string) error {
 	ctx, cancelAll := context.WithCancel(ctx)
 	defer cancelAll()
 	run, _ := m.Get(id)
-	cmd := exec.Command("node", "--max-old-space-size=384", m.runtime)
+	cmd := exec.Command("node", "--max-old-space-size=384", m.runtime) // #nosec G204 -- fixed Node executable runs the pinned, host-supplied engine bundle.
 	// The script runtime has no reason to inherit provider keys or shell preload flags.
 	for _, key := range []string{"PATH", "HOME", "TMPDIR", "TEMP", "TMP", "SystemRoot"} {
 		if value, ok := os.LookupEnv(key); ok {

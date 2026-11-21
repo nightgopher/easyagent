@@ -79,7 +79,7 @@ func New(dir, runtimePath string, host Host) (*Manager, error) {
 		if !e.IsDir() || !validID.MatchString(e.Name()) {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name(), "run.json"))
+		data, err := os.ReadFile(filepath.Join(dir, e.Name(), "run.json")) // #nosec G304 -- run directory names are checked against validID.
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -113,7 +113,7 @@ func (m *Manager) Available() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, node, "--version").Output()
+	out, err := exec.CommandContext(ctx, node, "--version").Output() // #nosec G204 -- node is resolved from the host PATH, with a fixed argument.
 	if err != nil {
 		return errors.New("无法检查 Node.js 版本")
 	}
@@ -283,13 +283,16 @@ func clone(run *Run) *Run {
 	return &out
 }
 func (m *Manager) save(run *Run) error {
+	if !validID.MatchString(run.ID) {
+		return errors.New("invalid workflow run id")
+	}
 	run.Updated = time.Now().UnixMilli()
 	data, err := json.Marshal(run)
 	if err != nil {
 		return err
 	}
 	path := filepath.Join(m.dir, run.ID, "run.json")
-	f, err := os.OpenFile(path+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(path+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600) // #nosec G304 -- run ID is validated before constructing the private run path.
 	if err != nil {
 		return err
 	}

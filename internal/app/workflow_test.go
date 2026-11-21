@@ -180,3 +180,14 @@ func TestWorkflowExecutesRealActorSession(t *testing.T) {
 	require.Equal(t, "completed", runs[0].Status)
 	require.Len(t, runs[0].Actors, 1)
 }
+
+func TestWorkflowActorConfigRejectsUnsafeIDs(t *testing.T) {
+	cfg := config.Default()
+	cfg.DataDir = t.TempDir()
+	application := workflowTestApp(t, cfg)
+	for _, id := range []string{"", ".", "..", "../outside", `..\outside`} {
+		require.ErrorContains(t, application.saveActorConfig(id, actorConfig{}), "invalid workflow actor")
+		_, err := application.readActorConfig(id)
+		require.ErrorContains(t, err, "invalid workflow actor")
+	}
+}

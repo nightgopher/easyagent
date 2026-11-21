@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/nightgopher/easyagent/internal/dynamicflow"
 	"github.com/nightgopher/easyagent/sdk/agent"
@@ -52,13 +54,19 @@ func (r actorConfig) apply(cfg *config.Config) {
 	cfg.AllowOutsideWorkspace = cfg.AllowOutsideWorkspace && r.AllowOutsideWorkspace
 }
 
+func validActorID(id string) bool {
+	return filepath.IsLocal(id) && id != "." && !strings.ContainsAny(id, `/\`)
+}
 func (a *App) saveActorConfig(id string, cfg actorConfig) error {
+	if !validActorID(id) {
+		return fmt.Errorf("invalid workflow actor session id")
+	}
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return err
 	}
 	path := filepath.Join(filepath.Dir(a.sessionMgr.SessionPath(id)), "workflow-actor.json")
-	f, err := os.OpenFile(path+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	f, err := os.OpenFile(path+".tmp", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600) // #nosec G304 -- id is validated and path is under the configured session directory.
 	if err != nil {
 		return err
 	}
@@ -77,6 +85,9 @@ func (a *App) saveActorConfig(id string, cfg actorConfig) error {
 }
 func (a *App) readActorConfig(id string) (actorConfig, error) {
 	var cfg actorConfig
+	if !validActorID(id) {
+		return cfg, fmt.Errorf("invalid workflow actor session id")
+	}
 	data, err := os.ReadFile(filepath.Join(filepath.Dir(a.sessionMgr.SessionPath(id)), "workflow-actor.json"))
 	if err != nil {
 		return cfg, err
