@@ -25,7 +25,12 @@ func (a *preview) phoneChrome(c *ui.Context) {
 		}
 		if !a.Settings.Open {
 			ui.Text(c, a.connectionLabel()).FontSize(11).TextColor(c.Theme().TextMuted)
-			iconButton(c, "settings", "设置").OnClick(func() { a.openSettings("connections") })
+			iconButton(c, "settings", "设置").OnClick(func() {
+				a.openSettings("connections")
+				if a.Settings.Open {
+					a.MobileSettingsMenu = true
+				}
+			})
 		}
 	})
 }
@@ -60,23 +65,40 @@ func (a *preview) openPhoneSteward() {
 	a.openSteward()
 }
 
+// Phone settings focus on the device, its host connection, and run visibility.
+// Host administration remains on the computer instead of duplicating its UI.
+func phoneSettingsPages() []settingsPage {
+	ids := []string{"connections", "appearance", "general", "usage", "workflows"}
+	pages := make([]settingsPage, 0, len(ids))
+	for _, id := range ids {
+		for _, page := range settingsPages {
+			if page.ID == id {
+				if id == "connections" {
+					page.Label = "连接电脑"
+					page.Description = "扫码配对、切换或管理已连接的电脑。"
+				}
+				pages = append(pages, page)
+				break
+			}
+		}
+	}
+	return pages
+}
+
 func (a *preview) phoneSettingsMenu(c *ui.Context) {
 	s := &a.Settings
 	ui.Scroll(c).Grow(1).MinHeight(0).Padding(16).Children(func() {
-		ui.Column(c).FillWidth().Gap(8).Children(func() {
-			ui.Text(c, "设置").FontSize(22).FontWeight(600)
-			for group, title := range []string{"基础设置", "连接与能力", "业务能力"} {
-				ui.Text(c, title).Padding(12, 4, 4, 4).FontSize(12).TextColor(c.Theme().TextMuted)
-				for _, page := range settingsPages {
-					if page.Group != group {
-						continue
-					}
-					p := page
-					ui.ButtonBase(c.Key(p.ID)).Label(a.tr(p.Label)).FillWidth().MinHeight(48).Padding(10, 12).Gap(10).Justify(ui.Start).Radius(8).Selected(p.ID == s.Tab).OnClick(func() { a.openSettings(p.ID) }).Children(func() {
-						icon(c, p.Icon)
-						a.text(c, p.Label)
-					})
-				}
+		ui.Column(c).FillWidth().MaxWidth(560).MinWidth(0).Margin(0, ui.Auto).Gap(8).Children(func() {
+			ui.Text(c, "手机设置").FontSize(22).FontWeight(600)
+			a.note(c, "连接电脑，调整手机外观，查看运行情况。")
+			for _, page := range phoneSettingsPages() {
+				p := page
+				ui.ButtonBase(c.Key(p.ID)).Label(a.tr(p.Label)).FillWidth().MinHeight(52).Padding(10, 12).Gap(10).Justify(ui.Start).Radius(8).Selected(p.ID == s.Tab).OnClick(func() { a.openSettings(p.ID) }).Children(func() {
+					icon(c, p.Icon)
+					a.text(c, p.Label)
+					ui.Spacer(c)
+					icon(c, "chevron-right")
+				})
 			}
 		})
 	})

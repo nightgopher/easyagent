@@ -86,6 +86,7 @@ type preview struct {
 	Archived                                                                       bool
 	Sidebar                                                                        bool
 	MobileSettingsMenu                                                             bool
+	PhoneHostEditor                                                                bool
 	PhoneTools                                                                     bool
 	Workbench                                                                      bool
 	ModelMenu, PermissionMenu, MoreMenu, HostMenu, SlashMenu, NewMenu, ContextMenu bool

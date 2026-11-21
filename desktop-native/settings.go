@@ -193,6 +193,10 @@ func (a *preview) dirtySuffix() string {
 func (a *preview) settingsView(c *ui.Context) {
 	s := &a.Settings
 	page := s.page()
+	if phoneClient && page.ID == "connections" {
+		page.Label = "连接电脑"
+		page.Description = "扫码配对、切换或管理已连接的电脑。"
+	}
 	if phoneClient && a.MobileSettingsMenu {
 		a.phoneSettingsMenu(c)
 		return
@@ -292,7 +296,7 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.note(c, "语言与外观保存在此设备，修改后立即保存。")
 					} else if page.ID == "permissions" {
 						a.note(c, "权限配置应用于当前主机，选择后自动保存。")
-					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" {
+					} else if page.ID != "capabilities" && page.ID != "mcp" && page.ID != "remote-access" && page.ID != "workflows" && !(phoneClient && page.ID == "connections") {
 						a.note(c, "配置应用于当前主机；编辑后请保存。")
 					}
 				})
@@ -395,6 +399,10 @@ func (a *preview) generalSettings(c *ui.Context) {
 			})
 		})
 		version := "EasyAgent " + nativeAppVersion()
+		if phoneClient {
+			a.preferenceRow(c, "应用版本", version, func() {})
+			return
+		}
 		a.preferenceRow(c, "桌面版本", version, func() {
 			a.action(c, "检查更新").Disabled(!a.UpdaterReady).OnClick(updater.CheckForUpdates)
 		})
@@ -402,6 +410,9 @@ func (a *preview) generalSettings(c *ui.Context) {
 			a.commandLineRow(c)
 		}
 	})
+	if phoneClient {
+		return
+	}
 	if a.UpdaterReady {
 		checks := updater.AutomaticChecks()
 		if ui.Checkbox(c, &checks, "自动检查更新").Changed() {
