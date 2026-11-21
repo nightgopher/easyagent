@@ -51,7 +51,11 @@ func (h *ASRHandler) transcribe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "failed to parse audio upload: "+err.Error())
 		return
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() {
+		if err := r.MultipartForm.RemoveAll(); err != nil {
+			slog.Warn("failed to remove temporary ASR upload", "error", err)
+		}
+	}()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {

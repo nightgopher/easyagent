@@ -374,6 +374,9 @@ func (a *preview) liveToolbar(c *ui.Context) {
 		if n := a.runningBackgroundTasks(s); n > 0 {
 			flatButton(c, "terminal", fmt.Sprintf("后台 %d", n)).Label("后台任务").Tooltip("本会话有后台命令正在运行").FontSize(11).OnClick(func() { a.openResource("background") })
 		}
+		if phoneClient && width > height {
+			a.phoneStewardButton(c)
+		}
 		more := iconButton(c, "menu", "会话操作").OnClick(func() { a.toggleMenu(&a.MoreMenu) })
 		a.menuPanel(c, more, &a.MoreMenu, func() {
 			menuOption(c, "", "重命名会话", false).Disabled(s.RemoteID == "").OnClick(func() { a.renameNativeSession(s) })
@@ -546,6 +549,10 @@ func (a *preview) liveComposer(c *ui.Context) {
 				}
 				ui.Row(c).FillWidth().Gap(4).AlignItems(ui.Center).Children(func() {
 					if compactPhone {
+						_, _, keyboardBottom, _ := c.SafeArea()
+						if keyboardBottom > 80 {
+							a.phoneStewardButton(c)
+						}
 						iconButton(c, "plus", "更多输入工具").OnClick(func() { a.LandscapeTools = !a.LandscapeTools })
 					}
 					renderInput()

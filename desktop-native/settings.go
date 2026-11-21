@@ -251,7 +251,12 @@ func (a *preview) settingsView(c *ui.Context) {
 			if phoneClient {
 				flatButton(c, "arrow-left", "设置目录").OnClick(func() { a.MobileSettingsMenu = true })
 			}
-			ui.Column(c).FillWidth().MaxWidth(780).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
+			maxContent := float32(780)
+			width, height := c.Size()
+			if phoneClient && width > height {
+				maxContent = 560
+			}
+			ui.Column(c).FillWidth().MaxWidth(maxContent).MinWidth(0).Margin(0, ui.Auto).Gap(12).Children(func() {
 				ui.Column(c).Gap(6).Margin(0, 0, 12, 0).Children(func() {
 					ui.Row(c).Gap(10).AlignItems(ui.Center).Children(func() {
 						a.text(c, page.Label).Bind(&s.Heading).Focusable().Role(ui.RoleHeading).FontSize(22).FontWeight(600)

@@ -20,11 +20,44 @@ func (a *preview) phoneChrome(c *ui.Context) {
 			ui.Text(c, label).FontSize(17).FontWeight(600)
 		}
 		ui.Spacer(c)
+		if a.Live != nil {
+			a.phoneStewardButton(c)
+		}
 		if !a.Settings.Open {
 			ui.Text(c, a.connectionLabel()).FontSize(11).TextColor(c.Theme().TextMuted)
 			iconButton(c, "settings", "设置").OnClick(func() { a.openSettings("connections") })
 		}
 	})
+}
+
+// phoneStewardButton is present on each phone destination; it stays usable
+// offline so that a tap can explain why the conversation cannot open.
+func (a *preview) phoneStewardButton(c *ui.Context) {
+	iconButton(c, "user", "打开管家").Radius(22).Background(c.Theme().Accent.Alpha(.14)).TextColor(c.Theme().Accent).Disabled(a.Live.Loading["steward"]).OnClick(a.openPhoneSteward)
+}
+
+func (a *preview) openPhoneSteward() {
+	if a.Live == nil {
+		return
+	}
+	if !a.Live.Connected {
+		a.Live.Error = "主机未连接，连接恢复后即可打开管家"
+		return
+	}
+	if a.Settings.Open {
+		if a.Live.Loading["host-save"] || a.Live.Loading["business-save"] || a.PhonePair.Pending != nil {
+			return
+		}
+		if a.settingsFormDirty() {
+			a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "打开管家前，当前表单中未保存的修改将被放弃。", func() { a.discardSettingsForms(); a.openPhoneSteward() }}
+			return
+		}
+		a.closeSettings()
+		if a.Settings.Open {
+			return
+		}
+	}
+	a.openSteward()
 }
 
 func (a *preview) phoneSettingsMenu(c *ui.Context) {
