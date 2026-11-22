@@ -6,6 +6,8 @@
 
 核心入口先查找当前目录 `easyagent.yaml`，否则查找 `~/.easyagent/config.yaml`，再应用环境变量，最后应用已解析的命令行运行选项。
 
+独立 CLI 的 TUI 可使用 `/config` 设置默认模型或单独切换当前会话模型。默认模型保存在 `EA_HOME/cli-default-model.json`（未设置 `EA_HOME` 时为 `~/.easyagent/cli-default-model.json`），跨工作目录生效，用于新 CLI 会话及单次运行；不会更改桌面主机或 `serve` 的设置。面板只选择当前已配置服务商的模型，网关未提供模型目录时可手动输入 ID；手动输入不验证模型是否可用。启动 shell 显式设置的 `EA_PROVIDER` 以及相应模型变量（`EA_MODEL` / `OPENAI_MODEL`、`EA_CODEX_MODEL`、`ANTHROPIC_MODEL`）优先于此默认值。EasyCode CLI 选择使用独立文件并优先于普通 CLI 默认值；在 `/config` 保存普通服务商模型会关闭该 CLI 选择，但不会退出 EasyCode 登录。
+
 环境加载会补充 `.env` → `.env.local` → `~/.easyagent/.env` → `~/.easyagent/.env.local`，已有的非空环境值不会被覆盖。因此 `.env.local` **不是覆盖层**。设置 `EA_ENV_FILE` 时仅加载指定文件及其 `.local` 文件。`EA_HOME` 可改变默认用户配置目录。
 
 桥接的 dotenv 加载与核心不同：指定 `EA_ENV_FILE` 时只加载该文件，否则加载当前目录和用户配置目录中的 `.env`；另可读取 `/feishu setup` 保存的凭据。systemd 部署建议使用显式 EnvironmentFile，见 [部署文档](MINI_DEPLOY.md)。

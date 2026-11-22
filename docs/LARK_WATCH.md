@@ -47,6 +47,18 @@
 
 ## 部署
 
+### 在 CLI 设置并通过 systemd 常驻
+
+在交互式 CLI 输入 `/watch`，或进入 `/config` →「飞书看门狗」，即可查看状态、设置核心地址、会话 ID 和轮询间隔，并启停独立的 `easyagent-cli-watch.service` 用户服务。会话 ID 留空时尝试从当前 `EA_HOME` 下的飞书路由自动发现；多个候选时需明确填写。服务使用创建时的 EasyAgent 可执行文件和 PATH，升级或移动二进制后应重新启动服务。重新保存设置后需要在面板中再次启动以应用。
+
+此功能需要 Linux 的 systemd 用户服务、已安装并完成用户授权的 `lark-cli`，以及**独立运行的核心服务**。看门狗不会替你启动核心；核心也需要由服务管理器持续运行。CLI 配置保存在 `EA_HOME/cli-watch.json`，不与桌面端托管的看门狗共享开关。面板仅管理自己创建的同名用户服务，不覆盖其他服务。macOS 目前请使用桌面端的飞书设置或自行托管 `easyagent watch serve`。
+
+CLI 用户服务的巡查位点保存在 `EA_HOME/cli-watch-state.json`。如果桌面与 CLI 同时巡查同一个收件箱，它们可能各自处理同一条消息，应只保留一个巡查实例。
+
+如果核心要求认证，在 `EA_HOME/cli-watch.env` 中配置 `EA_SERVER_API_KEY=...`，并将文件权限设为 `0600`；此文件由用户自行创建，不在面板中展示令牌。进程环境、该环境文件中的看门狗变量优先于面板保存的配置。
+
+SSH 断开后，systemd 用户服务能否继续运行取决于用户管理器是否保持运行。CLI 会检查 linger；未启用或无法确认时不会启动服务，避免误以为断线后会继续运行。需要由有权限的管理员执行 `loginctl enable-linger <用户名>` 后再启动。CLI 不会自动修改该系统设置，也不会自动启动核心服务，飞书授权仍需保持有效。可用 `systemctl --user status easyagent-cli-watch.service` 和 `journalctl --user -u easyagent-cli-watch.service` 排查状态。
+
 ```bash
 # 前台试跑一轮（首跑只建基线，安全）：
 easyagent watch once --session sess_xxx --core-url http://127.0.0.1:35157

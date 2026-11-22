@@ -76,18 +76,27 @@ type TuiModel struct {
 	theme *Theme
 
 	// Phase 3: completion + confirmation + model selector
-	completion     CompletionState
-	confirmation   *ConfirmationState
-	questions      *QuestionState
-	questionResult chan QuestionResultMsg // pending ask_user_question reply channel
-	modelSelect    bool                   // Ctrl+P model selector popup active
-	modelCatalog   []CompletionItem
-	searchCatalog  []CompletionItem
-	pickerID       uint64
-	toolFocus      bool
-	focusedTool    toolTarget
-	runStarted     time.Time
-	program        *tea.Program // ref to program for sending msgs
+	completion        CompletionState
+	confirmation      *ConfirmationState
+	questions         *QuestionState
+	questionResult    chan QuestionResultMsg // pending ask_user_question reply channel
+	modelSelect       bool                   // Ctrl+P model selector popup active
+	configBackend     ConfigBackend
+	configWatch       bool
+	watchState        WatchSnapshot
+	configOpen        bool
+	configEditing     bool
+	configIndex       int
+	configInput       string
+	configNotice      string
+	configModelPicker bool
+	modelCatalog      []CompletionItem
+	searchCatalog     []CompletionItem
+	pickerID          uint64
+	toolFocus         bool
+	focusedTool       toolTarget
+	runStarted        time.Time
+	program           *tea.Program // ref to program for sending msgs
 
 	// 当前 agent 流的取消函数：Ctrl+C 时真正中断底层 LLM 流/工具执行，
 	// 而不只是把 UI 状态置停。cmd goroutine 写、Update goroutine 读，需互斥。
@@ -236,6 +245,9 @@ func (m *TuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		return m.handleKeyPress(msg)
 	case tea.MouseMsg:
+		if m.configOpen && !m.modelSelect {
+			return m, nil
+		}
 		return m.handleMouse(msg)
 	case clipboardResultMsg:
 		if msg.err != nil {
@@ -593,6 +605,9 @@ func (m *TuiModel) renderView() string {
 		tea.SetCursorPosition(0, 0)
 		return strings.Join(lines, "\n")
 	}
+	if m.configOpen && !m.modelSelect {
+		return m.renderConfig()
+	}
 	if m.height <= 5 && m.completion.IsActive() {
 		tea.SetCursorPosition(0, 0)
 		return NewCompletionPopup().RenderHeight(&m.completion, m.width, m.height)
@@ -789,6 +804,8 @@ func (m *TuiModel) helpHint() string {
 	}
 	var hints []string
 	switch {
+	case m.configModelPicker:
+		hints = []string{"Type: search models", "↑↓: select", "Enter: set default", "Esc: settings"}
 	case m.toolFocus:
 		hints = []string{"↑↓: tools", "Enter: expand", "F2: copy tool", "Esc: input", "PgUp/Dn: scroll"}
 	case m.modelSelect:
