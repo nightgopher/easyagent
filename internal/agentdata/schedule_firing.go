@@ -29,7 +29,7 @@ func (s *Store) QueueScheduleFiring(ctx context.Context, sc Schedule, next time.
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	result, err := tx.ExecContext(ctx, `UPDATE schedules SET next_run_ms=? WHERE id=? AND version=? AND next_run_ms=? AND next_run_ms>0`, next.UnixMilli(), sc.ID, sc.Version, sc.nextRunMS)
 	if err != nil {
 		return false, err
@@ -105,7 +105,7 @@ func (s *Store) FinishScheduleFiring(ctx context.Context, f ScheduleFiring, run 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	data, err := json.Marshal(run)
 	if err != nil {
 		return err
