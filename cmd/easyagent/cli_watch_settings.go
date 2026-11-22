@@ -21,6 +21,17 @@ const cliWatchMarker = "# Managed by EasyAgent CLI watch settings\n"
 
 var cliWatchPlatform = runtime.GOOS
 
+func checkWatchLinger(ctx context.Context) error {
+	out, err := exec.CommandContext(ctx, "loginctl", "show-user", strconv.Itoa(os.Getuid()), "--property=Linger", "--value").CombinedOutput() //nolint:gosec // UID is obtained from the current process, not user input.
+	if err != nil {
+		return fmt.Errorf("无法检查 systemd linger 状态：%w", err)
+	}
+	if strings.TrimSpace(string(out)) != "yes" {
+		return fmt.Errorf("未启用 linger；请执行 loginctl enable-linger <用户名>")
+	}
+	return nil
+}
+
 type cliWatchConfig struct {
 	CoreURL  string `json:"core_url"`
 	Session  string `json:"session,omitempty"`
@@ -57,6 +68,9 @@ func (b *cliConfigBackend) WatchSnapshot(ctx context.Context) tui.WatchSnapshot 
 	if cliWatchPlatform != "linux" {
 		s.Status = "用户服务目前仅支持 Linux（桌面端可使用飞书设置）"
 		return s
+	}
+	if err := checkWatchLinger(ctx); err != nil {
+		s.Warning = err.Error()
 	}
 	userConfig, err := os.UserConfigDir()
 	if err != nil {
@@ -168,6 +182,9 @@ func (b *cliConfigBackend) SetWatchRunning(ctx context.Context, start bool) erro
 	if err != nil {
 		return err
 	}
+	if strings.ContainsAny(home, "\r\n\x00") {
+		return fmt.Errorf("EA_HOME 路径不能包含换行符")
+	}
 	q := func(s string) string { return strconv.Quote(strings.ReplaceAll(s, "%", "%%")) }
 	userConfig, err := os.UserConfigDir()
 	if err != nil {
@@ -201,6 +218,9 @@ func (b *cliConfigBackend) SetWatchRunning(ctx context.Context, start bool) erro
 		}
 		return nil
 	}
+	if err := checkWatchLinger(ctx); err != nil {
+		return err
+	}
 	c, err := b.loadWatch()
 	if err != nil {
 		return err
@@ -230,7 +250,7 @@ func (b *cliConfigBackend) SetWatchRunning(ctx context.Context, start bool) erro
 		return err
 	}
 	// Unit arguments use systemd quoting. No tokens are written into this file.
-	unit := cliWatchMarker + "[Unit]\nDescription=EasyAgent CLI Feishu inbox watch\nAfter=network-online.target\n[Service]\nType=simple\nEnvironment=" + q("EA_HOME="+home) + "\nEnvironment=" + q("PATH="+os.Getenv("PATH")) + "\nEnvironmentFile=-" + q(filepath.Join(home, "cli-watch.env")) + "\nExecStart=" + q(binary) + " watch serve --config " + q(filepath.Join(home, "cli-watch.json")) + " --state-file " + q(filepath.Join(home, "cli-watch-state.json")) + "\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n"
+	unit := cliWatchMarker + "[Unit]\nDescription=EasyAgent CLI Feishu inbox watch\nAfter=network-online.target\n[Service]\nType=simple\nEnvironment=" + q("EA_HOME="+home) + "\nEnvironment=" + q("PATH="+os.Getenv("PATH")) + "\nEnvironmentFile=-" + strings.ReplaceAll(filepath.Join(home, "cli-watch.env"), "%", "%%") + "\nExecStart=" + q(binary) + " watch serve --config " + q(filepath.Join(home, "cli-watch.json")) + " --state-file " + q(filepath.Join(home, "cli-watch-state.json")) + "\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n"
 	f, err := os.CreateTemp(unitDir, ".easyagent-watch-*")
 	if err != nil {
 		return err
