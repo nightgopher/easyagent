@@ -50,7 +50,9 @@ def main():
                 raise ValueError("invalid pinned signing certificate")
         key.chmod(0o600)
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        run([str(apksigner), "sign", "--ks", str(key), "--ks-key-alias", "easyagent", "--ks-pass", "env:ANDROID_KEYSTORE_PASSWORD", "--out", str(args.output), str(args.input)], env=env)
+        # V4 creates an extra .idsig sidecar for incremental installation. The
+        # release distributes a standalone APK and its manifest rejects extras.
+        run([str(apksigner), "sign", "--v4-signing-enabled", "false", "--ks", str(key), "--ks-key-alias", "easyagent", "--ks-pass", "env:ANDROID_KEYSTORE_PASSWORD", "--out", str(args.output), str(args.input)], env=env)
         signature = subprocess.check_output([str(apksigner), "verify", "--verbose", "--print-certs", str(args.output)], text=True)
         found = re.findall(r"Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})", signature)
         if [x.lower() for x in found] != [expected]:
