@@ -11,6 +11,8 @@ type processRange struct {
 	Running, Abnormal         bool
 }
 
+const processPageSize = 25
+
 // A user input is always a visible boundary. A trailing text becomes an answer
 // only after the work stops; an earlier commentary cannot stand in for one.
 func conversationProcess(s *session, start int) processRange {
@@ -45,7 +47,7 @@ func (a *preview) processMessages(c *ui.Context, s *session, p processRange, sel
 	if end > p.Start {
 		root := ui.Column(c.Key(fmt.Sprintf("process/%s/%d", s.RemoteID, p.Start))).Gap(8).MinWidth(0)
 		state := ui.Local(root, "open", func() toolGroupState {
-			return toolGroupState{Open: p.Running || p.Abnormal || p.Answer < 0, Running: p.Running, Failed: p.Abnormal}
+			return toolGroupState{Open: p.Running || p.Abnormal || p.Answer < 0, Running: p.Running, Failed: p.Abnormal, Shown: processPageSize}
 		})
 		if state.Running && !p.Running && !state.Touched {
 			state.Open = p.Abnormal || p.Answer < 0
@@ -70,7 +72,21 @@ func (a *preview) processMessages(c *ui.Context, s *session, p processRange, sel
 			}
 			flatButton(c, glyph, label).Label("展开或收起工作过程").Expanded(open).FillWidth().Justify(ui.Start).FontSize(12).OnClick(func() { state.Open = !open; state.Touched = true })
 			if open {
-				for i := p.Start; i < end; i++ {
+				first := max(p.Start, end-max(processPageSize, state.Shown))
+				if first > p.Start {
+					a.action(c, fmt.Sprintf("显示更早步骤（还有 %d 个）", first-p.Start)).AlignSelf(ui.Start).OnClick(func() { state.Shown = max(processPageSize, state.Shown) + processPageSize })
+				}
+				// Search can reveal an older match without rendering every step
+				// between it and the recent window.
+				if selected >= p.Start && selected < first {
+					m := s.Messages[selected]
+					if m.Kind == "thought" || m.Kind == "tool" {
+						m.Expanded = true
+					}
+					a.conversationRow(c.Key(selected), s, selected, selected)
+					a.note(c, "中间步骤已折叠，可继续显示更早步骤。")
+				}
+				for i := first; i < end; i++ {
 					m := s.Messages[i]
 					if i == selected && (m.Kind == "thought" || m.Kind == "tool") {
 						m.Expanded = true
