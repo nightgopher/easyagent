@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"strings"
 	"time"
@@ -58,6 +59,7 @@ func (a *preview) playSpeech(text string) {
 	ctx, cancel := context.WithTimeout(l.ctx, 60*time.Second)
 	l.SpeechCancel = cancel
 	provider, voice := a.Settings.Preferences.SpeechProvider, a.Settings.Preferences.SpeechVoice
+	prefs := a.Settings.Preferences
 	if voice == "" {
 		voice = "zh-CN-XiaoxiaoNeural"
 	}
@@ -66,7 +68,20 @@ func (a *preview) playSpeech(text string) {
 		if provider == "system" {
 			return platformSystemSpeech(ctx, text), nil
 		}
-		audio, err := edgeSpeech(ctx, text, voice)
+		var audio []byte
+		var err error
+		if provider == "custom" {
+			key := ""
+			if prefs.SpeechHasKey {
+				key, err = l.Secrets.Get(speechCredential)
+				if err != nil {
+					return errors.New("无法读取语音接口密钥，请重新保存"), nil
+				}
+			}
+			audio, err = customSpeech(ctx, prefs.SpeechEndpoint, prefs.SpeechModel, prefs.SpeechCustomVoice, text, key)
+		} else {
+			audio, err = edgeSpeech(ctx, text, voice)
+		}
 		if err == nil && ctx.Err() != nil {
 			err = ctx.Err()
 		}
@@ -107,14 +122,18 @@ func (a *preview) speechSettings(c *ui.Context) {
 	}
 	s := &a.Settings
 	provider := s.Preferences.SpeechProvider
-	choices := []string{"Edge 在线", "系统语音"}
+	choices := []string{"Edge 在线", "系统语音", "自定义语音模型"}
 	selected := choices[0]
 	if provider == "system" {
 		selected = choices[1]
+	} else if provider == "custom" {
+		selected = choices[2]
 	}
 	if a.selectControl(c, "朗读服务", &selected, choices).Width(260).Changed() {
 		if selected == choices[1] {
 			s.Preferences.SpeechProvider = "system"
+		} else if selected == choices[2] {
+			s.Preferences.SpeechProvider = "custom"
 		} else {
 			s.Preferences.SpeechProvider = "edge"
 		}
@@ -122,6 +141,33 @@ func (a *preview) speechSettings(c *ui.Context) {
 	}
 	if s.Preferences.SpeechProvider == "system" {
 		a.note(c, "使用手机系统语音引擎；声音与语言由手机系统设置管理。")
+	} else if s.Preferences.SpeechProvider == "custom" {
+		a.note(c, "使用 OpenAI 兼容的语音接口，朗读文字会发送到你配置的服务。")
+		a.input(c, "语音接口地址", &s.Preferences.SpeechEndpoint, "https://服务地址/v1/audio/speech", false)
+		a.input(c, "语音模型", &s.Preferences.SpeechModel, "例如 tts-1", false)
+		a.input(c, "语音音色", &s.Preferences.SpeechCustomVoice, "例如 alloy", false)
+		a.input(c, "API 密钥", &s.SpeechAPIKey, "留空保留已保存的密钥", true)
+		a.action(c, "保存语音配置").Disabled(a.Live == nil || a.Live.Loading["speech-config"]).OnClick(func() {
+			key := strings.TrimSpace(s.SpeechAPIKey)
+			if key == "" {
+				s.savePreferences()
+				return
+			}
+			a.run("speech-config", func(context.Context, *backendClient) (any, error) {
+				return nil, a.Live.Secrets.Set(speechCredential, key)
+			}, func(any) {
+				s.SpeechAPIKey = ""
+				s.Preferences.SpeechHasKey = true
+				s.savePreferences()
+			})
+		})
+		if s.Preferences.SpeechHasKey {
+			a.action(c, "移除语音密钥").Disabled(a.Live == nil || a.Live.Loading["speech-config"]).OnClick(func() {
+				a.run("speech-config", func(context.Context, *backendClient) (any, error) {
+					return nil, a.Live.Secrets.Delete(speechCredential)
+				}, func(any) { s.Preferences.SpeechHasKey = false; s.savePreferences() })
+			})
+		}
 	} else {
 		a.note(c, "使用 Edge 在线自然语音，朗读时文字会发送到微软；需要网络连接。")
 		if s.Preferences.SpeechVoice == "" {
