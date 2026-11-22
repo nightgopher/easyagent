@@ -73,7 +73,7 @@ func (t *SendMessageTool) Execute(_ context.Context, raw json.RawMessage, _ func
 	// UI 按 UserFacing 送达用户；Content 回给 LLM，不含正文（正文已在 tool call
 	// 参数里，避免上下文重复）。
 	return agent.ToolResult{
-		Content:    "Message delivered to user.",
+		Content:    "Message handed to the client for delivery; delivery is not confirmed.",
 		UserFacing: message,
 	}, nil
 }

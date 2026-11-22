@@ -154,6 +154,18 @@ func (c *Client) SendMarkdown(ctx context.Context, chatID, markdown, _ string) (
 	return *resp.Data.MessageId, nil
 }
 
+// sendMarkdownOnce uses the same provider-side identity for retries.
+func (c *Client) sendMarkdownOnce(ctx context.Context, chatID, markdown, id string) error {
+	resp, err := c.sdk.Im.Message.Create(ctx, larkim.NewCreateMessageReqBuilder().ReceiveIdType(receiveIDType(chatID)).Body(larkim.NewCreateMessageReqBodyBuilder().ReceiveId(chatID).MsgType("post").Content(mdToPostContent(markdown)).Uuid(id).Build()).Build())
+	if err != nil {
+		return fmt.Errorf("send notification: %w", err)
+	}
+	if resp == nil || !resp.Success() {
+		return fmt.Errorf("notification rejected by Feishu")
+	}
+	return nil
+}
+
 // AddReaction adds an emoji reaction to a message. Returns the reaction ID.
 func (c *Client) AddReaction(ctx context.Context, messageID, emojiType string) (string, error) {
 	resp, err := c.sdk.Im.MessageReaction.Create(ctx, larkim.NewCreateMessageReactionReqBuilder().

@@ -67,6 +67,9 @@ type Handler struct {
 	senderMu    sync.Mutex
 	approvalsMu sync.Mutex
 	approvals   map[string]*toolApproval
+	outbox      *notificationOutbox
+	outboxMu    sync.Mutex
+	outboxWake  chan struct{}
 }
 
 // NewHandler creates a new message handler.
@@ -81,6 +84,8 @@ func NewHandler(piAgentURL, appID string, client *Client, workspace string) *Han
 		httpClient:    &http.Client{Timeout: 31 * time.Minute}, // Core bounds a chat turn to 30 minutes.
 		workspace:     workspace,
 		senders:       make(map[string]string),
+		outboxWake:    make(chan struct{}, 1),
+		outbox:        &notificationOutbox{path: filepath.Join(config.HomeDir(), "feishu-notifications.sqlite"), appID: appID},
 	}
 	h.loadRoutes()
 	return h
@@ -635,6 +640,7 @@ func (h *Handler) messageRequestID(messageID string) string {
 // 流式更新不受影响）。
 func (h *Handler) maybeDeliverBroadcast(ctx context.Context, chatKey, messageID, data string) {
 	var ev struct {
+		ToolCallID  string         `json:"tool_call_id"`
 		ToolName    string         `json:"tool_name"`
 		ToolResult  string         `json:"tool_result"`
 		ToolDetails map[string]any `json:"tool_details"`
@@ -648,8 +654,22 @@ func (h *Handler) maybeDeliverBroadcast(ctx context.Context, chatKey, messageID,
 		if message == "" {
 			return
 		}
-		if _, err := h.client.SendMarkdown(ctx, chatKey, message, messageID); err != nil {
-			slog.Warn("send_message delivery failed", "error", err)
+		if h.outbox == nil { // Legacy/test handlers without a persistent outbox.
+			if _, err := h.client.SendMarkdown(ctx, chatKey, message, messageID); err != nil {
+				slog.Warn("send_message delivery failed", "error", err)
+			}
+			return
+		}
+		saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		err := h.enqueueBroadcast(saveCtx, chatKey, messageID, ev.ToolCallID, message)
+		cancel()
+		if err != nil {
+			slog.Error("persist notification failed", "error", err)
+			return
+		}
+		select {
+		case h.outboxWake <- struct{}{}:
+		default:
 		}
 	case "send_file":
 		h.deliverSentFile(ctx, chatKey, ev.ToolDetails)

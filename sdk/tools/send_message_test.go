@@ -38,7 +38,7 @@ func TestSendMessageToolExecuteDeliversViaUserFacing(t *testing.T) {
 	require.False(t, result.IsError)
 	// UI 按 UserFacing 送达用户；Content 只回执给 LLM，不重复正文。
 	require.Equal(t, "遇到一个报错，我改用备选方案继续", result.UserFacing)
-	require.Equal(t, "Message delivered to user.", result.Content)
+	require.Equal(t, "Message handed to the client for delivery; delivery is not confirmed.", result.Content)
 	require.Equal(t, result.UserFacing, result.DisplayText())
 }
 

@@ -77,15 +77,22 @@ func (s *Server) fireDueSchedules(ctx context.Context, now time.Time) {
 			slog.Error("schedules: plan next", "schedule", sc.ID, "error", err)
 			continue
 		}
-		claimed, err := store.AdvanceSchedule(ctx, sc, next)
+		claimed, err := store.QueueScheduleFiring(ctx, sc, next)
 		if err != nil || !claimed {
 			if err != nil {
 				slog.Error("schedules: claim", "schedule", sc.ID, "error", err)
 			}
 			continue
 		}
-		if _, err := s.fireSchedule(ctx, sc); err != nil {
-			slog.Warn("schedules: fire", "schedule", sc.ID, "error", err)
+	}
+	firings, err := store.PendingScheduleFirings(ctx)
+	if err != nil {
+		slog.Error("schedules: load pending firings", "error", err)
+		return
+	}
+	for _, firing := range firings {
+		if err := s.firePendingSchedule(ctx, firing); err != nil {
+			slog.Warn("schedules: pending firing", "schedule", firing.Schedule.ID, "error", err)
 		}
 	}
 }
@@ -119,6 +126,54 @@ func (s *Server) fireSchedule(ctx context.Context, sc agentdata.Schedule) (agent
 }
 
 func (s *Server) startScheduledRun(ctx context.Context, sc agentdata.Schedule, started time.Time, run *agentdata.ScheduleRun) error {
+	return s.startScheduledRunWithFiring(ctx, sc, started, run, nil)
+}
+
+func (s *Server) firePendingSchedule(ctx context.Context, firing agentdata.ScheduleFiring) error {
+	s.scheduleMu.Lock()
+	defer s.scheduleMu.Unlock()
+	current, err := s.app.Agents().GetPendingScheduleFiring(ctx, firing.Schedule.ID, firing.DueMS)
+	if err != nil || current == nil {
+		return err
+	}
+	firing = *current
+	sc := firing.Schedule
+	started := time.UnixMilli(firing.DueMS)
+	if firing.SessionID != "" {
+		requestID := "schedule-firing-" + sc.ID + "-" + fmt.Sprint(started.UnixMilli())
+		receipt, err := s.loadRunReceipt(requestID)
+		if err != nil {
+			return err
+		}
+		if receipt != nil {
+			if receipt.SessionID != firing.SessionID {
+				return fmt.Errorf("schedule receipt session mismatch")
+			}
+			work, err := s.app.Agents().WorkForSession(ctx, firing.SessionID)
+			if err != nil {
+				return err
+			}
+			return s.app.Agents().FinishScheduleFiring(ctx, firing, agentdata.ScheduleRun{StartedAt: started.UTC().Format(time.RFC3339), SessionID: firing.SessionID, WorkID: work.ID})
+		}
+	}
+	if latest, err := s.app.Agents().GetSchedule(ctx, sc.ID); err == nil && latest.LastRun != nil && latest.LastRun.SessionID != "" && latest.LastRun.SessionID != firing.SessionID {
+		switch s.sessionRunState(latest.LastRun.SessionID) {
+		case "running", "waiting_confirmation":
+			return errScheduleBusy
+		}
+	}
+	run := agentdata.ScheduleRun{StartedAt: started.UTC().Format(time.RFC3339), SessionID: firing.SessionID}
+	if err := s.startScheduledRunWithFiring(ctx, sc, started, &run, &firing); err != nil {
+		run.Error = err.Error()
+		if recordErr := s.app.Agents().RecordScheduleRun(ctx, sc.ID, run); recordErr != nil {
+			slog.Error("schedules: record pending failure", "schedule", sc.ID, "error", recordErr)
+		}
+		return err
+	}
+	return s.app.Agents().FinishScheduleFiring(ctx, firing, run)
+}
+
+func (s *Server) startScheduledRunWithFiring(ctx context.Context, sc agentdata.Schedule, started time.Time, run *agentdata.ScheduleRun, firing *agentdata.ScheduleFiring) error {
 	cfg := s.app.Config()
 	cfg.DefaultAccessMode = channelAccessMode(cfg, "")
 	var deps runtime.Dependencies
@@ -134,20 +189,32 @@ func (s *Server) startScheduledRun(ctx context.Context, sc agentdata.Schedule, s
 	if err != nil {
 		return err
 	}
-	sess, err := s.app.SessionStore().Create(ctx, runtime.AgentSessionOptions{Config: cfg}, deps)
+	var sess *runtime.AgentSession
+	if run.SessionID != "" {
+		sess, err = s.resolveSession(ctx, run.SessionID)
+	} else {
+		sess, err = s.app.SessionStore().Create(ctx, runtime.AgentSessionOptions{Config: cfg}, deps)
+	}
 	if err != nil {
 		return err
 	}
-	if sc.TeamID != "" {
-		err = s.app.SessionManager().SaveTeamSession(sess.SessionID(), sess.Workspace(), team.LeaderID, team.ID, team.Name, team)
-	} else {
-		err = s.app.SessionManager().SaveAgentMeta(sess.SessionID(), sess.Workspace(), sc.AgentID)
-	}
-	if err != nil {
-		_ = s.app.SessionStore().Delete(sess.SessionID())
-		return fmt.Errorf("save session metadata: %w", err)
+	if run.SessionID == "" {
+		if sc.TeamID != "" {
+			err = s.app.SessionManager().SaveTeamSession(sess.SessionID(), sess.Workspace(), team.LeaderID, team.ID, team.Name, team)
+		} else {
+			err = s.app.SessionManager().SaveAgentMeta(sess.SessionID(), sess.Workspace(), sc.AgentID)
+		}
+		if err != nil {
+			_ = s.app.SessionStore().Delete(sess.SessionID())
+			return fmt.Errorf("save session metadata: %w", err)
+		}
 	}
 	run.SessionID = sess.SessionID()
+	if firing != nil && firing.SessionID == "" {
+		if err := s.app.Agents().SaveScheduleFiringSession(ctx, *firing, run.SessionID); err != nil {
+			return err
+		}
+	}
 	title := sc.Name + " · " + started.Format("01-02 15:04")
 	work, err := s.app.Agents().TrackWork(ctx, agentdata.WorkItem{SessionID: sess.SessionID(), AgentID: agentID, Application: "business", Workspace: sess.Workspace(), WorkUpdate: agentdata.WorkUpdate{Title: title}})
 	if err != nil {
@@ -159,12 +226,22 @@ func (s *Server) startScheduledRun(ctx context.Context, sc agentdata.Schedule, s
 		return fmt.Errorf("refresh tools: %w", err)
 	}
 	prompt := sc.Prompt + fmt.Sprintf(scheduleRunNote, sc.Name)
-	_, _, err = s.startRun(sess.SessionID(), prompt, "schedule-"+sc.ID+"-"+fmt.Sprint(started.UnixMilli()))
+	requestID := "schedule-" + sc.ID + "-" + fmt.Sprint(started.UnixMilli())
+	if firing != nil {
+		requestID = "schedule-firing-" + sc.ID + "-" + fmt.Sprint(started.UnixMilli())
+	}
+	_, _, err = s.startRun(sess.SessionID(), prompt, requestID)
 	return err
 }
 
 func (s *Server) schedules(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
+	// Serialize changes with starting a queued firing, so an edit or delete
+	// cannot race the decision to execute an earlier version.
+	if r.Method != http.MethodGet {
+		s.scheduleMu.Lock()
+		defer s.scheduleMu.Unlock()
+	}
 	store, id := s.app.Agents(), r.PathValue("schedule")
 	switch {
 	case r.Method == http.MethodGet && id == "":

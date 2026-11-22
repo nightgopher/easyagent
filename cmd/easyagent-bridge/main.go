@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
 	"github.com/nightgopher/easyagent/internal/feishu"
 	"github.com/nightgopher/easyagent/sdk/config"
-	"github.com/joho/godotenv"
 )
 
 var version = "dev"
@@ -123,6 +123,7 @@ func main() {
 
 	// Graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
+	handler.StartNotificationWorker(ctx)
 	defer cancel()
 
 	sigCh := make(chan os.Signal, 1)

@@ -117,6 +117,8 @@ func (s *Server) localBridgeRun() func(ctx context.Context, baseURL string) erro
 // serve 自己，长连接跑在进程内。启动失败（含凭据缺失）作为 error 返回。
 // attach 在 handler 就绪后登记看门狗转交入口，可为 nil。
 func runFeishuBridgeLocal(ctx context.Context, baseURL string, attach func(context.Context, *feishu.Handler)) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	creds, _ := feishu.LoadCredentials()
 	if creds == nil || creds.AppID == "" || creds.AppSecret == "" {
 		return errors.New("未找到飞书凭据，请先完成扫码绑定")
@@ -137,6 +139,7 @@ func runFeishuBridgeLocal(ctx context.Context, baseURL string, attach func(conte
 	client := feishu.NewClient(creds.AppID, creds.AppSecret)
 	handler := feishu.NewHandler(baseURL, creds.AppID, client, workspace)
 	handler.SetOwnerAccess(access)
+	handler.StartNotificationWorker(ctx)
 	gateway := feishu.NewGateway(creds.AppID, creds.AppSecret, client, func(ctx context.Context, msg feishu.Message) {
 		handler.Handle(ctx, msg)
 	})

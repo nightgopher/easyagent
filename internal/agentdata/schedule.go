@@ -32,6 +32,7 @@ type Schedule struct {
 	// Runner-owned fields: filled on read, ignored on save.
 	NextRunAt string       `json:"next_run_at,omitempty"`
 	LastRun   *ScheduleRun `json:"last_run,omitempty"`
+	nextRunMS int64
 }
 
 // ScheduleRun records the latest firing. Live run state comes from the run
@@ -55,6 +56,12 @@ CREATE TABLE IF NOT EXISTS schedules (
 	last_run TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS schedules_due ON schedules(next_run_ms);
+CREATE TABLE IF NOT EXISTS schedule_firings (
+ schedule_id TEXT NOT NULL, due_ms INTEGER NOT NULL, definition TEXT NOT NULL,
+ session_id TEXT NOT NULL DEFAULT '', work_id TEXT NOT NULL DEFAULT '',
+ state TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '',
+ PRIMARY KEY(schedule_id, due_ms)
+);
 `
 
 func normalizeSchedule(sc *Schedule) error {
@@ -187,6 +194,7 @@ func readSchedule(row interface{ Scan(...any) error }) (Schedule, error) {
 		return Schedule{}, fmt.Errorf("decode schedule: %w", err)
 	}
 	if nextMS > 0 {
+		sc.nextRunMS = nextMS
 		sc.NextRunAt = time.UnixMilli(nextMS).UTC().Format(time.RFC3339)
 	}
 	if lastRun != "" {
@@ -248,7 +256,7 @@ func (s *Store) AdvanceSchedule(ctx context.Context, sc Schedule, next time.Time
 		return false, err
 	}
 	defer func() { _ = db.Close() }()
-	result, err := db.ExecContext(ctx, "UPDATE schedules SET next_run_ms=? WHERE id=? AND version=? AND next_run_ms>0", next.UnixMilli(), sc.ID, sc.Version)
+	result, err := db.ExecContext(ctx, "UPDATE schedules SET next_run_ms=? WHERE id=? AND version=? AND next_run_ms=? AND next_run_ms>0", next.UnixMilli(), sc.ID, sc.Version, sc.nextRunMS)
 	if err != nil {
 		return false, err
 	}
