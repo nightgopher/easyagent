@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -32,6 +33,7 @@ EA_LARKWATCH_EXCLUDE_CHATS、EA_LARKWATCH_MAX_PER_WAKE、EA_LARKWATCH_LARK_CLI�
 // watchOptions 汇总 CLI flag 与环境变量的最终取值；零值表示未指定，交给默认值。
 type watchOptions struct {
 	command    string
+	configFile string
 	coreURL    string
 	sessionID  string
 	interval   time.Duration
@@ -54,6 +56,7 @@ func parseWatchArgs(args []string) (*watchOptions, error) {
 		return nil, fmt.Errorf("unknown watch command %q\n%s", args[0], watchUsage)
 	}
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	fs.StringVar(&opts.configFile, "config", "", "CLI 看门狗配置文件")
 	fs.StringVar(&opts.coreURL, "core-url", "", "EasyAgent 核心 HTTP 地址（默认取 EA_LARKWATCH_CORE_URL / PI_AGENT_URL）")
 	fs.StringVar(&opts.sessionID, "session", "", "要唤醒的会话 ID（默认取 EA_LARKWATCH_SESSION_ID）")
 	fs.DurationVar(&opts.interval, "interval", 0, "轮询间隔，≥10s（默认 30s）")
@@ -71,6 +74,10 @@ func parseWatchArgs(args []string) (*watchOptions, error) {
 func runWatchCLI(args []string) {
 	opts, err := parseWatchArgs(args)
 	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	if err := applyWatchSettings(opts, os.Getenv); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
@@ -100,6 +107,37 @@ func runWatchCLI(args []string) {
 		logger.Error("lark watch exited with error", "error", err)
 		os.Exit(1)
 	}
+}
+
+// applyWatchSettings supplies file defaults; explicit flags and environment win.
+func applyWatchSettings(opts *watchOptions, getenv func(string) string) error {
+	if opts.configFile == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(opts.configFile)
+	if err != nil {
+		return err
+	}
+	if len(raw) > 4096 {
+		return errors.New("看门狗配置过大")
+	}
+	var saved cliWatchConfig
+	if err = json.Unmarshal(raw, &saved); err != nil {
+		return err
+	}
+	if opts.coreURL == "" && getenv("EA_LARKWATCH_CORE_URL") == "" && getenv("PI_AGENT_URL") == "" {
+		opts.coreURL = saved.CoreURL
+	}
+	if opts.sessionID == "" && getenv("EA_LARKWATCH_SESSION_ID") == "" {
+		opts.sessionID = saved.Session
+	}
+	if opts.interval == 0 && getenv("EA_LARKWATCH_INTERVAL") == "" {
+		opts.interval, err = time.ParseDuration(saved.Interval)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // buildWatchConfig 把 CLI flag 与环境变量默认值收敛为最终配置。
