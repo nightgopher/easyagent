@@ -144,8 +144,10 @@ jobs:
           (cd desktop-native && go install github.com/egoist/mygo/cmd/mygo)
           version=$(python3 -c 'import json; print(json.load(open("desktop-native/mygo.json"))["version"])')
           (cd desktop-native && "$(go env GOPATH)/bin/mygo" build -platform android/arm64)
-          python3 scripts/sign-mygo-apk.py "desktop-native/build.noindex/android/easyagent-${version}.apk" "$RUNNER_TEMP/signed-mygo.apk" "$version" --test-signing
-          "$ANDROID_HOME/build-tools/35.0.1/aapt2" dump xmltree "$RUNNER_TEMP/signed-mygo.apk" --file AndroidManifest.xml | grep -F 'android.intent.action.TTS_SERVICE'
+          mkdir -p "$RUNNER_TEMP/mygo-release"
+          python3 scripts/sign-mygo-apk.py "desktop-native/build.noindex/android/easyagent-${version}.apk" "$RUNNER_TEMP/mygo-release/easyagent-mygo-android.apk" "$version" --test-signing
+          python3 -c 'from pathlib import Path; import sys; p = Path(sys.argv[1]); assert sorted(x.name for x in p.iterdir()) == ["easyagent-mygo-android.apk"]' "$RUNNER_TEMP/mygo-release"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt2" dump xmltree "$RUNNER_TEMP/mygo-release/easyagent-mygo-android.apk" --file AndroidManifest.xml | grep -F 'android.intent.action.TTS_SERVICE'
   signing-certificate:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     runs-on: ${{ vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-15' && 'macos-15' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'xcode-27' && 'xcode-27' || vars.EASYAGENT_MACOS_ARM_RUNNER == 'macos-26' && 'macos-26' || (vars.EASYAGENT_MACOS_ARM_RUNNER != '' && vars.EASYAGENT_MACOS_ARM_RUNNER || 'macos-26') }}
