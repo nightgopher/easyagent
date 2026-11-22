@@ -339,6 +339,22 @@ func (a *App) SetDefaultModel(provider, model string) error {
 	return config.SaveRuntimeOverrideDefaultModel(a.cfg.DataDir, provider, model)
 }
 
+// ApplyCLIDefaultModel updates this CLI process after its user-scoped
+// preference has been persisted. The current provider is already registered.
+func (a *App) ApplyCLIDefaultModel(provider, model string) {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	a.cfg.Provider = provider
+	switch provider {
+	case "codex":
+		a.cfg.CodexModel = model
+	case "anthropic":
+		a.cfg.AnthropicModel = model
+	default:
+		a.cfg.OpenAIModel = model
+	}
+}
+
 // Config returns a snapshot of the current configuration.
 func (a *App) Config() config.Config {
 	a.cfgMu.Lock()

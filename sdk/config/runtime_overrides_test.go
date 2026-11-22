@@ -51,3 +51,16 @@ func TestMalformedSettingsAreNotOverwritten(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, original, data)
 }
+
+func TestCodexDefaultModelRestoresIntoCodexField(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, SaveRuntimeOverrideDefaultModel(dir, "codex", "codex-selected"))
+	c := Default()
+	c.Provider = "openai"
+	c.CodexModel = "codex-old"
+	c.OpenAIModel = "openai-old"
+	c.LoadRuntimeOverrides(dir)
+	require.Equal(t, "codex", c.Provider)
+	require.Equal(t, "codex-selected", c.CodexModel)
+	require.Equal(t, "openai-old", c.OpenAIModel)
+}

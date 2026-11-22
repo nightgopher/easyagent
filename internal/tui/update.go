@@ -55,10 +55,20 @@ func (m *TuiModel) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.configOpen && !m.modelSelect {
+		return m.handleConfigKey(msg)
+	}
 
 	// Model selection owns its keys before generic completion.
 	if m.modelSelect || m.completion.IsActive() {
 		if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyCtrlD {
+			if m.configModelPicker {
+				m.configModelPicker = false
+				m.configOpen = true
+				m.modelSelect = false
+				m.completion.Close()
+				return m, nil
+			}
 			m.modelSelect = false
 			m.completion.Close()
 			if msg.Type == tea.KeyCtrlC && !m.agentBusy {
@@ -302,6 +312,10 @@ func (m *TuiModel) handleModelSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc, tea.KeyCtrlP:
 		m.modelSelect = false
 		m.completion.Close()
+		if m.configModelPicker {
+			m.configModelPicker = false
+			m.configOpen = true
+		}
 		return m, nil
 	case tea.KeyEnter:
 		// Apply the selected model
@@ -316,13 +330,26 @@ func (m *TuiModel) handleModelSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if len(parts) == 2 {
 				provider := parts[0]
 				modelID := parts[1]
+				if m.configModelPicker {
+					m.saveConfigModel(provider, modelID)
+					m.configModelPicker = false
+					m.configOpen = true
+					m.completion.Close()
+					return m, nil
+				}
 				if err := m.session.SwitchModel(context.Background(), modelID, provider); err != nil {
+					if m.configOpen {
+						m.configNotice = "切换会话模型失败: " + err.Error()
+					}
 					m.messages = append(m.messages, ChatMessage{
 						Role:      "system",
 						Content:   fmt.Sprintf("❌ Model switch failed: %v", err),
 						Timestamp: time.Now(),
 					})
 				} else {
+					if m.configOpen {
+						m.configNotice = "当前会话模型已切换；CLI 默认模型未改变"
+					}
 					m.provider = provider
 					m.modelID = modelID
 					m.messages = append(m.messages, ChatMessage{
@@ -634,6 +661,9 @@ var syncSlashCommands = map[string]bool{
 // Ctrl+C 走命令自己的 context 真正取消。
 func (m *TuiModel) handleSlashCommand(input string) (tea.Model, tea.Cmd) {
 	m.input.Reset()
+	if strings.TrimSpace(input) == "/config" {
+		return m.openConfig()
+	}
 	if strings.TrimSpace(input) == "/models" {
 		return m.openModelSelector()
 	}

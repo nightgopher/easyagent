@@ -714,6 +714,8 @@ func (c *Config) LoadRuntimeOverrides(dataDir string) {
 			c.OpenAIModel = *o.DefaultModel
 		case "anthropic":
 			c.AnthropicModel = *o.DefaultModel
+		case "codex":
+			c.CodexModel = *o.DefaultModel
 		default:
 			c.OpenAIModel = *o.DefaultModel
 		}
