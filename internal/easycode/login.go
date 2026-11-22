@@ -97,7 +97,16 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 	return s, nil
 }
 
-func (s *LoginSession) Close() { _ = s.server.Close(); _ = s.listener.Close() }
+func (s *LoginSession) Close() {
+	// Wait for the callback response to finish before closing its connection;
+	// Wait can return while the HTTP handler is still writing to the browser.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if err := s.server.Shutdown(ctx); err != nil {
+		_ = s.server.Close()
+	}
+	_ = s.listener.Close()
+}
 
 func (s *LoginSession) Wait(ctx context.Context) (User, error) {
 	select {
