@@ -661,6 +661,9 @@ var syncSlashCommands = map[string]bool{
 // Ctrl+C 走命令自己的 context 真正取消。
 func (m *TuiModel) handleSlashCommand(input string) (tea.Model, tea.Cmd) {
 	m.input.Reset()
+	if strings.TrimSpace(input) == "/watch" {
+		return m.openWatch()
+	}
 	if strings.TrimSpace(input) == "/config" {
 		return m.openConfig()
 	}

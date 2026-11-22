@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +13,13 @@ import (
 
 // ConfigSnapshot intentionally contains no credentials or secret-bearing URLs.
 type ConfigSnapshot struct{ Provider, Model, Source, DataDir, DefaultPath, Warning string }
+
+type WatchSnapshot struct{ CoreURL, Session, Interval, Status, ConfigPath string }
+type WatchBackend interface {
+	WatchSnapshot(context.Context) WatchSnapshot
+	SetWatchField(string, string) error
+	SetWatchRunning(context.Context, bool) error
+}
 
 // ConfigBackend exposes the independent CLI's model defaults to its TUI.
 type ConfigBackend interface {
@@ -31,6 +39,7 @@ func (m *TuiModel) openConfig() (tea.Model, tea.Cmd) {
 	}
 	m.completion.Close()
 	m.configOpen = true
+	m.configWatch = false
 	m.configEditing = false
 	m.configIndex = 0
 	m.configNotice = ""
@@ -38,6 +47,9 @@ func (m *TuiModel) openConfig() (tea.Model, tea.Cmd) {
 }
 
 func (m *TuiModel) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.configWatch {
+		return m.handleWatchKey(msg)
+	}
 	if m.configEditing {
 		switch msg.Type {
 		case tea.KeyEsc, tea.KeyCtrlC:
@@ -79,9 +91,9 @@ func (m *TuiModel) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.configOpen = false
 		m.configNotice = ""
 	case tea.KeyUp:
-		m.configIndex = (m.configIndex + 3) % 4
+		m.configIndex = (m.configIndex + 4) % 5
 	case tea.KeyDown:
-		m.configIndex = (m.configIndex + 1) % 4
+		m.configIndex = (m.configIndex + 1) % 5
 	case tea.KeyEnter:
 		switch m.configIndex {
 		case 0:
@@ -110,6 +122,15 @@ func (m *TuiModel) handleConfigKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		case 3:
+			if _, ok := m.configBackend.(WatchBackend); !ok {
+				m.configNotice = "当前入口不支持看门狗"
+				return m, nil
+			}
+			m.configWatch = true
+			m.configIndex = 0
+			m.configNotice = ""
+			m.refreshWatch()
+		case 4:
 			m.configOpen = false
 		}
 	}
@@ -125,6 +146,9 @@ func (m *TuiModel) saveConfigModel(provider, model string) {
 }
 
 func (m *TuiModel) renderConfig() string {
+	if m.configWatch {
+		return m.renderWatch()
+	}
 	snapshot := m.configBackend.Snapshot()
 	lines := []string{
 		m.theme.StatusAccent.Render("设置 · 独立 CLI"),
@@ -140,7 +164,7 @@ func (m *TuiModel) renderConfig() string {
 		lines = append(lines, "注意: "+snapshot.Warning)
 	}
 	lines = append(lines, "")
-	items := []string{"从列表设置默认模型", "手动输入默认模型 ID", "切换当前会话模型", "返回对话"}
+	items := []string{"从列表设置默认模型", "手动输入默认模型 ID", "切换当前会话模型", "飞书看门狗", "返回对话"}
 	for i, item := range items {
 		prefix := "  "
 		if i == m.configIndex {
@@ -168,5 +192,133 @@ func (m *TuiModel) renderConfig() string {
 		lines[i] = ansi.Truncate(terminalText(line), width, "")
 	}
 	tea.SetCursorPosition(0, 0)
+	return strings.Join(lines, "\n")
+}
+
+func (m *TuiModel) refreshWatch() {
+	b := m.configBackend.(WatchBackend)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	m.watchState = b.WatchSnapshot(ctx)
+}
+func (m *TuiModel) openWatch() (tea.Model, tea.Cmd) {
+	_, cmd := m.openConfig()
+	if !m.configOpen {
+		return m, cmd
+	}
+	if _, ok := m.configBackend.(WatchBackend); !ok {
+		m.configNotice = "当前入口不支持看门狗"
+		return m, cmd
+	}
+	m.configWatch = true
+	m.configIndex = 0
+	m.refreshWatch()
+	return m, cmd
+}
+func (m *TuiModel) handleWatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	b := m.configBackend.(WatchBackend)
+	if m.configEditing {
+		switch msg.Type {
+		case tea.KeyEsc, tea.KeyCtrlC:
+			m.configEditing = false
+			m.configNotice = ""
+		case tea.KeyEnter:
+			fields := []string{"url", "session", "interval"}
+			err := b.SetWatchField(fields[m.configIndex], m.configInput)
+			if err != nil {
+				m.configNotice = "保存失败: " + err.Error()
+			} else {
+				m.configEditing = false
+				m.configNotice = "已保存；运行中的服务需重启才能应用"
+				m.refreshWatch()
+			}
+		case tea.KeyCtrlU:
+			m.configInput = ""
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			r := []rune(m.configInput)
+			if len(r) > 0 {
+				m.configInput = string(r[:len(r)-1])
+			}
+		case tea.KeySpace:
+			if len(m.configInput) < 500 {
+				m.configInput += " "
+			}
+		case tea.KeyRunes:
+			if utf8.RuneCountInString(m.configInput)+len(msg.Runes) <= 500 {
+				m.configInput += strings.ReplaceAll(sanitizeInput(string(msg.Runes)), "\n", "")
+			}
+		}
+		return m, nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.configWatch = false
+		m.configIndex = 3
+		m.configNotice = ""
+	case tea.KeyUp:
+		m.configIndex = (m.configIndex + 5) % 6
+	case tea.KeyDown:
+		m.configIndex = (m.configIndex + 1) % 6
+	case tea.KeyEnter:
+		switch m.configIndex {
+		case 0, 1, 2:
+			m.configEditing = true
+			m.configNotice = ""
+			m.configInput = []string{m.watchState.CoreURL, m.watchState.Session, m.watchState.Interval}[m.configIndex]
+			if m.configIndex == 1 && m.configInput == "自动发现" {
+				m.configInput = ""
+			}
+		case 3, 4:
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			err := b.SetWatchRunning(ctx, m.configIndex == 3)
+			cancel()
+			if err != nil {
+				m.configNotice = "操作失败: " + err.Error()
+			} else if m.configIndex == 3 {
+				m.configNotice = "启动请求已提交；SSH 断开后运行依赖 user service 和 linger"
+			} else {
+				m.configNotice = "已停止并取消开机启动"
+			}
+			m.refreshWatch()
+		case 5:
+			m.configWatch = false
+			m.configIndex = 3
+			m.configNotice = ""
+		}
+	}
+	return m, nil
+}
+func (m *TuiModel) renderWatch() string {
+	s := m.watchState
+	lines := []string{"飞书收件箱看门狗 · CLI 用户服务", "状态: " + s.Status, "配置: " + s.ConfigPath, "需要独立运行的核心服务与已登录的 lark-cli", "SSH 断开后继续运行需要启用 systemd linger", "认证令牌请配置在 CLI 的 cli-watch.env", ""}
+	items := []string{"核心地址: " + s.CoreURL, "会话 ID: " + s.Session, "轮询间隔: " + s.Interval, "启动并启用用户服务", "停止并禁用用户服务", "返回设置"}
+	for i, item := range items {
+		prefix := "  "
+		if i == m.configIndex {
+			prefix = "› "
+		}
+		lines = append(lines, prefix+item)
+	}
+	if m.configEditing {
+		lines = append(lines, "", "输入: "+m.configInput+"▏", "Enter 保存 · Ctrl+U 清空 · Esc 取消")
+	}
+	if m.configNotice != "" {
+		lines = append(lines, "", m.configNotice)
+	}
+	lines = append(lines, "", "↑↓ 选择 · Enter 确认 · Esc 返回")
+	height := max(1, m.height)
+	if len(lines) > height {
+		if height > 2 {
+			lines = append(lines[:2:2], lines[len(lines)-(height-2):]...)
+		} else {
+			lines = lines[len(lines)-height:]
+		}
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	for i, line := range lines {
+		lines[i] = ansi.Truncate(terminalText(line), max(1, m.width), "")
+	}
 	return strings.Join(lines, "\n")
 }

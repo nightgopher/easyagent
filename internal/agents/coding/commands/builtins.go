@@ -18,6 +18,9 @@ import (
 // RegisterBuiltins registers coding-agent slash commands into the shared framework registry.
 func RegisterBuiltins(registry *slashcmd.Registry) {
 	registerWorkflow(registry)
+	registry.Register(slashcmd.Command{Name: "watch", Description: "打开飞书看门狗设置", Handler: func(slashcmd.Context, string) (slashcmd.CommandResult, error) {
+		return slashcmd.CommandResult{Output: "请在交互式终端中使用 /watch"}, nil
+	}})
 	registry.Register(slashcmd.Command{Name: "config", Description: "打开终端设置面板", Handler: func(slashcmd.Context, string) (slashcmd.CommandResult, error) {
 		return slashcmd.CommandResult{Output: "设置面板仅在交互式 TUI 可用；运行 easyagent 后输入 /config。"}, nil
 	}})

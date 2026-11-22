@@ -82,6 +82,8 @@ type TuiModel struct {
 	questionResult    chan QuestionResultMsg // pending ask_user_question reply channel
 	modelSelect       bool                   // Ctrl+P model selector popup active
 	configBackend     ConfigBackend
+	configWatch       bool
+	watchState        WatchSnapshot
 	configOpen        bool
 	configEditing     bool
 	configIndex       int
