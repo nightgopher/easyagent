@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestPhoneSettingsOfferDeviceAndViewingPages(t *testing.T) {
-	want := []string{"connections", "appearance", "general", "usage", "workflows"}
+	want := []string{"connections", "appearance", "speech", "general", "usage", "workflows"}
 	pages := phoneSettingsPages()
 	if len(pages) != len(want) {
 		t.Fatalf("got %d phone settings, want %d", len(pages), len(want))

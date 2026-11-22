@@ -29,4 +29,4 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 )
 
-replace github.com/egoist/mygo => github.com/nightgopher/mygo v0.8.4-0.20261122041547-8b42f3435924
+replace github.com/egoist/mygo => github.com/nightgopher/mygo v0.8.4-0.20261122042639-22eca46b88c3

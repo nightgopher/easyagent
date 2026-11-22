@@ -61,16 +61,24 @@ var settingsPages = []settingsPage{
 	{"memory-knowledge", "记忆与知识", "book", "管理知识来源、Agent 独立记忆与人工整理发布。", "", 2},
 }
 
+var phoneSpeechSettingsPage = settingsPage{"speech", "语音朗读", "play", "选择朗读服务和声音。", "立即生效", 0}
+
 type localPreferences struct {
-	Language        string               `json:"language"`
-	Theme           string               `json:"theme"`
-	LarkWatch       bool                 `json:"lark_watch,omitempty"`
-	Background      wallpaperPreferences `json:"background"`
-	WorkbenchWidth  float32              `json:"workbench_width,omitempty"`
-	TerminalHeight  float32              `json:"terminal_height,omitempty"`
-	Shortcuts       map[string]string    `json:"shortcuts,omitempty"`
-	UpdateProxyMode string               `json:"update_proxy_mode,omitempty"`
-	UpdateProxyURL  string               `json:"update_proxy_url,omitempty"`
+	SpeechProvider    string               `json:"speech_provider,omitempty"`
+	SpeechVoice       string               `json:"speech_voice,omitempty"`
+	SpeechEndpoint    string               `json:"speech_endpoint,omitempty"`
+	SpeechModel       string               `json:"speech_model,omitempty"`
+	SpeechCustomVoice string               `json:"speech_custom_voice,omitempty"`
+	SpeechHasKey      bool                 `json:"speech_has_key,omitempty"`
+	Language          string               `json:"language"`
+	Theme             string               `json:"theme"`
+	LarkWatch         bool                 `json:"lark_watch,omitempty"`
+	Background        wallpaperPreferences `json:"background"`
+	WorkbenchWidth    float32              `json:"workbench_width,omitempty"`
+	TerminalHeight    float32              `json:"terminal_height,omitempty"`
+	Shortcuts         map[string]string    `json:"shortcuts,omitempty"`
+	UpdateProxyMode   string               `json:"update_proxy_mode,omitempty"`
+	UpdateProxyURL    string               `json:"update_proxy_url,omitempty"`
 }
 type demoHost struct {
 	ID, Name, URL string
@@ -117,6 +125,7 @@ type feishuForm struct {
 	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
 }
 type settingsState struct {
+	SpeechAPIKey                                            string
 	HookDraft, HookSaved, HookRevision                      string
 	HookEvent, HookTool, HookCommand, HookArgs, HookTimeout string
 	HookFormOpen, HookEnabled                               bool
@@ -247,10 +256,14 @@ func (a *preview) closeSettings() {
 	a.Settings.HostTokenField.CancelFocus()
 	a.Settings.AppSecret = ""
 	a.Settings.APIKey = ""
+	a.Settings.SpeechAPIKey = ""
 	a.Settings.HostToken = ""
 	a.ReturnToComposer = !phoneClient
 }
 func (s *settingsState) page() settingsPage {
+	if s.Tab == phoneSpeechSettingsPage.ID {
+		return phoneSpeechSettingsPage
+	}
 	for _, p := range settingsPages {
 		if p.ID == s.Tab {
 			return p
