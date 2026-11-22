@@ -1,24 +1,35 @@
 # EasyAgent
 
-**A Go-powered personal AI coding assistant and agent workbench — desktop, Android, web, terminal, Feishu and MCP.**
+**A Go-powered personal AI coding assistant and agent workbench — native desktop, Android, web, terminal TUI, Feishu, and MCP.**
 
-EasyAgent reads and edits code, runs tools with explicit approval, and keeps resumable sessions across a native desktop client, an Android app, a browser workspace, a terminal TUI and Feishu chats. The agent core (providers, tools, sessions, context compaction, skills, local/SSH execution) is reusable as a public Go SDK.
+[中文文档](README.md) · Website: [Easy Suite](https://nightgopher.github.io/easy-suite/) · Docs: [Online Docs](https://nightgopher.github.io/easy-suite/docs/)
 
-> Documentation is Chinese-first. See [README.md](README.md) and [docs/](docs/) for the full manuals; this page only covers the essentials in English.
+EasyAgent reads and edits code, runs tools with explicit approval, and keeps resumable sessions across a native desktop client, an Android app, a browser workspace, a terminal TUI, and Feishu chats. Its agent core (providers, tools, sessions, context compaction, skills, local/SSH execution) is reusable as a public Go SDK.
 
-## Quickstart from source
+![EasyAgent Desktop](https://nightgopher.github.io/easy-suite/screenshots/easyagent-desktop.webp)
 
-Requires Go (see [go.mod](go.mod) for the exact version).
+> Documentation is Chinese-first. See [README.md](README.md) and [docs/](docs/) for the full manuals; this page covers the essentials in English.
+
+## Install
+
+### One-line CLI install (macOS / Linux)
 
 ```bash
-git clone https://github.com/nightgopher/easyagent.git
-cd easyagent
-make build
-cp .env.example .env    # then fill in your provider, model and API key
-./bin/easyagent         # terminal chat
+curl -fsSL https://raw.githubusercontent.com/nightgopher/easyagent/main/scripts/install.sh | bash
 ```
 
-Minimal configuration for an OpenAI-compatible upstream:
+### Desktop, Mobile & Server
+
+Download installers from [GitHub Releases](https://github.com/nightgopher/easyagent/releases/latest) or the [Easy Suite Download Page](https://nightgopher.github.io/easy-suite/download/):
+
+- **macOS (Apple Silicon)** — `easyagent-native-darwin-arm64.dmg` (includes one-click `easyagent` CLI symlink in Settings).
+- **Linux desktop** — `easyagent-native-linux-<arch>.deb`, or `tar.gz` + user-level install script.
+- **Servers (Debian/Ubuntu)** — `easyagent-server_<version>-1_<arch>.deb` registers a systemd service on `127.0.0.1:8080` and generates a random `EA_SERVER_API_KEY`.
+- **Android (8.0+)** — [easyagent-android.apk](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.apk) or [ZIP mirror](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.zip).
+
+## Quickstart
+
+Minimal configuration for an OpenAI-compatible upstream or [EasyGateway](https://github.com/nightgopher/easygateway) (`EA_*` prefix):
 
 ```dotenv
 EA_PROVIDER=openai
@@ -27,20 +38,21 @@ EA_MODEL=your-model-id
 EA_API_KEY=your-api-key
 ```
 
-To serve the web workspace instead of the terminal UI:
+Run the terminal TUI or web workspace:
 
 ```bash
-./bin/easyagent serve --listen 127.0.0.1:8080
+easyagent                                 # interactive TUI
+easyagent serve --listen 127.0.0.1:8080   # web workspace & HTTP API
 ```
 
-All configuration uses the `EA_*` prefix — see the [configuration reference](docs/CONFIG.md) (Chinese) for providers, tool permissions, paths and the HTTP API key.
+Or build from source (requires Go — see [go.mod](go.mod)):
 
-## Install a release
-
-- **macOS (Apple Silicon)** — download [`easyagent-native-darwin-arm64.dmg`](https://github.com/nightgopher/easyagent/releases/latest) from the latest release.
-- **Linux desktop** — `easyagent-native-linux-<arch>.deb`, or the self-updating `tar.gz` + install script.
-- **Servers (Debian/Ubuntu)** — `easyagent-server_<version>-1_<arch>.deb` registers a systemd service on 127.0.0.1:8080 and generates a random `EA_SERVER_API_KEY` on first install.
-- **Android (8.0+)** — [easyagent-android.apk](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.apk) or the [ZIP mirror](https://github.com/nightgopher/easyagent/releases/latest/download/easyagent-android.zip).
+```bash
+git clone https://github.com/nightgopher/easyagent.git
+cd easyagent
+make build
+cp .env.example .env && ./bin/easyagent
+```
 
 ## Security
 
