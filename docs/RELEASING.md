@@ -46,7 +46,7 @@ git push origin refs/tags/v0.1.1-rc.1
 1. 严格版本格式；附注 tag；HEAD 与 tag 一致；提交已进入 main；版本高于现有版本；对应 CHANGELOG 节非空。
 2. 复用完整 Verify：Go 测试/vet、Bubble Tea、Web、更新器、发布脚本、iOS 测试/构建和 Android 单测 / Lint / Debug 构建；发布还必须等待同一 SHA 的 API 31/34/35 UI 测试矩阵通过，并按 [Android 验收清单](QA_ANDROID.md) 记录候选版本和人工检查。Release build check 另在 Apple Silicon runner 构建原生客户端并执行实际 bundle 健康检查，在 Linux runner 使用一次性密钥演练签名 Release APK。
 3. 同一 SHA 在四台 Ubuntu runner 并行构建 Linux/macOS、amd64/arm64 的核心与桥接共 8 个程序，注入相同版本。各平台产物校验源码元数据，PR 再汇总校验完整核心清单。核心、桌面、Android 构建与测试在版本校验后并行开始，发布入口等待所有检查和构建成功。原生 DMG 在 Apple Silicon runner 构建，核验包版本与 tag 一致、Bundle ID 为 `com.hwj.easyagent`，并启动实际 bundle 核心检查健康响应和子进程回收。
-4. v0.21.0 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产、1 个签名 Android APK 和 1 个 ZIP 备用包、2 个 Linux 桌面 deb、2 个 Linux 用户级自更新 tar.gz 及配套 install 脚本与签名清单、2 个服务端 deb，加上 `release.json` 与 `checksums.txt`，共 25 项资产；v0.19.2 至 v0.20.0 保留历史的 15 项，v0.19.0 至 v0.19.1 为 14 项，v0.16.0 至 v0.18.1 为 13 项。`core_only` 清单不能发布；缺少必需文件、空文件、额外旧 Electron 文件或校验失败均阻止发布。Linux 桌面 deb 由独立的 Linux runner 并行构建（amd64 直接执行包内核心校验版本，arm64 依赖同一 prepare 流水线与 deb 元数据校验），签名更新清单使用与 macOS 相同的 `MYGO_UPDATER_PRIVATE_KEY` 并在打包目录内复核签名与 URL。服务端 deb 复用核心 job 已构建并校验过 vcs 元数据的两个 Linux 二进制。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹；ZIP 须仅包含与独立 APK 字节完全一致的 `easyagent-android.apk`。v0.51.0 起新增 MyGo Android 客户端 APK 1 项（`easyagent-mygo-android.apk`，`mygo-android` job 构建，与 Kotlin APK 并存分发，暂为调试签名），达 27 项资产；此后资产变化须同步 `release.py` 清单与本段计数。
+4. v0.21.0 起汇集 8 个核心及桥接程序、1 个原生 DMG、2 项桌面签名更新资产、1 个签名 Android APK 和 1 个 ZIP 备用包、2 个 Linux 桌面 deb、2 个 Linux 用户级自更新 tar.gz 及配套 install 脚本与签名清单、2 个服务端 deb，加上 `release.json` 与 `checksums.txt`，共 25 项资产；v0.19.2 至 v0.20.0 保留历史的 15 项，v0.19.0 至 v0.19.1 为 14 项，v0.16.0 至 v0.18.1 为 13 项。`core_only` 清单不能发布；缺少必需文件、空文件、额外旧 Electron 文件或校验失败均阻止发布。Linux 桌面 deb 由独立的 Linux runner 并行构建（amd64 直接执行包内核心校验版本，arm64 依赖同一 prepare 流水线与 deb 元数据校验），签名更新清单使用与 macOS 相同的 `MYGO_UPDATER_PRIVATE_KEY` 并在打包目录内复核签名与 URL。服务端 deb 复用核心 job 已构建并校验过 vcs 元数据的两个 Linux 二进制。Android 构建另校验应用标识、版本、最低系统版本、非 Debug 属性与固定证书指纹；ZIP 须仅包含与独立 APK 字节完全一致的 `easyagent-android.apk`。v0.51.0 起新增 MyGo Android 客户端 APK 1 项（`easyagent-mygo-android.apk`，`mygo-android` job 构建，与 Kotlin APK 并存分发；v0.53.0 起使用固定 Android 发布证书签名），达 27 项资产；此后资产变化须同步 `release.py` 清单与本段计数。
 5. 先建草稿，上传全部资产，核对 GitHub 返回的各文件 digest，再一次性公开；已公开版本拒绝重传。失败只保留草稿供检查，不公开半套文件。
 
 发布相关脚本变更还会运行 `Release build check`：在临时仓库创建仅供测试的 tag，实际构建所有核心目标与原生桌面目标，不向 GitHub 推送测试 tag，也不创建 Release。
@@ -98,6 +98,8 @@ SHA-256 用于检测下载损坏，信任根仍是 GitHub HTTPS 和发布权限�
 - **失败处理**：同步失败不影响已发布的 GitHub Release；修复原因后手动重跑即可，已上传的资产会被跳过。
 
 ## Android 签名与发布
+
+MyGo Android 自 v0.53.0 起使用相同的固定发布证书签名，发布时重新签名并校验应用标识、版本和证书。之前 MyGo 发布包使用临时调试签名，无法直接覆盖升级到固定签名：用户应先保存旧版所需本地数据，再卸载、安装及重新配对；不能声称升级保留手机端数据。Kotlin Android 使用不同应用标识，不受此迁移影响。
 
 完整 Release 仍总是包含 APK，但 `release.json` 额外记录 `"sources": {"android": <发布提交中 mobile-native/ 的 git tree>}`，发布前由 `publish-release.py` 按同一提交重新计算核对。正式构建在 `mobile-native/` 无未提交修改时把同一 tree 写入 `BuildConfig.SOURCE_TREE`。应用内更新发现最新版本的 tree 与已安装应用相同（本次没有改动 Android 源码）时不提示升级；开发构建的 tree 为空，旧版本清单没有该字段，均按版本号正常比较。APK 只依赖 `mobile-native/` 和版本号，因此不按其他目录判断；桌面客户端内嵌 Go 核心，几乎每个版本都有变化，不做同类跳过。
 

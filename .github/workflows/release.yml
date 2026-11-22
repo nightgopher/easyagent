@@ -269,9 +269,9 @@ jobs:
           java-version: '17'
       - name: Install the Android NDK and platform
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36' 'build-tools;35.0.1'
       - name: Install the MyGo CLI
-        run: go install github.com/egoist/mygo/cmd/mygo@v0.10.0
+        run: cd desktop-native && go install github.com/egoist/mygo/cmd/mygo
       - name: Build the MyGo Android APK
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -279,16 +279,15 @@ jobs:
           cd desktop-native
           "$(go env GOPATH)/bin/mygo" build -platform android/arm64
           mkdir -p "${GITHUB_WORKSPACE}/dist"
-          cp "build.noindex/android/easyagent-${TAG#v}.apk" "${GITHUB_WORKSPACE}/dist/easyagent-mygo-android.apk"
-      - name: Verify the APK identity
+          cp "build.noindex/android/easyagent-${TAG#v}.apk" "${RUNNER_TEMP}/easyagent-mygo-unsigned.apk"
+      - name: Sign and verify the MyGo APK
         env:
           TAG: ${{ needs.validate.outputs.version }}
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          badging=$("$ANDROID_HOME/build-tools/35.0.1/aapt2" dump badging dist/easyagent-mygo-android.apk | head -1)
-          echo "$badging"
-          # versionCode 位于 name 与 versionName 之间，分开匹配两个字段。
-          echo "$badging" | grep -F "package: name='com.hwj.easyagent'"
-          echo "$badging" | grep -F "versionName='${TAG#v}'"
+          python3 scripts/sign-mygo-apk.py "$RUNNER_TEMP/easyagent-mygo-unsigned.apk" dist/easyagent-mygo-android.apk "$TAG"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt2" dump xmltree dist/easyagent-mygo-android.apk --file AndroidManifest.xml | grep -F 'android.intent.action.TTS_SERVICE'
       - uses: actions/upload-artifact@v7
         with:
           name: release-mygo-android
