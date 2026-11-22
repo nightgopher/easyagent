@@ -23,6 +23,7 @@ type fakeHost struct {
 	hold             bool
 	parallel         chan string
 	release          chan struct{}
+	deadline         chan bool
 }
 
 func (f *fakeHost) Prepare(context.Context, string) (json.RawMessage, error) {
@@ -35,6 +36,10 @@ func (f *fakeHost) Actor(_ context.Context, _ string, _ json.RawMessage, p Perso
 	return p.Name, nil
 }
 func (f *fakeHost) Ask(ctx context.Context, id, prompt string, typed bool, _ json.RawMessage) (string, error) {
+	if f.deadline != nil {
+		_, ok := ctx.Deadline()
+		f.deadline <- ok
+	}
 	f.mu.Lock()
 	f.calls[prompt]++
 	f.history[id] = append(f.history[id], prompt)
@@ -67,6 +72,16 @@ func (f *fakeHost) Ask(ctx context.Context, id, prompt string, typed bool, _ jso
 		return `{"ok":true,"items":["A","B"]}`, nil
 	}
 	return "OUT:" + prompt, nil
+}
+
+func TestInteractiveWorkflowHasNoInternalDeadline(t *testing.T) {
+	m, host, _, _ := newManager(t)
+	host.deadline = make(chan bool, 1)
+	run, err := m.Start(context.Background(), "long", `const a=agent("author"); return await a.ask("probe");`, "")
+	require.NoError(t, err)
+	result := waitRun(t, m, run.ID)
+	require.Equal(t, "completed", result.Status, result.Error)
+	require.False(t, <-host.deadline, "workflow imposed a deadline on its actor")
 }
 func newManager(t *testing.T) (*Manager, *fakeHost, string, string) {
 	t.Helper()
@@ -162,13 +177,15 @@ func TestDynamicInvalidScriptNeverCallsHost(t *testing.T) {
 	_, err = m.Start(context.Background(), "large", strings.Repeat("x", 65<<10), "")
 	require.Error(t, err)
 }
-func TestDynamicBusyScriptCancellation(t *testing.T) {
+func TestDynamicBusyScriptDeadline(t *testing.T) {
 	m, _, _, _ := newManager(t)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	run, err := m.Start(ctx, "busy", `while(true) {}`, "")
 	require.NoError(t, err)
-	require.Equal(t, "cancelled", waitRun(t, m, run.ID).Status)
+	finished := waitRun(t, m, run.ID)
+	require.Equal(t, "failed", finished.Status)
+	require.Contains(t, finished.Error, "deadline exceeded")
 }
 
 func TestIndependentActorsRunConcurrently(t *testing.T) {

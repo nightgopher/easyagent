@@ -97,6 +97,10 @@ func projectWorkflow(run map[string]any) ([]workflowStage, []workflowRelation) {
 	for _, raw := range nodes {
 		n := object(raw)
 		site, actor, status := str(n["siteId"]), str(n["actorSiteId"]), str(n["status"])
+		runStatus := str(run["status"])
+		if status == "running" && (runStatus == "completed" || runStatus == "failed" || runStatus == "cancelled" || runStatus == "interrupted" || runStatus == "stopped") {
+			status = "interrupted"
+		}
 		statusBySite[site] = workflowAggregate(statusBySite[site], status)
 		key := workflowNodeKey{Site: site, Actor: actor}
 		statusByLane[key] = workflowAggregate(statusByLane[key], status)
@@ -246,7 +250,7 @@ func projectWorkflow(run map[string]any) ([]workflowStage, []workflowRelation) {
 }
 
 func workflowAggregate(a, b string) string {
-	priority := map[string]int{"": 0, "pending": 1, "completed": 2, "running": 3, "failed": 4}
+	priority := map[string]int{"": 0, "pending": 1, "completed": 2, "running": 3, "interrupted": 4, "failed": 5}
 	if priority[b] > priority[a] {
 		return b
 	}
