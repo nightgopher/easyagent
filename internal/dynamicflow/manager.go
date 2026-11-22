@@ -191,7 +191,7 @@ func (m *Manager) Resume(ctx context.Context, id string) (*Run, error) {
 	return clone(run), nil
 }
 func (m *Manager) launch(ctx context.Context, run *Run) {
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Minute)
+	ctx, cancel := context.WithCancel(ctx)
 	active := &activeRun{cancel: cancel, done: make(chan struct{})}
 	m.active[run.ID] = active
 	go func() {
@@ -200,7 +200,7 @@ func (m *Manager) launch(ctx context.Context, run *Run) {
 		if err != nil {
 			run.Status = "failed"
 			run.Error = err.Error()
-			if ctx.Err() != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
 				run.Status = "cancelled"
 			}
 		}
@@ -235,7 +235,45 @@ func (m *Manager) Get(id string) (*Run, error) {
 	if r == nil {
 		return nil, os.ErrNotExist
 	}
-	return clone(r), nil
+	view := clone(r)
+	if view.Status != "running" {
+		view.State = interruptedNodes(view.State)
+	}
+	return view, nil
+}
+
+// The worker can be stopped before its final snapshot. Preserve its journal
+// for recovery while ensuring readers do not see stopped nodes as running.
+func interruptedNodes(state json.RawMessage) json.RawMessage {
+	var doc map[string]json.RawMessage
+	if json.Unmarshal(state, &doc) != nil {
+		return state
+	}
+	var nodes []map[string]json.RawMessage
+	if json.Unmarshal(doc["nodes"], &nodes) != nil {
+		return state
+	}
+	changed := false
+	for _, node := range nodes {
+		var status string
+		if json.Unmarshal(node["status"], &status) == nil && status == "running" {
+			node["status"] = json.RawMessage(`"interrupted"`)
+			changed = true
+		}
+	}
+	if !changed {
+		return state
+	}
+	encoded, err := json.Marshal(nodes)
+	if err != nil {
+		return state
+	}
+	doc["nodes"] = encoded
+	encoded, err = json.Marshal(doc)
+	if err != nil {
+		return state
+	}
+	return encoded
 }
 func (m *Manager) List() []*Run {
 	m.mu.Lock()
