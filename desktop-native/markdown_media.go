@@ -250,5 +250,5 @@ func (a *preview) renderSessionMarkdown(c *ui.Context, d *markdownDocument, text
 			return decodeNativeImage(data, target)
 		}
 	}
-	d.render(c, markdownFileReferences(text), streaming)
+	d.render(c, d.fileReferences(text), streaming)
 }
