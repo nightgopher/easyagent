@@ -2,8 +2,13 @@
   "mobile": {
     "id": "easyagent_tts",
     "android": {
-      "sources": ["android/*.kt"],
-      "class": "EasyAgentTTSPlugin"
+      "sources": [
+        "android/*.kt"
+      ],
+      "class": "EasyAgentTTSPlugin",
+      "queries": [
+        "android.intent.action.TTS_SERVICE"
+      ]
     }
   }
 }
