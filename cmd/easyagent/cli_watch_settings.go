@@ -22,7 +22,7 @@ const cliWatchMarker = "# Managed by EasyAgent CLI watch settings\n"
 var cliWatchPlatform = runtime.GOOS
 
 func checkWatchLinger(ctx context.Context) error {
-	out, err := exec.CommandContext(ctx, "loginctl", "show-user", strconv.Itoa(os.Getuid()), "--property=Linger", "--value").CombinedOutput()
+	out, err := exec.CommandContext(ctx, "loginctl", "show-user", strconv.Itoa(os.Getuid()), "--property=Linger", "--value").CombinedOutput() //nolint:gosec // UID is obtained from the current process, not user input.
 	if err != nil {
 		return fmt.Errorf("无法检查 systemd linger 状态：%w", err)
 	}
