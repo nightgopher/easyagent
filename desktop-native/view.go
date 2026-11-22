@@ -739,6 +739,9 @@ func (a *preview) conversationMessage(key *ui.Context, s *session, i int, m *mes
 				// The latest reply keeps its actions visible: copying or forking the
 				// answer just given is the common case.
 				messageActions(key, reveal || i == latestReply(s), func() {
+					if phoneClient {
+						a.speechButton(key, m.Text, fmt.Sprintf("朗读回复 %d", i))
+					}
 					if a.Live != nil {
 						iconButton(key, "plus", fmt.Sprintf("选择回复 %d 整理", i)).OnClick(func() { a.collectMaterial(m.Text, "session:"+s.RemoteID+"/entry:"+m.EntryID) })
 						iconButton(key, "file", fmt.Sprintf("保存回复 %d 为成果", i)).OnClick(func() { a.prepareArtifact(s, m) })
