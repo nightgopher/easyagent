@@ -76,7 +76,7 @@ func (b *cliConfigBackend) WatchSnapshot(ctx context.Context) tui.WatchSnapshot 
 		s.Status = "已有同名服务文件，CLI 未接管"
 		return s
 	}
-	unit, err := os.ReadFile(unitPath)
+	unit, err := os.ReadFile(unitPath) //nolint:gosec // Fixed unit name under the user's systemd config directory.
 	if err != nil {
 		s.Status = "状态不可用: " + err.Error()
 		return s
@@ -179,7 +179,7 @@ func (b *cliConfigBackend) SetWatchRunning(ctx context.Context, start bool) erro
 		if !info.Mode().IsRegular() {
 			return fmt.Errorf("已有非普通文件，未操作: %s", unitPath)
 		}
-		old, readErr := os.ReadFile(unitPath)
+		old, readErr := os.ReadFile(unitPath) //nolint:gosec // Fixed unit name under the user's systemd config directory.
 		if readErr != nil {
 			return readErr
 		}
@@ -231,7 +231,26 @@ func (b *cliConfigBackend) SetWatchRunning(ctx context.Context, start bool) erro
 	}
 	// Unit arguments use systemd quoting. No tokens are written into this file.
 	unit := cliWatchMarker + "[Unit]\nDescription=EasyAgent CLI Feishu inbox watch\nAfter=network-online.target\n[Service]\nType=simple\nEnvironment=" + q("EA_HOME="+home) + "\nEnvironment=" + q("PATH="+os.Getenv("PATH")) + "\nEnvironmentFile=-" + q(filepath.Join(home, "cli-watch.env")) + "\nExecStart=" + q(binary) + " watch serve --config " + q(filepath.Join(home, "cli-watch.json")) + " --state-file " + q(filepath.Join(home, "cli-watch-state.json")) + "\nRestart=on-failure\nRestartSec=5\n[Install]\nWantedBy=default.target\n"
-	if err = os.WriteFile(unitPath, []byte(unit), 0600); err != nil {
+	f, err := os.CreateTemp(unitDir, ".easyagent-watch-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	if err = f.Chmod(0600); err == nil {
+		_, err = f.WriteString(unit)
+	}
+	if e := f.Close(); err == nil {
+		err = e
+	}
+	if err != nil {
+		return err
+	}
+	root, err := os.OpenRoot(unitDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err = root.Rename(filepath.Base(f.Name()), cliWatchUnit); err != nil {
 		return err
 	}
 	out, err := exec.CommandContext(ctx, "systemctl", "--user", "daemon-reload").CombinedOutput()
