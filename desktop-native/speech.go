@@ -23,6 +23,7 @@ func (a *preview) stopSpeech() {
 		return
 	}
 	l := a.Live
+	l.SpeechPendingText, l.SpeechPendingSession = "", nil
 	l.SpeechGeneration++
 	if l.SpeechCancel != nil {
 		l.SpeechCancel()
@@ -37,6 +38,43 @@ func (a *preview) stopSpeech() {
 		defer cancel()
 		_ = platformStopSpeech(ctx)
 	}()
+}
+
+// completedSpeechText only returns a newly finished run's reply, never history.
+func completedSpeechText(s *session, wasRunning bool, runID string) string {
+	if !wasRunning || s.Running || s.Run == nil || s.Run.State != "completed" || runID == "" || s.Run.ID != runID {
+		return ""
+	}
+	for i := len(s.Messages) - 1; i >= 0; i-- {
+		m := s.Messages[i]
+		matchesRun := m.RunID == runID || (s.Run.AssistantEntry != "" && m.EntryID == s.Run.AssistantEntry)
+		if matchesRun && !m.User && m.Kind == "" && m.Tool == "" {
+			return strings.TrimSpace(m.Text)
+		}
+	}
+	return ""
+}
+
+func (a *preview) autoSpeechButton(c *ui.Context) {
+	if !platformSpeechAvailable() || a.Live == nil {
+		return
+	}
+	enabled := a.Settings.Preferences.SpeechAuto
+	label, glyph := "开启自动朗读", "volume-off"
+	if enabled {
+		label, glyph = "关闭自动朗读", "volume-on"
+	}
+	button := iconButton(c, glyph, label)
+	if enabled {
+		button.TextColor(c.Theme().Accent)
+	}
+	button.OnClick(func() {
+		a.Settings.Preferences.SpeechAuto = !enabled
+		a.Settings.savePreferences()
+		if enabled {
+			a.stopSpeech()
+		}
+	})
 }
 func (a *preview) playSpeech(text string) {
 	if a.Live == nil || !platformSpeechAvailable() {
