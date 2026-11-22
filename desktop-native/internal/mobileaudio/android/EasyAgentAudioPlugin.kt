@@ -1,8 +1,6 @@
 package dev.mygo
 
 import android.Manifest
-import android.media.AudioFormat
-import android.media.AudioRecord
 import android.media.MediaRecorder
 import org.json.JSONObject
 import java.io.File
@@ -10,18 +8,15 @@ import kotlin.concurrent.thread
 
 class EasyAgentAudioPlugin : MyGoPlugin {
     init {
-        // A killed process cannot run Stop; remove only this plugin's old
-        // private recordings when the application starts again.
+        // Clean up only files owned by this plugin after an interrupted run.
         PluginHost.context.cacheDir.listFiles()?.forEach { file ->
-            if (file.name.startsWith("easyagent-voice-") && file.name.endsWith(".pcm")) file.delete()
+            if (file.name.startsWith("easyagent-voice-") &&
+                (file.name.endsWith(".pcm") || file.name.endsWith(".m4a"))) file.delete()
         }
     }
 
-    private class Recording(val audio: AudioRecord, val file: File) {
-        @Volatile var active = true
-        @Volatile var error: String? = null
-        @Volatile var level: Float = 0f
-        lateinit var worker: Thread
+    private class Recording(val audio: MediaRecorder, val file: File) {
+        @Volatile var tooLong = false
     }
 
     private var recording: Recording? = null
@@ -38,68 +33,40 @@ class EasyAgentAudioPlugin : MyGoPlugin {
                         reply.failure(PluginFailure("PermissionDenied", "未获得麦克风权限"))
                         return@requestPermissions
                     }
+                    var audio: MediaRecorder? = null
+                    var file: File? = null
                     try {
-                        val minBuffer = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-                        check(minBuffer > 0) { "录音设备不可用" }
-                        val audio = AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, 4096))
-                        if (audio.state != AudioRecord.STATE_INITIALIZED) {
-                            audio.release()
-                            throw IllegalStateException("录音设备初始化失败")
+                        file = File.createTempFile("easyagent-voice-", ".m4a", PluginHost.context.cacheDir)
+                        @Suppress("DEPRECATION")
+                        val recorder = MediaRecorder()
+                        audio = recorder
+                        val r = Recording(recorder, file)
+                        recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                        recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                        recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                        recorder.setAudioChannels(1)
+                        recorder.setAudioSamplingRate(16000)
+                        recorder.setAudioEncodingBitRate(32000)
+                        recorder.setOutputFile(file.absolutePath)
+                        recorder.setMaxDuration(600_000)
+                        recorder.setOnInfoListener { _, what, _ ->
+                            if (what == MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED) r.tooLong = true
                         }
-                        val file = try {
-                            File.createTempFile("easyagent-voice-", ".pcm", PluginHost.context.cacheDir)
-                        } catch (e: Exception) {
-                            audio.release()
-                            throw e
-                        }
-                        val r = Recording(audio, file)
-                        try {
-                            audio.startRecording()
-                        } catch (e: Exception) {
-                            audio.release()
-                            file.delete()
-                            throw e
-                        }
+                        recorder.prepare()
+                        recorder.start()
                         recording = r
-                        r.worker = thread(name = "easyagent-microphone") {
-                            try {
-                                file.outputStream().use { output ->
-                                    val buffer = ByteArray(maxOf(minBuffer, 4096))
-                                    var total = 0
-                                    while (r.active && total < 19_200_000) {
-                                        val n = audio.read(buffer, 0, minOf(buffer.size, 19_200_000 - total))
-                                        if (n > 0) {
-                                            output.write(buffer, 0, n)
-                                            var peak = 0
-                                            for (i in 0 until n - 1 step 2) {
-                                                val sample = ((buffer[i].toInt() and 0xff) or (buffer[i + 1].toInt() shl 8)).toShort().toInt()
-                                                peak = maxOf(peak, kotlin.math.abs(sample))
-                                            }
-                                            r.level = minOf(1f, peak / 8192f)
-                                            total += n
-                                        } else if (n < 0 && r.active) {
-                                            throw IllegalStateException("录音设备读取失败")
-                                        }
-                                    }
-                                    if (total >= 19_200_000) {
-                                        r.error = "TooLong"
-                                        r.active = false
-                                        runCatching { audio.stop() }
-                                    }
-                                }
-                            } catch (e: Exception) {
-                                r.error = "录音保存失败"
-                                r.active = false
-                                runCatching { audio.stop() }
-                            }
-                        }
                         reply.success(null)
                     } catch (e: Exception) {
+                        runCatching { audio?.release() }
+                        file?.delete()
                         reply.failure(PluginFailure("Unavailable", e.message ?: "录音设备不可用"))
                     }
                 }
             }
-            "level" -> reply.success(JSONObject().put("level", recording?.level ?: 0f))
+            "level" -> {
+                val level = try { (recording?.audio?.maxAmplitude ?: 0) / 8192f } catch (_: Exception) { 0f }
+                reply.success(JSONObject().put("level", minOf(1f, level)))
+            }
             "stop" -> {
                 val r = recording
                 if (r == null) {
@@ -107,15 +74,12 @@ class EasyAgentAudioPlugin : MyGoPlugin {
                     return
                 }
                 recording = null
-                r.active = false
                 thread(name = "easyagent-stop-microphone") {
-                    runCatching { r.audio.stop() }
-                    r.worker.join()
-                    r.audio.release()
-                    val error = r.error
-                    if (error != null) {
+                    val stopped = runCatching { r.audio.stop() }.isSuccess
+                    runCatching { r.audio.release() }
+                    if (!stopped || r.tooLong || r.file.length() == 0L) {
                         r.file.delete()
-                        reply.failure(PluginFailure(if (error == "TooLong") error else "RecordingFailed", error))
+                        reply.failure(PluginFailure(if (r.tooLong) "TooLong" else "RecordingFailed", "录音失败"))
                     } else {
                         reply.success(JSONObject().put("path", r.file.absolutePath))
                     }

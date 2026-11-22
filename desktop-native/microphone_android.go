@@ -79,11 +79,11 @@ func (m *androidMicrophone) Stop() ([]byte, error) {
 		return nil, errors.New("未录到声音，请重试")
 	}
 	defer os.Remove(result.Path)
-	pcm, err := os.ReadFile(result.Path)
-	if err != nil || len(pcm) == 0 {
+	audio, err := os.ReadFile(result.Path)
+	if err != nil || !isM4AAudio(audio) {
 		return nil, errors.New("未录到声音，请重试")
 	}
-	return pcmWAV(pcm), nil
+	return audio, nil
 }
 
 func (m *androidMicrophone) Levels() [6]float32 {
