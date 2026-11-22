@@ -154,6 +154,19 @@ func (a *preview) startVoice() {
 	})
 }
 
+// Android records AAC in an ISO base media container. Other platforms keep
+// their existing WAV recordings, including recordings saved for retry.
+func isM4AAudio(data []byte) bool {
+	return len(data) >= 12 && string(data[4:8]) == "ftyp"
+}
+
+func voiceFileName(data []byte) string {
+	if isM4AAudio(data) {
+		return "voice.m4a"
+	}
+	return "voice.wav"
+}
+
 func (a *preview) retryVoice() {
 	l := a.Live
 	pending := l.PendingVoice
@@ -187,7 +200,7 @@ func (a *preview) retryVoice() {
 		}
 		var body bytes.Buffer
 		w := multipart.NewWriter(&body)
-		part, err := w.CreateFormFile("file", "voice.wav")
+		part, err := w.CreateFormFile("file", voiceFileName(pending.Data))
 		if err == nil {
 			_, err = part.Write(pending.Data)
 		}
