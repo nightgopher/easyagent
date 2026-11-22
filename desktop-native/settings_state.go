@@ -65,6 +65,7 @@ var phoneSpeechSettingsPage = settingsPage{"speech", "语音朗读", "play", "�
 
 type localPreferences struct {
 	SpeechProvider    string               `json:"speech_provider,omitempty"`
+	SpeechAuto        bool                 `json:"speech_auto,omitempty"`
 	SpeechVoice       string               `json:"speech_voice,omitempty"`
 	SpeechEndpoint    string               `json:"speech_endpoint,omitempty"`
 	SpeechModel       string               `json:"speech_model,omitempty"`
