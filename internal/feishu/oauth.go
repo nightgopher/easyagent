@@ -387,7 +387,7 @@ func NewGatewayManager() *GatewayManager {
 
 // StartWithCredentials starts the feishu gateway using saved or provided credentials.
 func (gm *GatewayManager) StartWithCredentials(creds Credentials, client *Client, handler MessageHandler) error {
-	return gm.start(creds, client, handler, nil, nil)
+	return gm.start(creds, client, handler, nil, nil, nil)
 }
 
 // StartWithHandler starts the gateway with the full Feishu handler, including
@@ -396,10 +396,10 @@ func (gm *GatewayManager) StartWithHandler(creds Credentials, client *Client, ha
 	if handler == nil {
 		return fmt.Errorf("feishu handler is required")
 	}
-	return gm.start(creds, client, handler.Handle, handler.HandleCardAction, func(g *Gateway) { handler.SetGateway(g); handler.SetOwnerAccess(g.access) })
+	return gm.start(creds, client, handler.Handle, handler.HandleCardAction, func(g *Gateway) { handler.SetGateway(g); handler.SetOwnerAccess(g.access) }, handler.StartNotificationWorker)
 }
 
-func (gm *GatewayManager) start(creds Credentials, client *Client, handler MessageHandler, cardHandler CardActionHandler, attach func(*Gateway)) error {
+func (gm *GatewayManager) start(creds Credentials, client *Client, handler MessageHandler, cardHandler CardActionHandler, attach func(*Gateway), onStart func(context.Context)) error {
 	gm.mu.Lock()
 	defer gm.mu.Unlock()
 
@@ -430,11 +430,15 @@ func (gm *GatewayManager) start(creds Credentials, client *Client, handler Messa
 		attach(gw)
 	}
 
+	if onStart != nil {
+		onStart(ctx)
+	}
 	gm.gateway = gw
 	gm.cancel = cancel
 	gm.running = true
 
 	go func() {
+		defer cancel()
 		defer func() {
 			gm.mu.Lock()
 			gm.running = false
