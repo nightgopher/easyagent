@@ -94,6 +94,8 @@ EA_API_KEY=your-api-key
 
 TUI 中输入 `/help` 查看命令。`Enter` 发送，`Ctrl+J` 换行，`PgUp/PgDn` 翻页；鼠标拖选后松开复制，`F2` 复制最近回复，`F3` 复制完整对话及工具结果，`Esc` 清除选区。点击工具组或命令标题展开详情，`Ctrl+O` 切换最近工具组。`Ctrl+T` 进入工具浏览，`↑↓` 选择组或命令，`Enter` 展开/折叠，`F2` 复制选中工具的完整参数和结果，`Esc` 返回输入。`Ctrl+P` 或 `/models` 打开模型选择器，可直接输入搜索，`Ctrl+U` 清空搜索。使用 `--session <ID>` 或 `/switch` 恢复会话时会显示当前分支完整历史。等待、输出文字和工具执行分别显示状态与耗时；输入草稿非空时，空闲 `Ctrl+C` 会保留草稿。macOS 使用 `pbcopy`，Linux 使用 `wl-copy`、`xclip` 或 `xsel`；复制失败会显示提示。
 
+输入 `/config` 可查看当前会话模型与 CLI 默认模型，从列表或通过模型 ID 设置新会话的默认模型；当前会话模型仍可单独切换。CLI 默认值与桌面主机的设置相互独立，配置优先级见 [配置说明](docs/CONFIG.md)。
+
 `easyagent update` 升级到最新 Release：SHA-256 校验后原子替换二进制，失败自动回滚保留旧安装；`-y` 免确认（远程服务器脚本用），`--check` 只检查。TUI 里也可直接输入 `/update`。升级在重启后生效，运行中的会话不受影响。迷你主机由 `easyagent-update.timer` 跟踪 main 构建，与该命令是两条独立通道，同一主机不要混用。
 
 默认提供联网搜索和公开网页读取；已有配置中明确关闭时，可用 `--web=true --web-search=true` 为当前 CLI 进程开启。搜索依赖运行主机访问搜索服务，详见[工具配置](docs/CONFIG.md#工具和文件路径)。

@@ -49,6 +49,8 @@ func main() {
 	if explicitModel == "" {
 		explicitModel = strings.TrimSpace(os.Getenv("OPENAI_MODEL"))
 	}
+	explicitCodex := strings.TrimSpace(os.Getenv("EA_CODEX_MODEL"))
+	explicitAnthropic := strings.TrimSpace(os.Getenv("ANTHROPIC_MODEL"))
 
 	// Version flag (injectable via -ldflags "-X main.version=...")
 	versionFlag := flag.Bool("version", false, "Print version and exit")
@@ -156,6 +158,10 @@ func main() {
 			outsideWorkspaceExplicit = true
 		}
 	})
+	if err := applyCLIDefault(&cfg, config.HomeDir(), *modeFlag, explicitProvider, explicitModel, explicitCodex, explicitAnthropic); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	if err := applyEasyCodeCLISelection(context.Background(), &cfg, config.HomeDir(), *modeFlag, explicitProvider, explicitModel); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -212,7 +218,8 @@ func main() {
 		if *legacyTUI {
 			must(mode.NewInteractiveMode(sess, cmds, application).Run(context.Background()))
 		} else {
-			must(tui.Run(sess, cmds, application, sess.AccessMode() == "full"))
+			settings := &cliConfigBackend{app: application, home: config.HomeDir(), explicitProvider: explicitProvider, explicitModel: explicitModel, explicitCodex: explicitCodex, explicitAnthropic: explicitAnthropic}
+			must(tui.Run(sess, cmds, application, sess.AccessMode() == "full", settings))
 		}
 
 	case "run":
