@@ -215,11 +215,11 @@ func (m *Manager) execute(ctx context.Context, id string) error {
 	askMu.Unlock()
 	cancelAll()
 	requests.Wait()
-	if failure != nil {
-		return failure
-	}
 	if parentCtx.Err() != nil {
 		return parentCtx.Err()
+	}
+	if failure != nil {
+		return failure
 	}
 	if waitErr != nil {
 		return fmt.Errorf("workflow process failed: %w", waitErr)
