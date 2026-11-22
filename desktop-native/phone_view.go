@@ -26,11 +26,7 @@ func (a *preview) phoneChrome(c *ui.Context) {
 		if !a.Settings.Open {
 			ui.Text(c, a.connectionLabel()).FontSize(11).TextColor(c.Theme().TextMuted)
 			if !a.Sidebar {
-				text := ""
-				if i := latestReply(a.current()); i >= 0 && !a.current().Running {
-					text = a.current().Messages[i].Text
-				}
-				a.speechButton(c, text, "朗读最新回复")
+				a.autoSpeechButton(c)
 			}
 			iconButton(c, "settings", "设置").OnClick(func() {
 				a.openSettings("connections")

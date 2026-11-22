@@ -88,6 +88,8 @@ type liveState struct {
 	VoiceStarted                                                           time.Time
 	VoiceGeneration                                                        uint64
 	SpeechPlaying                                                          bool
+	SpeechPendingText                                                      string
+	SpeechPendingSession                                                   *session
 	SpeechGeneration                                                       uint64
 	SpeechCancel                                                           context.CancelFunc
 	SpeechNext                                                             time.Time
@@ -338,6 +340,14 @@ func (a *preview) liveTick() bool {
 			}
 		})
 	}
+	if l.SpeechPendingText != "" && !l.SpeechPlaying && !l.Loading["speech"] {
+		text, owner := l.SpeechPendingText, l.SpeechPendingSession
+		l.SpeechPendingText, l.SpeechPendingSession = "", nil
+		if a.Settings.Preferences.SpeechAuto && a.current() == owner {
+			a.playSpeech(text)
+			changed = true
+		}
+	}
 	return changed
 }
 func (a *preview) background(work func(context.Context, *backendClient) (any, error), done func(any)) {
@@ -583,7 +593,13 @@ func (a *preview) receive(e envelope) {
 			s.Sending = false
 			l.Error = e.Message
 		}
+		wasRunning, previousRun := s.Running, s.runID()
 		s.reduce(e)
+		if phoneClient && a.Settings.Preferences.SpeechAuto && a.current() == s {
+			if text := completedSpeechText(s, wasRunning, previousRun); text != "" {
+				l.SpeechPendingText, l.SpeechPendingSession = text, s
+			}
+		}
 		if e.Type == "snapshot" {
 			a.resolveSessionSearchHit(s)
 		}
