@@ -269,9 +269,9 @@ jobs:
           java-version: '17'
       - name: Install the Android NDK and platform
         run: |
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.2.12479018' 'platforms;android-36' 'build-tools;35.0.1'
       - name: Install the MyGo CLI
-        run: go install github.com/egoist/mygo/cmd/mygo@v0.10.0
+        run: cd desktop-native && go install github.com/egoist/mygo/cmd/mygo
       - name: Build the MyGo Android APK
         env:
           TAG: ${{ needs.validate.outputs.version }}
@@ -285,7 +285,9 @@ jobs:
           TAG: ${{ needs.validate.outputs.version }}
           ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-        run: python3 scripts/sign-mygo-apk.py "$RUNNER_TEMP/easyagent-mygo-unsigned.apk" dist/easyagent-mygo-android.apk "$TAG"
+        run: |
+          python3 scripts/sign-mygo-apk.py "$RUNNER_TEMP/easyagent-mygo-unsigned.apk" dist/easyagent-mygo-android.apk "$TAG"
+          "$ANDROID_HOME/build-tools/35.0.1/aapt2" dump xmltree dist/easyagent-mygo-android.apk --file AndroidManifest.xml | grep -F 'android.intent.action.TTS_SERVICE'
       - uses: actions/upload-artifact@v7
         with:
           name: release-mygo-android
