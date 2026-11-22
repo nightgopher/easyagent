@@ -14,7 +14,7 @@ import (
 // ConfigSnapshot intentionally contains no credentials or secret-bearing URLs.
 type ConfigSnapshot struct{ Provider, Model, Source, DataDir, DefaultPath, Warning string }
 
-type WatchSnapshot struct{ CoreURL, Session, Interval, Status, ConfigPath string }
+type WatchSnapshot struct{ CoreURL, Session, Interval, Status, ConfigPath, Warning string }
 type WatchBackend interface {
 	WatchSnapshot(context.Context) WatchSnapshot
 	SetWatchField(string, string) error
@@ -290,7 +290,11 @@ func (m *TuiModel) handleWatchKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 func (m *TuiModel) renderWatch() string {
 	s := m.watchState
-	lines := []string{"飞书收件箱看门狗 · CLI 用户服务", "状态: " + s.Status, "配置: " + s.ConfigPath, "需要独立运行的核心服务与已登录的 lark-cli", "SSH 断开后继续运行需要启用 systemd linger", "认证令牌请配置在 CLI 的 cli-watch.env", ""}
+	lines := []string{"飞书收件箱看门狗 · CLI 用户服务", "状态: " + s.Status, "配置: " + s.ConfigPath, "需要独立运行的核心服务与已登录的 lark-cli", "SSH 断开后继续运行需要启用 systemd linger", "认证令牌请配置在 CLI 的 cli-watch.env"}
+	if s.Warning != "" {
+		lines = append(lines, "注意: "+s.Warning)
+	}
+	lines = append(lines, "")
 	items := []string{"核心地址: " + s.CoreURL, "会话 ID: " + s.Session, "轮询间隔: " + s.Interval, "启动并启用用户服务", "停止并禁用用户服务", "返回设置"}
 	for i, item := range items {
 		prefix := "  "

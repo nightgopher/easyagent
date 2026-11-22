@@ -57,7 +57,7 @@ CLI 用户服务的巡查位点保存在 `EA_HOME/cli-watch-state.json`。如果
 
 如果核心要求认证，在 `EA_HOME/cli-watch.env` 中配置 `EA_SERVER_API_KEY=...`，并将文件权限设为 `0600`；此文件由用户自行创建，不在面板中展示令牌。进程环境、该环境文件中的看门狗变量优先于面板保存的配置。
 
-SSH 断开后，systemd 用户服务能否继续运行取决于用户管理器是否保持运行；如需退出登录后及开机后继续运行，可由有权限的管理员执行 `loginctl enable-linger <用户名>`。这不会自动启动核心服务，也不能保证飞书授权长期有效。可用 `systemctl --user status easyagent-cli-watch.service` 和 `journalctl --user -u easyagent-cli-watch.service` 排查状态。
+SSH 断开后，systemd 用户服务能否继续运行取决于用户管理器是否保持运行。CLI 会检查 linger；未启用或无法确认时不会启动服务，避免误以为断线后会继续运行。需要由有权限的管理员执行 `loginctl enable-linger <用户名>` 后再启动。CLI 不会自动修改该系统设置，也不会自动启动核心服务，飞书授权仍需保持有效。可用 `systemctl --user status easyagent-cli-watch.service` 和 `journalctl --user -u easyagent-cli-watch.service` 排查状态。
 
 ```bash
 # 前台试跑一轮（首跑只建基线，安全）：
