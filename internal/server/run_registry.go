@@ -205,7 +205,12 @@ func (s *Server) consumeRun(ctx context.Context, run *sessionRun, stream <-chan 
 	defer s.runs.mu.Unlock()
 	// 旧 run 的迟到收尾不得清除后来任务的运行状态。
 	state := s.runs.sessionLocked(run.SessionID)
-	if ctx.Err() != nil {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		run.State = "failed"
+		if run.Error == "" {
+			run.Error = "任务超过渠道时限"
+		}
+	} else if ctx.Err() != nil {
 		run.State = "cancelled"
 	} else if run.Error != "" {
 		run.State = "failed"

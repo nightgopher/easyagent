@@ -498,6 +498,11 @@ func (s *session) reduce(e envelope) {
 		s.syncAnchors(s.Run.Anchors)
 		s.Confirmations = nil
 		s.Pending = false
+		for _, m := range s.Messages {
+			if m.RunID == s.Run.ID && m.Kind == "tool" && m.Status == "执行中" {
+				m.Status = "未完成"
+			}
+		}
 		for i := len(s.Messages) - 1; i >= 0; i-- {
 			m := s.Messages[i]
 			if m.RunID == s.Run.ID && !m.User && m.Kind == "" && m.Tool == "" {

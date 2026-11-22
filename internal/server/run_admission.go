@@ -141,7 +141,7 @@ func (s *Server) startChannelRun(sessionID, prompt, requestID, channel string, v
 	if !ok {
 		return nil, false, &runAdmissionError{"updating", "服务正在更新，请稍后重试；消息尚未执行"}
 	}
-	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Minute)
+	ctx, cancel := channelRunContext(s.ctx, channel)
 	accepted := false
 	defer func() {
 		if !accepted {
@@ -224,6 +224,16 @@ func (s *Server) startChannelRun(sessionID, prompt, requestID, channel string, v
 	accepted = true
 	go func() { defer unsubscribeFiles(); s.consumeRun(ctx, run, stream, release) }()
 	return run, false, nil
+}
+
+// Interactive runs can span long workflows. Channel integrations retain the
+// existing bounded request lifetime; user cancellation and server shutdown
+// still stop every interactive run.
+func channelRunContext(parent context.Context, channel string) (context.Context, context.CancelFunc) {
+	if channel != "" {
+		return context.WithTimeout(parent, 30*time.Minute)
+	}
+	return context.WithCancel(parent)
 }
 
 func (g *runRegistry) rememberRunLocked(run *sessionRun) {
