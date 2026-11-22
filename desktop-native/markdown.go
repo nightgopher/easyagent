@@ -13,11 +13,24 @@ import (
 // MyGo keeps the parsed document, selection and syntax tokens on the view.
 // Image loading uses the active core and its workspace access checks.
 type markdownDocument struct {
-	MediaScope string
-	Anchor     string
-	options    markdown.Options
-	ready      bool
-	source     *editor.State
+	MediaScope      string
+	Anchor          string
+	referenceSource string
+	referenceText   string
+	referenceReady  bool
+	options         markdown.Options
+	ready           bool
+	source          *editor.State
+}
+
+// fileReferences avoids rescanning unchanged history on every scroll frame.
+func (d *markdownDocument) fileReferences(text string) string {
+	if !d.referenceReady || d.referenceSource != text {
+		d.referenceSource = text
+		d.referenceText = markdownFileReferences(text)
+		d.referenceReady = true
+	}
+	return d.referenceText
 }
 
 func (d *markdownDocument) render(c *ui.Context, reply string, streaming ...bool) {
