@@ -320,6 +320,8 @@ func (a *preview) settingsView(c *ui.Context) {
 						a.generalSettings(c)
 					case "appearance":
 						a.appearanceSettings(c)
+					case "speech":
+						a.speechSettings(c)
 					case "models":
 						a.modelSettings(c)
 					case "usage":

@@ -61,7 +61,11 @@ var settingsPages = []settingsPage{
 	{"memory-knowledge", "记忆与知识", "book", "管理知识来源、Agent 独立记忆与人工整理发布。", "", 2},
 }
 
+var phoneSpeechSettingsPage = settingsPage{"speech", "语音朗读", "play", "选择朗读服务和声音。", "立即生效", 0}
+
 type localPreferences struct {
+	SpeechProvider  string               `json:"speech_provider,omitempty"`
+	SpeechVoice     string               `json:"speech_voice,omitempty"`
 	Language        string               `json:"language"`
 	Theme           string               `json:"theme"`
 	LarkWatch       bool                 `json:"lark_watch,omitempty"`
@@ -251,6 +255,9 @@ func (a *preview) closeSettings() {
 	a.ReturnToComposer = !phoneClient
 }
 func (s *settingsState) page() settingsPage {
+	if s.Tab == phoneSpeechSettingsPage.ID {
+		return phoneSpeechSettingsPage
+	}
 	for _, p := range settingsPages {
 		if p.ID == s.Tab {
 			return p

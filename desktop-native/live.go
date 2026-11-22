@@ -87,6 +87,10 @@ type liveState struct {
 	PendingVoice                                                           *pendingVoice
 	VoiceStarted                                                           time.Time
 	VoiceGeneration                                                        uint64
+	SpeechPlaying                                                          bool
+	SpeechGeneration                                                       uint64
+	SpeechCancel                                                           context.CancelFunc
+	SpeechNext                                                             time.Time
 	QRGeneration                                                           uint64
 	LoginCancel                                                            context.CancelFunc
 	LoginGeneration                                                        uint64
@@ -325,6 +329,15 @@ func (a *preview) liveTick() bool {
 	if l.Voice != nil {
 		changed = true
 	}
+	if l.SpeechPlaying && time.Now().After(l.SpeechNext) && !l.Loading["speech-status"] {
+		l.SpeechNext = time.Now().Add(1200 * time.Millisecond)
+		generation := l.SpeechGeneration
+		a.run("speech-status", func(ctx context.Context, _ *backendClient) (any, error) { return platformSpeechPlaying(ctx) }, func(v any) {
+			if generation == l.SpeechGeneration && !boolean(v) {
+				l.SpeechPlaying = false
+			}
+		})
+	}
 	return changed
 }
 func (a *preview) background(work func(context.Context, *backendClient) (any, error), done func(any)) {
@@ -422,6 +435,7 @@ func (a *preview) connectLive() {
 	a.cancelQR()
 	a.cancelMCPLogin()
 	a.cancelVoice()
+	a.stopSpeech()
 	if l.configBusy() {
 		l.Error = "正在保存配置，请稍后重连"
 		return
@@ -1074,6 +1088,7 @@ func (a *preview) closeLive() {
 		return
 	}
 	l := a.Live
+	a.stopSpeech()
 	if phoneClient {
 		a.closePairCamera()
 	}

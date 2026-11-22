@@ -1,0 +1,9 @@
+{
+  "mobile": {
+    "id": "easyagent_tts",
+    "android": {
+      "sources": ["android/*.kt"],
+      "class": "EasyAgentTTSPlugin"
+    }
+  }
+}

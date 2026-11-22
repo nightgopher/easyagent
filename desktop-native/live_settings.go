@@ -138,7 +138,7 @@ func (a *preview) saveLiveDefaultModel(model string) {
 func (a *preview) liveSettingsPage(c *ui.Context) {
 	l := a.Live
 	tab := a.Settings.Tab
-	if tab != "hooks" && tab != "permissions" && tab != "agents" && tab != "teams" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
+	if tab != "speech" && tab != "hooks" && tab != "permissions" && tab != "agents" && tab != "teams" && tab != "memory-knowledge" && tab != "appearance" && tab != "general" && tab != "connections" && tab != "models" && tab != "capabilities" && tab != "mcp" {
 		ui.Row(c).Children(func() {
 			a.note(c, a.connectionLabel())
 			ui.Spacer(c)
@@ -167,6 +167,8 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 		a.action(c, "打开应用数据目录").AlignSelf(ui.Start).OnClick(func() { go mygo.Shell.OpenPath(l.Dir) })
 	case "appearance":
 		a.appearanceSettings(c)
+	case "speech":
+		a.speechSettings(c)
 	case "models":
 		a.liveModelSettings(c)
 	case "connections":

@@ -25,6 +25,13 @@ func (a *preview) phoneChrome(c *ui.Context) {
 		}
 		if !a.Settings.Open {
 			ui.Text(c, a.connectionLabel()).FontSize(11).TextColor(c.Theme().TextMuted)
+			if !a.Sidebar {
+				text := ""
+				if i := latestReply(a.current()); i >= 0 && !a.current().Running {
+					text = a.current().Messages[i].Text
+				}
+				a.speechButton(c, text, "朗读最新回复")
+			}
 			iconButton(c, "settings", "设置").OnClick(func() {
 				a.openSettings("connections")
 				if a.Settings.Open {
@@ -68,9 +75,13 @@ func (a *preview) openPhoneSteward() {
 // Phone settings focus on the device, its host connection, and run visibility.
 // Host administration remains on the computer instead of duplicating its UI.
 func phoneSettingsPages() []settingsPage {
-	ids := []string{"connections", "appearance", "general", "usage", "workflows"}
+	ids := []string{"connections", "appearance", "speech", "general", "usage", "workflows"}
 	pages := make([]settingsPage, 0, len(ids))
 	for _, id := range ids {
+		if id == phoneSpeechSettingsPage.ID {
+			pages = append(pages, phoneSpeechSettingsPage)
+			continue
+		}
 		for _, page := range settingsPages {
 			if page.ID == id {
 				if id == "connections" {
