@@ -38,7 +38,13 @@ func TestCLIWatchUserService(t *testing.T) {
 	t.Setenv("TEST_WATCH_LOG", log)
 	require.NoError(t, os.WriteFile(filepath.Join(temp, "lark-cli"), []byte("#!/bin/sh\nexit 0\n"), 0700))
 	require.NoError(t, os.WriteFile(filepath.Join(temp, "systemctl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$TEST_WATCH_LOG\"\nexit 0\n"), 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(temp, "loginctl"), []byte("#!/bin/sh\nprintf '%s\\n' \"$TEST_LINGER\"\n"), 0700))
 	b := &cliConfigBackend{home: filepath.Join(temp, "home")}
+	t.Setenv("TEST_LINGER", "no")
+	require.ErrorContains(t, b.SetWatchRunning(context.Background(), true), "未启用 linger")
+	require.Contains(t, b.WatchSnapshot(context.Background()).Warning, "未启用 linger")
+	require.NoFileExists(t, log)
+	t.Setenv("TEST_LINGER", "yes")
 	require.NoError(t, b.SetWatchRunning(context.Background(), true))
 	c, err := b.loadWatch()
 	require.NoError(t, err)
@@ -50,6 +56,7 @@ func TestCLIWatchUserService(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(data), "watch serve --config")
 	require.Contains(t, string(data), "Restart=on-failure")
+	require.Contains(t, string(data), "EnvironmentFile=-"+filepath.Join(temp, "home", "cli-watch.env")+"\n")
 	other := &cliConfigBackend{home: filepath.Join(temp, "another-home")}
 	require.ErrorContains(t, other.SetWatchRunning(context.Background(), true), "其他 EA_HOME")
 	require.ErrorContains(t, other.SetWatchRunning(context.Background(), false), "其他 EA_HOME")
