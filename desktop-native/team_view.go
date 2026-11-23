@@ -144,7 +144,7 @@ func (a *preview) teamSettings(c *ui.Context) {
 		}
 	}
 	if len(agents) == 0 {
-		a.note(c, "先在“业务 Agent”页创建至少两名 Agent，再回来组建团队。")
+		a.note(c, "先在上方创建至少两名 Agent，再组建团队。")
 	}
 }
 

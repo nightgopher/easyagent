@@ -26,9 +26,8 @@ import (
 // DefaultBaseURL is the EasyCode marketplace serving the expert catalog.
 const DefaultBaseURL = "https://skills.deepvlab.ai"
 
-// DefaultTimeout bounds every catalog HTTP request. The list changes rarely,
-// so a slow endpoint should fail fast into the cached copy.
-const DefaultTimeout = 5 * time.Second
+// DefaultTimeout includes downloading the entire catalog, not just headers.
+const DefaultTimeout = 20 * time.Second
 
 // capabilities pins the wire contract the client understands.
 const capabilities = "expert-profiles-v1"
@@ -38,6 +37,9 @@ const templatesPath = "/api/expert-templates"
 
 // refreshInterval is how often Refresh re-fetches the catalog.
 const refreshInterval = 10 * time.Minute
+
+// Failed requests are retried soon, while still limiting automatic retries.
+const retryInterval = 5 * time.Second
 
 // Catalog limits, mirroring the reference client's sanitizer: anything a
 // template could never save as an agent profile is rejected outright.
@@ -91,12 +93,12 @@ type LocalizedText struct {
 type Template struct {
 	ID string `json:"id"`
 	// Kind is KindExpert or KindTeam.
-	Kind       Kind   `json:"kind"`
-	Category   string `json:"category"`
-	Icon       string `json:"icon"`
-	Name       LocalizedText   `json:"name"`
-	Description LocalizedText  `json:"description"`
-	Tags       []LocalizedText `json:"tags,omitempty"`
+	Kind        Kind            `json:"kind"`
+	Category    string          `json:"category"`
+	Icon        string          `json:"icon"`
+	Name        LocalizedText   `json:"name"`
+	Description LocalizedText   `json:"description"`
+	Tags        []LocalizedText `json:"tags,omitempty"`
 	// Instructions is set for KindExpert: the role system prompt.
 	Instructions LocalizedText `json:"instructions,omitempty"`
 	// Skills is the optional expert skill binding (template ids of skills).
@@ -409,6 +411,7 @@ type Source struct {
 	templates   []Template
 	meta        Meta
 	lastAttempt time.Time
+	lastFailed  bool
 	fetchMu     sync.Mutex // held across check+fetch so concurrent refreshes collapse
 }
 
@@ -432,30 +435,42 @@ func (s *Source) Current() ([]Template, Meta) {
 	return s.templates, s.meta
 }
 
-// Refresh re-fetches the catalog if the cached copy is stale. Safe for
-// concurrent use; concurrent refreshes collapse into one request, and a
-// failure waits out the full interval before retrying.
+// Refresh re-fetches the catalog when stale. Concurrent refreshes collapse
+// into one request, and failed fetches use a short retry interval.
 func (s *Source) Refresh(ctx context.Context) {
+	s.refresh(ctx, false)
+}
+
+// RefreshNow bypasses the cache interval for an explicit user retry.
+func (s *Source) RefreshNow(ctx context.Context) {
+	s.refresh(ctx, true)
+}
+
+func (s *Source) refresh(ctx context.Context, force bool) {
 	s.fetchMu.Lock()
 	defer s.fetchMu.Unlock()
 
 	now := s.now()
 	s.mu.Lock()
-	if now.Sub(s.lastAttempt) < refreshInterval {
+	interval := refreshInterval
+	if s.lastFailed {
+		interval = retryInterval
+	}
+	if !force && !s.lastAttempt.IsZero() && now.Sub(s.lastAttempt) < interval {
 		s.mu.Unlock()
 		return
 	}
-	// Stamp before fetching so a failure waits out the full interval,
-	// mirroring the reference client.
+	// Stamp before fetching; fetchMu serializes concurrent attempts.
 	s.lastAttempt = now
 	s.mu.Unlock()
 
 	catalog, err := s.client.Templates(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lastFailed = err != nil || len(catalog.Items) == 0
 	if err != nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(catalog.Items) > 0 {
 		s.templates = catalog.Items
 		s.meta = catalog.Meta

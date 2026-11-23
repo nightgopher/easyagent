@@ -27,6 +27,10 @@ type message struct {
 }
 type nativePlanEntry struct{ Content, Status string }
 type session struct {
+	composerHistory                              []string
+	composerHistoryIndex                         int
+	composerHistoryActive                        bool
+	composerHistoryValue                         string
 	ModelRetry                                   *modelRetry
 	WaitingSecond                                int64
 	FileReferences                               []fileReference

@@ -30,7 +30,7 @@ func TestSettingsSidebarSearch(t *testing.T) {
 		{"工具服务", "mcp"}, {"屏幕", "experiments"},
 		{"中继", "remote-access"}, {"机器人", "feishu"},
 		{"token", "usage"}, {"审批", "permissions"},
-		{"知识库", "memory-knowledge"}, {"专家市场", "agents"},
+		{"知识库", "memory-knowledge"}, {"专家市场", "agents"}, {"专家团", "agents"}, {"团队", "agents"},
 	}
 	for _, c := range cases {
 		matched := false

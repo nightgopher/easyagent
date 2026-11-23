@@ -243,3 +243,29 @@ func TestSanitizeEmptyCatalog(t *testing.T) {
 		t.Fatalf("unexpected items: %+v", catalog.Items)
 	}
 }
+
+func TestSourceRetryAfterFailureAndExplicitRefresh(t *testing.T) {
+	server, hits := newFakeCatalog(t, "unavailable", http.StatusServiceUnavailable)
+	now := time.Unix(1000000, 0)
+	source := NewSource(NewClient(WithBaseURL(server.URL)), WithNow(func() time.Time { return now }))
+	source.Refresh(context.Background())
+	source.Refresh(context.Background())
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("retry should be throttled, got %d requests", got)
+	}
+	source.RefreshNow(context.Background())
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("explicit refresh must retry, got %d requests", got)
+	}
+	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); _, _ = w.Write([]byte(catalogJSON)) })
+	now = now.Add(retryInterval)
+	source.Refresh(context.Background())
+	items, _ := source.Current()
+	if len(items) != 3 {
+		t.Fatalf("automatic retry did not recover: %d items", len(items))
+	}
+	source.RefreshNow(context.Background())
+	if got := hits.Load(); got != 4 {
+		t.Fatalf("explicit refresh must bypass fresh cache, got %d requests", got)
+	}
+}

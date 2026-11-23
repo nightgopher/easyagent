@@ -55,9 +55,8 @@ var settingsPages = []settingsPage{
 	{"capabilities", "技能", "code", "管理主机上的全局技能，或从市场安装新技能。", "新会话生效", 1},
 	{"experiments", "电脑控制", "wrench", "启用电脑控制工具，配置审批策略与系统权限。", "新会话生效", 1},
 	{"feishu", "飞书机器人", "feishu", "配置应用凭据、查看桥接状态，并完成私聊配对。", "立即生效", 1},
-	{"agents", "业务 Agent", "user", "创建可持续使用的角色，管理它的工具、技能与知识。", "下次执行生效", 2},
+	{"agents", "Agent 与专家团", "user", "管理角色、团队和专家市场模板。", "下次执行生效", 2},
 	{"workflows", "动态工作流", "activity", "查看多角色协作的运行状态与执行步骤。", "", 2},
-	{"teams", "专家团", "user", "由负责人 Agent 按需委派多名业务 Agent 协作完成任务。", "新会话生效", 2},
 	{"memory-knowledge", "记忆与知识", "book", "管理知识来源、Agent 独立记忆与人工整理发布。", "", 2},
 }
 
@@ -186,6 +185,12 @@ func (a *preview) openSettings(tab string) {
 	if a.Live != nil && a.Live.Loading["business-save"] {
 		return
 	}
+	requestedTab := tab
+	legacyTeams := tab == "teams"
+	// Preserve older internal links while keeping a single settings entry.
+	if legacyTeams {
+		tab = "agents"
+	}
 	if tab == "skillMarket" {
 		tab = "capabilities"
 		a.Settings.CapabilityTab = "market"
@@ -203,14 +208,19 @@ func (a *preview) openSettings(tab string) {
 		if s := strings.ToLower(a.Settings.Search); strings.Contains(s, "专家市场") {
 			a.Settings.Business.ExpertTab = "market"
 			a.Settings.Business.ExpertQuery, a.Settings.Business.ExpertKind, a.Settings.Business.ExpertCategory, a.Settings.Business.ExpertDetail, a.Settings.Business.ExpertHint = "", "", "", "", ""
+		} else if strings.Contains(s, "专家团") || strings.Contains(s, "团队") {
+			a.Settings.Business.ExpertTab = "mine"
 		}
 	}
 	if a.Live != nil && a.Settings.Open && a.Settings.Tab != tab && a.settingsFormDirty() {
 		a.Live.Confirm = &nativeConfirmation{"放弃未保存的修改？", "当前表单有未保存的修改，切换分区会丢弃这些修改。", func() {
 			a.discardSettingsForms()
-			a.openSettings(tab)
+			a.openSettings(requestedTab)
 		}}
 		return
+	}
+	if legacyTeams {
+		a.Settings.Business.ExpertTab = "mine"
 	}
 	if a.Live != nil && a.Settings.Tab != tab {
 		a.cancelSettingsTransient()
@@ -293,7 +303,7 @@ func settingsPageMatches(p settingsPage, search string) bool {
 	case "capabilities":
 		text += " 技能市场 市场 market 安装技能"
 	case "agents":
-		text += " 专家市场 market 安装专家 专家团模板"
+		text += " 业务 Agent 专家市场 market 安装专家 专家团 团队 协作 委派"
 	case "appearance":
 		text += " 背景 壁纸 图片 模糊 wallpaper background blur"
 	case "general":

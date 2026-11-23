@@ -85,13 +85,15 @@ func (a *preview) loadSettingsPage() {
 		if !l.Loading["builtin-tools-save"] {
 			a.resource("builtin-tools", "/settings/builtin-tools")
 		}
-	case "agents", "memory-knowledge":
+	case "agents":
+		a.refreshTeams()
+		if s.Business.ExpertTab == "market" {
+			a.loadExpertMarket()
+		}
+	case "memory-knowledge":
 		a.refreshBusiness()
 		if s.Business.Tab == "memories" {
 			a.loadAgentMemories()
-		}
-		if s.Business.ExpertTab == "market" {
-			a.loadExpertMarket()
 		}
 	case "teams":
 		a.refreshTeams()

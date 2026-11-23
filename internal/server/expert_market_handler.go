@@ -53,7 +53,11 @@ func (s *Server) registerExpertMarketRoutes(mux *http.ServeMux) {
 // an error hint instead of a blank list so clients can offer a retry.
 func (s *Server) expertMarketTemplates(w http.ResponseWriter, r *http.Request) {
 	source := s.app.ExpertMarketSource()
-	source.Refresh(r.Context())
+	if r.URL.Query().Get("refresh") == "1" {
+		source.RefreshNow(r.Context())
+	} else {
+		source.Refresh(r.Context())
+	}
 	items, meta := source.Current()
 
 	records, err := readExpertInstalls(s.app.Config().DataDir)
