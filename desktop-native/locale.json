@@ -387,6 +387,8 @@
   "刷新默认权限": "Refresh permission defaults",
   "主机返回了无效的权限配置，请刷新后重试。": "The host returned invalid permission defaults. Refresh and try again.",
   "已保存默认权限，新会话生效": "Permission defaults saved for new sessions",
+  "管家使用同一个会话，请直接在管家对话中发送新任务；如需新建其他会话，请先切换项目或模式。": "The steward uses one conversation. Send new tasks there; switch project or mode to start another conversation.",
+  "管家使用同一个会话；选择其他项目或模式可新建会话": "The steward uses one conversation. Choose another project or mode to start a conversation.",
   "工具加载": "Tool loading",
   "工具加载模式": "Tool loading mode",
   "工具加载设置": "Tool loading settings",
