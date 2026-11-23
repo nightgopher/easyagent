@@ -14,6 +14,10 @@ import (
 )
 
 const speechCredential = "mobile-tts-api-key"
+const siliconSpeechCredential = "mobile-siliconflow-tts-api-key"
+const siliconSpeechEndpoint = "https://api.siliconflow.cn/v1/audio/speech"
+const siliconSpeechDefaultModel = "FunAudioLLM/CosyVoice2-0.5B"
+const siliconSpeechDefaultVoice = "FunAudioLLM/CosyVoice2-0.5B:alex"
 
 func customSpeech(ctx context.Context, endpoint, model, voice, text, key string) ([]byte, error) {
 	u, err := url.Parse(strings.TrimSpace(endpoint))

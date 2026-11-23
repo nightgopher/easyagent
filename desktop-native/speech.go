@@ -108,7 +108,17 @@ func (a *preview) playSpeech(text string) {
 		}
 		var audio []byte
 		var err error
-		if provider == "custom" {
+		if provider == "siliconflow" {
+			if !prefs.SiliconSpeechHasKey {
+				return errors.New("请先保存硅基流动 API 密钥"), nil
+			}
+			key, readErr := l.Secrets.Get(siliconSpeechCredential)
+			if readErr != nil || key == "" {
+				return errors.New("无法读取硅基流动密钥，请重新保存"), nil
+			}
+			model, selectedVoice := siliconSpeechSettings(prefs)
+			audio, err = customSpeech(ctx, siliconSpeechEndpoint, model, selectedVoice, text, key)
+		} else if provider == "custom" {
 			key := ""
 			if prefs.SpeechHasKey {
 				key, err = l.Secrets.Get(speechCredential)
@@ -141,6 +151,17 @@ func (a *preview) playSpeech(text string) {
 		l.SpeechNext = time.Now().Add(2 * time.Second)
 	})
 }
+
+func siliconSpeechSettings(prefs localPreferences) (string, string) {
+	model, voice := strings.TrimSpace(prefs.SiliconSpeechModel), strings.TrimSpace(prefs.SiliconSpeechVoice)
+	if model == "" {
+		model = siliconSpeechDefaultModel
+	}
+	if voice == "" {
+		voice = siliconSpeechDefaultVoice
+	}
+	return model, voice
+}
 func (a *preview) speechButton(c *ui.Context, text, label string) {
 	if !platformSpeechAvailable() || a.Live == nil {
 		return
@@ -160,18 +181,26 @@ func (a *preview) speechSettings(c *ui.Context) {
 	}
 	s := &a.Settings
 	provider := s.Preferences.SpeechProvider
-	choices := []string{"Edge 在线", "系统语音", "自定义语音模型"}
+	choices := []string{"Edge 在线", "系统语音", "自定义语音模型", "硅基流动"}
 	selected := choices[0]
 	if provider == "system" {
 		selected = choices[1]
 	} else if provider == "custom" {
 		selected = choices[2]
+	} else if provider == "siliconflow" {
+		selected = choices[3]
 	}
 	if a.selectControl(c, "朗读服务", &selected, choices).Width(260).Changed() {
+		if strings.TrimSpace(s.SpeechAPIKey) != "" {
+			s.Error = "请先保存或清空当前输入的语音密钥，再切换服务。"
+			return
+		}
 		if selected == choices[1] {
 			s.Preferences.SpeechProvider = "system"
 		} else if selected == choices[2] {
 			s.Preferences.SpeechProvider = "custom"
+		} else if selected == choices[3] {
+			s.Preferences.SpeechProvider = "siliconflow"
 		} else {
 			s.Preferences.SpeechProvider = "edge"
 		}
@@ -179,6 +208,32 @@ func (a *preview) speechSettings(c *ui.Context) {
 	}
 	if s.Preferences.SpeechProvider == "system" {
 		a.note(c, "使用手机系统语音引擎；声音与语言由手机系统设置管理。")
+	} else if s.Preferences.SpeechProvider == "siliconflow" {
+		a.note(c, "使用硅基流动语音接口；文字将发送到硅基流动，费用以账号及所选模型为准。")
+		a.input(c, "语音模型", &s.Preferences.SiliconSpeechModel, siliconSpeechDefaultModel, false)
+		a.input(c, "语音音色", &s.Preferences.SiliconSpeechVoice, siliconSpeechDefaultVoice, false)
+		a.input(c, "API 密钥", &s.SpeechAPIKey, "留空保留已保存的密钥", true)
+		a.action(c, "保存语音配置").Disabled(a.Live == nil || a.Live.Loading["speech-config"]).OnClick(func() {
+			key := strings.TrimSpace(s.SpeechAPIKey)
+			if key == "" {
+				s.savePreferences()
+				return
+			}
+			a.run("speech-config", func(context.Context, *backendClient) (any, error) {
+				return nil, a.Live.Secrets.Set(siliconSpeechCredential, key)
+			}, func(any) {
+				s.SpeechAPIKey = ""
+				s.Preferences.SiliconSpeechHasKey = true
+				s.savePreferences()
+			})
+		})
+		if s.Preferences.SiliconSpeechHasKey {
+			a.action(c, "移除语音密钥").Disabled(a.Live == nil || a.Live.Loading["speech-config"]).OnClick(func() {
+				a.run("speech-config", func(context.Context, *backendClient) (any, error) {
+					return nil, a.Live.Secrets.Delete(siliconSpeechCredential)
+				}, func(any) { s.Preferences.SiliconSpeechHasKey = false; s.savePreferences() })
+			})
+		}
 	} else if s.Preferences.SpeechProvider == "custom" {
 		a.note(c, "使用 OpenAI 兼容的语音接口，朗读文字会发送到你配置的服务。")
 		a.input(c, "语音接口地址", &s.Preferences.SpeechEndpoint, "https://服务地址/v1/audio/speech", false)
