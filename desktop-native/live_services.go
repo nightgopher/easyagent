@@ -42,7 +42,7 @@ func (a *preview) liveMCPSettings(c *ui.Context) {
 		a.text(c, "已配置服务").FontSize(14).FontWeight(600)
 		a.note(c, fmt.Sprintf("%d 个", len(list(m["servers"]))))
 		ui.Spacer(c)
-		a.action(c, "工具加载设置").OnClick(func() { s.Tab = "models"; a.loadSettingsPage() })
+		a.action(c, "工具加载设置").OnClick(func() { s.Tab = "permissions"; a.loadSettingsPage() })
 		a.action(c, "刷新").Disabled(l.Loading["mcp"]).OnClick(a.loadSettingsPage)
 		label := "添加服务"
 		if a.settingsFormDirty() {
@@ -581,8 +581,10 @@ func (a *preview) saveLocalFeishu(id, secret string) {
 	})
 }
 
+var versionedModelBase = regexp.MustCompile(`/v[1-9]$`)
+
 func modelCatalogPath(base string) string {
-	if strings.HasSuffix(base, "/v1") {
+	if versionedModelBase.MatchString(strings.TrimRight(base, "/")) {
 		return "/models"
 	}
 	return "/v1/models"
