@@ -191,6 +191,19 @@ Coding 提供 `work_get` / `work_report`；业务 Agent 在用户跟进其会话
 业务 Agent 的知识引用也必须来自已绑定来源：`files` 项可带 `source_id`，其 `scope` 为 `knowledge`。
 SQLite 中的文档和 FTS5 表是可重建索引，Markdown 原文继续由用户维护。
 
+可选语义检索默认关闭，通过 `GET/PUT /knowledge/embeddings` 配置当前主机。接口接受
+`enabled`、`endpoint`、`model`、可选 `api_key`；`clear_key: true` 用于清除密钥，
+GET 和 PUT 响应仅返回 `has_key`，不会返回密钥。`POST /knowledge/embeddings/test` 使用固定样本文本检查已保存的配置，不上传知识文档。默认预设为硅基流动的
+`https://api.siliconflow.cn/v1/embeddings` 和 `BAAI/bge-m3`；服务与模型的可用性和费用
+以供应商实际套餐为准。仅接受 HTTPS，切换地址不会复用旧密钥，密钥存储在主机的
+`agents/agents.sqlite` 中，文件由主机账号保护。
+
+启用后，Agent 的 `kb_search` 会向配置服务发送查询以及该 Agent 绑定来源的文档内容，
+首次检索需建立向量缓存；文档变更后会重新生成。关键词检索继续参与结果。语义检索每个来源
+最多 200 个文档、400 KB UTF-8 内容；超出时明确报错，需缩小来源目录。直接浏览来源的
+`/knowledge/sources/{source}/search` 保持关键词检索。禁用语义检索或切换模型会删除向量缓存。
+
+
 
 ## Agent 独立记忆
 

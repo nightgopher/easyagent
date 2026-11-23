@@ -74,7 +74,17 @@ type nativeExpertInstallRecord struct {
 	AgentIDs   []string `json:"agent_ids"`
 	TeamID     string   `json:"team_id"`
 }
+type nativeEmbeddingSettings struct {
+	Enabled  bool   `json:"enabled"`
+	Endpoint string `json:"endpoint"`
+	Model    string `json:"model"`
+	APIKey   string `json:"api_key,omitempty"`
+	HasKey   bool   `json:"has_key"`
+}
+
 type businessSettingsState struct {
+	Embedding                                                       nativeEmbeddingSettings
+	EmbeddingLoaded                                                 bool
 	AgentEditor, SourceEditor, MemoryEditor, Publishing, Advanced   bool
 	Agent                                                           nativeBusinessAgent
 	Source                                                          nativeKnowledgeSource

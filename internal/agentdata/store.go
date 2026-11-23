@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,10 @@ type Agent struct {
 	PresetVersion int64 `json:"preset_version,omitempty"`
 }
 
-type Store struct{ dataDir string }
+type Store struct {
+	dataDir             string
+	embeddingHTTPClient *http.Client
+}
 
 func New(dataDir string) *Store { return &Store{dataDir: dataDir} }
 
