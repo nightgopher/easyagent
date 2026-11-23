@@ -7,6 +7,7 @@ import (
 
 func TestEmbeddingConfigAPIDoesNotReturnKeys(t *testing.T) {
 	s, _, _ := newRunTestServer(t)
+	businessRequest(t, s, "POST", "/knowledge/embeddings/test", nil, 400)
 	input := map[string]any{"enabled": true, "endpoint": "https://api.siliconflow.cn/v1/embeddings", "model": "BAAI/bge-m3", "api_key": "secret-example"}
 	w := businessRequest(t, s, "PUT", "/knowledge/embeddings", input, 200)
 	require.NotContains(t, w.Body.String(), "secret-example")
