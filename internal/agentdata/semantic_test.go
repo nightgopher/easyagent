@@ -61,6 +61,19 @@ func TestSemanticKnowledgeScopesAndCachesDocuments(t *testing.T) {
 	_, err = store.SearchAgentKnowledge(ctx, agent.ID, "恢复服务")
 	require.NoError(t, err)
 	require.Len(t, calls, 5, "changed document must be embedded again")
+	db, err := store.open(ctx)
+	require.NoError(t, err)
+	var cacheRows int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM knowledge_embedding_vectors`).Scan(&cacheRows))
+	require.Equal(t, 1, cacheRows)
+	require.NoError(t, db.Close())
+	config.Enabled = false
+	require.NoError(t, store.SaveEmbeddingConfig(ctx, config))
+	db, err = store.open(ctx)
+	require.NoError(t, err)
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM knowledge_embedding_vectors`).Scan(&cacheRows))
+	require.Equal(t, 0, cacheRows)
+	require.NoError(t, db.Close())
 	require.NoError(t, os.Remove(filepath.Join(sourceRoot, "a.md")))
 	hits, err = store.SearchAgentKnowledge(ctx, agent.ID, "恢复服务")
 	require.NoError(t, err)
@@ -93,4 +106,54 @@ func TestSemanticSearchRejectsOversizedSourceBeforeSending(t *testing.T) {
 	_, err = store.SearchAgentKnowledge(ctx, agent.ID, "query")
 	require.ErrorContains(t, err, "400 KB")
 	require.Equal(t, 0, calls)
+}
+
+func TestSemanticIndexStopsWhenDisabledDuringRequest(t *testing.T) {
+	ctx := context.Background()
+	store := New(t.TempDir())
+	calls := 0
+	service := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var input struct {
+			Input []string `json:"input"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Error(err)
+			return
+		}
+		if calls == 2 {
+			cfg, err := store.EmbeddingConfig(ctx)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			cfg.Enabled = false
+			if err = store.SaveEmbeddingConfig(ctx, cfg); err != nil {
+				t.Error(err)
+				return
+			}
+		}
+		data := make([]map[string]any, len(input.Input))
+		for i := range input.Input {
+			data[i] = map[string]any{"index": i, "embedding": []float32{1, 1}}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+	}))
+	defer service.Close()
+	store.embeddingHTTPClient = service.Client()
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.md"), []byte("# knowledge\ncontent"), 0600))
+	source, err := store.SaveSource(ctx, KnowledgeSource{Name: "docs", Path: root})
+	require.NoError(t, err)
+	agent, err := store.SaveAgent(ctx, Agent{Name: "test", Instructions: "role", Knowledge: []KnowledgeBinding{{SourceID: source.ID, Access: "read"}}})
+	require.NoError(t, err)
+	require.NoError(t, store.SaveEmbeddingConfig(ctx, EmbeddingConfig{Enabled: true, Endpoint: service.URL, Model: "model", APIKey: "key"}))
+	_, err = store.SearchAgentKnowledge(ctx, agent.ID, "test query")
+	require.ErrorContains(t, err, "settings changed")
+	db, err := store.open(ctx)
+	require.NoError(t, err)
+	defer db.Close()
+	var count int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT count(*) FROM knowledge_embedding_vectors`).Scan(&count))
+	require.Zero(t, count)
 }
