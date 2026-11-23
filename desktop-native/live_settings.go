@@ -92,6 +92,10 @@ func (a *preview) loadSettingsPage() {
 		}
 	case "memory-knowledge":
 		a.refreshBusiness()
+		if s.Business.Tab == "embedding" {
+			s.Business.EmbeddingLoaded = false
+			a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.Business.setEmbedding(v) })
+		}
 		if s.Business.Tab == "memories" {
 			a.loadAgentMemories()
 		}

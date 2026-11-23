@@ -85,6 +85,7 @@ type nativeEmbeddingSettings struct {
 type businessSettingsState struct {
 	Embedding                                                       nativeEmbeddingSettings
 	EmbeddingLoaded                                                 bool
+	EmbeddingBaseline                                               string
 	AgentEditor, SourceEditor, MemoryEditor, Publishing, Advanced   bool
 	Agent                                                           nativeBusinessAgent
 	Source                                                          nativeKnowledgeSource
@@ -140,10 +141,22 @@ func (s *businessSettingsState) snapshot() string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+func (s *businessSettingsState) embeddingSnapshot() string {
+	b, _ := json.Marshal([]any{s.Embedding.Enabled, s.Embedding.Endpoint, s.Embedding.Model})
+	return string(b)
+}
+func (s *businessSettingsState) setEmbedding(v any) {
+	s.Embedding = businessDecode[nativeEmbeddingSettings](v)
+	s.EmbeddingLoaded = true
+	s.EmbeddingBaseline = s.embeddingSnapshot()
+}
 func (s *businessSettingsState) dirty() bool {
-	return (s.AgentEditor || s.SourceEditor || s.MemoryEditor || s.Publishing) && s.snapshot() != s.Baseline
+	return strings.TrimSpace(s.Embedding.APIKey) != "" || (s.EmbeddingLoaded && s.embeddingSnapshot() != s.EmbeddingBaseline) || (s.AgentEditor || s.SourceEditor || s.MemoryEditor || s.Publishing) && s.snapshot() != s.Baseline
 }
 func (s *businessSettingsState) closeEditors() {
+	s.Embedding = nativeEmbeddingSettings{}
+	s.EmbeddingLoaded = false
+	s.EmbeddingBaseline = ""
 	s.AgentEditor = false
 	s.SourceEditor = false
 	s.MemoryEditor = false

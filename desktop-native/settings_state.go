@@ -268,6 +268,9 @@ func (a *preview) closeSettings() {
 	a.Settings.AppSecret = ""
 	a.Settings.APIKey = ""
 	a.Settings.SpeechAPIKey = ""
+	a.Settings.Business.Embedding = nativeEmbeddingSettings{}
+	a.Settings.Business.EmbeddingLoaded = false
+	a.Settings.Business.EmbeddingBaseline = ""
 	a.Settings.HostToken = ""
 	a.ReturnToComposer = !phoneClient
 }

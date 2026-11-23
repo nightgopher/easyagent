@@ -283,7 +283,7 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 					s.Tab = tab.ID
 					if tab.ID == "embedding" {
 						s.EmbeddingLoaded = false
-						a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.Embedding = businessDecode[nativeEmbeddingSettings](v); s.EmbeddingLoaded = true })
+						a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.setEmbedding(v) })
 					}
 					if tab.ID == "memories" {
 						if s.MemoryAgentID == "" {
@@ -564,7 +564,7 @@ func (a *preview) embeddingSettings(c *ui.Context) {
 	if !s.EmbeddingLoaded {
 		a.note(c, "正在读取配置…")
 		a.action(c, "重新读取").OnClick(func() {
-			a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.Embedding = businessDecode[nativeEmbeddingSettings](v); s.EmbeddingLoaded = true })
+			a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.setEmbedding(v) })
 		})
 		return
 	}
@@ -578,7 +578,7 @@ func (a *preview) embeddingSettings(c *ui.Context) {
 		a.action(c, "停用并清除密钥").OnClick(func() {
 			payload := map[string]any{"enabled": false, "endpoint": v.Endpoint, "model": v.Model, "clear_key": true}
 			a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
-				s.Embedding = businessDecode[nativeEmbeddingSettings](result)
+				s.setEmbedding(result)
 				a.Settings.message("向量检索已停用，密钥已清除。")
 			})
 		})
@@ -591,7 +591,7 @@ func (a *preview) embeddingSettings(c *ui.Context) {
 	a.primary(c, "保存向量模型").OnClick(func() {
 		payload := map[string]any{"enabled": v.Enabled, "endpoint": v.Endpoint, "model": v.Model, "api_key": v.APIKey}
 		a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
-			s.Embedding = businessDecode[nativeEmbeddingSettings](result)
+			s.setEmbedding(result)
 			a.Settings.message("向量模型配置已保存。")
 		})
 	})

@@ -26,7 +26,7 @@ func businessFixture(t *testing.T) *preview {
 func TestBusinessManagementLayouts(t *testing.T) {
 	for _, width := range []int{900, 1240} {
 		for _, theme := range []string{"dark", "light"} {
-			for _, screen := range []string{"agents", "agent-editor", "sources", "source-editor", "memories", "memory-editor", "publication"} {
+			for _, screen := range []string{"agents", "agent-editor", "sources", "source-editor", "embeddings", "memories", "memory-editor", "publication"} {
 				t.Run(fmt.Sprintf("%d-%s-%s", width, theme, screen), func(t *testing.T) {
 					a := businessFixture(t)
 					a.Settings.Open = true
@@ -41,6 +41,11 @@ func TestBusinessManagementLayouts(t *testing.T) {
 					case "source-editor":
 						a.Settings.Tab = "memory-knowledge"
 						a.editKnowledgeSource(a.knowledgeSources()[0])
+					case "embeddings":
+						a.Settings.Tab = "memory-knowledge"
+						s.Tab = "embedding"
+						s.EmbeddingLoaded = true
+						s.setEmbedding(nativeEmbeddingSettings{Endpoint: "https://api.siliconflow.cn/v1/embeddings", Model: "BAAI/bge-m3"})
 					case "memories", "memory-editor", "publication":
 						a.Settings.Tab = "memory-knowledge"
 						s.Tab = "memories"
@@ -209,5 +214,21 @@ func TestBusinessKnowledgeBindingUsesReadableChoices(t *testing.T) {
 		if name == "read" {
 			t.Fatal("tool selection not applied")
 		}
+	}
+}
+
+func TestEmbeddingUnsavedSecretGuard(t *testing.T) {
+	a := businessFixture(t)
+	a.Settings.Open = true
+	a.Settings.Tab = "memory-knowledge"
+	a.Settings.Business.Tab = "embedding"
+	a.Settings.Business.Embedding.APIKey = "unsaved-secret"
+	a.closeSettings()
+	if a.Live.Confirm == nil || !a.Settings.Open {
+		t.Fatal("closing did not protect the unsaved key")
+	}
+	a.Live.Confirm.Action()
+	if a.Settings.Open || a.Settings.Business.Embedding.APIKey != "" {
+		t.Fatal("discard did not clear the secret")
 	}
 }
