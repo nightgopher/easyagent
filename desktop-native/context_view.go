@@ -95,7 +95,26 @@ func (a *preview) contextWorkbench(c *ui.Context) {
 			usage := object(m["usage"])
 			ui.Text(c, str(usage["model"])).FontSize(13).FontWeight(600)
 			a.note(c, fmt.Sprintf("%d 条消息 · 估算 %s tokens", len(list(m["messages"])), formatCount(usage["estimated_tokens"])))
-			nativeDisclosure(c, "system", "系统提示词 · 估算 "+formatCount(usage["system"])+" tokens", func() { nativePre(c, str(m["system"])) })
+			nativeDisclosure(c, "system", "系统提示词 · 估算 "+formatCount(usage["system"])+" tokens", func() {
+				prompt := str(m["system"])
+				ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+					button := a.action(c, "复制系统提示词").Disabled(prompt == "")
+					status := ui.Local(button, "copy-status", func() string { return "" })
+					button.OnClick(func() {
+						c.WriteClipboardThen(prompt, func(err error) {
+							if err != nil {
+								*status = "复制失败，请检查剪贴板权限"
+							} else {
+								*status = "已复制系统提示词"
+							}
+						})
+					})
+					if *status != "" {
+						ui.Text(c, a.tr(*status)).FontSize(11).TextColor(c.Theme().TextMuted).Role(ui.RoleStatus)
+					}
+				})
+				nativePre(c, prompt)
+			})
 			nativeDisclosure(c, "messages", "模型输入消息 · 估算 "+formatCount(usage["messages"])+" tokens", func() {
 				for i, raw := range list(m["messages"]) {
 					entry := object(raw)

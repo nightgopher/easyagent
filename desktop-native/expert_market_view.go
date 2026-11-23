@@ -29,12 +29,16 @@ func (a *preview) loadExpertMarket() {
 	a.marketRead("expert-market", "/experts/market/templates", nil)
 }
 
+func (a *preview) refreshExpertMarket() {
+	a.marketRead("expert-market", "/experts/market/templates?refresh=1", nil)
+}
+
 func (a *preview) installExpertTemplate(t nativeExpertTemplate) {
 	s := &a.Settings.Business
 	a.operation("expert-install-"+t.ID, "POST", "/experts/market/install", map[string]any{"id": t.ID, "kind": t.Kind}, func(v any) {
 		a.Settings.message("已安装「" + t.Name.Zh + "」；权限与说明将在下次执行时生效。")
 		s.ExpertHint = ""
-		a.refreshBusiness()
+		a.refreshTeams()
 		a.loadExpertMarket()
 		if missing := businessDecode[[]string](object(v)["missing_skills"]); len(missing) > 0 {
 			s.ExpertHint = "缺少技能：" + strings.Join(missing, "、") + "。绑定已保留，可在「技能」页的市场安装后自动生效。"
@@ -67,7 +71,7 @@ func expertIcon(name string) string {
 
 // expertIconTile renders the card's leading icon inside a rounded tile.
 func (a *preview) expertIconTile(c *ui.Context, iconID string) {
-	ui.Column(c.Key("icon-" + iconID)).Size(36, 36).Center().Radius(8).Background(c.Theme().Accent.Alpha(.12)).Children(func() {
+	ui.Column(c.Key("icon-"+iconID)).Size(36, 36).Center().Radius(8).Background(c.Theme().Accent.Alpha(.12)).Children(func() {
 		if svg := icons[expertIcon(iconID)]; svg != nil {
 			ui.Icon(c, svg).FontSize(19).TextColor(c.Theme().Accent)
 		}
@@ -91,10 +95,10 @@ func expertMatchesQuery(t nativeExpertTemplate, q string) bool {
 	}
 	haystack := strings.ToLower(t.Name.Zh + " " + t.Name.En + " " + t.Description.Zh + " " + t.Description.En)
 	for _, tag := range t.Tags {
-		haystack += " " + strings.ToLower(tag.Zh + " " + tag.En)
+		haystack += " " + strings.ToLower(tag.Zh+" "+tag.En)
 	}
 	if t.Kind == "team" {
-		haystack += " " + strings.ToLower(t.Roles.Zh + " " + t.Roles.En)
+		haystack += " " + strings.ToLower(t.Roles.Zh+" "+t.Roles.En)
 	}
 	return strings.Contains(haystack, q)
 }
@@ -105,7 +109,7 @@ func (a *preview) expertMarketView(c *ui.Context) {
 	ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &s.ExpertQuery).Label("搜索专家市场").Placeholder("搜索名称、描述或标签…").Grow(1).Basis(200).MinWidth(0).OnSubmit(func() {})
 		ui.Spacer(c)
-		a.action(c, "刷新").Disabled(l.Loading["expert-market"]).OnClick(a.loadExpertMarket)
+		a.action(c, "刷新").Disabled(l.Loading["expert-market"]).OnClick(a.refreshExpertMarket)
 	})
 	ui.Row(c).Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
 		for _, f := range []businessChoice{{"", "全部"}, {"expert", "专家"}, {"team", "专家团"}} {
@@ -126,15 +130,24 @@ func (a *preview) expertMarketView(c *ui.Context) {
 		}
 	})
 
-	if m := a.marketState(); m.Error != "" && l.Data["expert-market"] == nil {
+	if m := a.marketState(); m.Error != "" {
 		ui.Column(c).Padding(16).Gap(10).Children(func() {
 			ui.Text(c, m.Error).FontSize(12).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
-			a.action(c, "重试").AlignSelf(ui.Start).OnClick(func() { m.Error = ""; a.loadExpertMarket() })
+			a.action(c, "重试").AlignSelf(ui.Start).OnClick(func() { m.Error = ""; a.refreshExpertMarket() })
 		})
-		return
+		if l.Data["expert-market"] == nil {
+			return
+		}
 	}
 	if l.Loading["expert-market"] && l.Data["expert-market"] == nil {
 		a.note(c, "正在读取专家目录…")
+		return
+	}
+	if msg := str(object(l.Data["expert-market"])["error"]); msg != "" {
+		ui.Column(c).Padding(16).Gap(10).Children(func() {
+			ui.Text(c, msg).FontSize(12).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
+			a.action(c, "重试").AlignSelf(ui.Start).Disabled(l.Loading["expert-market"]).OnClick(a.refreshExpertMarket)
+		})
 		return
 	}
 	if s.ExpertHint != "" {

@@ -534,6 +534,9 @@ func (a *preview) liveComposer(c *ui.Context) {
 					input.OnPaste(func(string) bool { return a.pasteAttachments(services, s) })
 					composing := input.Composing()
 					if input.Changed() && !composing {
+						if s.composerHistoryActive && s.Draft != s.composerHistoryValue {
+							s.clearComposerHistory()
+						}
 						l.CommandIndex = 0
 						l.CommandJump = true
 						s.MentionIndex = 0
@@ -553,6 +556,11 @@ func (a *preview) liveComposer(c *ui.Context) {
 							return false
 						}
 						s.Draft = ev.Text()
+						// Moving the caret leaves history browsing so subsequent vertical
+						// arrows work normally while editing the recalled message.
+						if s.composerHistoryActive && (ev.Key == ui.KeyLeft || ev.Key == ui.KeyRight || ev.Key == ui.KeyHome || ev.Key == ui.KeyEnd) {
+							s.clearComposerHistory()
+						}
 						if _, mention := expertQuery(s.Draft); mention && s.MentionDismissed != s.Draft {
 							matches := a.expertMatches(s)
 							if ev.Key == ui.KeyEscape {
@@ -616,7 +624,14 @@ func (a *preview) liveComposer(c *ui.Context) {
 							ev.SetText(s.Draft)
 							return true
 						}
+						if !phoneClient && ev.Mods == 0 && (ev.Key == ui.KeyUp || ev.Key == ui.KeyDown) {
+							if text, ok := s.navigateComposerHistory(ev.Key == ui.KeyUp, ev.Text()); ok {
+								ev.SetText(text)
+								return true
+							}
+						}
 						if !phoneClient && ev.Key == ui.KeyEnter && ev.Mods&ui.Shift == 0 {
+							s.clearComposerHistory()
 							a.submit()
 							ev.SetText(s.Draft)
 							return true
@@ -761,7 +776,7 @@ func (a *preview) liveComposer(c *ui.Context) {
 			}
 			if !phoneClient {
 				ui.Row(c).Gap(10).Children(func() {
-					ui.Text(c, "Enter 发送 · Shift+Enter 换行").FontSize(11).TextColor(c.Theme().TextMuted)
+					ui.Text(c, "Enter 发送 · Shift+Enter 换行 · 空输入框 ↑↓ 历史").FontSize(11).TextColor(c.Theme().TextMuted)
 					ui.Spacer(c)
 					newSessionShortcut := a.shortcutLabel("新会话")
 					if newSessionShortcut == "" {

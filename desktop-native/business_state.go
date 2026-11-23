@@ -84,7 +84,7 @@ type businessSettingsState struct {
 	MemoryOffset                                                    int
 	BrowseSourceID, KnowledgeQuery, DocumentPath                    string
 	PublishSourceID, PublishDirectory, PublishTitle, PublishContent string
-	// Expert market tab state: ExpertTab is "" or "mine" (agent list) vs
+	// Expert market tab state: ExpertTab is "" or "mine" (agents and teams) vs
 	// "market" (remote expert catalog); the rest drive market filters.
 	ExpertTab, ExpertKind, ExpertCategory, ExpertDetail, ExpertHint string
 	ExpertQuery                                                     string

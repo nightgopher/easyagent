@@ -62,8 +62,12 @@ func (a *preview) businessSettings(c *ui.Context) {
 		a.businessAgentEditor(c)
 		return
 	}
+	if a.Settings.Teams.Editor {
+		a.teamEditor(c)
+		return
+	}
 	ui.Row(c).Gap(4).Children(func() {
-		for _, tab := range []businessChoice{{"mine", "我的 Agent"}, {"market", "专家市场"}} {
+		for _, tab := range []businessChoice{{"mine", "我的 Agent 与团队"}, {"market", "专家市场"}} {
 			selected := (s.ExpertTab == "" && tab.ID == "mine") || s.ExpertTab == tab.ID
 			btn := a.action(c, tab.Label)
 			if selected {
@@ -89,6 +93,14 @@ func (a *preview) businessSettings(c *ui.Context) {
 		a.expertMarketView(c)
 		return
 	}
+	a.heading(c, "业务 Agent")
+	a.businessAgentList(c)
+	a.heading(c, "专家团")
+	a.teamSettings(c)
+}
+
+func (a *preview) businessAgentList(c *ui.Context) {
+	s := &a.Settings.Business
 	ui.Row(c).Gap(8).Wrap().AlignItems(ui.Center).Children(func() {
 		ui.TextInput(c, &s.AgentQuery).Label("搜索业务 Agent").Placeholder("搜索名称或角色说明…").Grow(1).Basis(180).MinWidth(0)
 		a.primary(c, "创建 Agent").Disabled(!a.Live.Connected).OnClick(func() { a.editBusinessAgent(nativeBusinessAgent{}) })

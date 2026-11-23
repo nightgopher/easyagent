@@ -73,3 +73,18 @@ func TestNativeExpertMarketLayouts(t *testing.T) {
 	}
 	_ = json.Marshal
 }
+
+func TestExpertMarketShowsUnavailableInsteadOfEmptyFilter(t *testing.T) {
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Live.Data["expert-market"] = map[string]any{"items": []any{}, "error": "专家目录暂不可用，请稍后重试"}
+	a.Settings.Business.ExpertTab = "market"
+	a.openSettings("agents")
+	tt := ui.NewTester(a.View, 1240, 820)
+	if !tt.HasText("专家目录暂不可用，请稍后重试") || !tt.HasText("重试") {
+		t.Fatal("market failure must be visible and offer a retry")
+	}
+	if tt.HasText("没有匹配的模板，请调整筛选或搜索词。") {
+		t.Fatal("failure should not be shown as an empty filter")
+	}
+}

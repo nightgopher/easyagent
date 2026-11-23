@@ -99,11 +99,11 @@ func TestExpertMarketInstallExpert(t *testing.T) {
 	var out struct {
 		Installed bool `json:"installed"`
 		Agents    []struct {
-			ID           string   `json:"id"`
-			Name         string   `json:"name"`
-			Instructions string   `json:"instructions"`
-			Skills       []string `json:"skills"`
-			MemoryEnabled bool    `json:"memory_enabled"`
+			ID            string   `json:"id"`
+			Name          string   `json:"name"`
+			Instructions  string   `json:"instructions"`
+			Skills        []string `json:"skills"`
+			MemoryEnabled bool     `json:"memory_enabled"`
 		} `json:"agents"`
 		MissingSkills []string `json:"missing_skills"`
 		Team          any      `json:"team"`
@@ -199,4 +199,17 @@ func TestExpertMarketDisabled(t *testing.T) {
 	w := businessRequest(t, s, "GET", "/experts/market/templates", nil, 404)
 	require.Contains(t, w.Body.String(), "404")
 	businessRequest(t, s, "POST", "/experts/market/install", map[string]any{"id": "x", "kind": "expert"}, 404)
+}
+
+func TestExpertMarketExplicitRefreshRetriesFailure(t *testing.T) {
+	s, hits, upstream := newExpertMarketTestServer(t, "unavailable", http.StatusServiceUnavailable)
+	w := businessRequest(t, s, "GET", "/experts/market/templates", nil, 200)
+	require.Contains(t, w.Body.String(), "专家目录暂不可用")
+	upstream.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); _, _ = w.Write([]byte(expertMarketCatalog)) })
+	businessRequest(t, s, "GET", "/experts/market/templates", nil, 200)
+	require.EqualValues(t, 1, hits.Load())
+	w = businessRequest(t, s, "GET", "/experts/market/templates?refresh=1", nil, 200)
+	require.EqualValues(t, 2, hits.Load())
+	require.Contains(t, w.Body.String(), "fullstack")
+	require.NotContains(t, w.Body.String(), "专家目录暂不可用")
 }

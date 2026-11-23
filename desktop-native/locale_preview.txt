@@ -245,6 +245,12 @@ MCP 工具连接|MCP tool connections
 
 业务能力|Business capabilities
 业务 Agent|Business agents
+Agent 与专家团|Agents and teams
+管理角色、团队和专家市场模板。|Manage roles, teams, and expert marketplace templates.
+我的 Agent 与团队|My agents and teams
+复制系统提示词|Copy system prompt
+已复制系统提示词|System prompt copied
+复制失败，请检查剪贴板权限|Copy failed; check clipboard permissions
 记忆与知识|Memory and knowledge
 创建可持续使用的角色，管理它的工具、技能与知识。|Create reusable roles with their own tools, skills, and knowledge.
 管理知识来源、Agent 独立记忆与人工整理发布。|Manage knowledge sources, private agent memories, and reviewed publications.

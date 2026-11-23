@@ -223,3 +223,36 @@ func TestTeamRosterShowsMemberStates(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentAndTeamShareSettingsPage(t *testing.T) {
+	a := teamFixture(t)
+	a.Live.Data["business-agents"] = map[string]any{"agents": []any{
+		map[string]any{"id": "agent-lead", "name": "调研负责人", "instructions": "统筹", "tools": businessDefaultTools},
+		map[string]any{"id": "agent-search", "name": "资料检索", "instructions": "检索", "tools": businessDefaultTools},
+	}}
+	a.Settings.Open = true
+	a.Settings.Tab = "agents"
+	tt := ui.NewTester(a.View, 1240, 1600)
+	for _, want := range []string{"Agent 与专家团", "调研负责人", "调研小组", "创建 Agent", "创建团队", "专家市场"} {
+		if !tt.HasText(want) {
+			t.Fatalf("combined settings missing %q", want)
+		}
+	}
+	for _, page := range settingsPages {
+		if page.ID == "teams" {
+			t.Fatal("teams must not appear as a separate settings entry")
+		}
+	}
+	if dir := os.Getenv("EASYAGENT_PREVIEW_SNAPSHOTS"); dir != "" {
+		saveSnapshot(t, tt, filepath.Join(dir, "agents-and-teams.png"))
+	}
+	click(t, tt, "编辑团队：调研小组")
+	if !a.Settings.Teams.Editor {
+		t.Fatal("team editing should be available from combined page")
+	}
+	a.Settings.Teams.Team.Name = "未保存"
+	a.closeSettings()
+	if a.Live.Confirm == nil || !a.Settings.Open {
+		t.Fatal("combined page must protect unsaved team edits")
+	}
+}
