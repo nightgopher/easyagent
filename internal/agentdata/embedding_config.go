@@ -43,6 +43,12 @@ func (s *Store) SaveEmbeddingConfig(ctx context.Context, c EmbeddingConfig) erro
 	c.Endpoint = strings.TrimSpace(c.Endpoint)
 	c.Model = strings.TrimSpace(c.Model)
 	c.APIKey = strings.TrimSpace(c.APIKey)
+	if c.ClearKey {
+		if c.Enabled {
+			return fmt.Errorf("disable embeddings before clearing the API key")
+		}
+		c.APIKey = ""
+	}
 	u, err := url.Parse(c.Endpoint)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		return fmt.Errorf("embedding endpoint must be an HTTPS URL without credentials or query")

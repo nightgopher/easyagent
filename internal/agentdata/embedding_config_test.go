@@ -34,6 +34,11 @@ func TestEmbeddingConfigCredentialIsolation(t *testing.T) {
 	if err = s.SaveEmbeddingConfig(ctx, saved); err != nil {
 		t.Fatal(err)
 	}
+	saved.ClearKey = true
+	saved.APIKey = "must-not-be-saved"
+	if err = s.SaveEmbeddingConfig(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
 	saved, err = s.EmbeddingConfig(ctx)
 	if err != nil || saved.APIKey != "" || saved.HasKey {
 		t.Fatalf("key leaked to new endpoint: %v", err)
