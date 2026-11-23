@@ -59,7 +59,7 @@ func (s *Store) SaveEmbeddingConfig(ctx context.Context, c EmbeddingConfig) erro
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var oldEndpoint, oldModel, oldKey string
 	err = tx.QueryRowContext(ctx, `SELECT endpoint,model,api_key FROM knowledge_embedding_config WHERE id=1`).Scan(&oldEndpoint, &oldModel, &oldKey)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
