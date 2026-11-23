@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/creack/pty v1.1.24
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
+	github.com/gorilla/websocket v1.5.4-0.20240701034025-d67f41855da4
 	github.com/joho/godotenv v1.5.1
 	github.com/larksuite/oapi-sdk-go/v3 v3.12.2
 	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
