@@ -560,7 +560,7 @@ func businessTimestamp(raw string) string {
 func (a *preview) embeddingSettings(c *ui.Context) {
 	s := &a.Settings.Business
 	a.heading(c, "向量模型")
-	a.note(c, "启用后，Agent 检索知识时会将已授权的知识内容和查询发送到所配置的服务。请先确认服务商和可能产生的费用。每个知识来源最多 200 个文档、400 KB；首次检索需要建立索引。")
+	a.note(c, "启用后，Agent 检索知识时会将已授权的知识内容和查询发送到所配置的服务。请先确认服务商和可能产生的费用。每个知识来源最多 200 个文档、400 KB 和 100 万个向量数值；首次检索需要建立索引。")
 	if !s.EmbeddingLoaded {
 		a.note(c, "正在读取配置…")
 		a.action(c, "重新读取").OnClick(func() {

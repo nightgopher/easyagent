@@ -106,6 +106,14 @@ func (s *Store) semanticKnowledge(ctx context.Context, source KnowledgeSource, q
 		}
 		preparedDocs = append(preparedDocs, p)
 	}
+	// Bound the size of the persistent vector cache, including previously cached chunks.
+	totalChunks := 0
+	for _, p := range preparedDocs {
+		totalChunks += len(p.chunks)
+	}
+	if len(queryVector) > 0 && totalChunks > 1000000/len(queryVector) {
+		return nil, errors.New("semantic index would exceed one million vector values; narrow the source or use a smaller model")
+	}
 	for offset := 0; offset < len(missingTexts); offset += 32 {
 		var active bool
 		if err := db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM knowledge_embedding_config WHERE id=1 AND enabled=1 AND endpoint=? AND model=? AND api_key=?)`, config.Endpoint, config.Model, config.APIKey).Scan(&active); err != nil {
