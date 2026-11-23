@@ -7,6 +7,37 @@ import (
 	"testing"
 )
 
+func TestCLIManagementDetail(t *testing.T) {
+	for _, tc := range []struct {
+		status        cliInstallStatus
+		version, want string
+	}{
+		{cliNotInstalled, "", "未安装"},
+		{cliInstalledHere, "v0.54.0", "桌面应用管理 · 构建版本 v0.54.0"},
+		{cliInstallConflict, "v0.53.1", "独立安装或其他链接 · 构建版本 v0.53.1"},
+		{cliInstallConflict, "", "构建版本 未知"},
+	} {
+		if got := cliManagementDetail(tc.status, "/test/easyagent", tc.version); !strings.Contains(got, tc.want) {
+			t.Errorf("got %q, want %q", got, tc.want)
+		}
+	}
+}
+
+func TestCLIVersionDoesNotExecuteUnknownFile(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "executed")
+	path := filepath.Join(dir, "easyagent")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\ntouch "+marker+"\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if got := cachedCLIBuildVersion(path); got != "" {
+		t.Fatalf("unexpected version %q", got)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("file was executed: %v", err)
+	}
+}
+
 // 隔离 HOME/SHELL/PATH，返回 (home, corePath)。
 func cliInstallTestEnv(t *testing.T, shell string, path string) (string, string) {
 	t.Helper()

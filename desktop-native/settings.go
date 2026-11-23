@@ -138,9 +138,14 @@ func (a *preview) commandLineRow(c *ui.Context) {
 	if err != nil {
 		return
 	}
+	target, err := cliInstallTarget()
+	if err != nil {
+		return
+	}
+	detail := cliManagementDetail(status, target, cachedCLIBuildVersion(target))
 	switch status {
 	case cliNotInstalled:
-		a.preferenceRow(c, "命令行", "在终端使用 easyagent 命令；symlink 到应用内嵌核心，随应用更新自动跟进", func() {
+		a.preferenceRow(c, "命令行", detail, func() {
 			a.action(c, "安装命令行").OnClick(func() {
 				installed, rcPath, err := installCLI(corePath)
 				if err != nil {
@@ -163,7 +168,7 @@ func (a *preview) commandLineRow(c *ui.Context) {
 			})
 		})
 	case cliInstalledHere:
-		a.preferenceRow(c, "命令行", "已安装：终端可直接使用 easyagent 命令（随应用更新自动跟进）", func() {
+		a.preferenceRow(c, "命令行", detail, func() {
 			a.action(c, "卸载命令行").OnClick(func() {
 				removed, message, err := uninstallCLI(corePath)
 				if err != nil {
@@ -178,7 +183,7 @@ func (a *preview) commandLineRow(c *ui.Context) {
 			})
 		})
 	case cliInstallConflict:
-		a.preferenceRow(c, "命令行", "检测到独立的 easyagent 命令（install.sh 或手动安装），本应用不做改动", func() {})
+		a.preferenceRow(c, "命令行", detail, func() {})
 	}
 }
 
