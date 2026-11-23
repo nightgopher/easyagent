@@ -63,3 +63,20 @@ func TestConfigPanelCustomModelAndSmallScreen(t *testing.T) {
 	require.False(t, m.configEditing)
 	require.True(t, strings.Contains(m.configNotice, "已保存"))
 }
+
+func TestConfigPanelSelectionRemainsVisibleOnSmallScreens(t *testing.T) {
+	m := newSelectorTestModel(t)
+	m.configBackend = &fakeConfigBackend{snapshot: ConfigSnapshot{Provider: "openai", Model: "test"}}
+	m.handleSlashCommand("/config")
+	items := []string{"从列表设置默认模型", "手动输入默认模型 ID", "切换当前会话模型", "飞书看门狗", "返回对话"}
+	for _, height := range []int{2, 4, 8, 12, 30} {
+		m.Update(tea.WindowSizeMsg{Width: 40, Height: height})
+		for i, item := range items {
+			m.configIndex = i
+			view := m.View()
+			require.Contains(t, view, item)
+			require.LessOrEqual(t, lipgloss.Width(view), 40)
+			require.LessOrEqual(t, lipgloss.Height(view), height)
+		}
+	}
+}
