@@ -59,7 +59,7 @@ func TestBusinessManagementLayouts(t *testing.T) {
 						}
 					}
 					tt := ui.NewTester(a.View, width, 820)
-					for _, label := range []string{"创建 Agent", "添加来源", "保存来源", "保存 Agent", "保存记忆", "确认发布"} {
+					for _, label := range []string{"创建 Agent", "添加来源", "保存来源", "保存 Agent", "保存记忆", "确认发布", "保存向量模型", "测试已保存的模型"} {
 						if box, ok := tt.Find(label); ok && box.W > 190 {
 							t.Fatalf("stretched action %s: %+v", label, box)
 						}

@@ -575,24 +575,25 @@ func (a *preview) embeddingSettings(c *ui.Context) {
 	a.input(c, "API 密钥", &v.APIKey, "留空保留当前服务的密钥", true)
 	if v.HasKey {
 		a.note(c, "当前服务已保存密钥。更换地址后须填写新密钥。")
-		a.action(c, "停用并清除密钥").OnClick(func() {
-			payload := map[string]any{"enabled": false, "endpoint": v.Endpoint, "model": v.Model, "clear_key": true}
-			a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
-				s.setEmbedding(result)
-				a.Settings.message("向量检索已停用，密钥已清除。")
+	}
+	ui.Row(c).Wrap().Gap(8).Children(func() {
+		a.primary(c, "保存向量模型").Disabled(a.Live.Loading["embedding-save"]).OnClick(func() {
+			payload := map[string]any{"enabled": v.Enabled, "endpoint": v.Endpoint, "model": v.Model, "api_key": v.APIKey}
+			a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) { s.setEmbedding(result); a.Settings.message("向量模型配置已保存。") })
+		})
+		a.action(c, "测试已保存的模型").Disabled(!v.Enabled || !v.HasKey || a.Live.Loading["embedding-test"]).OnClick(func() {
+			a.operation("embedding-test", "POST", "/knowledge/embeddings/test", nil, func(result any) {
+				a.Settings.message(fmt.Sprintf("向量模型连接成功，维度：%v。", object(result)["dimensions"]))
 			})
 		})
-	}
-	a.action(c, "测试已保存的模型").Disabled(!v.Enabled || !v.HasKey).OnClick(func() {
-		a.operation("embedding-test", "POST", "/knowledge/embeddings/test", nil, func(v any) {
-			a.Settings.message(fmt.Sprintf("向量模型连接成功，维度：%v。", object(v)["dimensions"]))
-		})
-	})
-	a.primary(c, "保存向量模型").OnClick(func() {
-		payload := map[string]any{"enabled": v.Enabled, "endpoint": v.Endpoint, "model": v.Model, "api_key": v.APIKey}
-		a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
-			s.setEmbedding(result)
-			a.Settings.message("向量模型配置已保存。")
-		})
+		if v.HasKey {
+			a.action(c, "停用并清除密钥").Disabled(a.Live.Loading["embedding-save"]).OnClick(func() {
+				payload := map[string]any{"enabled": false, "endpoint": v.Endpoint, "model": v.Model, "clear_key": true}
+				a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
+					s.setEmbedding(result)
+					a.Settings.message("向量检索已停用，密钥已清除。")
+				})
+			})
+		}
 	})
 }
