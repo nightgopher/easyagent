@@ -9,6 +9,20 @@ import (
 	"testing"
 )
 
+func TestSiliconSpeechDefaultsAndSeparateCredentials(t *testing.T) {
+	model, voice := siliconSpeechSettings(localPreferences{})
+	if model != "FunAudioLLM/CosyVoice2-0.5B" || voice != model+":alex" {
+		t.Fatalf("defaults: %q %q", model, voice)
+	}
+	model, voice = siliconSpeechSettings(localPreferences{SiliconSpeechModel: " custom/model ", SiliconSpeechVoice: " custom/voice "})
+	if model != "custom/model" || voice != "custom/voice" {
+		t.Fatalf("custom values: %q %q", model, voice)
+	}
+	if speechCredential == siliconSpeechCredential {
+		t.Fatal("silicon key must be separate from custom speech")
+	}
+}
+
 func TestCustomSpeechRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var v map[string]string
