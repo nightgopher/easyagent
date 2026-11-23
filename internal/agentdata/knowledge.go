@@ -46,6 +46,8 @@ type KnowledgeHit struct {
 
 const knowledgeSchema = `
 CREATE TABLE IF NOT EXISTS knowledge_sources(id TEXT PRIMARY KEY, definition TEXT NOT NULL, version INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS knowledge_embedding_config(id INTEGER PRIMARY KEY CHECK(id=1), enabled INTEGER NOT NULL, endpoint TEXT NOT NULL, model TEXT NOT NULL, api_key TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS knowledge_embedding_vectors(document_id INTEGER NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE, cache_key TEXT NOT NULL, stamp TEXT NOT NULL, vectors TEXT NOT NULL, PRIMARY KEY(document_id,cache_key));
 CREATE TABLE IF NOT EXISTS knowledge_documents(
  id INTEGER PRIMARY KEY, source_id TEXT NOT NULL, path TEXT NOT NULL,
  title TEXT NOT NULL, body TEXT NOT NULL, stamp TEXT NOT NULL, modified TEXT NOT NULL,
@@ -462,6 +464,34 @@ func (s *Store) SearchAgentKnowledge(ctx context.Context, agentID, query string)
 		found, err := s.SearchKnowledge(ctx, binding.SourceID, query, 5)
 		if err != nil {
 			return nil, err
+		}
+		config, err := s.EmbeddingConfig(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if config.Enabled && strings.TrimSpace(query) != "" {
+			source, err := s.GetSource(ctx, binding.SourceID)
+			if err != nil {
+				return nil, err
+			}
+			semantic, err := s.semanticKnowledge(ctx, source, query, 5, config)
+			if err != nil {
+				return nil, fmt.Errorf("semantic knowledge search failed: %w", err)
+			}
+			seen := map[string]bool{}
+			merged := make([]KnowledgeHit, 0, 5)
+			// Reserve two slots for semantic matches when keywords already fill the list.
+			combined := append(append(append([]KnowledgeHit{}, found[:min(3, len(found))]...), semantic...), found[min(3, len(found)):]...)
+			for _, hit := range combined {
+				if !seen[hit.Path] {
+					seen[hit.Path] = true
+					merged = append(merged, hit)
+				}
+				if len(merged) == 5 {
+					break
+				}
+			}
+			found = merged
 		}
 		hits = append(hits, found...)
 		if len(hits) >= 20 {

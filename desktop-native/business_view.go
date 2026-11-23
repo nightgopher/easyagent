@@ -269,7 +269,7 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 	}
 	s := &a.Settings.Business
 	ui.Row(c).Gap(4).Children(func() {
-		for _, tab := range []businessChoice{{"sources", "知识来源"}, {"memories", "Agent 记忆"}} {
+		for _, tab := range []businessChoice{{"sources", "知识来源"}, {"memories", "Agent 记忆"}, {"embedding", "语义检索"}} {
 			btn := a.action(c, tab.Label)
 			if s.Tab == tab.ID || s.Tab == "" && tab.ID == "sources" {
 				btn.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
@@ -281,6 +281,10 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 						a.Settings.Notice, a.Settings.Error = "", ""
 					}
 					s.Tab = tab.ID
+					if tab.ID == "embedding" {
+						s.EmbeddingLoaded = false
+						a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.setEmbedding(v) })
+					}
 					if tab.ID == "memories" {
 						if s.MemoryAgentID == "" {
 							agents := a.businessAgents()
@@ -294,6 +298,10 @@ func (a *preview) memoryKnowledgeSettings(c *ui.Context) {
 			})
 		}
 	})
+	if s.Tab == "embedding" {
+		a.embeddingSettings(c)
+		return
+	}
 	if s.Tab == "memories" {
 		a.agentMemorySettings(c)
 		return
@@ -547,4 +555,45 @@ func businessTimestamp(raw string) string {
 		return stamp.Local().Format("2006-01-02 15:04")
 	}
 	return raw
+}
+
+func (a *preview) embeddingSettings(c *ui.Context) {
+	s := &a.Settings.Business
+	a.heading(c, "向量模型")
+	a.note(c, "启用后，Agent 检索知识时会将已授权的知识内容和查询发送到所配置的服务。请先确认服务商和可能产生的费用。每个知识来源最多 200 个文档、400 KB 和 100 万个向量数值；首次检索需要建立索引。")
+	if !s.EmbeddingLoaded {
+		a.note(c, "正在读取配置…")
+		a.action(c, "重新读取").OnClick(func() {
+			a.operation("embedding-load", "GET", "/knowledge/embeddings", nil, func(v any) { s.setEmbedding(v) })
+		})
+		return
+	}
+	v := &s.Embedding
+	ui.Checkbox(c, &v.Enabled, "启用语义检索")
+	a.input(c, "接口地址", &v.Endpoint, "https://api.siliconflow.cn/v1/embeddings", false)
+	a.input(c, "向量模型", &v.Model, "BAAI/bge-m3", false)
+	a.input(c, "API 密钥", &v.APIKey, "留空保留当前服务的密钥", true)
+	if v.HasKey {
+		a.note(c, "当前服务已保存密钥。更换地址后须填写新密钥。")
+	}
+	ui.Row(c).Wrap().Gap(8).Children(func() {
+		a.primary(c, "保存向量模型").Disabled(a.Live.Loading["embedding-save"]).OnClick(func() {
+			payload := map[string]any{"enabled": v.Enabled, "endpoint": v.Endpoint, "model": v.Model, "api_key": v.APIKey}
+			a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) { s.setEmbedding(result); a.Settings.message("向量模型配置已保存。") })
+		})
+		a.action(c, "测试已保存的模型").Disabled(!v.Enabled || !v.HasKey || a.Live.Loading["embedding-test"]).OnClick(func() {
+			a.operation("embedding-test", "POST", "/knowledge/embeddings/test", nil, func(result any) {
+				a.Settings.message(fmt.Sprintf("向量模型连接成功，维度：%v。", object(result)["dimensions"]))
+			})
+		})
+		if v.HasKey {
+			a.action(c, "停用并清除密钥").Disabled(a.Live.Loading["embedding-save"]).OnClick(func() {
+				payload := map[string]any{"enabled": false, "endpoint": v.Endpoint, "model": v.Model, "clear_key": true}
+				a.operation("embedding-save", "PUT", "/knowledge/embeddings", payload, func(result any) {
+					s.setEmbedding(result)
+					a.Settings.message("向量检索已停用，密钥已清除。")
+				})
+			})
+		}
+	})
 }
