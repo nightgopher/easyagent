@@ -812,6 +812,11 @@ func (a *preview) startBusinessSession(agentID string) {
 	a.createBoundSession("", "", "business", agentID, func(*session) { a.closeSettings() })
 }
 func (a *preview) createBoundSession(draft, workspace, application, agentID string, ready ...func(*session)) {
+	if agentID == desktopStewardID {
+		a.Live.Error = ""
+		a.Live.Notice = a.tr("管家使用同一个会话，请直接在管家对话中发送新任务；如需新建其他会话，请先切换项目或模式。")
+		return
+	}
 	if a.Live.configBusy() {
 		a.Live.Error = "正在应用连接配置，请稍后创建会话"
 		return
