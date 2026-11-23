@@ -1,12 +1,71 @@
 package main
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 )
+
+var cliVersionCache struct {
+	sync.Mutex
+	path    string
+	file    os.FileInfo
+	version string
+}
+
+func cachedCLIBuildVersion(path string) string {
+	file, err := os.Stat(path)
+	if err != nil || !file.Mode().IsRegular() {
+		return ""
+	}
+	cliVersionCache.Lock()
+	defer cliVersionCache.Unlock()
+	if cliVersionCache.path == path && cliVersionCache.file != nil && os.SameFile(file, cliVersionCache.file) && file.Size() == cliVersionCache.file.Size() && file.ModTime().Equal(cliVersionCache.file.ModTime()) {
+		return cliVersionCache.version
+	}
+	cliVersionCache.path, cliVersionCache.file = path, file
+	cliVersionCache.version = cliBuildVersion(path)
+	return cliVersionCache.version
+}
+
+// cliBuildVersion reads metadata without executing a possibly old or unrelated binary.
+func cliBuildVersion(path string) string {
+	info, err := buildinfo.ReadFile(path)
+	if err != nil || info.Path != "github.com/nightgopher/easyagent/cmd/easyagent" {
+		return ""
+	}
+	version := info.Main.Version
+	if version == "" || version == "(devel)" || strings.Contains(version, "-") {
+		return ""
+	}
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.modified" && setting.Value == "true" {
+			return ""
+		}
+	}
+	return version
+}
+
+func cliManagementDetail(status cliInstallStatus, target, version string) string {
+	switch status {
+	case cliNotInstalled:
+		return "未安装桌面管理的命令行；安装后随桌面应用更新。请确认终端 PATH 中没有其他 easyagent。"
+	case cliInstalledHere:
+		if version == "" {
+			version = "未知"
+		}
+		return "桌面应用管理 · 构建版本 " + version + " · 随桌面应用更新。入口：" + target + "；终端实际使用的命令由 PATH 决定。"
+	default:
+		if version == "" {
+			version = "未知（可在终端运行 easyagent --version 查看）"
+		}
+		return "独立安装或其他链接 · 构建版本 " + version + " · 不随桌面更新。入口：" + target + "；桌面不会覆盖此文件。"
+	}
+}
 
 // 桌面端「安装命令行」：把应用内嵌的核心 CLI（macOS 为
 // Contents/Resources/easyagent）symlink 到 ~/.easyagent/bin/easyagent，
