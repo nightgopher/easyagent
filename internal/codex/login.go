@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net"
@@ -54,6 +55,10 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
+		if subtle.ConstantTimeCompare([]byte(q.Get("state")), []byte(session.flow.state)) != 1 {
+			http.Error(w, "授权回调 state 不匹配", http.StatusBadRequest)
+			return
+		}
 		if e := q.Get("error"); e != "" {
 			http.Error(w, "授权未完成: "+e, http.StatusBadRequest)
 			session.fail(errors.New("codex 授权被拒绝: " + e))
@@ -64,17 +69,26 @@ func (m *Manager) StartLogin(ctx context.Context) (*LoginSession, error) {
 			http.Error(w, "回调缺少 code 参数", http.StatusBadRequest)
 			return
 		}
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = fmt.Fprint(w, "登录成功，可以关闭此页面并返回 EasyAgent。")
-		go func() {
-			input := redirectURI + "?" + q.Encode()
-			// 完成路径整体一次性：授权码只能换一次令牌，重复回调不得重复
-			// 交换（第二次的错误会污染 Wait 结果），也不得二次 close。
-			session.completeOnce.Do(func() {
-				session.done <- session.manager.completeLogin(context.WithoutCancel(ctx), session.flow, input)
-				session.markClosed()
-			})
-		}()
+		input := redirectURI + "?" + q.Encode()
+		completed := false
+		session.completeOnce.Do(func() {
+			completed = true
+			exchangeErr := session.manager.completeLogin(context.WithoutCancel(ctx), session.flow, input)
+			if exchangeErr != nil {
+				http.Error(w, "登录未完成，请返回 EasyAgent 查看错误。", http.StatusBadGateway)
+			} else {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				_, _ = fmt.Fprint(w, "登录成功，可以关闭此页面并返回 EasyAgent。")
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			session.done <- exchangeErr
+			session.markClosed()
+		})
+		if !completed {
+			http.Error(w, "该登录回调已处理", http.StatusConflict)
+		}
 	})
 	session.server = &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 	go func() {

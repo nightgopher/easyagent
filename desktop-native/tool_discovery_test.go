@@ -17,7 +17,7 @@ func TestToolDiscoverySettingsLayoutAndUnknownHost(t *testing.T) {
 		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			a := alignmentPreview(t)
 			a.Settings.Open = true
-			a.Settings.Tab = "models"
+			a.Settings.Tab = "permissions"
 			a.Live.Data["tool-discovery"] = map[string]any{"mode": "local"}
 			tt := ui.NewTester(a.View, width, 900)
 			if !tt.HasText("按需加载") || !tt.HasText("工具加载") {

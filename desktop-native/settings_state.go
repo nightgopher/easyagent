@@ -30,9 +30,13 @@ const (
 	SettingCopyCmdlineMode       = "沿用命令行配置"
 	SettingCopyDesktopMode       = "在桌面客户端配置"
 	SettingCopyEasyCodeMode      = "EasyCode 飞书登录"
+	SettingCopyOpenAIProvider    = "OpenAI API Key"
+	SettingCopyOpenAIBaseURL     = "https://api.openai.com"
 	SettingCopyCmdlineNote       = "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。"
 	SettingCopyZhipuProvider     = "智谱 GLM Coding Plan"
 	SettingCopyZhipuBaseURL      = "https://open.bigmodel.cn/api/coding/paas/v4"
+	SettingCopyVolcProvider      = "火山引擎 Coding Plan"
+	SettingCopyVolcBaseURL       = "https://ark.cn-beijing.volces.com/api/coding/v3"
 	SettingCopyZhipuModelNote    = "Coding Plan 端点不提供模型目录，检测连接不可用；直接从常用模型选择或手动填写模型 ID。国际版把地址域名换成 api.z.ai。"
 )
 
@@ -63,22 +67,25 @@ var settingsPages = []settingsPage{
 var phoneSpeechSettingsPage = settingsPage{"speech", "语音朗读", "play", "选择朗读服务和声音。", "立即生效", 0}
 
 type localPreferences struct {
-	SpeechProvider    string               `json:"speech_provider,omitempty"`
-	SpeechAuto        bool                 `json:"speech_auto,omitempty"`
-	SpeechVoice       string               `json:"speech_voice,omitempty"`
-	SpeechEndpoint    string               `json:"speech_endpoint,omitempty"`
-	SpeechModel       string               `json:"speech_model,omitempty"`
-	SpeechCustomVoice string               `json:"speech_custom_voice,omitempty"`
-	SpeechHasKey      bool                 `json:"speech_has_key,omitempty"`
-	Language          string               `json:"language"`
-	Theme             string               `json:"theme"`
-	LarkWatch         bool                 `json:"lark_watch,omitempty"`
-	Background        wallpaperPreferences `json:"background"`
-	WorkbenchWidth    float32              `json:"workbench_width,omitempty"`
-	TerminalHeight    float32              `json:"terminal_height,omitempty"`
-	Shortcuts         map[string]string    `json:"shortcuts,omitempty"`
-	UpdateProxyMode   string               `json:"update_proxy_mode,omitempty"`
-	UpdateProxyURL    string               `json:"update_proxy_url,omitempty"`
+	SpeechProvider      string               `json:"speech_provider,omitempty"`
+	SpeechAuto          bool                 `json:"speech_auto,omitempty"`
+	SpeechVoice         string               `json:"speech_voice,omitempty"`
+	SpeechEndpoint      string               `json:"speech_endpoint,omitempty"`
+	SpeechModel         string               `json:"speech_model,omitempty"`
+	SpeechCustomVoice   string               `json:"speech_custom_voice,omitempty"`
+	SpeechHasKey        bool                 `json:"speech_has_key,omitempty"`
+	SiliconSpeechModel  string               `json:"silicon_speech_model,omitempty"`
+	SiliconSpeechVoice  string               `json:"silicon_speech_voice,omitempty"`
+	SiliconSpeechHasKey bool                 `json:"silicon_speech_has_key,omitempty"`
+	Language            string               `json:"language"`
+	Theme               string               `json:"theme"`
+	LarkWatch           bool                 `json:"lark_watch,omitempty"`
+	Background          wallpaperPreferences `json:"background"`
+	WorkbenchWidth      float32              `json:"workbench_width,omitempty"`
+	TerminalHeight      float32              `json:"terminal_height,omitempty"`
+	Shortcuts           map[string]string    `json:"shortcuts,omitempty"`
+	UpdateProxyMode     string               `json:"update_proxy_mode,omitempty"`
+	UpdateProxyURL      string               `json:"update_proxy_url,omitempty"`
 }
 type demoHost struct {
 	ID, Name, URL string
@@ -125,6 +132,7 @@ type feishuForm struct {
 	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
 }
 type settingsState struct {
+	ModelShowChatGPT                                        bool
 	SpeechAPIKey                                            string
 	HookDraft, HookSaved, HookRevision                      string
 	HookEvent, HookTool, HookCommand, HookArgs, HookTimeout string
