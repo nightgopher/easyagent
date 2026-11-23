@@ -64,3 +64,17 @@ func TestModelDiscoveryDoesNotForwardCredentialsThroughRedirect(t *testing.T) {
 	assert.Nil(t, models)
 	assert.Equal(t, 0, redirected)
 }
+
+func TestModelDiscoveryPreservesVersionedBase(t *testing.T) {
+	for _, tc := range []struct{ base, path string }{{"", "/v1/models"}, {"/v1", "/v1/models"}, {"/api/coding/v3", "/api/coding/v3/models"}, {"/api/coding/paas/v4", "/api/coding/paas/v4/models"}} {
+		t.Run(tc.base, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, tc.path, r.URL.Path)
+				_, _ = w.Write([]byte(`{"data":[]}`))
+			}))
+			defer srv.Close()
+			_, err := (&Server{}).fetchGatewayModels(context.Background(), srv.URL+tc.base, "test-key")
+			require.NoError(t, err)
+		})
+	}
+}

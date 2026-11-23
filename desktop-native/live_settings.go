@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,9 @@ func (a *preview) loadSettingsPage() {
 		}
 	case "permissions":
 		a.resource("permissions", "/settings/permissions")
+		if !l.Loading["tool-discovery-save"] {
+			a.resource("tool-discovery", "/settings/tool-discovery")
+		}
 		if !l.Loading["builtin-tools-save"] {
 			a.resource("builtin-tools", "/settings/builtin-tools")
 		}
@@ -99,9 +103,6 @@ func (a *preview) loadSettingsPage() {
 		a.refreshTeams()
 	case "models":
 		a.refreshModels()
-		if !l.Loading["tool-discovery-save"] {
-			a.resource("tool-discovery", "/settings/tool-discovery")
-		}
 	case "usage":
 		a.resource("usage", "/usage/summary")
 	case "experiments":
@@ -163,6 +164,7 @@ func (a *preview) liveSettingsPage(c *ui.Context) {
 	case "permissions":
 		a.livePermissionSettings(c)
 		a.liveBuiltinToolSettings(c)
+		a.toolDiscoverySettings(c)
 	case "general":
 		a.generalSettings(c)
 		a.note(c, "会话、草稿、主机和模型配置会保存到此原生应用的数据目录。模型 API Key 与主机密钥保存在 macOS 钥匙串；EasyCode 登录凭据保存在仅当前用户可访问的目录。")
@@ -229,7 +231,6 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	})
 	a.preferenceRow(c, SettingCopyCurrentModel, a.current().Model, func() {})
 	a.note(c, SettingCopyModelNote)
-	a.toolDiscoverySettings(c)
 	if !s.host().Local {
 		a.note(c, SettingCopyRemoteModelNote)
 		ui.Row(c).Gap(8).Wrap().Children(func() {
@@ -239,40 +240,36 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 		})
 		return
 	}
-	a.heading(c, SettingCopyLocalSource)
+	a.heading(c, "模型服务")
+	a.modelSourceSelector(c, busy)
+	if s.ModelShowChatGPT {
+		a.codexSettings(c)
+		return
+	}
+	if s.Mode == SettingCopyDesktopMode {
+		a.savedModelProfiles(c)
+	}
 	ui.Column(c).Gap(12).Disabled(busy).Children(func() {
-		ui.RadioGroup(c, func() {
-			ui.Row(c).Gap(20).Wrap().Children(func() {
-				for _, mode := range []string{SettingCopyCmdlineMode, SettingCopyDesktopMode, SettingCopyEasyCodeMode} {
-					if ui.Radio(c, &s.Mode, mode, a.tr(mode)).Changed() {
-						a.clearModelCheck()
-						if mode == SettingCopyEasyCodeMode {
-							if l.Config.Model.Mode != "easycode" {
-								s.Model = ""
-							}
-							a.refreshEasyCodeStatus()
-							if l.EasyCode.LoggedIn {
-								a.refreshEasyCodeModels()
-							}
-						}
-					}
-				}
-			})
-		})
 		if s.Mode == "在桌面客户端配置" {
 			ui.Row(c).Gap(16).Wrap().Children(func() {
 				for index := 0; index < 4; index++ {
 					ui.Column(c.Key(index)).Basis(220).Grow(1).MinWidth(180).Children(func() {
 						switch index {
 						case 0:
-							if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", "Anthropic", SettingCopyZhipuProvider}).Changed() {
+							if a.dropdown(c, "模型服务", &s.Provider, []string{"OpenAI 兼容服务 / 网关", SettingCopyOpenAIProvider, "Anthropic", SettingCopyZhipuProvider, SettingCopyVolcProvider}).Changed() {
 								s.APIKey = ""
 								a.clearModelCheck()
 								// 切到智谱时把仍是各家默认占位的地址替换为 coding 端点，已有自定义地址不动
-								if s.Provider == SettingCopyZhipuProvider {
+								if s.Provider == SettingCopyZhipuProvider || s.Provider == SettingCopyVolcProvider || s.Provider == SettingCopyOpenAIProvider {
 									switch s.BaseURL {
-									case "", "http://localhost:4001", "https://api.anthropic.com":
-										s.BaseURL = SettingCopyZhipuBaseURL
+									case "", "http://localhost:4001", "https://api.anthropic.com", SettingCopyZhipuBaseURL, SettingCopyVolcBaseURL, SettingCopyOpenAIBaseURL:
+										if s.Provider == SettingCopyZhipuProvider {
+											s.BaseURL = SettingCopyZhipuBaseURL
+										} else if s.Provider == SettingCopyVolcProvider {
+											s.BaseURL = SettingCopyVolcBaseURL
+										} else {
+											s.BaseURL = SettingCopyOpenAIBaseURL
+										}
 									}
 								}
 							}
@@ -283,6 +280,10 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 								placeholder = "https://api.anthropic.com"
 							case SettingCopyZhipuProvider:
 								placeholder = SettingCopyZhipuBaseURL
+							case SettingCopyVolcProvider:
+								placeholder = SettingCopyVolcBaseURL
+							case SettingCopyOpenAIProvider:
+								placeholder = SettingCopyOpenAIBaseURL
 							}
 							if a.input(c, "服务地址", &s.BaseURL, placeholder, false).Label("全局模型服务地址").Changed() {
 								a.clearModelCheck()
@@ -299,7 +300,9 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 							if s.Provider == "Anthropic" {
 								provider = "anthropic"
 							}
-							if l.Config.Model.HasKey && l.Config.Model.Provider == provider {
+							target := modelConfig{Provider: provider, BaseURL: s.BaseURL}
+							profile, saved := availableModelProfiles(l.Config)[modelProfileID(target)]
+							if l.Config.Model.HasKey && sameModelCredentialTarget(l.Config.Model, target) || saved && profile.HasKey && sameModelCredentialTarget(profile, target) {
 								placeholder = "留空保留已存入钥匙串的密钥"
 							}
 							if a.input(c, "API Key", &s.APIKey, placeholder, true).Changed() {
@@ -325,6 +328,9 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 				a.note(c, "留空沿用模型默认；仅对支持的模型开启思考，可能增加耗时和 token。adaptive 仅供支持它的 Anthropic 模型使用。")
 			})
 			a.note(c, "配置适用于此 Mac 的本地 Agent。密钥保存在 macOS 钥匙串；远程 Agent 的访问令牌在运行主机中配置。")
+			if s.Provider == SettingCopyOpenAIProvider {
+				a.note(c, "OpenAI API Key 使用 API 账户计费；ChatGPT 订阅登录请使用下方登录入口。")
+			}
 		} else if s.Mode == SettingCopyEasyCodeMode {
 			a.note(c, "使用飞书登录 EasyCode，无需单独配置网关；模型使用所登录账号的额度。")
 		} else {
@@ -341,7 +347,6 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	if s.Mode == SettingCopyEasyCodeMode {
 		a.easyCodeSettings(c)
 	}
-	a.codexSettings(c)
 	running := false
 	for _, session := range a.Sessions {
 		running = running || session.Running || session.Pending || session.Sending
@@ -394,6 +399,165 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 		a.note(c, "模型目录读取失败；当前配置的模型仍可选择。")
 	}
 }
+
+func modelSource(form modelForm) string {
+	if form.Mode == SettingCopyEasyCodeMode {
+		return "easycode"
+	}
+	if form.Mode != SettingCopyDesktopMode {
+		return "inherit"
+	}
+	switch form.Provider {
+	case SettingCopyOpenAIProvider:
+		return "openai"
+	case SettingCopyZhipuProvider:
+		return "zhipu"
+	case SettingCopyVolcProvider:
+		return "volc"
+	default:
+		return "custom"
+	}
+}
+
+func availableModelProfiles(cfg clientConfig) map[string]modelConfig {
+	profiles := cloneConfig(cfg).ModelProfiles
+	if profiles == nil {
+		profiles = map[string]modelConfig{}
+	}
+	add := func(p modelConfig) {
+		if isModelOverride(p) && p.HasKey {
+			id := modelProfileID(p)
+			if _, exists := profiles[id]; !exists {
+				profiles[id] = p
+			}
+		}
+	}
+	add(cfg.Model)
+	if cfg.PreviousModel != nil {
+		add(*cfg.PreviousModel)
+	}
+	return profiles
+}
+
+func (a *preview) selectModelSource(source string) {
+	s, l := &a.Settings, a.Live
+	if source == "chatgpt" {
+		s.ModelShowChatGPT = true
+		return
+	}
+	if modelSource(s.modelForm) == source {
+		s.ModelShowChatGPT = false
+		return
+	}
+	change := func() {
+		choice := s.DefaultModelChoice
+		s.modelForm = l.SavedModelForm
+		s.ModelShowChatGPT = false
+		s.APIKey = ""
+		switch source {
+		case "inherit":
+			s.Mode = SettingCopyCmdlineMode
+		case "easycode":
+			s.Mode = SettingCopyEasyCodeMode
+			if l.Config.Model.Mode != "easycode" {
+				s.Model = ""
+			}
+			a.refreshEasyCodeStatus()
+			if l.EasyCode.LoggedIn {
+				a.refreshEasyCodeModels()
+			}
+		default:
+			provider, base := "OpenAI 兼容服务 / 网关", ""
+			switch source {
+			case "openai":
+				provider, base = SettingCopyOpenAIProvider, SettingCopyOpenAIBaseURL
+			case "zhipu":
+				provider, base = SettingCopyZhipuProvider, SettingCopyZhipuBaseURL
+			case "volc":
+				provider, base = SettingCopyVolcProvider, SettingCopyVolcBaseURL
+			}
+			candidate := modelConfig{Mode: "override", Provider: "openai", BaseURL: base}
+			if p, ok := availableModelProfiles(l.Config)[modelProfileID(candidate)]; base != "" && ok && sameModelCredentialTarget(p, candidate) {
+				s.modelForm = modelFormFromConfig(p)
+			} else if modelSource(l.SavedModelForm) == source {
+				s.modelForm = l.SavedModelForm
+			} else {
+				s.modelForm = modelForm{Mode: SettingCopyDesktopMode, Provider: provider, BaseURL: base, Thinking: "沿用模型默认", ReasoningEffort: "沿用模型默认"}
+			}
+		}
+		s.DefaultModelChoice = choice
+		a.clearModelCheck()
+	}
+	if a.settingsFormDirty() {
+		a.requestConfirmation("切换模型配置", "当前有未保存的模型设置，切换将丢弃这些修改。", change)
+		return
+	}
+	change()
+}
+
+func (a *preview) modelSourceSelector(c *ui.Context, busy bool) {
+	s := &a.Settings
+	selected := modelSource(s.modelForm)
+	if s.ModelShowChatGPT {
+		selected = "chatgpt"
+	}
+	for _, group := range []struct {
+		title   string
+		entries [][2]string
+	}{
+		{"账号登录", [][2]string{{"easycode", "EasyCode 飞书登录"}, {"chatgpt", "ChatGPT 订阅登录"}}},
+		{"API 与 Coding Plan", [][2]string{{"openai", SettingCopyOpenAIProvider}, {"zhipu", SettingCopyZhipuProvider}, {"volc", SettingCopyVolcProvider}, {"custom", "其他服务"}, {"inherit", "沿用命令行配置"}}},
+	} {
+		a.note(c, group.title)
+		ui.Row(c).Gap(8).Wrap().Children(func() {
+			for _, entry := range group.entries {
+				id, label := entry[0], entry[1]
+				selectedButton(c.Key(id), a.action(c.Key(id), label), selected == id).Disabled(busy).OnClick(func() { a.selectModelSource(id) })
+			}
+		})
+	}
+}
+
+func (a *preview) savedModelProfiles(c *ui.Context) {
+	profiles := availableModelProfiles(a.Live.Config)
+	if len(profiles) == 0 {
+		return
+	}
+	ids := make([]string, 0, len(profiles))
+	for id, p := range profiles {
+		if isModelOverride(p) && p.HasKey && id == modelProfileID(p) {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	if len(ids) == 0 {
+		return
+	}
+	a.heading(c, "已保存的模型服务")
+	a.note(c, "各服务的密钥分别保存；选择后可检查配置并应用为当前主机的模型服务。")
+	ui.Row(c).Gap(8).Wrap().Children(func() {
+		for _, id := range ids {
+			p := profiles[id]
+			label := modelFormFromConfig(p).Provider + " · " + p.Model
+			if u, err := url.Parse(p.BaseURL); err == nil && u.Host != "" {
+				label += " · " + u.Host
+			}
+			load := func() {
+				choice := a.Settings.DefaultModelChoice
+				a.Settings.modelForm = modelFormFromConfig(p)
+				a.Settings.DefaultModelChoice = choice
+				a.clearModelCheck()
+			}
+			a.action(c.Key(id), label).MaxWidth(320).Disabled(a.Live.configBusy()).OnClick(func() {
+				if a.settingsFormDirty() {
+					a.requestConfirmation("切换模型配置", "当前有未保存的模型设置，切换将丢弃这些修改。", load)
+					return
+				}
+				load()
+			})
+		}
+	})
+}
 func (a *preview) clearModelCheck() {
 	delete(a.Live.Data, "model-check")
 	a.Settings.ModelCatalogSearch = ""
@@ -430,6 +594,21 @@ func (a *preview) modelCandidateForCheck() (modelConfig, string, error) {
 	return a.modelCandidateWithModel(model)
 }
 
+// A stored key belongs to the configured endpoint, not every compatible API.
+func sameModelCredentialTarget(old, next modelConfig) bool {
+	return old.Provider == next.Provider && strings.TrimRight(strings.TrimSpace(old.BaseURL), "/") == strings.TrimRight(strings.TrimSpace(next.BaseURL), "/")
+}
+
+func savedModelCredential(cfg modelConfig, current modelConfig, profiles map[string]modelConfig, secrets secretStore) (string, error) {
+	if p, ok := profiles[modelProfileID(cfg)]; ok && isModelOverride(p) && p.HasKey && sameModelCredentialTarget(p, cfg) {
+		return secrets.Get(modelSecretName(p))
+	}
+	if isModelOverride(current) && current.HasKey && sameModelCredentialTarget(current, cfg) {
+		return secrets.Get(modelSecretName(current))
+	}
+	return "", errors.New("切换模型服务地址或类型时需要填写密钥")
+}
+
 func (a *preview) checkLiveModel() {
 	l := a.Live
 	if a.Settings.Mode == SettingCopyEasyCodeMode {
@@ -453,15 +632,15 @@ func (a *preview) checkLiveModel() {
 	version := l.Versions["model-check"]
 	l.Loading["model-check"] = true
 	epoch, ctx, secrets := l.epoch, l.ctx, l.Secrets
-	oldProvider := l.Config.Model.Provider
+	oldModel := l.Config.Model
+	if oldModel.Mode == "easycode" && l.Config.PreviousModel != nil {
+		oldModel = *l.Config.PreviousModel
+	}
+	profiles := cloneConfig(l.Config).ModelProfiles
 	go func() {
 		var err error
 		if key == "" {
-			if oldProvider != cfg.Provider {
-				err = errors.New("切换服务类型时需要填写密钥")
-			} else {
-				key, err = secrets.Get("model")
-			}
+			key, err = savedModelCredential(cfg, oldModel, profiles, secrets)
 		}
 		var result map[string]any
 		if err == nil && key == "" {
@@ -535,65 +714,88 @@ func (a *preview) applyLiveModel() {
 	}
 	l.Loading["model-save"] = true
 	epoch, ctx, secrets, dir := l.epoch, l.ctx, l.Secrets, l.Dir
-	next := l.Config
-	next.Model = cfg
-	old := l.Config
+	old := cloneConfig(l.Config)
+	next := cloneConfig(old)
+	previousModel := old.Model
+	if previousModel.Mode == "easycode" && old.PreviousModel != nil {
+		previousModel = *old.PreviousModel
+	}
 	go func() {
-		var previousKey string
 		var err error
-		keySaved := false
+		var rollbackErr error
+		var replacedKey string
+		var hadStoredKey, keySaved bool
+		var configWritten, coreStopped bool
+		var targetSecret string
 		if err = l.Core.ensureIdle(ctx); err != nil {
 			a.post(epoch, func() { l.Loading["model-save"] = false; l.Error = err.Error() })
 			return
 		}
-		if old.Model.HasKey {
-			previousKey, err = secrets.Get("model")
-			if err != nil && cfg.Mode == "override" && key == "" {
-				a.post(epoch, func() { l.Loading["model-save"] = false; l.Error = err.Error() })
-				return
-			}
-			// An explicitly entered replacement must work even if the legacy
-			// key is protected by an obsolete code hash. It remains untouched.
-			err = nil
+		if next.ModelProfiles == nil {
+			next.ModelProfiles = map[string]modelConfig{}
 		}
-		if err == nil && cfg.Mode == "override" {
-			if key == "" {
-				if old.Model.Provider != cfg.Provider {
-					err = errors.New("切换服务类型时需要填写密钥")
-				} else {
-					key = previousKey
-				}
+		if isModelOverride(previousModel) && previousModel.HasKey {
+			id := modelProfileID(previousModel)
+			if _, exists := next.ModelProfiles[id]; !exists {
+				next.ModelProfiles[id] = previousModel
 			}
+		}
+		if cfg.Mode == "override" {
 			if key == "" {
+				key, err = savedModelCredential(cfg, previousModel, old.ModelProfiles, secrets)
+			}
+			if err == nil && key == "" {
 				err = errors.New("请输入模型密钥")
 			}
+			cfg.ProfileSecret = true
+			cfg.Mode = "profile"
+			targetSecret = modelSecretName(cfg)
 			if err == nil {
-				err = secrets.Set("model", key)
-				keySaved = err == nil
+				replacedKey, err = secrets.Get(targetSecret)
+				hadStoredKey = replacedKey != ""
+			}
+			if err == nil {
+				keySaved = true // Set may write successfully before reporting an error.
+				err = secrets.Set(targetSecret, key)
+				if err == nil {
+					next.ModelProfiles[modelProfileID(cfg)] = cfg
+				}
 			}
 		}
+		next.Model = cfg
 		if err == nil {
 			err = atomicJSON(filepath.Join(dir, "connections.json"), next)
+			configWritten = err == nil
 		}
 		if err == nil {
 			l.Core.stop()
+			coreStopped = true
 			_, err = l.Core.start(ctx, dir, cfg, secrets)
 		}
 		if err != nil {
-			if keySaved && previousKey != "" {
-				_ = secrets.Set("model", previousKey)
+			if keySaved && hadStoredKey {
+				rollbackErr = errors.Join(rollbackErr, secrets.Set(targetSecret, replacedKey))
 			} else if keySaved {
-				_ = secrets.Delete("model")
+				rollbackErr = errors.Join(rollbackErr, secrets.Delete(targetSecret))
 			}
-			_ = atomicJSON(filepath.Join(dir, "connections.json"), old)
-			l.Core.stop()
-			_, _ = l.Core.start(ctx, dir, old.Model, secrets)
+			if configWritten {
+				rollbackErr = errors.Join(rollbackErr, atomicJSON(filepath.Join(dir, "connections.json"), old))
+			}
+			if coreStopped {
+				l.Core.stop()
+				_, restartErr := l.Core.start(ctx, dir, old.Model, secrets)
+				rollbackErr = errors.Join(rollbackErr, restartErr)
+			}
 		}
 		a.post(epoch, func() {
 			l.Loading["model-save"] = false
 			if err != nil {
 				a.connectLive()
-				l.Error = "应用失败，已恢复原配置：" + err.Error()
+				if rollbackErr != nil {
+					l.Error = "应用失败：" + err.Error() + "；恢复原配置失败，请检查连接设置：" + rollbackErr.Error()
+				} else {
+					l.Error = "应用失败，已恢复原配置：" + err.Error()
+				}
 				return
 			}
 			a.Settings.APIKey = ""

@@ -425,3 +425,14 @@ func TestCredentialFileJSONShape(t *testing.T) {
 		}
 	}
 }
+
+func TestCredentialsAccountIDFromAccessToken(t *testing.T) {
+	cred, err := credentialsFromToken(&tokenResponse{AccessToken: fixtureIDToken, RefreshToken: "refresh", ExpiresIn: 3600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := accountIDFromIDToken(fixtureIDToken)
+	if err != nil || cred.AccountID != expected {
+		t.Fatalf("account ID mismatch: %v", err)
+	}
+}

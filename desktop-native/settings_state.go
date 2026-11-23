@@ -30,9 +30,13 @@ const (
 	SettingCopyCmdlineMode       = "沿用命令行配置"
 	SettingCopyDesktopMode       = "在桌面客户端配置"
 	SettingCopyEasyCodeMode      = "EasyCode 飞书登录"
+	SettingCopyOpenAIProvider    = "OpenAI API Key"
+	SettingCopyOpenAIBaseURL     = "https://api.openai.com"
 	SettingCopyCmdlineNote       = "沿用 easyagent.yaml、个人配置文件和 EA_* 环境变量。"
 	SettingCopyZhipuProvider     = "智谱 GLM Coding Plan"
 	SettingCopyZhipuBaseURL      = "https://open.bigmodel.cn/api/coding/paas/v4"
+	SettingCopyVolcProvider      = "火山引擎 Coding Plan"
+	SettingCopyVolcBaseURL       = "https://ark.cn-beijing.volces.com/api/coding/v3"
 	SettingCopyZhipuModelNote    = "Coding Plan 端点不提供模型目录，检测连接不可用；直接从常用模型选择或手动填写模型 ID。国际版把地址域名换成 api.z.ai。"
 )
 
@@ -125,6 +129,7 @@ type feishuForm struct {
 	Bridge, FeishuSaved, Pairing, QR, QRAuthorized bool
 }
 type settingsState struct {
+	ModelShowChatGPT                                        bool
 	SpeechAPIKey                                            string
 	HookDraft, HookSaved, HookRevision                      string
 	HookEvent, HookTool, HookCommand, HookArgs, HookTimeout string
