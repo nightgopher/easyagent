@@ -12,6 +12,52 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+func TestStewardNewSessionShowsNoticeWithoutRequestOrDraftLoss(t *testing.T) {
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); http.Error(w, "unexpected", 500) }))
+	defer srv.Close()
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Live.Client, _ = newBackendClient(srv.URL, "")
+	a.Live.Connected = true
+	s := a.current()
+	s.AgentID, s.Application, s.Workspace, s.RemoteID, s.Draft = desktopStewardID, "business", "/steward", "steward-1", "未发送的草稿"
+	for _, action := range []func(){func() { a.createLiveSession("") }, func() { a.createLiveSessionIn("", s.Workspace, "business") }} {
+		action()
+		if requests.Load() != 0 || a.current() != s || s.Draft != "未发送的草稿" || a.Live.Error != "" || !strings.Contains(a.Live.Notice, "管家使用同一个会话") {
+			t.Fatalf("unexpected state: requests=%d notice=%q error=%q", requests.Load(), a.Live.Notice, a.Live.Error)
+		}
+	}
+}
+
+func TestStewardCanCreateExplicitCodingSession(t *testing.T) {
+	bodies := make(chan map[string]any, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/sessions" && r.Method == http.MethodPost {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			bodies <- body
+			fmt.Fprint(w, `{"id":"coding-new"}`)
+			return
+		}
+		fmt.Fprint(w, `{}`)
+	}))
+	defer srv.Close()
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Live.Client, _ = newBackendClient(srv.URL, "")
+	a.Live.Connected = true
+	s := a.current()
+	s.AgentID, s.Application, s.RemoteID, s.Draft = desktopStewardID, "business", "steward-1", "管家草稿"
+	a.createLiveSessionIn("", "/project", "")
+	waitNative(t, a, func() bool { return a.current().RemoteID == "coding-new" })
+	body := <-bodies
+	if body["agent_id"] != nil || body["cwd"] != "/project" || s.Draft != "管家草稿" {
+		t.Fatalf("unexpected request or draft: %#v %q", body, s.Draft)
+	}
+}
+
 func TestStewardReusesConversationAndPreservesUnsentDraft(t *testing.T) {
 	var creates atomic.Int32
 	bodies := make(chan map[string]any, 3)
