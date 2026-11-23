@@ -354,6 +354,7 @@ func (a *preview) disconnectedHint(c *ui.Context) {
 				a.action(c, "飞书登录 EasyCode").Disabled(l.Connecting).OnClick(func() {
 					a.openSettings("models")
 					if a.Settings.Open && a.Settings.Tab == "models" {
+						a.Settings.ModelShowChatGPT = false
 						a.Settings.Mode = SettingCopyEasyCodeMode
 						a.refreshEasyCodeStatus()
 					}

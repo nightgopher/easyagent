@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -34,13 +35,34 @@ type modelConfig struct {
 	Thinking, ReasoningEffort, ThinkingBudget, StreamIdleTimeout string
 	Mode, Provider, BaseURL, Model                               string
 	HasKey                                                       bool
+	ProfileSecret                                                bool `json:",omitempty"`
 }
 type clientConfig struct {
 	Hosts         []hostConfig
 	ActiveHost    string
 	Model         modelConfig
-	PreviousModel *modelConfig `json:",omitempty"`
+	PreviousModel *modelConfig           `json:",omitempty"`
+	ModelProfiles map[string]modelConfig `json:",omitempty"`
 	Workspace     string
+}
+
+// A distinct persisted mode prevents older clients from applying an old shared
+// key to a newer profile endpoint when a user rolls back the desktop app.
+func isModelOverride(cfg modelConfig) bool {
+	return cfg.Mode == "override" || cfg.Mode == "profile" && cfg.ProfileSecret
+}
+
+// Profile secret names are bound to the exact endpoint and protocol. Legacy
+// configurations continue to use the original "model" key until migrated.
+func modelProfileID(cfg modelConfig) string {
+	sum := sha256.Sum256([]byte(cfg.Provider + "\x00" + strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")))
+	return hex.EncodeToString(sum[:])
+}
+func modelSecretName(cfg modelConfig) string {
+	if cfg.ProfileSecret {
+		return "model-profile-" + modelProfileID(cfg)
+	}
+	return "model"
 }
 
 func atomicJSON(path string, value any) error {
@@ -213,8 +235,8 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	if model.Mode == "easycode" {
 		env["EA_PROVIDER"] = "deepv"
 		env["EA_MODEL"], env["OPENAI_MODEL"] = model.Model, model.Model
-	} else if model.Mode == "override" {
-		key, err := secrets.Get("model")
+	} else if isModelOverride(model) {
+		key, err := secrets.Get(modelSecretName(model))
 		if err != nil {
 			return nil, err
 		}
@@ -375,7 +397,7 @@ func validatedModel(cfg modelConfig) (modelConfig, error) {
 		}
 		return cfg, nil
 	}
-	if cfg.Mode != "override" || (cfg.Provider != "openai" && cfg.Provider != "anthropic") {
+	if !isModelOverride(cfg) || (cfg.Provider != "openai" && cfg.Provider != "anthropic") {
 		return cfg, errors.New("请选择有效的模型服务类型")
 	}
 	b, err := newBackendClient(cfg.BaseURL, "")
@@ -393,7 +415,7 @@ func modelEnvironmentDescription(cfg modelConfig) string {
 	if cfg.Mode == "easycode" {
 		return "EasyCode · " + cfg.Model
 	}
-	if cfg.Mode != "override" {
+	if !isModelOverride(cfg) {
 		return "沿用命令行配置"
 	}
 	return fmt.Sprintf("%s · %s", cfg.Provider, cfg.Model)

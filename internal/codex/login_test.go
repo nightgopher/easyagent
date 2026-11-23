@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -59,6 +60,37 @@ func TestLoginSessionWaitCompletes(t *testing.T) {
 	}
 }
 
+func TestLoginCallbackDoesNotReportSuccessWhenTokenExchangeFails(t *testing.T) {
+	auth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "synthetic-sensitive-error", http.StatusUnauthorized)
+	}))
+	defer auth.Close()
+	m, err := NewManager(t.TempDir(), auth.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := m.StartLogin(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if session.portBusy {
+		t.Skip("callback port 1455 busy")
+	}
+	resp, err := http.Get(redirectURI + "?code=bad&state=" + session.flow.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusOK || strings.Contains(string(body), "synthetic-sensitive-error") {
+		t.Fatalf("incorrect callback response: %d %s", resp.StatusCode, body)
+	}
+	if err := session.Wait(context.Background()); err == nil {
+		t.Fatal("failed token exchange accepted")
+	}
+}
+
 // TestLoginSessionWrongStateRejected state 不匹配时必须拒绝。
 func TestLoginSessionWrongStateRejected(t *testing.T) {
 	var mu sync.Mutex
@@ -85,13 +117,25 @@ func TestLoginSessionWrongStateRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if err := session.Wait(context.Background()); err == nil {
-		t.Fatal("wrong state accepted")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatal("wrong state accepted", resp.StatusCode)
+	}
+	// A bogus callback must not consume the one-shot login session.
+	good, err := http.Get(redirectURI + "?code=good&state=" + session.flow.state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good.Body.Close()
+	if good.StatusCode != http.StatusOK {
+		t.Fatalf("valid callback status %d", good.StatusCode)
+	}
+	if err := session.Wait(context.Background()); err != nil {
+		t.Fatalf("valid callback failed: %v", err)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(requests) != 0 {
-		t.Fatal("token exchange reached with wrong state")
+	if len(requests) != 1 || requests[0].Form.Get("code") != "good" {
+		t.Fatal("unexpected token exchange after wrong state")
 	}
 }
 
@@ -122,8 +166,8 @@ func TestLoginSessionMissingStateRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp.Body.Close()
-	if err := session.Wait(context.Background()); err == nil {
-		t.Fatal("missing state accepted")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatal("missing state accepted", resp.StatusCode)
 	}
 	mu.Lock()
 	defer mu.Unlock()
