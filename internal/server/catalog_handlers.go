@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -147,9 +148,14 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 
 // fetchGatewayModels queries an OpenAI-compatible /v1/models endpoint and returns
 // the list advertised by the gateway; it does not perform inference.
+var versionedModelBase = regexp.MustCompile(`/v[1-9]$`)
+
 func (s *Server) fetchGatewayModels(ctx context.Context, baseURL, apiKey string) ([]ModelInfo, error) {
-	baseURL = strings.TrimSuffix(strings.TrimRight(baseURL, "/"), "/v1")
+	baseURL = strings.TrimRight(baseURL, "/")
 	url := baseURL + "/v1/models"
+	if versionedModelBase.MatchString(baseURL) {
+		url = baseURL + "/models"
+	}
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		slog.Debug("failed to create gateway models request", "error", err)

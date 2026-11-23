@@ -59,7 +59,7 @@ func TestReplacementModelKeyRepairsUnreadableLegacyCredential(t *testing.T) {
 	waitNative(t, a, func() bool {
 		return !a.Live.Loading["model-save"] && a.Live.Config.Model.Model == "fixture-repaired" && a.Live.Connected
 	})
-	value, err := store.Get("model")
+	value, err := store.Get(modelSecretName(a.Live.Config.Model))
 	if err != nil || value != "fixture-replacement" || calls.Load() != 0 || store.deletes.Load() != 0 {
 		t.Fatal("replacement required access to the obsolete credential", err)
 	}
@@ -333,5 +333,254 @@ func TestExpectedModelFormZhipuBackfill(t *testing.T) {
 	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: "http://localhost:4001", Model: "coding", HasKey: true}
 	if f := a.expectedModelForm(); f.Provider != "OpenAI 兼容服务 / 网关" {
 		t.Fatal("plain gateway config must keep the generic label:", f.Provider)
+	}
+}
+
+func TestModelCredentialTargetDoesNotCrossEndpoints(t *testing.T) {
+	old := modelConfig{Provider: "openai", BaseURL: SettingCopyZhipuBaseURL}
+	for _, tc := range []struct {
+		next modelConfig
+		same bool
+	}{
+		{modelConfig{Provider: "openai", BaseURL: SettingCopyZhipuBaseURL + "/"}, true},
+		{modelConfig{Provider: "openai", BaseURL: SettingCopyVolcBaseURL}, false},
+		{modelConfig{Provider: "anthropic", BaseURL: SettingCopyZhipuBaseURL}, false},
+	} {
+		if got := sameModelCredentialTarget(old, tc.next); got != tc.same {
+			t.Errorf("target %+v: got %v", tc.next, got)
+		}
+	}
+}
+
+func TestModelCatalogDoesNotSendStoredKeyToDifferentEndpoint(t *testing.T) {
+	requests := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests <- struct{}{}
+		fmt.Fprint(w, `{"data":[]}`)
+	}))
+	defer srv.Close()
+	a := alignmentPreview(t)
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: "https://old.example", Model: "model", HasKey: true}
+	a.Live.Secrets = &memorySecrets{values: map[string]string{"model": "old-secret"}}
+	a.Settings.Mode, a.Settings.Provider = SettingCopyDesktopMode, "OpenAI 兼容服务 / 网关"
+	a.Settings.BaseURL, a.Settings.Model, a.Settings.APIKey = srv.URL, "model", ""
+	a.checkLiveModel()
+	waitNative(t, a, func() bool { return !a.Live.Loading["model-check"] })
+	if a.Live.Error == "" {
+		t.Fatal("expected endpoint change to require a key")
+	}
+	select {
+	case <-requests:
+		t.Fatal("sent request to another endpoint")
+	default:
+	}
+}
+
+func TestVolcCodingPlanConfigRoundTrip(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: SettingCopyVolcBaseURL, Model: "test", HasKey: true}
+	if got := a.expectedModelForm().Provider; got != SettingCopyVolcProvider {
+		t.Fatalf("provider: %s", got)
+	}
+}
+
+func TestVersionedModelCatalogPath(t *testing.T) {
+	for _, tc := range []struct{ base, path string }{{"https://example.com", "/v1/models"}, {"https://example.com/v1", "/models"}, {SettingCopyVolcBaseURL, "/models"}, {SettingCopyZhipuBaseURL, "/models"}} {
+		if got := modelCatalogPath(tc.base); got != tc.path {
+			t.Fatalf("%s: got %s", tc.base, got)
+		}
+	}
+}
+
+func TestOpenAIAPIConfigRoundTrip(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Live.Config.Model = modelConfig{Mode: "override", Provider: "openai", BaseURL: SettingCopyOpenAIBaseURL, Model: "gpt-5", HasKey: true}
+	if got := a.expectedModelForm().Provider; got != SettingCopyOpenAIProvider {
+		t.Fatalf("provider: %s", got)
+	}
+}
+
+func TestModelSourcesSeparateAccountAndAPIWithoutChangingActiveConfig(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Settings.Open, a.Settings.Tab = true, "models"
+	before := a.Live.Config.Model
+	tt := ui.NewTester(a.View, 1240, 1000)
+	for _, label := range []string{"ChatGPT 订阅登录", "OpenAI API Key", "智谱 GLM Coding Plan", "火山引擎 Coding Plan"} {
+		if _, ok := tt.Find(label); !ok {
+			t.Fatalf("missing source %q", label)
+		}
+	}
+	click(t, tt, "ChatGPT 订阅登录")
+	if !a.Settings.ModelShowChatGPT || a.Live.Config.Model != before {
+		t.Fatal("opening account changed active model")
+	}
+	tt.Frame()
+	if !tt.HasText("ChatGPT 登录 (Codex)") {
+		t.Fatal("missing ChatGPT login")
+	}
+	click(t, tt, "OpenAI API Key")
+	if a.Settings.ModelShowChatGPT || a.Settings.Provider != SettingCopyOpenAIProvider || a.Settings.BaseURL != SettingCopyOpenAIBaseURL || a.Live.Config.Model != before {
+		t.Fatal("API selection changed active model or missed default endpoint")
+	}
+}
+
+func TestModelSourceControlsFitSettingsPage(t *testing.T) {
+	for _, width := range []int{640, 960, 1240} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			a := alignmentPreview(t)
+			a.Settings.Open, a.Settings.Tab = true, "models"
+			tt := ui.NewTester(a.View, width, 1100)
+			for _, label := range []string{"ChatGPT 订阅登录", "OpenAI API Key", "智谱 GLM Coding Plan", "火山引擎 Coding Plan"} {
+				box, ok := tt.Find(label)
+				if !ok || box.X < 0 || box.X+box.W > float32(width) {
+					t.Fatalf("%s outside window: %+v", label, box)
+				}
+			}
+		})
+	}
+}
+
+func TestSwitchingModelSourceKeepsUnsavedKeyUntilConfirmed(t *testing.T) {
+	a := alignmentPreview(t)
+	a.Settings.Open, a.Settings.Tab = true, "models"
+	a.Settings.Mode, a.Settings.Provider = SettingCopyDesktopMode, SettingCopyOpenAIProvider
+	a.Settings.BaseURL, a.Settings.APIKey = SettingCopyOpenAIBaseURL, "unsaved-key"
+	a.selectModelSource("volc")
+	if a.Settings.APIKey != "unsaved-key" || a.Settings.Provider != SettingCopyOpenAIProvider || a.Live.Confirm == nil {
+		t.Fatal("source switch discarded draft")
+	}
+}
+
+func TestSavedModelCredentialsRemainBoundToEndpoint(t *testing.T) {
+	old := modelConfig{Mode: "override", Provider: "openai", BaseURL: "https://old.example", Model: "old", HasKey: true}
+	other := modelConfig{Mode: "override", Provider: "openai", BaseURL: "https://new.example", Model: "new", HasKey: true, ProfileSecret: true}
+	secrets := &memorySecrets{values: map[string]string{"model": "legacy-key", modelSecretName(other): "other-key"}}
+	profiles := map[string]modelConfig{modelProfileID(old): old, modelProfileID(other): other}
+	for _, tc := range []struct {
+		cfg  modelConfig
+		want string
+	}{{old, "legacy-key"}, {other, "other-key"}} {
+		got, err := savedModelCredential(tc.cfg, other, profiles, secrets)
+		if err != nil || got != tc.want {
+			t.Fatalf("credential for %s: %q %v", tc.cfg.BaseURL, got, err)
+		}
+	}
+	unknown := modelConfig{Mode: "override", Provider: "openai", BaseURL: "https://third.example"}
+	if _, err := savedModelCredential(unknown, other, profiles, secrets); err == nil {
+		t.Fatal("unknown endpoint reused another credential")
+	}
+	copy := cloneConfig(clientConfig{ModelProfiles: profiles})
+	delete(copy.ModelProfiles, modelProfileID(old))
+	if len(profiles) != 2 {
+		t.Fatal("config snapshot shares profile map")
+	}
+}
+
+func TestLegacyPreviousModelVisibleWhileUsingEasyCode(t *testing.T) {
+	legacy := modelConfig{Mode: "override", Provider: "openai", BaseURL: SettingCopyOpenAIBaseURL, Model: "gpt", HasKey: true}
+	cfg := clientConfig{Model: modelConfig{Mode: "easycode"}, PreviousModel: &legacy}
+	p, ok := availableModelProfiles(cfg)[modelProfileID(legacy)]
+	if !ok || p.Model != "gpt" || p.ProfileSecret {
+		t.Fatal("legacy profile not visible")
+	}
+}
+
+func TestModelProfilesSwitchAcrossRestarts(t *testing.T) {
+	a, first, _, _ := nativeCoreFixture(t)
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"data":[{"id":"other"}]}`) }))
+	defer second.Close()
+	apply := func(endpoint, model, key string) {
+		t.Helper()
+		a.Settings.Mode, a.Settings.Provider = SettingCopyDesktopMode, "OpenAI 兼容服务 / 网关"
+		a.Settings.BaseURL, a.Settings.Model, a.Settings.APIKey = endpoint, model, key
+		a.applyLiveModel()
+		waitNative(t, a, func() bool {
+			return !a.Live.Loading["model-save"] && (a.Live.Error != "" || a.Live.Config.Model.Model == model && a.Live.Connected)
+		})
+		if a.Live.Error != "" {
+			t.Fatal(a.Live.Error)
+		}
+	}
+	apply(first.URL, "first-model", "first-key")
+	apply(second.URL, "second-model", "second-key")
+	apply(first.URL, "first-model", "")
+	if len(a.Live.Config.ModelProfiles) != 2 {
+		t.Fatalf("profiles: %d", len(a.Live.Config.ModelProfiles))
+	}
+	if a.Live.Config.Model.Mode != "profile" || !a.Live.Config.Model.ProfileSecret {
+		t.Fatal("profile must use its own stored credential mode")
+	}
+	data, err := os.ReadFile(filepath.Join(a.Live.Dir, "connections.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted clientConfig
+	if err := json.Unmarshal(data, &persisted); err != nil || len(persisted.ModelProfiles) != 2 {
+		t.Fatalf("persisted profiles: %v", err)
+	}
+	if strings.Contains(string(data), "first-key") || strings.Contains(string(data), "second-key") {
+		t.Fatal("credential written to connections.json")
+	}
+	for _, tc := range []struct{ url, key string }{{first.URL, "first-key"}, {second.URL, "second-key"}} {
+		cfg := modelConfig{Provider: "openai", BaseURL: tc.url, ProfileSecret: true}
+		got, err := a.Live.Secrets.Get(modelSecretName(cfg))
+		if err != nil || got != tc.key {
+			t.Fatalf("wrong stored credential for %s: %v", tc.url, err)
+		}
+	}
+}
+
+func TestLegacyModelProfilePreservedWhenSwitching(t *testing.T) {
+	a, first, _, _ := nativeCoreFixture(t)
+	second := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, `{"data":[{"id":"other"}]}`) }))
+	defer second.Close()
+	legacy := modelConfig{Mode: "override", Provider: "openai", BaseURL: first.URL, Model: "legacy-model", HasKey: true}
+	a.Live.Config.Model = legacy
+	if err := a.Live.Secrets.Set("model", "legacy-key"); err != nil {
+		t.Fatal(err)
+	}
+	a.Settings.Mode, a.Settings.Provider = SettingCopyDesktopMode, "OpenAI 兼容服务 / 网关"
+	a.Settings.BaseURL, a.Settings.Model, a.Settings.APIKey = second.URL, "other-model", "other-key"
+	a.applyLiveModel()
+	waitNative(t, a, func() bool {
+		return !a.Live.Loading["model-save"] && (a.Live.Error != "" || a.Live.Config.Model.Model == "other-model" && a.Live.Connected)
+	})
+	if a.Live.Error != "" {
+		t.Fatal(a.Live.Error)
+	}
+	p, ok := a.Live.Config.ModelProfiles[modelProfileID(legacy)]
+	if !ok || p.ProfileSecret || p.BaseURL != legacy.BaseURL {
+		t.Fatal("legacy profile not retained")
+	}
+	key, err := savedModelCredential(legacy, a.Live.Config.Model, a.Live.Config.ModelProfiles, a.Live.Secrets)
+	if err != nil || key != "legacy-key" {
+		t.Fatalf("legacy key unavailable: %v", err)
+	}
+}
+
+func TestModelProfileSaveFailureKeepsOldConfiguration(t *testing.T) {
+	a, provider, _, _ := nativeCoreFixture(t)
+	path := filepath.Join(a.Live.Dir, "connections.json")
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	old := a.Live.Config.Model
+	a.Settings.Mode, a.Settings.Provider = SettingCopyDesktopMode, "OpenAI 兼容服务 / 网关"
+	a.Settings.BaseURL, a.Settings.Model, a.Settings.APIKey = provider.URL, "failure-model", "test-key"
+	target := modelConfig{Provider: "openai", BaseURL: provider.URL, ProfileSecret: true}
+	if err := a.Live.Secrets.Set(modelSecretName(target), "previous-orphan"); err != nil {
+		t.Fatal(err)
+	}
+	a.applyLiveModel()
+	waitNative(t, a, func() bool { return !a.Live.Loading["model-save"] && a.Live.Error != "" })
+	if a.Live.Config.Model != old {
+		t.Fatal("failed save changed active model")
+	}
+	key, err := a.Live.Secrets.Get(modelSecretName(target))
+	if err != nil || key != "previous-orphan" {
+		t.Fatal("failed save did not restore prior credential", err)
 	}
 }

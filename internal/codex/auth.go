@@ -237,6 +237,11 @@ func (m *Manager) tokenRequest(ctx context.Context, form url.Values) (*tokenResp
 
 func credentialsFromToken(data *tokenResponse) (credentials, error) {
 	accountID := data.AccountID
+	// Codex commonly places this claim in the access token. Some older
+	// responses instead provide it in the ID token.
+	if accountID == "" && data.AccessToken != "" {
+		accountID, _ = accountIDFromIDToken(data.AccessToken)
+	}
 	if accountID == "" && data.IDToken != "" {
 		id, err := accountIDFromIDToken(data.IDToken)
 		if err != nil {

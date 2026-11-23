@@ -201,6 +201,7 @@ func (a *preview) syncSettingsConfig() {
 		}
 	}
 	s.modelForm = a.expectedModelForm()
+	s.ModelShowChatGPT = false
 	s.HasKey = l.Config.Model.HasKey
 	s.Workspace = l.workspace()
 	l.SavedModelForm = s.modelForm
@@ -210,9 +211,11 @@ func (a *preview) syncSettingsConfig() {
 // expectedModelForm is the model page state as saved in the live config; the
 // form and its dirty comparison both derive from it.
 func (a *preview) expectedModelForm() modelForm {
-	m := a.Live.Config.Model
+	return modelFormFromConfig(a.Live.Config.Model)
+}
+func modelFormFromConfig(m modelConfig) modelForm {
 	f := modelForm{Mode: "沿用命令行配置", Provider: "OpenAI 兼容服务 / 网关", BaseURL: m.BaseURL, Model: m.Model, Thinking: thinkingLabel(m.Thinking), ReasoningEffort: m.ReasoningEffort, ThinkingBudget: m.ThinkingBudget, StreamIdleTimeout: m.StreamIdleTimeout}
-	if m.Mode == "override" {
+	if isModelOverride(m) {
 		f.Mode = "在桌面客户端配置"
 	}
 	if m.Mode == "easycode" {
@@ -221,9 +224,15 @@ func (a *preview) expectedModelForm() modelForm {
 	if m.Provider == "anthropic" {
 		f.Provider = "Anthropic"
 	}
+	if m.Provider == "openai" && strings.TrimRight(m.BaseURL, "/") == SettingCopyOpenAIBaseURL {
+		f.Provider = SettingCopyOpenAIProvider
+	}
 	// 智谱 coding 端点复用 openai 通道，凭地址特征回填下拉标签，保持往返与 dirty 对比稳定
 	if strings.Contains(m.BaseURL, "coding/paas/") {
 		f.Provider = SettingCopyZhipuProvider
+	}
+	if strings.TrimRight(m.BaseURL, "/") == SettingCopyVolcBaseURL {
+		f.Provider = SettingCopyVolcProvider
 	}
 	if f.ReasoningEffort == "" {
 		f.ReasoningEffort = "沿用模型默认"

@@ -319,7 +319,7 @@ func TestNativeCoreConversationSettingsAndRestart(t *testing.T) {
 	a.Settings.Model = "fixture-model"
 	a.Settings.APIKey = "fixture-secret"
 	a.applyLiveModel()
-	waitNative(t, a, func() bool { return a.Live.Config.Model.Mode == "override" && a.Live.Connected && !a.Live.Connecting })
+	waitNative(t, a, func() bool { return isModelOverride(a.Live.Config.Model) && a.Live.Connected && !a.Live.Connecting })
 	metadata, _ := os.ReadFile(filepath.Join(a.Live.Dir, "connections.json"))
 	if strings.Contains(string(metadata), "fixture-secret") {
 		t.Fatal("model secret leaked to JSON")
