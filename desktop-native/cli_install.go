@@ -58,12 +58,12 @@ func cliManagementDetail(status cliInstallStatus, target, version string) string
 		if version == "" {
 			version = "未知"
 		}
-		return "桌面应用管理 · 版本 " + version + " · 随桌面应用更新。入口：" + target + "；终端实际使用的命令由 PATH 决定。"
+		return "桌面应用管理 · 构建版本 " + version + " · 随桌面应用更新。入口：" + target + "；终端实际使用的命令由 PATH 决定。"
 	default:
 		if version == "" {
 			version = "未知（可在终端运行 easyagent --version 查看）"
 		}
-		return "独立安装或其他链接 · 版本 " + version + " · 不随桌面更新。入口：" + target + "；桌面不会覆盖此文件。"
+		return "独立安装或其他链接 · 构建版本 " + version + " · 不随桌面更新。入口：" + target + "；桌面不会覆盖此文件。"
 	}
 }
 

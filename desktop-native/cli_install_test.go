@@ -13,9 +13,9 @@ func TestCLIManagementDetail(t *testing.T) {
 		version, want string
 	}{
 		{cliNotInstalled, "", "未安装"},
-		{cliInstalledHere, "v0.54.0", "桌面应用管理 · 版本 v0.54.0"},
-		{cliInstallConflict, "v0.53.1", "独立安装或其他链接 · 版本 v0.53.1"},
-		{cliInstallConflict, "", "版本 未知"},
+		{cliInstalledHere, "v0.54.0", "桌面应用管理 · 构建版本 v0.54.0"},
+		{cliInstallConflict, "v0.53.1", "独立安装或其他链接 · 构建版本 v0.53.1"},
+		{cliInstallConflict, "", "构建版本 未知"},
 	} {
 		if got := cliManagementDetail(tc.status, "/test/easyagent", tc.version); !strings.Contains(got, tc.want) {
 			t.Errorf("got %q, want %q", got, tc.want)
