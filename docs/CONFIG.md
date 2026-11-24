@@ -120,6 +120,74 @@ channel_access_modes:
 
 `full` 自动批准普通工具确认，不解除 MCP 的独立信任要求、必须回答的问题、工具启用开关或工作区路径限制。飞书选择 `ask` 后，通过已配对使用者的机器人私聊卡片允许一次或拒绝；普通工具审批两分钟未处理会拒绝，绝不会因超时自动放行。
 
+## 受控运营部署（Guard profile）
+
+把一次部署限定为某个仓库的运营角色（例如只维护一个网站的飞书机器人）时，用下面这组可选配置收紧工具，不需要改代码。每一段都缺省为空，不配置的部署行为不变；配置后与访问模式、`-y`、`EA_AUTO_APPROVE` 无关，放开审批也不会放开这些限制。建议配合独立的 `EA_HOME` 与 `EA_WORKSPACE`。
+
+```yaml
+strict_config: true
+prompt_file: SYSTEM_PROMPT.md
+skills:
+  deny: [generic-design-method]
+  always_inline: [brand-rules]
+file_policy:
+  write_allow: ["content/**", "data/**", "assets/**", ".scratch/**"]
+bash_policy:
+  allow: [image-tool]
+  deny: [find]
+  deny_args: ["gitlab.example.com/api"]
+  npx: [astro]
+submit:
+  gate: ["npm run lint", "npm run build"]
+  include: ["content/**", "data/**", "assets/**"]
+  branch_prefixes: ["bot/", "demo/"]
+  base_branch: main
+  preview_url: http://test.example.com/
+  next_steps: "如需微调请直接回复；验收通过后由负责人合并并发布。"
+```
+
+| 配置 | 作用 |
+|---|---|
+| `strict_config: true` | 配置文件出现未知键、非法值，或引用的文件读不到时拒绝启动。默认加载失败只告警并忽略整个文件，对护栏部署等于无保护运行 |
+| `prompt_file` | 系统提示词文件；相对路径按配置文件所在目录解析。内容替换默认的基础提示，等同于多行的 `EA_PROMPT_TEMPLATE`（环境变量仍优先）；工具说明、项目上下文和技能清单照常追加 |
+| `skills.dirs` | 显式的技能根目录，与 `--skill-dir` 叠加；为空时保持默认发现 |
+| `skills.deny` | 不向模型暴露的技能名 |
+| `skills.always_inline` | 正文常驻系统提示的技能名。只在清单里列出技能并不能保证模型去读；常驻后其中的规则每一轮都在上下文里。加载不到时记录警告 |
+| `file_policy.write_allow` / `write_deny` | `write`、`edit`、`patch`、`delete_file` 只能改动匹配的工作区相对路径：`**` 跨目录，`*`、`?` 限单段；deny 优先。按符号链接解析后的位置判断，`deny` 为空时不在 `write_allow` 内的一律不可写 |
+| `bash_policy` | 出现即启用 bash 命令策略，见下文 |
+| `submit` | 配置 `gate` 后注册 `submit_task` 工具，见下文 |
+
+**bash 命令策略**只放行清单里的程序（内置默认清单，加 `allow`，减 `deny`），并且判断的是解析后的整条命令：管道、`&&`、命令替换、条件与函数体里的命令逐个检查，命令名必须是固定的程序名且不带路径，用变量或替换充当命令名、充当要写入的路径，以及无法解析的命令，一律拒绝。另有几条固定规则：
+
+- 写入只允许落在 `file_policy.write_allow` 内，包括重定向，以及 `rm`、`mv`、`cp`、`ln`、`touch`、`mkdir`、`tee`、`sort -o` 和 `curl -o` 的目标；`/dev/null` 等设备除外。
+- `git` 只读：只允许 `status`、`diff`、`log` 等查询子命令，提交、打标签、推送以及 `-c`、`--paginate` 等会执行外部程序的选项都被拒绝。
+- `npm` 只运行 `package.json` 里已有的脚本（`run`、`ci` 等），脚本名之后的参数必须是单个普通单词——npm 会把它们拼进 shell 命令行；`npx` 只运行 `npx` 列出的包。
+- `bash`、`sh` 只能执行工作区内、且不在 `write_allow` 里的脚本文件，不允许 `-c`、`-s` 和标准输入脚本。
+- `curl` 只读，不允许上传、指定请求方法和按远程文件名落盘；`find`、`rg`、`sort` 中会执行外部命令的选项被拒绝。
+- 不允许设置会改变程序解析或加载的变量，例如 `PATH`、`NODE_OPTIONS`、`LD_PRELOAD`、`GIT_DIR`、`npm_config_*`。
+- `deny_args` 列出的片段只要出现在任一参数里就拒绝，例如代码托管平台的 API 地址。
+
+默认清单不含 `sed`、`awk`、`node`、`python` 等能执行代码或原地改文件的程序，确有需要再用 `allow` 显式加入。它不是沙箱：放行的程序仍以运行用户身份执行，读取不受限制；隔离仍依靠运行账号、systemd 加固和代码托管平台的保护设置，见[安全模型](SECURITY_MODEL.md)。
+
+**`submit_task`** 是配置后会话通往远端的唯一出口。它依次做这些事，任何一步不通过都不会创建分支或推送：
+
+1. 所有改动路径必须匹配 `include`（缺省继承 `file_policy.write_allow`），否则拒绝并列出越界文件。
+2. 按 `gate` 的顺序执行检查，遇到第一个失败就停下，把失败的命令和输出末尾回给模型，便于修复后重新调用。
+3. 当前在主分支上时新建任务分支 `<branch_prefixes 首项><摘要>-<时间戳>`（缺省 `bot/`）；已在任务分支上时追加到该分支。
+4. 只暂存匹配的路径，提交，再 `git push -u <remote> <分支>`。不强推，不推主分支，不打标签。推送失败时本地提交保留，再次调用会重试推送。
+5. 配置了 `mr` 时创建合并请求，已存在则复用；失败只记为回执里的警告。
+
+成功后返回结构化回执：改动的文件、每一步检查的结果与耗时、`preview_url` 加 `preview_paths` 的预览链接和 `next_steps` 指引。调用时传 `new_task: true` 且工作区没有未提交改动，会切回 `base_branch` 并快进到远端最新，用于开始新的任务。其余选项：`push: false` 只提交不推送；`gate_timeout_seconds` 是单条检查命令的超时，默认 900 秒；`mr` 需要 `api_url`、`project`、`token_env`，令牌从运行进程的环境变量读取。
+
+```dotenv
+# 受控部署常用的配套环境变量
+EA_BLOCKED_TOOLS=task,skill_market,save_memory,delete_file,patch,web_fetch,web_search
+EA_SKILL_MARKET=0
+EA_EXPERT_MARKET=0
+```
+
+`submit_task` 与其他工具一样受 `EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 过滤。
+
 ## Hooks
 
 桌面端「设置 → Hooks」可为当前运行主机新建、编辑、启停和删除命令。保存后从下一次对应事件开始生效，包括已打开的会话。命令以运行核心的用户身份在会话工作区执行，并继承该进程的环境；只配置可信程序。配置保存在启动时确定的用户配置目录 `hooks.json`（默认 `~/.easyagent/hooks.json`，显式设置的 `EA_HOME` 可更改；桌面本地核心使用自己的 `core-home`），不会自动发现或执行项目中的 hooks，项目 `.env` 也不能更改该位置。远程桌面须使用主机所有者令牌；配对的中继设备不能管理这些可执行配置。
