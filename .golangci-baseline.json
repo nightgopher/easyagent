@@ -41,14 +41,6 @@
       "linter": "gosec",
       "file": "internal/agents/coding/prompt/builder.go",
       "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "82d702b8802cd412ad8cfc583bc42020f2699d244fdb28841231ba6588e85863",
-      "line_at_baseline": 299,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/coding/prompt/builder.go",
-      "message": "G304: Potential file inclusion via variable",
       "source_sha256": "85d8c74791d9419085b8f6ed5f8c3300746cd0c951f5f101fcf25d3a4185916a",
       "line_at_baseline": 270,
       "count": 1

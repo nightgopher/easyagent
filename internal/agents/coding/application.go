@@ -9,6 +9,7 @@ import (
 	codingtools "github.com/nightgopher/easyagent/internal/agents/coding/tools"
 	"github.com/nightgopher/easyagent/internal/capture"
 	modelsreg "github.com/nightgopher/easyagent/internal/models"
+	"github.com/nightgopher/easyagent/internal/shellguard"
 	"github.com/nightgopher/easyagent/internal/worktools"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai"
@@ -94,6 +95,12 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 	if len(opts.Skills) > 0 && a.Cfg.DataDir != "" {
 		skillUsage = skill.NewUsageRecorder(filepath.Join(a.Cfg.DataDir, "usage.jsonl"), opts.SessionID, opts.Skills)
 	}
+	// The guard profile lives on the tools themselves, so a session cannot
+	// outgrow it and a subagent that inherits the tools inherits the policy.
+	var bashPolicy func(string) error
+	if a.Cfg.BashPolicy != nil {
+		bashPolicy = shellguard.New(*a.Cfg.BashPolicy, opts.Workspace, WritePolicy(a.Cfg)).Check
+	}
 	return codingtools.BuildList(codingtools.ListOptions{
 		TodoDataDir:            a.Cfg.DataDir,
 		SessionID:              opts.SessionID,
@@ -102,6 +109,8 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 		MaxOutputLen:           opts.MaxOutputLen,
 		EnableBash:             a.Cfg.EnableBash,
 		BashOps:                opts.BashOps,
+		BashCommandPolicy:      bashPolicy,
+		WritePolicy:            WritePolicy(a.Cfg),
 		EnableWeb:              a.Cfg.EnableWeb,
 		WebTimeoutSeconds:      a.Cfg.WebTimeoutSeconds,
 		EnableWebSearch:        a.Cfg.EnableWebSearch,
@@ -125,13 +134,14 @@ func (a CodingApplication) BuildTools(opts runtime.ToolBuildOptions) []agent.Too
 // BuildPrompt constructs the coding-agent system prompt based on the provided options.
 func (a CodingApplication) BuildPrompt(opts runtime.PromptBuildOptions, profileName, goal string) string {
 	return codingprompt.BuildSystemPrompt(codingprompt.Options{
-		CustomPrompt: opts.CustomPrompt,
-		CWD:          opts.CWD,
-		Tools:        opts.Tools,
-		ContextFiles: opts.ContextFiles,
-		Skills:       opts.Skills,
-		Profile:      profileName,
-		Goal:         goal,
+		CustomPrompt:       opts.CustomPrompt,
+		CWD:                opts.CWD,
+		Tools:              opts.Tools,
+		ContextFiles:       opts.ContextFiles,
+		Skills:             opts.Skills,
+		Profile:            profileName,
+		Goal:               goal,
+		AppendSystemPrompt: inlineSkills(a.Cfg, opts.Skills),
 	})
 }
 

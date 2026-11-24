@@ -122,12 +122,8 @@ func (t *DeleteFileTool) Execute(ctx context.Context, raw json.RawMessage, _ fun
 
 	cleanPath := ResolvePath(t.workspace, params.FilePath)
 
-	// Check path safety
-	if !t.pathPolicy.Allows(t.workspace, cleanPath) {
-		return agent.ToolResult{
-			IsError: true,
-			Content: fmt.Sprintf("path %s is outside workspace %s", params.FilePath, t.workspace),
-		}, fmt.Errorf("path escapes workspace")
+	if err := t.pathPolicy.CheckWrite(t.workspace, cleanPath); err != nil {
+		return agent.ToolResult{IsError: true, Content: describeWriteDenied(params.FilePath, t.workspace, err)}, err
 	}
 
 	// Check file exists and is not a directory

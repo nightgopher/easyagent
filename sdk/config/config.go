@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -113,6 +114,14 @@ type Config struct {
 
 	// Prompt
 	PromptTemplate string
+
+	// Guard profile (see guard.go). Every section is optional: nil keeps the
+	// default behaviour for deployments that do not configure one.
+	PromptFile string
+	Skills     *SkillsConfig
+	FilePolicy *FilePolicy
+	BashPolicy *BashPolicy
+	Submit     *SubmitConfig
 
 	// Knowledge base (second-brain)
 	KBRepoPath string // path to the personal knowledge repo (default: ~/agent-lessons)
@@ -484,6 +493,13 @@ type yamlConfig struct {
 	ASRAPIKey  string `yaml:"asr_api_key,omitempty"`
 	ASRModel   string `yaml:"asr_model,omitempty"`
 	ASRBaseURL string `yaml:"asr_base_url,omitempty"`
+
+	StrictConfig bool          `yaml:"strict_config,omitempty"`
+	PromptFile   string        `yaml:"prompt_file,omitempty"`
+	Skills       *SkillsConfig `yaml:"skills,omitempty"`
+	FilePolicy   *FilePolicy   `yaml:"file_policy,omitempty"`
+	BashPolicy   *BashPolicy   `yaml:"bash_policy,omitempty"`
+	Submit       *SubmitConfig `yaml:"submit,omitempty"`
 }
 
 // LoadFromYAML loads configuration from a YAML file.
@@ -496,7 +512,15 @@ func (c *Config) LoadFromYAML(path string) error {
 	}
 
 	var yc yamlConfig
-	if err := yaml.Unmarshal(data, &yc); err != nil {
+	// strict_config rejects unknown keys so a mistyped guard rule fails loudly
+	// instead of silently leaving a restriction unconfigured.
+	if strictRequested(data) {
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&yc); err != nil {
+			return fmt.Errorf("parse YAML: %w", err)
+		}
+	} else if err := yaml.Unmarshal(data, &yc); err != nil {
 		return fmt.Errorf("parse YAML: %w", err)
 	}
 
@@ -642,7 +666,7 @@ func (c *Config) LoadFromYAML(path string) error {
 		c.ASRBaseURL = yc.ASRBaseURL
 	}
 
-	return nil
+	return c.applyGuardProfile(filepath.Dir(path), yc.PromptFile, yc.Skills, yc.FilePolicy, yc.BashPolicy, yc.Submit)
 }
 
 // ─── Runtime overrides (settings.json) ──────────────────────────────────────

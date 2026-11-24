@@ -9,11 +9,17 @@ import (
 
 // ListOptions controls how the coding-agent toolset is assembled.
 type ListOptions struct {
-	AllowOutsideWorkspace  bool
-	Workspace              string
-	MaxOutputLen           int
-	EnableBash             bool
-	BashOps                operations.BashOperations
+	AllowOutsideWorkspace bool
+	Workspace             string
+	MaxOutputLen          int
+	EnableBash            bool
+	BashOps               operations.BashOperations
+	// BashCommandPolicy, when set, vets each command before it runs and
+	// rejects it with the returned error.
+	BashCommandPolicy func(command string) error
+	// WritePolicy limits the mutation tools to writable workspace paths;
+	// the zero value keeps every path inside the workspace writable.
+	WritePolicy            basetools.WritePolicy
 	EnableWeb              bool
 	WebTimeoutSeconds      int
 	EnableWebSearch        bool
@@ -52,6 +58,8 @@ func WebSearchToolNames() []string {
 // BuildList assembles the concrete coding-agent toolset.
 func BuildList(opts ListOptions) []agent.Tool {
 	toolList := []agent.Tool{}
+	readPolicy := basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}
+	writePolicy := basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace, WritePolicy: opts.WritePolicy}
 
 	if opts.EnableBash {
 		toolList = append(toolList, basetools.NewBashTool(
@@ -59,6 +67,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 			basetools.WithBashMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithBashOperations(opts.BashOps),
 			basetools.WithBashBackground(opts.BackgroundTasks),
+			basetools.WithBashCommandPolicy(opts.BashCommandPolicy),
 		))
 		if opts.BackgroundTasks != nil {
 			toolList = append(toolList,
@@ -89,7 +98,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 	toolList = append(toolList,
 		basetools.NewReadTool(
 			basetools.WithReadWorkspace(opts.Workspace),
-			basetools.WithReadPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithReadPathPolicy(readPolicy),
 			basetools.WithReadMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithReadOperations(opts.FileOps),
 			basetools.WithReadTracker(opts.ReadTracker),
@@ -97,7 +106,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 		),
 		basetools.NewWriteTool(
 			basetools.WithWriteWorkspace(opts.Workspace),
-			basetools.WithWritePathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithWritePathPolicy(writePolicy),
 			basetools.WithWriteOperations(opts.FileOps),
 			basetools.WithWriteMutationQueue(opts.FileMutationQueue),
 			basetools.WithWriteBackupManager(opts.BackupManager),
@@ -105,7 +114,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 		),
 		basetools.NewEditTool(
 			basetools.WithEditWorkspace(opts.Workspace),
-			basetools.WithEditPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithEditPathPolicy(writePolicy),
 			basetools.WithEditOperations(opts.FileOps),
 			basetools.WithEditMutationQueue(opts.FileMutationQueue),
 			basetools.WithEditBackupManager(opts.BackupManager),
@@ -113,24 +122,24 @@ func BuildList(opts ListOptions) []agent.Tool {
 		),
 		basetools.NewGrepTool(
 			basetools.WithGrepWorkspace(opts.Workspace),
-			basetools.WithGrepPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithGrepPathPolicy(readPolicy),
 			basetools.WithGrepMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithGrepOperations(opts.FileOps),
 		),
 		basetools.NewFindTool(
 			basetools.WithFindWorkspace(opts.Workspace),
-			basetools.WithFindPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithFindPathPolicy(readPolicy),
 			basetools.WithFindOperations(opts.FileOps),
 		),
 		basetools.NewLsTool(
 			basetools.WithLsWorkspace(opts.Workspace),
-			basetools.WithLsPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithLsPathPolicy(readPolicy),
 			basetools.WithLsMaxOutputLen(opts.MaxOutputLen),
 			basetools.WithLsOperations(opts.FileOps),
 		),
 		basetools.NewPatchTool(
 			basetools.WithPatchWorkspace(opts.Workspace),
-			basetools.WithPatchPathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithPatchPathPolicy(writePolicy),
 			basetools.WithPatchOperations(opts.FileOps),
 			basetools.WithPatchBackupManager(opts.BackupManager),
 			basetools.WithPatchMutationQueue(opts.FileMutationQueue),
@@ -141,7 +150,7 @@ func BuildList(opts ListOptions) []agent.Tool {
 		basetools.NewLocalTimeTool(),
 		basetools.NewDeleteFileTool(
 			basetools.WithDeleteFileWorkspace(opts.Workspace),
-			basetools.WithDeleteFilePathPolicy(basetools.PathPolicy{AllowOutsideWorkspace: opts.AllowOutsideWorkspace}),
+			basetools.WithDeleteFilePathPolicy(writePolicy),
 			basetools.WithDeleteFileOperations(opts.FileOps),
 			basetools.WithDeleteFileBackupManager(opts.BackupManager),
 		),

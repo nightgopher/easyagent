@@ -9,9 +9,11 @@ import (
 
 // PathPolicy controls file-tool access without changing path resolution or cwd.
 // The zero value keeps the existing workspace restriction. It does not change
-// OS permissions, shell access, or tool confirmation requirements.
+// OS permissions, shell access, or tool confirmation requirements. A configured
+// WritePolicy additionally limits the mutation tools to writable paths.
 type PathPolicy struct {
 	AllowOutsideWorkspace bool
+	WritePolicy
 }
 
 func (p PathPolicy) Allows(workspace, path string) bool {

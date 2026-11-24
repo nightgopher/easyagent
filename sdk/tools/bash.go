@@ -19,7 +19,8 @@ type BashTool struct {
 	maxOutputLen     int    // 最大输出长度，0 表示使用 DefaultMaxOutputLen
 	progressInterval time.Duration
 	ops              operations.BashOperations
-	background       *BackgroundTasks // nil 表示不支持 run_in_background
+	background       *BackgroundTasks           // nil 表示不支持 run_in_background
+	commandPolicy    func(command string) error // 可选：命令执行前的策略检查
 }
 
 type BashParams struct {
@@ -52,6 +53,13 @@ func WithBashBackground(tasks *BackgroundTasks) BashToolOption {
 	return func(t *BashTool) { t.background = tasks }
 }
 
+// WithBashCommandPolicy vets each command before it runs. A returned error
+// rejects the command; it reaches the model as the tool result. The policy
+// lives on the tool, so subagents that inherit the tool inherit the policy.
+func WithBashCommandPolicy(policy func(command string) error) BashToolOption {
+	return func(t *BashTool) { t.commandPolicy = policy }
+}
+
 // NewBashTool creates BashTool with optional configuration.
 // If no BashOperations is provided via WithBashOperations, defaults to LocalBashOperations.
 func NewBashTool(opts ...BashToolOption) *BashTool {
@@ -67,7 +75,11 @@ func NewBashTool(opts ...BashToolOption) *BashTool {
 
 func (t *BashTool) Name() string { return "bash" }
 func (t *BashTool) Description() string {
-	return "Execute a non-interactive shell command on the server. No terminal or password input is available; use sudo -n when elevated access is needed."
+	description := "Execute a non-interactive shell command on the server. No terminal or password input is available; use sudo -n when elevated access is needed."
+	if t.commandPolicy != nil {
+		description += " An operator policy vets every command before it runs and refuses any program outside its allowlist."
+	}
+	return description
 }
 func (t *BashTool) Parameters() map[string]any {
 	properties := map[string]any{
@@ -95,10 +107,21 @@ func (t *BashTool) Validate(raw json.RawMessage) (json.RawMessage, error) {
 	if params.Command == "" {
 		return nil, fmt.Errorf("command is required")
 	}
+	if err := t.vet(params.Command); err != nil {
+		return nil, err
+	}
 	if params.Timeout <= 0 {
 		params.Timeout = DefaultBashTimeoutSeconds
 	}
 	return json.Marshal(params)
+}
+
+// vet applies the command policy, if one is configured.
+func (t *BashTool) vet(command string) error {
+	if t.commandPolicy == nil {
+		return nil
+	}
+	return t.commandPolicy(command)
 }
 
 // RequiresConfirmation 实现 agent.ToolWithConfirmation。
@@ -118,6 +141,11 @@ func (t *BashTool) Execute(ctx context.Context, raw json.RawMessage, onUpdate fu
 	var params BashParams
 	if err := json.Unmarshal(raw, &params); err != nil {
 		return agent.ToolResult{IsError: true}, err
+	}
+	// Validate already vets the command; repeat it here so a direct Execute
+	// cannot skip the policy.
+	if err := t.vet(params.Command); err != nil {
+		return agent.ToolResult{IsError: true, Content: err.Error()}, err
 	}
 
 	if params.RunInBackground {
