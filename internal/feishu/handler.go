@@ -60,6 +60,9 @@ type Handler struct {
 
 	httpClient *http.Client
 	workspace  string // default workspace root for file path detection
+	// inbox is a workspace-relative directory where the files users send are
+	// saved, so the model's file tools can read them. Empty disables it.
+	inbox string
 
 	// Sender context: per-chat sender OpenID for tool callbacks.
 	// Keyed by chatKey to avoid multi-chat race conditions.
@@ -83,12 +86,36 @@ func NewHandler(piAgentURL, appID string, client *Client, workspace string) *Han
 		routesFile:    defaultRoutesFile(),
 		httpClient:    &http.Client{Timeout: 31 * time.Minute}, // Core bounds a chat turn to 30 minutes.
 		workspace:     workspace,
+		inbox:         inboxSubdir(os.Getenv("FEISHU_INBOX_DIR")),
 		senders:       make(map[string]string),
 		outboxWake:    make(chan struct{}, 1),
 		outbox:        &notificationOutbox{path: filepath.Join(config.HomeDir(), "feishu-notifications.sqlite"), appID: appID},
 	}
 	h.loadRoutes()
 	return h
+}
+
+// inboxSubdir reads FEISHU_INBOX_DIR, a directory relative to the workspace.
+// An empty or unsafe value leaves the inbox disabled.
+func inboxSubdir(value string) string {
+	value = strings.Trim(strings.TrimSpace(value), "/")
+	if value == "" || strings.HasPrefix(value, "~") || strings.Contains(value, "..") {
+		return ""
+	}
+	return value
+}
+
+// InboxDir returns the directory inside a chat's workspace where the files
+// users send are saved, or "" when the chat has no inbox.
+func (h *Handler) InboxDir(chatKey string) string {
+	if h.inbox == "" {
+		return ""
+	}
+	workspace := h.workspaceFor(chatKey)
+	if workspace == "" {
+		return ""
+	}
+	return filepath.Join(workspace, filepath.FromSlash(h.inbox))
 }
 
 func defaultRoutesFile() string {

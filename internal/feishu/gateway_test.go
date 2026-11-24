@@ -186,7 +186,7 @@ func TestPostMessageFormats(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := (&Gateway{}).handlePostMessage(context.Background(), &larkim.EventMessage{Content: &tt.content})
+			got, err := (&Gateway{}).handlePostMessage(context.Background(), &larkim.EventMessage{Content: &tt.content}, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -225,7 +225,7 @@ func TestInvalidPostDoesNotReachAgent(t *testing.T) {
 }
 func TestInvalidPostFormats(t *testing.T) {
 	for _, content := range []string{`not JSON`, `null`, `{"content":"broken"}`, `{"title":"","content":[]}`} {
-		if _, err := (&Gateway{}).handlePostMessage(context.Background(), &larkim.EventMessage{Content: &content}); err == nil {
+		if _, err := (&Gateway{}).handlePostMessage(context.Background(), &larkim.EventMessage{Content: &content}, ""); err == nil {
 			t.Fatalf("accepted %s", content)
 		}
 	}

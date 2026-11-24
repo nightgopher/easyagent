@@ -101,6 +101,7 @@ func main() {
 	handler.SetGateway(gateway)
 	gateway.SetOwnerAccess(access)
 	gateway.SetCardActionHandler(handler.HandleCardAction)
+	gateway.SetInbox(handler.InboxDir)
 
 	// Start tool callback HTTP server
 	if callbackURL != "" {
