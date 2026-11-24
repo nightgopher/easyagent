@@ -17,6 +17,7 @@ import (
 	"github.com/nightgopher/easyagent/internal/profile"
 	"github.com/nightgopher/easyagent/internal/scheduler"
 	"github.com/nightgopher/easyagent/internal/stewardtools"
+	"github.com/nightgopher/easyagent/internal/submit"
 	"github.com/nightgopher/easyagent/sdk/agent"
 	"github.com/nightgopher/easyagent/sdk/ai/providers"
 	"github.com/nightgopher/easyagent/sdk/config"
@@ -420,29 +421,50 @@ func (a *App) deps() runtime.Dependencies {
 		ToolDiscoveryPolicy: a.toolDiscoveryPolicy,
 		PrepareTools:        a.prepareMCP,
 		AcquireTools:        a.acquireMCP,
-		BuildOperations: func(cfg config.Config, workspace string) *operations.Operations {
-			switch cfg.ExecutionMode {
-			case "ssh":
-				return operations.NewSSHOperations(operations.SSHConfig{
-					Host:    cfg.SSHHost,
-					Port:    cfg.SSHPort,
-					WorkDir: cfg.SSHWorkDir,
-				})
-			default:
-				return operations.NewLocalOperations()
-			}
-		},
+		BuildOperations:     a.buildOperations,
 	}
 }
 
-// additionalTools returns MCP tools plus the skill-market tool for the
-// given workspace. Used as runtime.Dependencies.AdditionalTools.
+// buildOperations selects the execution backend the tools run on.
+func (a *App) buildOperations(cfg config.Config, _ string) *operations.Operations {
+	switch cfg.ExecutionMode {
+	case "ssh":
+		return operations.NewSSHOperations(operations.SSHConfig{
+			Host:    cfg.SSHHost,
+			Port:    cfg.SSHPort,
+			WorkDir: cfg.SSHWorkDir,
+		})
+	default:
+		return operations.NewLocalOperations()
+	}
+}
+
+// additionalTools returns MCP tools, the skill-market tool and, for a
+// deployment with a guard profile gate, the submit tool. Used as
+// runtime.Dependencies.AdditionalTools.
 func (a *App) additionalTools(workspace string) []agent.Tool {
 	list := a.MCP(workspace).AllTools()
 	if tool := a.SkillMarketTool(); tool != nil {
 		list = append(list, tool)
 	}
+	if tool := a.submitTool(workspace); tool != nil {
+		list = append(list, tool)
+	}
 	return list
+}
+
+// submitTool registers submit_task when the guard profile configures a gate.
+// The paths it may commit default to the paths the file tools may write.
+func (a *App) submitTool(workspace string) agent.Tool {
+	cfg := a.Config()
+	if cfg.Submit == nil {
+		return nil
+	}
+	include := cfg.Submit.Include
+	if len(include) == 0 && cfg.FilePolicy != nil {
+		include = cfg.FilePolicy.WriteAllow
+	}
+	return submit.NewTool(*cfg.Submit, include, workspace, a.buildOperations(cfg, workspace).Bash)
 }
 
 // combinedToolRevision merges the MCP and skill-market revision counters so
@@ -493,6 +515,9 @@ func (a *App) ToolNames() []string {
 
 	if a.skillMarket != nil {
 		baseNames = append(baseNames, "skill_market")
+	}
+	if cfg.Submit != nil {
+		baseNames = append(baseNames, submit.ToolName)
 	}
 	for _, tool := range a.MCP(cfg.Workspace).AllTools() {
 		baseNames = append(baseNames, tool.Name())
