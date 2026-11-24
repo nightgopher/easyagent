@@ -79,6 +79,7 @@ type localPreferences struct {
 	SiliconSpeechHasKey bool                 `json:"silicon_speech_has_key,omitempty"`
 	Language            string               `json:"language"`
 	Theme               string               `json:"theme"`
+	LarkWatchGroups     string               `json:"lark_watch_groups,omitempty"`
 	LarkWatch           bool                 `json:"lark_watch,omitempty"`
 	Background          wallpaperPreferences `json:"background"`
 	WorkbenchWidth      float32              `json:"workbench_width,omitempty"`

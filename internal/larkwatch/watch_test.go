@@ -584,3 +584,69 @@ func TestRelayRejectedKeepsPositionForRetry(t *testing.T) {
 		t.Errorf("no /chat fallback expected, got %d", got)
 	}
 }
+
+func TestConfiguredGroupBaselineAndNewMessages(t *testing.T) {
+	const group = "oc_test_group"
+	latest := msgJSON("old", 10, "2026-11-12 09:30", "ou_peer", "群成员", "旧消息")
+	lark := standardLark("", 0)
+	original := lark.handler
+	lark.handler = func(args []string) (string, error) {
+		if strings.HasPrefix(strings.Join(args, " "), "im +chat-messages-list") && strings.Contains(strings.Join(args, " "), group) {
+			return `{"ok":true,"data":` + messagesJSON(latest) + `}`, nil
+		}
+		return original(args)
+	}
+	watch, rec := newTestWatch(t, lark, func(string, map[string]string) (int, string) { return http.StatusOK, "ok" })
+	watch.cfg.GroupChats = map[string]bool{group: true}
+	if err := watch.init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.byPath("chat")) != 0 {
+		t.Fatal("baseline triggered a wake")
+	}
+	latest = msgJSON("new", 11, "2026-11-12 09:31", "ou_peer", "群成员", "新消息")
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	posts := rec.byPath("chat")
+	if len(posts) != 1 || !strings.Contains(posts[0].body["prompt"], "新消息") || !strings.Contains(posts[0].body["prompt"], group) {
+		t.Fatalf("unexpected posts: %+v", posts)
+	}
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.byPath("chat")) != 1 {
+		t.Fatal("message processed twice")
+	}
+}
+
+func TestGroupBaselineReadFailureDoesNotReplayHistory(t *testing.T) {
+	const group = "oc_group"
+	fail := true
+	lark := standardLark("", 0)
+	original := lark.handler
+	lark.handler = func(args []string) (string, error) {
+		if strings.Contains(strings.Join(args, " "), group) {
+			if fail {
+				return "", fmt.Errorf("unavailable")
+			}
+			return `{"ok":true,"data":` + messagesJSON(msgJSON("old", 10, "2026-11-12 09:30", "ou_peer", "群成员", "旧消息")) + `}`, nil
+		}
+		return original(args)
+	}
+	watch, rec := newTestWatch(t, lark, func(string, map[string]string) (int, string) { return http.StatusOK, "ok" })
+	watch.cfg.GroupChats = map[string]bool{group: true}
+	if err := watch.init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	fail = false
+	if err := watch.Poll(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.byPath("chat")) != 0 || watch.state.Position(group) != 10 {
+		t.Fatal("failed baseline should retry without waking")
+	}
+}
