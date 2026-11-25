@@ -60,7 +60,7 @@ func TestGuardProfileLoadsAllSections(t *testing.T) {
 	require.NoError(t, cfg.LoadFromYAML(writeConfig(t, dir, guardProfileYAML)))
 
 	assert.Equal(t, "You are the website operator.\n", cfg.PromptTemplate)
-	assert.Equal(t, "SYSTEM_PROMPT.md", cfg.PromptFile)
+	assert.Equal(t, filepath.Join(dir, "SYSTEM_PROMPT.md"), cfg.PromptFile)
 	require.NotNil(t, cfg.Skills)
 	assert.Equal(t, []string{filepath.Join(dir, "skills-extra")}, cfg.Skills.Dirs)
 	assert.Equal(t, []string{"impeccable"}, cfg.Skills.Deny)
@@ -119,6 +119,69 @@ func TestGuardProfileRejectsInvalidValues(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cfg := Default()
 			assert.Error(t, cfg.LoadFromYAML(writeConfig(t, t.TempDir(), body)))
+		})
+	}
+}
+
+func TestConfigFilePathsAreAbsoluteAndRelativeToConfig(t *testing.T) {
+	root := t.TempDir()
+	t.Chdir(root)
+	dir := filepath.Join(root, "profile")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prompt.md"), []byte("Profile instructions"), 0o600))
+	writeConfig(t, dir, `context_scope: project
+workspace: repo
+data_dir: data
+mcp_config: mcp.json
+kb_repo_path: notes
+skill_market_skill_dir: market
+prompt_file: prompt.md
+skills:
+  dirs: [skills]
+`)
+	cfg := Default()
+	require.NoError(t, cfg.LoadFromYAML(filepath.Join("profile", "config.yaml")))
+	assert.Equal(t, "project", cfg.ContextScope)
+	for suffix, value := range map[string]string{
+		"repo": cfg.Workspace, "data": cfg.DataDir, "mcp.json": cfg.MCPConfigPath,
+		"notes": cfg.KBRepoPath, "market": cfg.SkillMarketSkillDir,
+		"prompt.md": cfg.PromptFile, "skills": cfg.Skills.Dirs[0],
+	} {
+		assert.True(t, filepath.IsAbs(value))
+		assert.Equal(t, filepath.Join(dir, suffix), value)
+	}
+}
+
+func TestContextScopeIsOptInAndValidated(t *testing.T) {
+	for _, scope := range []string{"", "all", "project", "typo"} {
+		t.Run(scope, func(t *testing.T) {
+			cfg := Default()
+			err := cfg.LoadFromYAML(writeConfig(t, t.TempDir(), "context_scope: "+scope+"\n"))
+			if scope == "typo" {
+				require.ErrorContains(t, err, "context_scope")
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, scope, cfg.ContextScope)
+			}
+		})
+	}
+}
+
+func TestStrictConfigRejectsTrailingDocuments(t *testing.T) {
+	for name, body := range map[string]string{
+		"valid second":            "strict_config: true\n---\nworkspace: escape\n",
+		"empty second":            "strict_config: true\n---\n",
+		"malformed second":        "strict_config: true\n---\nbroken: [\n",
+		"strict in second":        "workspace: ignored\n---\nstrict_config: true\n",
+		"malformed before strict": "broken: [\n---\nstrict_config: true\n",
+		"quoted strict":           "'strict_config': true\n---\nbroken: [\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfig(t, t.TempDir(), body)
+			require.True(t, StrictConfigFile(path), "entrypoints must fail closed on load error")
+			cfg := Default()
+			require.Error(t, cfg.LoadFromYAML(path))
+			assert.Empty(t, cfg.Workspace, "trailing documents must be rejected before applying values")
 		})
 	}
 }

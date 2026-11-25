@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -118,10 +119,13 @@ type Config struct {
 	// Guard profile (see guard.go). Every section is optional: nil keeps the
 	// default behaviour for deployments that do not configure one.
 	PromptFile string
-	Skills     *SkillsConfig
-	FilePolicy *FilePolicy
-	BashPolicy *BashPolicy
-	Submit     *SubmitConfig
+	// ContextScope is empty/all for legacy instruction discovery, or project
+	// to load instructions only from the explicitly configured workspace.
+	ContextScope string
+	Skills       *SkillsConfig
+	FilePolicy   *FilePolicy
+	BashPolicy   *BashPolicy
+	Submit       *SubmitConfig
 
 	// Knowledge base (second-brain)
 	KBRepoPath string // path to the personal knowledge repo (default: ~/agent-lessons)
@@ -496,6 +500,7 @@ type yamlConfig struct {
 
 	StrictConfig bool          `yaml:"strict_config,omitempty"`
 	PromptFile   string        `yaml:"prompt_file,omitempty"`
+	ContextScope string        `yaml:"context_scope,omitempty"`
 	Skills       *SkillsConfig `yaml:"skills,omitempty"`
 	FilePolicy   *FilePolicy   `yaml:"file_policy,omitempty"`
 	BashPolicy   *BashPolicy   `yaml:"bash_policy,omitempty"`
@@ -520,8 +525,30 @@ func (c *Config) LoadFromYAML(path string) error {
 		if err := decoder.Decode(&yc); err != nil {
 			return fmt.Errorf("parse YAML: %w", err)
 		}
+		var extra yaml.Node
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err != nil {
+				return fmt.Errorf("parse YAML trailing document: %w", err)
+			}
+			return fmt.Errorf("strict config must contain exactly one YAML document")
+		}
 	} else if err := yaml.Unmarshal(data, &yc); err != nil {
 		return fmt.Errorf("parse YAML: %w", err)
+	}
+	if err := ValidateContextScope(yc.ContextScope); err != nil {
+		return err
+	}
+	baseDir, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("resolve config directory: %w", err)
+	}
+	for _, value := range []*string{&yc.Workspace, &yc.DataDir, &yc.MCPConfigPath, &yc.KBRepoPath, &yc.SkillMarketSkillDir} {
+		if *value != "" {
+			*value = resolveConfigPath(baseDir, *value)
+		}
+	}
+	if yc.ContextScope != "" {
+		c.ContextScope = yc.ContextScope
 	}
 
 	if yc.ThinkingMode != "" {
@@ -666,7 +693,7 @@ func (c *Config) LoadFromYAML(path string) error {
 		c.ASRBaseURL = yc.ASRBaseURL
 	}
 
-	return c.applyGuardProfile(filepath.Dir(path), yc.PromptFile, yc.Skills, yc.FilePolicy, yc.BashPolicy, yc.Submit)
+	return c.applyGuardProfile(baseDir, yc.PromptFile, yc.Skills, yc.FilePolicy, yc.BashPolicy, yc.Submit)
 }
 
 // ─── Runtime overrides (settings.json) ──────────────────────────────────────

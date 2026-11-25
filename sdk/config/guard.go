@@ -1,7 +1,9 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -100,18 +102,37 @@ func (s *SubmitConfig) PushEnabled() bool {
 	return s.Push == nil || *s.Push
 }
 
-var strictLine = regexp.MustCompile(`(?m)^\s*strict_config:\s*["']?true["']?\s*(#.*)?$`)
+var strictLine = regexp.MustCompile(`(?m)^\s*["']?strict_config["']?:\s*["']?true["']?\s*(#.*)?$`)
 
 // strictRequested reads only the strict_config switch, so a file that asks for
 // strict loading is still recognised when the rest of it fails to parse.
 func strictRequested(data []byte) bool {
-	var only struct {
-		StrictConfig bool `yaml:"strict_config"`
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	for {
+		var only struct {
+			StrictConfig bool `yaml:"strict_config"`
+		}
+		err := decoder.Decode(&only)
+		if err == io.EOF {
+			return false
+		}
+		if err != nil {
+			return strictLine.Match(data)
+		}
+		if only.StrictConfig {
+			return true
+		}
 	}
-	if err := yaml.Unmarshal(data, &only); err != nil {
-		return strictLine.Match(data)
+}
+
+// ValidateContextScope keeps instruction scoping opt-in and rejects typos.
+func ValidateContextScope(scope string) error {
+	switch scope {
+	case "", "all", "project":
+		return nil
+	default:
+		return fmt.Errorf("context_scope must be all or project")
 	}
-	return only.StrictConfig
 }
 
 // StrictConfigFile reports whether the config file asks for strict loading.
@@ -170,7 +191,8 @@ func validateProgramNames(names []string, key string) error {
 
 func (c *Config) applyGuardProfile(baseDir, promptFile string, skills *SkillsConfig, filePolicy *FilePolicy, bashPolicy *BashPolicy, submit *SubmitConfig) error {
 	if promptFile != "" {
-		data, err := os.ReadFile(resolveConfigPath(baseDir, promptFile)) // #nosec G304 -- operator-configured path next to the config file.
+		promptFile = resolveConfigPath(baseDir, promptFile)
+		data, err := os.ReadFile(promptFile) // #nosec G304 -- operator-configured path next to the config file.
 		if err != nil {
 			return fmt.Errorf("prompt_file: %w", err)
 		}
