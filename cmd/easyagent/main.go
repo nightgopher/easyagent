@@ -94,6 +94,13 @@ func main() {
 		return
 	}
 
+	// Read --config before registering flags that take their defaults from it.
+	selectedConfig, err := configPathArgument(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	*configFile = selectedConfig
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {
 		candidates := []string{"easyagent.yaml", filepath.Join(config.HomeDir(), "config.yaml")}
@@ -106,7 +113,7 @@ func main() {
 	}
 	if *configFile != "" {
 		if err := cfg.LoadFromYAML(*configFile); err != nil {
-			if config.StrictConfigFile(*configFile) {
+			if selectedConfig != "" || config.StrictConfigFile(*configFile) {
 				// A guard profile must not start with its restrictions dropped.
 				slog.Error("refusing to start: strict config could not be loaded", "path", *configFile, "error", err)
 				os.Exit(1)
