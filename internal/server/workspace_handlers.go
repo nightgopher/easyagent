@@ -3,24 +3,111 @@ package server
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/nightgopher/easyagent/sdk/config"
+	"github.com/nightgopher/easyagent/sdk/tools"
 )
+
+// projectWorkspace only accepts the host's canonical project root. Empty or
+// inaccessible roots fail closed rather than falling back to the process cwd.
+func (s *Server) projectWorkspace(workspace string) (string, error) {
+	canonical := func(path string) (string, error) {
+		if path == "" {
+			return "", fmt.Errorf("project workspace is not configured")
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return "", err
+		}
+		root, err := filepath.EvalSymlinks(abs)
+		if err != nil {
+			return "", err
+		}
+		info, err := os.Stat(root) // #nosec G703 -- metadata check of a canonical directory; the caller then compares it with the host-pinned root.
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() {
+			return "", fmt.Errorf("project workspace is not a directory")
+		}
+		return root, nil
+	}
+	root, err := canonical(s.app.Config().Workspace)
+	if err != nil {
+		return "", err
+	}
+	selected, err := canonical(workspace)
+	if err != nil || selected != root {
+		return "", fmt.Errorf("workspace does not match the configured project")
+	}
+	return root, nil
+}
+
+func (s *Server) fileWorkspace(w http.ResponseWriter, workspace string) (string, bool) {
+	if s.app.Config().ContextScope != "project" {
+		return workspace, true
+	}
+	root, err := s.projectWorkspace(workspace)
+	if err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return "", false
+	}
+	return root, true
+}
+
+func (s *Server) allowFileSession(w http.ResponseWriter, id string) bool {
+	if s.app.Config().ContextScope != "project" {
+		return true
+	}
+	manager := s.app.SessionManager()
+	if id == "" || id == "." || id == ".." || filepath.Base(id) != id || strings.ContainsAny(id, "/\\") {
+		writeError(w, http.StatusNotFound, "session not found")
+		return false
+	}
+	if _, err := securePath(manager.SessionsDir(), id); err != nil || !manager.Exists(id) {
+		writeError(w, http.StatusNotFound, "session not found")
+		return false
+	}
+	workspace, _ := manager.Metadata(id)
+	_, ok := s.fileWorkspace(w, workspace)
+	return ok
+}
+
+func checkAPIWrite(cfg config.Config, root, path string) error {
+	if cfg.FilePolicy == nil {
+		return nil // securePath already enforces the API's workspace boundary.
+	}
+	canonicalRoot, err := securePath(root, ".")
+	if err != nil {
+		return err
+	}
+	policy := tools.PathPolicy{WritePolicy: tools.WritePolicy{Allow: cfg.FilePolicy.WriteAllow, Deny: cfg.FilePolicy.WriteDeny}}
+	return policy.CheckWrite(canonicalRoot, path)
+}
 
 // ─── GET /sessions/{id}/diff ────────────────────────────────────────────────
 
 func (s *Server) getSessionDiff(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if !s.allowFileSession(w, id) {
+		return
+	}
 	sess, err := s.resolveSession(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	cwd := sess.Workspace()
+	cwd, ok := s.fileWorkspace(w, sess.Workspace())
+	if !ok {
+		return
+	}
 	if cwd == "" {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"files": []any{}})
@@ -47,12 +134,19 @@ func (s *Server) getSessionFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.allowFileSession(w, r.PathValue("id")) {
+		return
+	}
 	sess, err := s.resolveSession(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	safePath, err := securePath(sess.Workspace(), path)
+	root, ok := s.fileWorkspace(w, sess.Workspace())
+	if !ok {
+		return
+	}
+	safePath, err := securePath(root, path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -87,14 +181,26 @@ func (s *Server) writeFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !s.allowFileSession(w, r.PathValue("id")) {
+		return
+	}
 	sess, err := s.resolveSession(r.Context(), r.PathValue("id"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	safePath, err := securePath(sess.Workspace(), path)
+	root, ok := s.fileWorkspace(w, sess.Workspace())
+	if !ok {
+		return
+	}
+	safePath, err := securePath(root, path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := checkAPIWrite(s.app.Config(), root, safePath); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -178,7 +284,7 @@ func gitDiff(cwd string) ([]fileDiff, error) {
 func (s *Server) workspaceRoot(w http.ResponseWriter, r *http.Request) (string, bool) {
 	query := r.URL.Query()
 	if !query.Has("session_id") {
-		return s.app.Config().Workspace, true
+		return s.fileWorkspace(w, s.app.Config().Workspace)
 	}
 	id := query.Get("session_id")
 	if id == "" || id == "." || id == ".." || filepath.Base(id) != id || strings.ContainsAny(id, "/\\") {
@@ -190,12 +296,18 @@ func (s *Server) workspaceRoot(w http.ResponseWriter, r *http.Request) (string, 
 		writeError(w, http.StatusNotFound, "session not found")
 		return "", false
 	}
+	if s.app.Config().ContextScope == "project" {
+		workspace, _ := manager.Metadata(id)
+		if _, ok := s.fileWorkspace(w, workspace); !ok {
+			return "", false
+		}
+	}
 	sess, err := s.app.LoadSession(r.Context(), id)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "session not found")
 		return "", false
 	}
-	return sess.Workspace(), true
+	return s.fileWorkspace(w, sess.Workspace())
 }
 
 // DirEntry represents a single entry in a directory listing.
@@ -451,6 +563,11 @@ func (s *Server) workspaceWriteFile(w http.ResponseWriter, r *http.Request) {
 	safePath, err := securePath(root, path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := checkAPIWrite(s.app.Config(), root, safePath); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 

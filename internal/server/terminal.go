@@ -32,6 +32,10 @@ func (s *Server) handleTerminal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "terminal requires API authentication")
 		return
 	}
+	if s.app.Config().ContextScope == "project" {
+		writeError(w, http.StatusForbidden, "interactive terminal is unavailable in project scope")
+		return
+	}
 	if !s.terminalEnabled {
 		writeError(w, http.StatusForbidden, "interactive terminal is not enabled on this host")
 		return
