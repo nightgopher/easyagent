@@ -206,6 +206,16 @@ func (a *App) NewSession(ctx context.Context) (*runtime.AgentSession, error) {
 // LoadSession loads an existing AgentSession by ID.
 // If already loaded in the registry, returns the cached instance.
 func (a *App) LoadSession(ctx context.Context, sessionID string) (*runtime.AgentSession, error) {
+	if a.Config().ContextScope == "project" {
+		workspace, application := a.sessionMgr.Metadata(sessionID)
+		agentID, err := a.sessionMgr.AgentID(sessionID)
+		if err != nil {
+			return nil, err
+		}
+		if err := a.checkProjectSession(workspace, application, agentID); err != nil {
+			return nil, err
+		}
+	}
 	if a.flows != nil && a.flows.ActorSession(sessionID) {
 		return a.loadWorkflowActor(ctx, sessionID)
 	}

@@ -228,6 +228,9 @@ func (t *workflowTool) Execute(ctx context.Context, params json.RawMessage, onUp
 // retain the original task instead of exposing internal orchestration text.
 func (a workflowApplication) BuildPrompt(opts runtime.PromptBuildOptions, profile, goal string) string {
 	base := a.Application.BuildPrompt(opts, profile, goal)
+	if a.app.Config().ContextScope == "project" {
+		return base
+	}
 	return base + `
 
 When the user starts a message with /workflow followed by whitespace, design and execute a dynamic workflow for that task. First decide named actors, which asks share context, parallel branches and final output. Then call create_workflow with a TypeScript script; do not substitute YAML or ordinary sequential tool calls. Use agent(name,{system}) and ask<T>(), define interface T for typed returns. Actor tasks can use the regular EasyAgent tools. Only supported workflow APIs are agent, ask, Promise.all, report and phase; use actors for all external operations. Include necessary context from this conversation in actor instructions. Inspect compilation errors and fix the script if needed. After completion summarize the actual result and run ID. Avoid duplicate execution after a runtime failure; inspect the run and ask the user to confirm recovery in the desktop interface.`

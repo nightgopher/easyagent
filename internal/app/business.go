@@ -55,6 +55,9 @@ func (a *App) readWork(ctx context.Context, query, view string, offset int) (any
 // invalid/missing business agent. Model changes affect new sessions; permissions
 // and instructions are reloaded before each subsequent turn.
 func (a *App) SessionSetup(ctx context.Context, application, agentID string, cfg config.Config) (config.Config, runtime.Dependencies, error) {
+	if err := a.ResolveProjectWorkspace(cfg.Workspace, application, agentID); err != nil {
+		return cfg, runtime.Dependencies{}, err
+	}
 	deps := a.SessionDepsWithApp(application)
 	if agentID == "" {
 		if application == "business" {
