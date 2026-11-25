@@ -111,14 +111,6 @@
     },
     {
       "linter": "gosec",
-      "file": "internal/feishu/gateway.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "1ab43d483e4069d8f667a2edc9db2214468eeda443d7c9ffd4a8d806ef2b762b",
-      "line_at_baseline": 575,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
       "file": "internal/feishu/handler.go",
       "message": "G118: Goroutine uses context.Background/TODO while request-scoped context is available",
       "source_sha256": "4198cd8cd4e456646a04a1fdfa65307bdf919e14dc25f705fc34c69316b13779",
