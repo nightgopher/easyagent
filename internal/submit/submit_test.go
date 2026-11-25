@@ -1,6 +1,7 @@
 package submit
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -149,17 +150,23 @@ func TestSubmitCommitsAllowedChangesToANewTaskBranch(t *testing.T) {
 	}
 }
 
-func TestSubmitStagesWhatTheGateLeavesBehind(t *testing.T) {
-	work, _ := newCheckout(t)
-	write(t, work, "src/content/news/a.md", "changed\n")
-	// The gate writes a file of its own; the commit must show the tree after
-	// the gate, not the tree before it.
-	tool := newTool(t, work, "printf 'generated\\n' > src/content/news/generated.md")
-
-	r, err := call(t, tool, `{"summary":"Run the generator"}`)
-	require.NoError(t, err)
-	assert.Equal(t, []fileChange{{"M", "src/content/news/a.md"}, {"A", "src/content/news/generated.md"}}, r.Files)
-	assert.Empty(t, git(t, work, "status", "--porcelain"))
+func TestSubmitRejectsSourceWrittenByGate(t *testing.T) {
+	for _, command := range []string{
+		"printf 'generated\\n' > src/content/news/generated.md",
+		"printf 'rewritten\\n' > src/content/news/a.md",
+		"printf 'staged\\n' > src/content/news/a.md; git add src/content/news/a.md",
+		"rm src/content/news/a.md",
+		"git commit -qm 'gate commit'",
+	} {
+		t.Run(command, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			write(t, work, "src/content/news/a.md", "changed\n")
+			_, err := call(t, newTool(t, work, command), `{"summary":"Run the generator"}`)
+			require.Error(t, err)
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+			assert.Empty(t, git(t, work, "branch", "--list", "bot/*"))
+		})
+	}
 }
 
 func TestSubmitRefusesChangesOutsideTheIncludedPaths(t *testing.T) {
@@ -234,16 +241,15 @@ func TestSubmitAddsAFollowUpToTheSameTaskBranch(t *testing.T) {
 	assert.Len(t, remoteHeads(t, remote), 2)
 }
 
-func TestSubmitWarnsWhenTheBaseIsBehind(t *testing.T) {
+func TestSubmitStopsWhenTheBaseIsBehind(t *testing.T) {
 	work, remote := newCheckout(t)
 	advanceRemote(t, remote)
 	write(t, work, "src/content/news/a.md", "changed\n")
 
-	r, err := call(t, newTool(t, work, "true"), `{"summary":"News"}`)
-	require.NoError(t, err)
-	require.Len(t, r.Warnings, 1)
-	assert.Contains(t, r.Warnings[0], "落后远端 1 个提交")
-	assert.Contains(t, r.markdown(), "⚠️")
+	_, err := call(t, newTool(t, work, "true"), `{"summary":"News"}`)
+	require.ErrorContains(t, err, "本地 base 与远端最新不同")
+	assert.Empty(t, git(t, work, "branch", "--list", "bot/*"))
+	assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
 }
 
 func TestNewTaskReturnsACleanWorkspaceToAnUpToDateBase(t *testing.T) {
@@ -280,19 +286,26 @@ func TestNewTaskReturnsACleanWorkspaceToAnUpToDateBase(t *testing.T) {
 func TestSubmitRetriesAPushThatFailedBefore(t *testing.T) {
 	work, remote := newCheckout(t)
 	write(t, work, "src/content/news/a.md", "changed\n")
-	// An unreachable remote makes the first push fail after the commit exists.
-	git(t, work, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing.git"))
+	// Reads/fetches work, but the local bare remote rejects the first push.
+	git(t, work, "--git-dir="+remote, "config", "receive.denyCurrentBranch", "refuse")
+	git(t, work, "--git-dir="+remote, "symbolic-ref", "HEAD", "refs/heads/bot/news-20261124-102030")
+	git(t, work, "--git-dir="+remote, "config", "core.bare", "false")
 	tool := newTool(t, work, "true")
+	tool.now = func() time.Time { return time.Date(2026, 11, 24, 10, 20, 30, 0, time.UTC) }
 
 	_, err := call(t, tool, `{"summary":"News"}`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "但没有推送")
 	assert.Contains(t, git(t, work, "branch", "--list", "bot/*"), "bot/")
 
-	git(t, work, "remote", "set-url", "origin", remote)
+	git(t, work, "--git-dir="+remote, "config", "core.bare", "true")
+	git(t, work, "--git-dir="+remote, "symbolic-ref", "HEAD", "refs/heads/main")
 	r, err := call(t, tool, `{"summary":"retry"}`)
 	require.NoError(t, err)
 	assert.True(t, r.Pushed)
+	require.Len(t, r.Gate, 1)
+	assert.True(t, r.Gate[0].OK)
+	assert.Contains(t, r.Files, fileChange{"M", "src/content/news/a.md"})
 	assert.Len(t, remoteHeads(t, remote), 2)
 
 	// With nothing pending, the same call is refused instead of pushing again.
@@ -409,6 +422,270 @@ func TestBranchNamesComeFromTheSummary(t *testing.T) {
 		"UPPER Case_and 99 numbers!": "bot/upper-case-and-99-numbers-20261124-102030",
 	} {
 		assert.Equal(t, want, tool.branchName(t.Context(), summary), summary)
+	}
+}
+
+func TestExecuteRequiresGateAllowlistAndValidArguments(t *testing.T) {
+	work, remote := newCheckout(t)
+	write(t, work, "src/content/news/a.md", "changed\n")
+	for _, tc := range []struct {
+		name          string
+		gate, include []string
+	}{
+		{"missing gate", nil, []string{"src/content/**"}},
+		{"blank gate", []string{"  "}, []string{"src/content/**"}},
+		{"missing include", []string{"true"}, nil},
+		{"blank include", []string{"true"}, []string{""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tool := NewTool(config.SubmitConfig{Gate: tc.gate}, tc.include, work, operations.LocalBashOperations{})
+			result, err := tool.Execute(t.Context(), json.RawMessage(`{"summary":"x"}`), nil)
+			require.Error(t, err)
+			assert.True(t, result.IsError)
+		})
+	}
+	tool := newTool(t, work, "true")
+	for _, args := range []string{`{"summary":"  "}`, `{"summary":"x","preview_paths":["https://evil/"]}`, `null`} {
+		result, err := tool.Execute(t.Context(), json.RawMessage(args), nil)
+		require.Error(t, err)
+		assert.True(t, result.IsError)
+	}
+	assert.Empty(t, git(t, work, "branch", "--list", "bot/*"))
+	assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+}
+
+func TestSubmitAuditsAllPendingHistory(t *testing.T) {
+	for _, mode := range []string{"retry", "with new edit", "reverted protected edit", "protected rename source", "already published bad history"} {
+		t.Run(mode, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			git(t, work, "switch", "-qc", "bot/pending")
+			if mode == "protected rename source" {
+				git(t, work, "mv", "astro.config.mjs", "src/content/news/config.mjs")
+			} else {
+				write(t, work, "astro.config.mjs", "bad\n")
+			}
+			git(t, work, "add", "-A")
+			git(t, work, "commit", "-qm", "protected change")
+			if mode == "reverted protected edit" {
+				git(t, work, "revert", "--no-edit", "HEAD")
+			}
+			if mode == "already published bad history" {
+				git(t, work, "push", "-q", "origin", "refs/heads/bot/pending:refs/heads/bot/pending")
+			}
+			before := remoteHeads(t, remote)
+			if mode == "with new edit" || mode == "already published bad history" {
+				write(t, work, "src/content/news/a.md", "allowed new edit\n")
+			}
+			_, err := call(t, newTool(t, work, "true"), `{"summary":"retry"}`)
+			require.ErrorContains(t, err, "astro.config.mjs")
+			assert.Equal(t, before, remoteHeads(t, remote))
+			assert.Equal(t, "bot/pending", strings.TrimSpace(git(t, work, "symbolic-ref", "--short", "HEAD")))
+		})
+	}
+}
+
+func TestRetryRunsGateAndRejectsGateMutation(t *testing.T) {
+	for _, command := range []string{"false", "printf 'new' > src/content/news/a.md", "printf 'new' > src/content/news/a.md; git add src/content/news/a.md"} {
+		t.Run(command, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			git(t, work, "switch", "-qc", "bot/pending")
+			write(t, work, "src/content/news/a.md", "pending\n")
+			git(t, work, "add", "-A")
+			git(t, work, "commit", "-qm", "pending")
+			_, err := call(t, newTool(t, work, command), `{"summary":"retry"}`)
+			require.Error(t, err)
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+		})
+	}
+}
+
+func TestSubmitChecksStagedDeletedAndRenamePaths(t *testing.T) {
+	for _, mode := range []string{"staged", "deleted", "renamed in", "renamed out"} {
+		t.Run(mode, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			switch mode {
+			case "staged":
+				write(t, work, "astro.config.mjs", "bad\n")
+				git(t, work, "add", "astro.config.mjs")
+			case "deleted":
+				git(t, work, "rm", "astro.config.mjs")
+			case "renamed in":
+				git(t, work, "mv", "astro.config.mjs", "src/content/news/配置 with space.mjs")
+			case "renamed out":
+				git(t, work, "mv", "src/content/news/a.md", "outside.md")
+			}
+			_, err := call(t, newTool(t, work, "true"), `{"summary":"bad"}`)
+			require.ErrorContains(t, err, "已拦截")
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+		})
+	}
+}
+
+func TestSubmitUsesLiteralPathsAndNULDelimitedNames(t *testing.T) {
+	work, _ := newCheckout(t)
+	names := []string{":(glob)*", ":(exclude)astro.config.mjs", "src/content/news/中文 with space.md", "src/content/news/line\nbreak.md"}
+	for _, name := range names {
+		write(t, work, name, "new\n")
+	}
+	git(t, work, "mv", "src/content/news/a.md", "src/content/news/改名 with space.md")
+	tool := newTool(t, work, "true")
+	tool.allow.Allow = append(tool.allow.Allow, names[0], names[1])
+	r, err := call(t, tool, `{"summary":"Literal paths"}`)
+	require.NoError(t, err)
+	for _, name := range append(names, "src/content/news/改名 with space.md") {
+		assert.Contains(t, r.Files, fileChange{"A", name})
+	}
+	assert.Contains(t, r.Files, fileChange{"D", "src/content/news/a.md"})
+	assert.Empty(t, git(t, work, "status", "--porcelain"))
+}
+
+func TestSubmitRejectsArbitraryBranchesAndLocalBaseCommits(t *testing.T) {
+	for _, mode := range []string{"arbitrary", "local base commit", "stale task"} {
+		t.Run(mode, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			switch mode {
+			case "arbitrary":
+				git(t, work, "switch", "-qc", "feature/unrelated")
+			case "local base commit":
+				write(t, work, "src/content/news/a.md", "local\n")
+				git(t, work, "add", "-A")
+				git(t, work, "commit", "-qm", "unverified base commit")
+			case "stale task":
+				git(t, work, "switch", "-qc", "bot/stale")
+				advanceRemote(t, remote)
+			}
+			write(t, work, "src/content/news/a.md", "new\n")
+			_, err := call(t, newTool(t, work, "true"), `{"summary":"no"}`)
+			require.Error(t, err)
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+		})
+	}
+}
+
+func TestPushExcludesBaseHEADTagsAndNonexistentTaskRefs(t *testing.T) {
+	work, remote := newCheckout(t)
+	tool := newTool(t, work, "true")
+	tool.cfg.BranchPrefixes = []string{"ma", "H", "refs/", "bot/"}
+	commit := strings.TrimSpace(git(t, work, "rev-parse", "HEAD"))
+	for _, branch := range []string{"main", "HEAD", "refs/tags/bot/release", "bot/missing"} {
+		assert.Error(t, tool.push(t.Context(), branch, commit))
+	}
+	git(t, work, "tag", "-a", "bot/release", "-m", "do not publish")
+	git(t, work, "config", "push.followTags", "true")
+	// A branch/tag name collision must still push only the real heads ref.
+	git(t, work, "switch", "-qc", "bot/release")
+	write(t, work, "src/content/news/a.md", "changed\n")
+	r, err := call(t, tool, `{"summary":"News"}`)
+	require.NoError(t, err)
+	assert.Equal(t, "bot/release", r.Branch)
+	assert.Empty(t, git(t, work, "ls-remote", "--tags", "origin"))
+	assert.Len(t, remoteHeads(t, remote), 2)
+}
+
+func TestSubmitFailsWhenLatestRemoteBaseCannotBeEstablished(t *testing.T) {
+	for _, mode := range []string{"submit", "retry", "new task"} {
+		t.Run(mode, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			if mode != "submit" {
+				git(t, work, "switch", "-qc", "bot/pending")
+				write(t, work, "src/content/news/a.md", "pending\n")
+				git(t, work, "add", "-A")
+				git(t, work, "commit", "-qm", "pending")
+			} else {
+				write(t, work, "src/content/news/a.md", "changed\n")
+			}
+			before := git(t, work, "rev-parse", "HEAD")
+			git(t, work, "remote", "set-url", "origin", filepath.Join(t.TempDir(), "missing.git"))
+			args := `{"summary":"x"}`
+			if mode == "new task" {
+				args = `{"new_task":true}`
+			}
+			_, err := call(t, newTool(t, work, "true"), args)
+			require.ErrorContains(t, err, "无法确认远端 base 最新状态")
+			assert.Equal(t, before, git(t, work, "rev-parse", "HEAD"))
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+		})
+	}
+}
+
+func TestNewTaskKeepsUnpushedWorkAndDivergentBase(t *testing.T) {
+	for _, mode := range []string{"pending task", "offline task", "divergent base"} {
+		t.Run(mode, func(t *testing.T) {
+			work, _ := newCheckout(t)
+			tool := newTool(t, work, "true")
+			if mode == "offline task" {
+				push := false
+				tool.cfg.Push = &push
+			}
+			if mode != "divergent base" {
+				git(t, work, "switch", "-qc", "bot/pending")
+			}
+			write(t, work, "src/content/news/a.md", "pending\n")
+			git(t, work, "add", "-A")
+			git(t, work, "commit", "-qm", "pending")
+			before := git(t, work, "symbolic-ref", "HEAD") + git(t, work, "rev-parse", "HEAD")
+			_, err := call(t, tool, `{"new_task":true}`)
+			require.Error(t, err)
+			assert.Equal(t, before, git(t, work, "symbolic-ref", "HEAD")+git(t, work, "rev-parse", "HEAD"))
+			assert.Empty(t, git(t, work, "status", "--porcelain"))
+		})
+	}
+}
+
+func TestLocalDemoWorksWithoutRemote(t *testing.T) {
+	work, _ := newCheckout(t)
+	git(t, work, "remote", "remove", "origin")
+	push := false
+	tool := NewTool(config.SubmitConfig{Gate: []string{"test -s src/content/news/a.md"}, Push: &push}, []string{"src/content/**"}, work, operations.LocalBashOperations{})
+	ready, err := call(t, tool, `{"new_task":true}`)
+	require.NoError(t, err)
+	assert.True(t, ready.Ready)
+	write(t, work, "src/content/news/a.md", "offline\n")
+	r, err := call(t, tool, `{"summary":"Offline demo"}`)
+	require.NoError(t, err)
+	assert.False(t, r.Pushed)
+	require.Len(t, r.Gate, 1)
+	assert.True(t, r.Gate[0].OK)
+}
+
+type cancelGateOperations struct {
+	operations.LocalBashOperations
+	cancel context.CancelFunc
+}
+
+func (o cancelGateOperations) Run(ctx context.Context, req operations.RunRequest) (operations.RunResult, error) {
+	if req.Command == "cancel-gate" {
+		o.cancel()
+		return operations.RunResult{}, nil
+	}
+	return o.LocalBashOperations.Run(ctx, req)
+}
+
+func TestSubmitCancellationNeverCommitsOrPushes(t *testing.T) {
+	for _, mode := range []string{"before submit", "during gate", "retry gate"} {
+		t.Run(mode, func(t *testing.T) {
+			work, remote := newCheckout(t)
+			write(t, work, "src/content/news/a.md", "changed\n")
+			if mode == "retry gate" {
+				git(t, work, "switch", "-qc", "bot/pending")
+				git(t, work, "add", "-A")
+				git(t, work, "commit", "-qm", "pending")
+			}
+			before := git(t, work, "rev-parse", "HEAD")
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			tool := newTool(t, work, "cancel-gate")
+			tool.ops = cancelGateOperations{cancel: cancel}
+			if mode == "before submit" {
+				cancel()
+			}
+			result, err := tool.Execute(ctx, json.RawMessage(`{"summary":"cancel"}`), nil)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, context.Canceled)
+			assert.True(t, result.IsError)
+			assert.Equal(t, before, git(t, work, "rev-parse", "HEAD"))
+			assert.Equal(t, []string{"main"}, headNames(remoteHeads(t, remote)))
+		})
 	}
 }
 

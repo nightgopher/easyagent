@@ -49,7 +49,7 @@ type Tool struct {
 }
 
 // NewTool builds the tool for one workspace. include lists the paths that may
-// be committed; an empty list allows every path. ops runs git and the gate.
+// be committed; it must be explicit and nonempty. ops runs git and the gate.
 func NewTool(cfg config.SubmitConfig, include []string, workspace string, ops operations.BashOperations) *Tool {
 	return &Tool{
 		cfg:       cfg,
@@ -119,8 +119,15 @@ func (t *Tool) Validate(raw json.RawMessage) (json.RawMessage, error) {
 }
 
 func (t *Tool) Execute(ctx context.Context, raw json.RawMessage, _ func(agent.PartialResult)) (agent.ToolResult, error) {
+	validated, err := t.Validate(raw)
+	if err != nil {
+		return agent.ToolResult{IsError: true, Content: err.Error()}, err
+	}
+	if err = t.validateConfig(); err != nil {
+		return agent.ToolResult{IsError: true, Content: err.Error()}, err
+	}
 	var p Params
-	if err := json.Unmarshal(raw, &p); err != nil {
+	if err = json.Unmarshal(validated, &p); err != nil {
 		return agent.ToolResult{IsError: true}, err
 	}
 	// Submits to one workspace are sequential: two tasks editing the same
@@ -129,10 +136,7 @@ func (t *Tool) Execute(ctx context.Context, raw json.RawMessage, _ func(agent.Pa
 	lock.Lock()
 	defer lock.Unlock()
 
-	var (
-		r   *receipt
-		err error
-	)
+	var r *receipt
 	if p.NewTask {
 		r, err = t.startTask(ctx)
 	} else {
@@ -150,65 +154,135 @@ func (t *Tool) Execute(ctx context.Context, raw json.RawMessage, _ func(agent.Pa
 	}, nil
 }
 
-// submit validates, gates, commits and pushes the working tree's changes.
+func (t *Tool) validateConfig() error {
+	if len(t.cfg.Gate) == 0 {
+		return errors.New("submit_task requires a nonempty gate")
+	}
+	for _, command := range t.cfg.Gate {
+		if strings.TrimSpace(command) == "" {
+			return errors.New("submit_task gate commands must not be empty")
+		}
+	}
+	if len(t.allow.Allow) == 0 {
+		return errors.New("submit_task requires an explicit nonempty include allowlist")
+	}
+	for _, pattern := range t.allow.Allow {
+		if strings.TrimSpace(pattern) == "" {
+			return errors.New("submit_task include patterns must not be empty")
+		}
+	}
+	for _, prefix := range t.cfg.TaskBranchPrefixes() {
+		if strings.TrimSpace(prefix) == "" {
+			return errors.New("submit_task branch prefixes must not be empty")
+		}
+	}
+	return nil
+}
+
+// submit uses the same gate and complete history audit for new commits and retries.
 func (t *Tool) submit(ctx context.Context, p Params) (*receipt, error) {
 	r := &receipt{Summary: p.Summary}
+	branch, err := t.currentBranch(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if branch != t.baseBranch() && !t.isTaskBranch(branch) {
+		return nil, fmt.Errorf("拒绝从任意分支 %s 提交；请使用配置的 base 或任务分支", branch)
+	}
+	base, err := t.submissionBase(ctx, branch)
+	if err != nil {
+		return nil, err
+	}
 	changes, err := t.status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if len(changes) == 0 {
-		// Nothing new to commit. On a task branch that can mean an earlier
-		// commit never reached the remote, so push again instead of refusing.
-		if r, err = t.pushPending(ctx); r != nil || err != nil {
-			return r, err
-		}
-		return nil, errors.New("没有可提交的改动：先完成修改，再调用 submit_task")
-	}
 	if err = t.checkAllowed(changes); err != nil {
 		return nil, err
 	}
-	if r.Gate, err = t.runGate(ctx); err != nil {
-		return nil, err
-	}
-	// The gate can add, remove or rewrite files: judge and stage what exists now.
-	if changes, err = t.status(ctx); err != nil {
+	if _, err = t.auditHistory(ctx, base); err != nil {
 		return nil, err
 	}
 	if len(changes) == 0 {
-		return nil, errors.New("质检之后没有可提交的改动")
-	}
-	if err = t.checkAllowed(changes); err != nil {
-		return nil, err
-	}
-	if r.Branch, err = t.currentBranch(ctx); err != nil {
-		return nil, err
-	}
-	if !t.isTaskBranch(r.Branch) {
-		r.Warnings = append(r.Warnings, t.staleBaseWarnings(ctx)...)
-		created := t.branchName(ctx, p.Summary)
-		if _, err = t.git(ctx, gitTimeout, "switch", "-c", created); err != nil {
-			return nil, fmt.Errorf("创建任务分支失败: %w", err)
+		pending, err := t.hasPending(ctx, branch)
+		if err != nil {
+			return nil, err
 		}
-		r.Branch = created
+		if !pending {
+			return nil, errors.New("没有可提交的改动：先完成修改，再调用 submit_task")
+		}
 	}
-	if _, err = t.git(ctx, gitTimeout, append([]string{"add", "-A", "--"}, changedPaths(changes)...)...); err != nil {
-		return nil, fmt.Errorf("暂存改动失败: %w", err)
+	// Stage literal filenames before the gate. The index tree is the exact
+	// candidate commit, and both it and the worktree must remain unchanged.
+	if len(changes) > 0 {
+		// Every status entry was audited, including already-staged deletions
+		// and rename sources that no longer exist in the index.
+		if _, err = t.git(ctx, gitTimeout, "--literal-pathspecs", "add", "-A", "--", "."); err != nil {
+			return nil, fmt.Errorf("暂存改动失败: %w", err)
+		}
 	}
-	if _, err = t.git(ctx, gitTimeout, "commit", "-m", p.Summary, "-m", "Submitted by EasyAgent submit_task."); err != nil {
-		return nil, fmt.Errorf("提交失败: %w", err)
+	staged, err := t.git(ctx, gitTimeout, "diff", "--cached", "--no-renames", "--name-status", "-z", base, "--")
+	if err != nil {
+		return nil, err
+	}
+	if err = t.checkAllowed(fileChanges(parseNameStatus(staged))); err != nil {
+		return nil, err
+	}
+	snapshot, err := t.sourceState(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if r.Gate, err = t.runGate(ctx, snapshot); err != nil {
+		return nil, err
+	}
+	if err = t.checkSourceState(ctx, snapshot); err != nil {
+		return nil, err
+	}
+	r.Branch = branch
+	if len(changes) > 0 {
+		if branch == t.baseBranch() {
+			created := t.branchName(ctx, p.Summary)
+			if !t.isTaskBranch(created) {
+				return nil, errors.New("生成的任务分支不安全")
+			}
+			if _, err = t.git(ctx, gitTimeout, "switch", "-c", created); err != nil {
+				return nil, fmt.Errorf("创建任务分支失败: %w", err)
+			}
+			r.Branch = created
+		}
+		if _, err = t.git(ctx, gitTimeout, "-c", "core.hooksPath=/dev/null", "commit", "-m", p.Summary, "-m", "Submitted by EasyAgent submit_task."); err != nil {
+			return nil, fmt.Errorf("提交失败: %w", err)
+		}
+		// Do not publish if anything other than the tested tree was committed.
+		tree, err := t.git(ctx, gitTimeout, "rev-parse", "HEAD^{tree}")
+		if err != nil || tree != snapshot.tree {
+			return nil, errors.New("提交的源码树与质检时不同，已拦截推送")
+		}
+	}
+	if r.Files, err = t.auditHistory(ctx, base); err != nil {
+		return nil, err
 	}
 	if r.Commit, err = t.git(ctx, gitTimeout, "rev-parse", "--short", "HEAD"); err != nil {
 		return nil, err
 	}
-	if r.Files, err = t.lastCommitFiles(ctx); err != nil {
-		return nil, err
+	if len(changes) > 0 {
+		if r.Files, err = t.lastCommitFiles(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if !t.cfg.PushEnabled() {
 		r.Preview, r.NextSteps = t.previewLinks(p.PreviewPaths), t.nextSteps()
 		return r, nil
 	}
-	if err = t.push(ctx, r.Branch); err != nil {
+	verified := snapshot
+	verified.branch = r.Branch
+	if verified.head, err = t.git(ctx, gitTimeout, "rev-parse", "HEAD"); err != nil {
+		return nil, err
+	}
+	if err = t.checkSourceState(ctx, verified); err != nil {
+		return nil, err
+	}
+	if err = t.push(ctx, r.Branch, verified.head); err != nil {
 		return nil, fmt.Errorf("改动已提交到本地分支 %s（%s），但没有推送: %w。排除原因后再次调用 submit_task 会重试推送", r.Branch, r.Commit, err)
 	}
 	r.Pushed = true
@@ -230,66 +304,178 @@ func (t *Tool) startTask(ctx context.Context) (*receipt, error) {
 	if len(changes) > 0 {
 		return nil, fmt.Errorf("开始新任务前工作区必须没有未提交的改动（当前有 %d 处）。这些改动若属于当前任务，请先不带 new_task 调用 submit_task 提交；否则先撤销它们", len(changes))
 	}
-	base, remote := t.baseBranch(), t.remote()
-	r := &receipt{Ready: true, Branch: base, NextSteps: "现在可以开始新任务：完成修改后调用 submit_task 提交。"}
-	// Fetch first: git switch then creates a missing local base from the remote branch.
-	if _, err = t.git(ctx, pushTimeout, "fetch", remote, base); err != nil {
-		r.Warnings = append(r.Warnings, "拉取远端 "+remote+"/"+base+" 失败，新任务将基于本地 "+base)
-	}
+	base := t.baseBranch()
 	current, err := t.currentBranch(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if current != base {
-		if _, err = t.git(ctx, gitTimeout, "switch", base); err != nil {
-			return nil, fmt.Errorf("切回主分支 %s 失败: %w", base, err)
-		}
+	if current != base && !t.isTaskBranch(current) {
+		return nil, errors.New("只能从 base 或任务分支开始新任务")
 	}
-	if len(r.Warnings) == 0 {
-		if _, err = t.git(ctx, gitTimeout, "merge", "--ff-only", remote+"/"+base); err != nil {
-			r.Warnings = append(r.Warnings, "本地 "+base+" 未能快进到远端最新，新任务将基于旧的 "+base)
-		}
-	}
-	return r, nil
-}
-
-// pushPending pushes a task branch whose commits the remote still lacks. It
-// returns nil, nil when nothing is pending.
-func (t *Tool) pushPending(ctx context.Context) (*receipt, error) {
-	if !t.cfg.PushEnabled() {
-		return nil, nil
-	}
-	branch, err := t.currentBranch(ctx)
-	if err != nil || !t.isTaskBranch(branch) {
-		return nil, nil
-	}
-	// Without an upstream the branch has never been pushed. With one, the
-	// remote branch is the reference; if it is gone, the work already landed.
-	ahead := t.baseBranch() + ".." + branch
-	if upstream, err := t.git(ctx, gitTimeout, "rev-parse", "--abbrev-ref", branch+"@{upstream}"); err == nil {
-		if _, err = t.git(ctx, pushTimeout, "fetch", t.remote(), branch); err != nil {
-			return nil, nil
-		}
-		ahead = strings.TrimSpace(upstream) + ".." + branch
-	}
-	count, err := t.git(ctx, gitTimeout, "rev-list", "--count", ahead)
-	if err != nil || strings.TrimSpace(count) == "0" {
-		return nil, nil
-	}
-	if err = t.push(ctx, branch); err != nil {
-		return nil, fmt.Errorf("分支 %s 上有尚未推送的提交: %w", branch, err)
-	}
-	r := &receipt{Summary: "推送之前已提交的改动", Branch: branch, Pushed: true, Gate: []gateStep{}, NextSteps: t.nextSteps()}
-	if r.Commit, err = t.git(ctx, gitTimeout, "rev-parse", "--short", "HEAD"); err != nil {
+	localBase, err := t.git(ctx, gitTimeout, "rev-parse", "refs/heads/"+base)
+	if err != nil {
 		return nil, err
 	}
-	if files, err := t.git(ctx, gitTimeout, "diff", "--name-status", ahead, "HEAD"); err == nil {
-		r.Files = parseNameStatus(files)
+	latest := localBase
+	if t.cfg.PushEnabled() {
+		if latest, err = t.fetchBase(ctx); err != nil {
+			return nil, err
+		}
+		if _, err = t.git(ctx, gitTimeout, "merge-base", "--is-ancestor", localBase, latest); err != nil {
+			return nil, errors.New("本地 base 不能快进到远端最新；保留当前分支")
+		}
 	}
-	return r, nil
+	if current != base {
+		// A new task must not hide local-only commits, including offline demos.
+		if _, merged := t.git(ctx, gitTimeout, "merge-base", "--is-ancestor", "HEAD", latest); merged != nil {
+			if !t.cfg.PushEnabled() {
+				return nil, errors.New("当前任务还有未推送的提交；保留当前分支")
+			}
+			pending, err := t.hasPending(ctx, current)
+			if err != nil {
+				return nil, err
+			}
+			if pending {
+				return nil, errors.New("当前任务还有未推送的提交；请先重试提交，保留当前分支")
+			}
+		}
+	}
+	if _, err = t.git(ctx, gitTimeout, "switch", base); err != nil {
+		return nil, fmt.Errorf("切回主分支 %s 失败: %w", base, err)
+	}
+	if latest != localBase {
+		if _, err = t.git(ctx, gitTimeout, "merge", "--ff-only", latest); err != nil {
+			return nil, fmt.Errorf("更新 base 失败: %w", err)
+		}
+	}
+	return &receipt{Ready: true, Branch: base, NextSteps: "现在可以开始新任务：完成修改后调用 submit_task 提交。"}, nil
 }
 
-func (t *Tool) remoteBranch(branch string) string { return t.remote() + "/" + branch }
+// fetchBase uses an explicit heads ref, never a possibly ambiguous tag or FETCH_HEAD.
+func (t *Tool) fetchBase(ctx context.Context) (string, error) {
+	ref := "refs/remotes/" + t.remote() + "/" + t.baseBranch()
+	if _, err := t.git(ctx, pushTimeout, "fetch", "--no-tags", "--", t.remote(), "+refs/heads/"+t.baseBranch()+":"+ref); err != nil {
+		return "", fmt.Errorf("无法确认远端 base 最新状态，已拦截: %w", err)
+	}
+	return t.git(ctx, gitTimeout, "rev-parse", ref+"^{commit}")
+}
+
+func (t *Tool) submissionBase(ctx context.Context, branch string) (string, error) {
+	base, err := t.git(ctx, gitTimeout, "rev-parse", "refs/heads/"+t.baseBranch()+"^{commit}")
+	if err != nil {
+		return "", err
+	}
+	if t.cfg.PushEnabled() {
+		if base, err = t.fetchBase(ctx); err != nil {
+			return "", err
+		}
+	}
+	head, err := t.git(ctx, gitTimeout, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	if branch == t.baseBranch() {
+		if head != base {
+			return "", errors.New("本地 base 与远端最新不同，已拦截；请先更新 base，不得携带本地额外提交")
+		}
+	} else if _, err = t.git(ctx, gitTimeout, "merge-base", "--is-ancestor", base, head); err != nil {
+		return "", errors.New("任务分支未包含最新 base，已拦截；请先更新任务分支")
+	}
+	return base, nil
+}
+
+func (t *Tool) hasPending(ctx context.Context, branch string) (bool, error) {
+	if !t.cfg.PushEnabled() || !t.isTaskBranch(branch) {
+		return false, nil
+	}
+	ref := "refs/heads/" + branch
+	out, err := t.git(ctx, pushTimeout, "ls-remote", "--heads", "--", t.remote(), ref)
+	if err != nil {
+		return false, err
+	}
+	if out == "" {
+		return true, nil
+	}
+	tracking := "refs/remotes/" + t.remote() + "/" + branch
+	if _, err = t.git(ctx, pushTimeout, "fetch", "--no-tags", "--", t.remote(), "+"+ref+":"+tracking); err != nil {
+		return false, err
+	}
+	_, err = t.git(ctx, gitTimeout, "merge-base", "--is-ancestor", "HEAD", tracking)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// Audit every commit, not just the final diff: a protected edit followed by a
+// revert is still protected history that would be published. Disabling rename
+// detection reports both the removed source and added destination, NUL-delimited.
+func (t *Tool) auditHistory(ctx context.Context, base string) ([]fileChange, error) {
+	commits, err := t.git(ctx, gitTimeout, "rev-list", base+"..HEAD", "--")
+	if err != nil {
+		return nil, err
+	}
+	var files []fileChange
+	for _, commit := range strings.Fields(commits) {
+		out, err := t.git(ctx, gitTimeout, "diff-tree", "--root", "-m", "--no-commit-id", "--no-renames", "--name-status", "-z", "-r", commit, "--")
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, parseNameStatus(out)...)
+	}
+	return files, t.checkAllowed(fileChanges(files))
+}
+
+func fileChanges(files []fileChange) []change {
+	changes := make([]change, 0, len(files))
+	for _, file := range files {
+		changes = append(changes, change{status: file.Status, path: file.Path})
+	}
+	return changes
+}
+
+type sourceState struct {
+	head, tree, branch string
+}
+
+func (t *Tool) sourceState(ctx context.Context) (sourceState, error) {
+	var s sourceState
+	var err error
+	if s.head, err = t.git(ctx, gitTimeout, "rev-parse", "HEAD"); err != nil {
+		return s, err
+	}
+	if s.branch, err = t.currentBranch(ctx); err != nil {
+		return s, err
+	}
+	if s.tree, err = t.git(ctx, gitTimeout, "write-tree"); err != nil {
+		return s, err
+	}
+	if _, err = t.git(ctx, gitTimeout, "diff", "--no-ext-diff", "--quiet", "--"); err != nil {
+		return s, errors.New("源码与暂存树不同，已拦截；请重新质检")
+	}
+	out, err := t.git(ctx, gitTimeout, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return s, err
+	}
+	if out != "" {
+		return s, errors.New("源码出现未质检的新文件，已拦截")
+	}
+	return s, nil
+}
+
+func (t *Tool) checkSourceState(ctx context.Context, expected sourceState) error {
+	actual, err := t.sourceState(ctx)
+	if err != nil {
+		return err
+	}
+	if actual != expected {
+		return errors.New("质检期间源码、提交或分支发生变化，已拦截；请重新质检")
+	}
+	return nil
+}
 
 func (t *Tool) remote() string {
 	if t.cfg.Remote != "" {
@@ -313,26 +499,15 @@ func (t *Tool) nextSteps() string {
 }
 
 func (t *Tool) isTaskBranch(branch string) bool {
+	if branch == "" || branch == "HEAD" || branch == t.baseBranch() || strings.HasPrefix(branch, "-") || strings.HasPrefix(branch, "refs/") {
+		return false
+	}
 	for _, prefix := range t.cfg.TaskBranchPrefixes() {
-		if len(branch) > len(prefix) && strings.HasPrefix(branch, prefix) {
+		if prefix != "" && len(branch) > len(prefix) && strings.HasPrefix(branch, prefix) {
 			return true
 		}
 	}
 	return false
-}
-
-// staleBaseWarnings tells when a new task branch starts from a base that is
-// behind the remote; the merge then needs attention.
-func (t *Tool) staleBaseWarnings(ctx context.Context) []string {
-	base := t.baseBranch()
-	if _, err := t.git(ctx, pushTimeout, "fetch", t.remote(), base); err != nil {
-		return []string{"拉取远端 " + t.remoteBranch(base) + " 失败，任务分支基于本地 " + base}
-	}
-	behind, err := t.git(ctx, gitTimeout, "rev-list", "--count", "HEAD.."+t.remoteBranch(base))
-	if err != nil || strings.TrimSpace(behind) == "0" {
-		return nil
-	}
-	return []string{"本地 " + base + " 落后远端 " + behind + " 个提交，任务分支基于旧的 " + base + "，合并时可能需要处理冲突"}
 }
 
 // branchName derives a task branch from the summary and makes it unique.
@@ -347,7 +522,8 @@ func (t *Tool) branchName(ctx context.Context, summary string) string {
 }
 
 func (t *Tool) currentBranch(ctx context.Context) (string, error) {
-	branch, err := t.git(ctx, gitTimeout, "rev-parse", "--abbrev-ref", "HEAD")
+	ref, err := t.git(ctx, gitTimeout, "symbolic-ref", "--quiet", "HEAD")
+	branch := strings.TrimPrefix(ref, "refs/heads/")
 	if err != nil {
 		return "", fmt.Errorf("读取当前分支失败，工作区不是 Git 仓库？: %w", err)
 	}
@@ -359,8 +535,20 @@ func (t *Tool) currentBranch(ctx context.Context) (string, error) {
 
 // push publishes a task branch. It never forces, so a branch rewritten on the
 // remote is rejected here and left for a person to sort out.
-func (t *Tool) push(ctx context.Context, branch string) error {
-	_, err := t.git(ctx, pushTimeout, "push", "-u", t.remote(), branch)
+func (t *Tool) push(ctx context.Context, branch, commit string) error {
+	if !t.isTaskBranch(branch) {
+		return errors.New("拒绝推送非任务分支")
+	}
+	if _, err := t.git(ctx, gitTimeout, "check-ref-format", "refs/heads/"+branch); err != nil {
+		return err
+	}
+	actual, err := t.git(ctx, gitTimeout, "rev-parse", "--verify", "refs/heads/"+branch)
+	if err != nil || actual != commit {
+		return errors.New("任务分支与已质检提交不同，已拦截推送")
+	}
+	// Explicit heads destination and pinned commit prevent tags, HEAD, push
+	// defaults and followTags from expanding what gets published.
+	_, err = t.git(ctx, pushTimeout, "-c", "core.hooksPath=/dev/null", "push", "--no-follow-tags", "--", t.remote(), commit+":refs/heads/"+branch)
 	if err != nil {
 		return fmt.Errorf("git push %s %s: %w", t.remote(), branch, err)
 	}
@@ -405,7 +593,7 @@ func parseStatus(out string) []change {
 // checkAllowed refuses the submit when a change lies outside the included paths.
 func (t *Tool) checkAllowed(changes []change) error {
 	if len(t.allow.Allow) == 0 {
-		return nil
+		return errors.New("submit_task requires an explicit nonempty include allowlist")
 	}
 	var outside []string
 	for _, c := range changes {
@@ -426,20 +614,11 @@ func (t *Tool) checkAllowed(changes []change) error {
 		len(outside), strings.Join(t.allow.Allow, ", "), listPaths(outside))
 }
 
-func changedPaths(changes []change) []string {
-	seen := make(map[string]bool, len(changes))
-	paths := make([]string, 0, len(changes))
-	for _, c := range changes {
-		if !seen[c.path] {
-			seen[c.path] = true
-			paths = append(paths, c.path)
-		}
-	}
-	return paths
-}
-
 // runGate runs the configured checks in order and stops at the first failure.
-func (t *Tool) runGate(ctx context.Context) ([]gateStep, error) {
+func (t *Tool) runGate(ctx context.Context, source sourceState) ([]gateStep, error) {
+	if err := t.validateConfig(); err != nil {
+		return nil, err
+	}
 	steps := make([]gateStep, 0, len(t.cfg.Gate))
 	for _, command := range t.cfg.Gate {
 		started := time.Now()
@@ -447,37 +626,39 @@ func (t *Tool) runGate(ctx context.Context) ([]gateStep, error) {
 		step := gateStep{Command: command, OK: err == nil, DurationMS: time.Since(started).Milliseconds()}
 		steps = append(steps, step)
 		if err != nil {
+			if ctx.Err() != nil {
+				return steps, ctx.Err()
+			}
 			step.Output = tail(out)
 			if step.Output == "" {
 				step.Output = err.Error()
 			}
 			return steps, fmt.Errorf("质检未通过，已拦截提交（没有创建分支，也没有推送）。失败的步骤：%s\n%s\n请修复后重新调用 submit_task", command, step.Output)
 		}
+		if err = t.checkSourceState(ctx, source); err != nil {
+			return steps, err
+		}
 	}
 	return steps, nil
 }
 
 func (t *Tool) lastCommitFiles(ctx context.Context) ([]fileChange, error) {
-	out, err := t.git(ctx, gitTimeout, "diff-tree", "--no-commit-id", "--name-status", "-r", "HEAD")
+	out, err := t.git(ctx, gitTimeout, "diff-tree", "--no-commit-id", "--no-renames", "--name-status", "-z", "-r", "HEAD", "--")
 	if err != nil {
 		return nil, fmt.Errorf("读取提交内容失败: %w", err)
 	}
 	return parseNameStatus(out), nil
 }
 
-// parseNameStatus reads `--name-status` output; a rename lists both paths.
+// parseNameStatus reads --no-renames --name-status -z without decoding or
+// splitting filenames on whitespace (including non-ASCII names and newlines).
 func parseNameStatus(out string) []fileChange {
 	var files []fileChange
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
+	fields := strings.Split(out, "\x00")
+	for i := 0; i+1 < len(fields); i += 2 {
+		if fields[i] != "" {
+			files = append(files, fileChange{Status: fields[i][:1], Path: fields[i+1]})
 		}
-		status := fields[0][:1]
-		if status == "R" || status == "C" {
-			status = "M"
-		}
-		files = append(files, fileChange{Status: status, Path: fields[len(fields)-1]})
 	}
 	return files
 }
@@ -497,8 +678,14 @@ func (t *Tool) previewLinks(paths []string) []string {
 // run executes one command in the workspace. Git must never wait for a
 // credential prompt, because there is nobody to answer it.
 func (t *Tool) run(ctx context.Context, timeout time.Duration, command string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	res, err := t.ops.Run(ctx, operations.RunRequest{Command: command, WorkDir: t.workspace, Timeout: timeout, Env: []string{"GIT_TERMINAL_PROMPT=0"}})
 	out := strings.TrimRight(string(res.Output), "\n")
+	if err == nil {
+		err = ctx.Err()
+	}
 	if err != nil {
 		return out, &commandError{command: command, output: out, cause: err}
 	}
