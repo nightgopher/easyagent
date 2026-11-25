@@ -126,17 +126,16 @@ channel_access_modes:
 
 ```yaml
 strict_config: true
+context_scope: project
 prompt_file: SYSTEM_PROMPT.md
+enable_bash: false
+allowed_tools: [read, write, edit, grep, find, ls, local_time, todo_write, send_message, send_file, submit_task]
 skills:
+  dirs: [/srv/website/.agents/skills]
   deny: [generic-design-method]
   always_inline: [brand-rules]
 file_policy:
   write_allow: ["content/**", "data/**", "assets/**", ".scratch/**"]
-bash_policy:
-  allow: [image-tool]
-  deny: [find]
-  deny_args: ["gitlab.example.com/api"]
-  npx: [astro]
 submit:
   gate: ["npm run lint", "npm run build"]
   include: ["content/**", "data/**", "assets/**"]
@@ -150,12 +149,15 @@ submit:
 |---|---|
 | `strict_config: true` | 配置文件出现未知键、非法值，或引用的文件读不到时拒绝启动。默认加载失败只告警并忽略整个文件，对护栏部署等于无保护运行 |
 | `prompt_file` | 系统提示词文件；相对路径按配置文件所在目录解析。内容替换默认的基础提示，等同于多行的 `EA_PROMPT_TEMPLATE`（环境变量仍优先）；工具说明、项目上下文和技能清单照常追加 |
-| `skills.dirs` | 显式的技能根目录，与 `--skill-dir` 叠加；为空时保持默认发现 |
+| `context_scope: project` | 仅加载固定工作区根目录的指令，不加载用户目录或祖先目录。要求存在且绝对的本地目录，Web/API 不能换目录、换专家或打开终端；默认空/all 保持通用模式 |
+| `skills.dirs` | 会话运行时统一应用的显式技能根目录，优先于入口传入目录；显式根不再混入个人、默认项目或市场目录。新建、恢复、刷新均一致 |
 | `skills.deny` | 不向模型暴露的技能名 |
-| `skills.always_inline` | 正文常驻系统提示的技能名。只在清单里列出技能并不能保证模型去读；常驻后其中的规则每一轮都在上下文里。加载不到时记录警告 |
-| `file_policy.write_allow` / `write_deny` | `write`、`edit`、`patch`、`delete_file` 只能改动匹配的工作区相对路径：`**` 跨目录，`*`、`?` 限单段；deny 优先。按符号链接解析后的位置判断，`deny` 为空时不在 `write_allow` 内的一律不可写 |
+| `skills.always_inline` | 正文常驻系统提示的技能名。只在清单里列出技能并不能保证模型去读；常驻后其中的规则每一轮都在上下文里。缺失、被禁用/拒绝/过滤或格式错误时拒绝创建或重建会话 |
+| `file_policy.write_allow` / `write_deny` | `write`、`edit`、`patch`、`delete_file` 只能改动匹配的工作区相对路径：`**` 跨目录，`*`、`?` 限单段；deny 优先。配置时必须有有效绝对工作区；同时检查逻辑与物理位置，拒绝工作区内的符号链接路径与多硬链接文件。`deny` 为空时不在 `write_allow` 内的一律不可写；检查不是抵御并发路径替换的 OS 沙箱 |
 | `bash_policy` | 出现即启用 bash 命令策略，见下文 |
 | `submit` | 配置 `gate` 后注册 `submit_task` 工具，见下文 |
+
+**面向业务的专家建议不开放原始 bash**，如上例只保留明确列出的工具，质检交由 `submit_task`。`context_scope` 不是进程沙箱，允许执行的 TS 配置仍是构建期代码；构建要在无凭据、无生产网络、源码只读且输出目录单独可写的隔离进程中运行。下面的可选命令策略仅适合可信操作者，不作为读取隔离保证。
 
 **bash 命令策略**只放行清单里的程序（内置默认清单，加 `allow`，减 `deny`），并且判断的是解析后的整条命令：管道、`&&`、命令替换、条件与函数体里的命令逐个检查，命令名必须是固定的程序名且不带路径，用变量或替换充当命令名、充当要写入的路径，以及无法解析的命令，一律拒绝。另有几条固定规则：
 
@@ -171,13 +173,13 @@ submit:
 
 **`submit_task`** 是配置后会话通往远端的唯一出口。它依次做这些事，任何一步不通过都不会创建分支或推送：
 
-1. 所有改动路径必须匹配 `include`（缺省继承 `file_policy.write_allow`），否则拒绝并列出越界文件。
-2. 按 `gate` 的顺序执行检查，遇到第一个失败就停下，把失败的命令和输出末尾回给模型，便于修复后重新调用。
+1. 必须配置非空检查命令和提交白名单（应用层可从 `file_policy.write_allow` 继承）。审计工作区、暂存区以及所有待推送提交的路径，包含删除、重命名来源及后来被还原的受保护改动。
+2. 按 `gate` 的顺序执行检查，绑定暂存候选树、HEAD、分支和工作区状态。门禁改变源码、并行改动或检查失败都阻止提交；修复后必须重跑，包括重试推送。
 3. 当前在主分支上时新建任务分支 `<branch_prefixes 首项><摘要>-<时间戳>`（缺省 `bot/`）；已在任务分支上时追加到该分支。
-4. 只暂存匹配的路径，提交，再 `git push -u <remote> <分支>`。不强推，不推主分支，不打标签。推送失败时本地提交保留，再次调用会重试推送。
+4. 完整审计后以 literal pathspec 暂存候选，提交并确认源码树一致，再将已验证 SHA 推到允许的 `refs/heads/<任务分支>`。不强推，不推主分支/HEAD/标签；拒绝任意来源分支和落后或无法验证的远端基线。推送失败保留本地提交，再次调用会重新审计和质检。
 5. 配置了 `mr` 时创建合并请求，已存在则复用；失败只记为回执里的警告。
 
-成功后返回结构化回执：改动的文件、每一步检查的结果与耗时、`preview_url` 加 `preview_paths` 的预览链接和 `next_steps` 指引。调用时传 `new_task: true` 且工作区没有未提交改动，会切回 `base_branch` 并快进到远端最新，用于开始新的任务。其余选项：`push: false` 只提交不推送；`gate_timeout_seconds` 是单条检查命令的超时，默认 900 秒；`mr` 需要 `api_url`、`project`、`token_env`，令牌从运行进程的环境变量读取。
+成功后返回结构化回执：改动的文件、每一步检查的结果与耗时、`preview_url` 加 `preview_paths` 的预览链接和 `next_steps` 指引。调用时传 `new_task: true`，须工作区干净且没有未推送/未整合工作才切回 `base_branch`；无法安全更新则拦截，不静默使用旧基线。其余选项：`push: false` 只提交不推送；`gate_timeout_seconds` 是单条检查命令的超时，默认 900 秒；`mr` 需要 `api_url`、`project`、`token_env`，令牌从运行进程的环境变量读取。
 
 ```dotenv
 # 受控部署常用的配套环境变量
