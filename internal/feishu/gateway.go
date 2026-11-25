@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	larkdispatcher "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
@@ -47,7 +48,8 @@ type Gateway struct {
 	cardHandler CardActionHandler
 	onReady     func()
 	// inbox names, per chat key, the directory inside the chat's workspace
-	// where files users send are saved. Empty keeps the system temp dir.
+	// where files users send are saved. A nil resolver keeps legacy image storage;
+	// an empty result from a configured resolver disables downloads for that chat.
 	inbox func(chatKey string) string
 	// openAPI and httpClient are overridden in tests to serve the resource API locally.
 	openAPI    string
@@ -156,7 +158,7 @@ func (g *Gateway) SetCardActionHandler(handler CardActionHandler) {
 
 // SetInbox names, for each chat key, the directory inside the chat's
 // workspace where the files users send are saved. A chat that resolves to ""
-// keeps the previous behaviour of saving images to the system temp dir.
+// cannot download media; a nil resolver keeps legacy image storage in temp.
 func (g *Gateway) SetInbox(inbox func(chatKey string) string) { g.inbox = inbox }
 
 // handleEvent processes a single incoming message event.
@@ -448,20 +450,20 @@ func (g *Gateway) isContentDuplicate(chatID, text string) bool {
 // handleImageMessage downloads the image and returns a markdown image reference.
 func (g *Gateway) handleImageMessage(ctx context.Context, msg *larkim.EventMessage, chatKey string) string {
 	if msg.Content == nil {
-		return "[图片消息]"
+		return ""
 	}
 
 	var content struct {
 		ImageKey string `json:"image_key"`
 	}
 	if err := json.Unmarshal([]byte(*msg.Content), &content); err != nil || content.ImageKey == "" {
-		return "[图片消息]"
+		return ""
 	}
 
 	localPath, err := g.downloadResource(ctx, chatKey, derefStr(msg.MessageId), content.ImageKey, "image", "feishu-image-"+content.ImageKey+".png")
 	if err != nil {
 		slog.Warn("download image failed", "imageKey", content.ImageKey, "error", err)
-		return fmt.Sprintf("[图片消息: %s]", content.ImageKey)
+		return ""
 	}
 
 	return fmt.Sprintf("![image](%s)", localPath)
@@ -488,12 +490,9 @@ func (g *Gateway) handleFileMessage(ctx context.Context, msg *larkim.EventMessag
 	}
 	name := sanitizeFileName(content.FileName)
 	if kind == "media" {
-		name = "feishu-video-" + content.FileKey + ".mp4"
+		name = sanitizeFileName("feishu-video-" + content.FileKey + ".mp4")
 	}
-	label := content.FileName
-	if label == "" {
-		label = name
-	}
+	label := name
 	localPath, err := g.downloadResource(ctx, chatKey, derefStr(msg.MessageId), content.FileKey, "file", name)
 	if err != nil {
 		slog.Warn("download file failed", "fileKey", content.FileKey, "error", err)
@@ -508,11 +507,16 @@ func sanitizeFileName(name string) string {
 		name = name[cut+1:]
 	}
 	name = strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("._-", r) {
 			return -1
 		}
 		return r
 	}, strings.TrimSpace(name))
+	// Leave room for CreateTemp's unique suffix and avoid oversized names.
+	runes := []rune(name)
+	if len(runes) > 48 {
+		name = string(runes[:48])
+	}
 	if name == "" || name == "." || name == ".." {
 		return "file"
 	}
@@ -577,15 +581,15 @@ func (g *Gateway) handlePostMessage(ctx context.Context, msg *larkim.EventMessag
 			case "at":
 				paraText += elem.Text
 			case "img":
-				if elem.ImageKey != "" {
-					localPath, err := g.downloadResource(ctx, chatKey, derefStr(msg.MessageId), elem.ImageKey, "image", "feishu-image-"+elem.ImageKey+".png")
-					if err != nil {
-						slog.Warn("download post image failed", "imageKey", elem.ImageKey, "error", err)
-						paraText += fmt.Sprintf(" [图片: %s] ", elem.ImageKey)
-					} else {
-						paraText += fmt.Sprintf(" ![image](%s) ", localPath)
-					}
+				if elem.ImageKey == "" {
+					return "", fmt.Errorf("missing post image key")
 				}
+				localPath, err := g.downloadResource(ctx, chatKey, derefStr(msg.MessageId), elem.ImageKey, "image", "feishu-image-"+elem.ImageKey+".png")
+				if err != nil {
+					slog.Warn("download post image failed", "imageKey", elem.ImageKey, "error", err)
+					return "", fmt.Errorf("download post image: %w", err)
+				}
+				paraText += fmt.Sprintf(" ![image](%s) ", localPath)
 			}
 		}
 		if strings.TrimSpace(paraText) != "" {
@@ -611,10 +615,22 @@ type postElement struct {
 // defaultOpenAPI is Feishu's open API root.
 const defaultOpenAPI = "https://open.feishu.cn"
 
+const maxMediaBytes = 50 << 20
+const mediaDownloadTimeout = 2 * time.Minute
+
 // downloadResource saves a resource of a message, of kind image or file, and
 // returns its local path.
 // API: GET /open-apis/im/v1/messages/{messageId}/resources/{key}?type=image|file
 func (g *Gateway) downloadResource(ctx context.Context, chatKey, messageID, key, kind, name string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, mediaDownloadTimeout)
+	defer cancel()
+	dir := g.inboxDir(chatKey)
+	if dir == "" {
+		return "", fmt.Errorf("no valid inbox configured for this chat")
+	}
+	if err := checkMediaDirectory(dir); err != nil {
+		return "", fmt.Errorf("unsafe media directory: %w", err)
+	}
 	if g.client == nil {
 		return "", fmt.Errorf("no client configured for %s download", kind)
 	}
@@ -647,36 +663,88 @@ func (g *Gateway) downloadResource(ctx context.Context, chatKey, messageID, key,
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("download failed (HTTP %d): %s", resp.StatusCode, string(body[:min(len(body), 200)]))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
+		return "", fmt.Errorf("download failed (HTTP %d): %s", resp.StatusCode, body)
+	}
+	if resp.ContentLength > maxMediaBytes {
+		return "", fmt.Errorf("media exceeds 50 MiB limit")
 	}
 
-	dir := g.inboxDir(chatKey)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", fmt.Errorf("create media directory: %w", err)
 	}
-	localPath := filepath.Join(dir, sanitizeFileName(name))
-	f, err := os.Create(localPath)
+	if err := checkMediaDirectory(dir); err != nil {
+		return "", fmt.Errorf("unsafe media directory: %w", err)
+	}
+	name = sanitizeFileName(name)
+	ext := filepath.Ext(name)
+	f, err := os.CreateTemp(dir, strings.TrimSuffix(name, ext)+"-*"+ext)
 	if err != nil {
 		return "", fmt.Errorf("create media file: %w", err)
 	}
-	defer f.Close()
+	localPath := f.Name()
+	complete := false
+	defer func() {
+		_ = f.Close()
+		if !complete {
+			_ = os.Remove(localPath)
+		}
+	}()
 
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	n, err := io.Copy(f, io.LimitReader(resp.Body, maxMediaBytes+1))
+	if err != nil {
 		return "", fmt.Errorf("save %s: %w", kind, err)
 	}
+	if n > maxMediaBytes {
+		return "", fmt.Errorf("media exceeds 50 MiB limit")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if err := resp.Body.Close(); err != nil {
+		return "", fmt.Errorf("close media response: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("close media file: %w", err)
+	}
+	complete = true
 
 	slog.Info("downloaded feishu resource", "kind", kind, "key", key, "path", localPath)
 	return localPath, nil
 }
 
-// inboxDir is where the files of a chat are saved: the configured inbox
-// inside the chat's workspace, or the system temp dir when there is none.
-func (g *Gateway) inboxDir(chatKey string) string {
-	if dir := g.configuredInbox(chatKey); dir != "" {
-		return dir
+// checkMediaDirectory rejects symlink components and non-directories, including
+// dangling links, before creating an inbox. It allows missing descendants, not
+// arbitrary relative paths. Concurrent filesystem replacement remains a TOCTOU.
+func checkMediaDirectory(dir string) error {
+	if !filepath.IsAbs(dir) {
+		return fmt.Errorf("media directory must be absolute")
 	}
-	return os.TempDir()
+	for current := filepath.Clean(dir); ; current = filepath.Dir(current) {
+		info, err := os.Lstat(current)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil && !info.IsDir() {
+			return fmt.Errorf("media directory component is not a directory: %s", current)
+		}
+		if filepath.Dir(current) == current {
+			return nil
+		}
+	}
+}
+
+// inboxDir uses temp storage only when no inbox resolver is installed.
+func (g *Gateway) inboxDir(chatKey string) string {
+	if g.inbox != nil {
+		return g.configuredInbox(chatKey)
+	}
+	// Canonicalize OS temp aliases such as macOS /var before checking them.
+	dir, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		return ""
+	}
+	return dir
 }
 
 // configuredInbox is the inbox inside the chat's workspace, or "" when the

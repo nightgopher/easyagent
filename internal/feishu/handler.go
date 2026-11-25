@@ -98,8 +98,17 @@ func NewHandler(piAgentURL, appID string, client *Client, workspace string) *Han
 // inboxSubdir reads FEISHU_INBOX_DIR, a directory relative to the workspace.
 // An empty or unsafe value leaves the inbox disabled.
 func inboxSubdir(value string) string {
-	value = strings.Trim(strings.TrimSpace(value), "/")
-	if value == "" || strings.HasPrefix(value, "~") || strings.Contains(value, "..") {
+	value = strings.TrimSpace(value)
+	if value == "" || !filepath.IsLocal(value) || strings.HasPrefix(value, "~") || strings.ContainsAny(value, "\\\x00\r\n") {
+		return ""
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == ".." {
+			return ""
+		}
+	}
+	value = filepath.Clean(value)
+	if value == "." {
 		return ""
 	}
 	return value
@@ -108,14 +117,27 @@ func inboxSubdir(value string) string {
 // InboxDir returns the directory inside a chat's workspace where the files
 // users send are saved, or "" when the chat has no inbox.
 func (h *Handler) InboxDir(chatKey string) string {
-	if h.inbox == "" {
-		return ""
-	}
+	subdir := inboxSubdir(h.inbox)
 	workspace := h.workspaceFor(chatKey)
-	if workspace == "" {
+	if subdir == "" || !filepath.IsAbs(workspace) {
 		return ""
 	}
-	return filepath.Join(workspace, filepath.FromSlash(h.inbox))
+	root, err := filepath.EvalSymlinks(workspace)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return ""
+	}
+	dir := filepath.Join(root, subdir)
+	// Reject even in-workspace symlink aliases: later creation must not
+	// follow an inbox component to a different tree. This is a preflight
+	// check, not protection against concurrent filesystem replacement.
+	if err := checkMediaDirectory(dir); err != nil {
+		return ""
+	}
+	return dir
 }
 
 func defaultRoutesFile() string {
