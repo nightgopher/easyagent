@@ -195,7 +195,7 @@ func (w *Watch) readChats(ctx context.Context, chats []P2PChat) []chatRead {
 }
 
 // Poll 执行一轮巡查：发现新消息则唤醒会话并转达结果。
-// 返回错误时不动位点，下一轮自动重试同样的消息。
+// 返回错误时不推进待投递消息的位点，下一轮自动重试；群基线独立建立。
 func (w *Watch) Poll(ctx context.Context) error {
 	chats, err := w.lark.P2PChats(ctx)
 	if err != nil {
@@ -215,10 +215,12 @@ func (w *Watch) Poll(ctx context.Context) error {
 		}
 		msgs := r.msgs
 		if w.cfg.GroupChats[r.chat.ChatID] && !w.groupReady[r.chat.ChatID] {
-			w.groupReady[r.chat.ChatID] = true
+			// 基线不是待投递消息，位点与就绪状态必须一起生效，
+			// 不受同轮其他会话投递失败影响。
 			if len(msgs) > 0 {
-				maxPos[r.chat.ChatID] = msgs[0].Position
+				w.state.Advance(r.chat.ChatID, msgs[0].Position)
 			}
+			w.groupReady[r.chat.ChatID] = true
 			continue
 		}
 		if len(msgs) == 0 {

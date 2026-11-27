@@ -623,6 +623,103 @@ func TestConfiguredGroupBaselineAndNewMessages(t *testing.T) {
 	}
 }
 
+func TestReviewBaselineRetryWithRejectedPeer(t *testing.T) {
+	const group = "oc_review_group"
+	const emptyGroup = "oc_review_empty_group"
+	baselineFail := true
+	groupMessages := map[string]string{
+		group:      msgJSON("old", 10, "2026-11-12 09:00", "ou_member", "Member", "old group history"),
+		emptyGroup: "",
+	}
+	lark := standardLark(msgJSON("peer", 11, "2026-11-12 09:31", "ou_peer", "Peer", "peer new"), 11)
+	original := lark.handler
+	lark.handler = func(args []string) (string, error) {
+		if strings.HasPrefix(strings.Join(args, " "), "im +chat-messages-list") {
+			chatID := args[indexOf(args, "--chat-id")+1]
+			if messages, ok := groupMessages[chatID]; ok {
+				if baselineFail {
+					return "", fmt.Errorf("temporary read failure")
+				}
+				return `{"ok":true,"data":` + messagesJSON(messages) + `}`, nil
+			}
+		}
+		return original(args)
+	}
+	rejected := true
+	watch, rec := newTestWatchWithRelay(t, lark, func(string, map[string]string) (int, string) {
+		t.Error("/chat must not be called when the bridge is present")
+		return http.StatusOK, ""
+	}, func(map[string]string) (int, string) {
+		if rejected {
+			return http.StatusConflict, `{"code":"not_admitted"}`
+		}
+		return http.StatusOK, `{"status":"accepted"}`
+	})
+	watch.cfg.GroupChats = map[string]bool{group: true, emptyGroup: true}
+	ctx := context.Background()
+	if err := watch.init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	rewind(watch, testPeerChat, 10)
+	baselineFail = false
+	if err := watch.Poll(ctx); err == nil {
+		t.Fatal("expected peer relay rejection")
+	}
+	if got := watch.state.Position(testPeerChat); got != 10 {
+		t.Fatalf("rejected peer position = %d, want 10", got)
+	}
+	for _, id := range []string{group, emptyGroup} {
+		if !watch.groupReady[id] {
+			t.Errorf("recovered baseline not ready: %s", id)
+		}
+	}
+	rejected = false
+	if err := watch.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	posts := rec.byPath("relay")
+	if len(posts) != 2 {
+		t.Fatalf("relay attempts = %d, want 2", len(posts))
+	}
+	if strings.Contains(posts[1].body["prompt"], "old group history") {
+		t.Fatal("recovered baseline history was replayed after unrelated peer relay rejection")
+	}
+	if posts[0].body["request_id"] != posts[1].body["request_id"] {
+		t.Fatal("unchanged peer retry must preserve request_id")
+	}
+
+	// New messages after either baseline must still retry until admitted.
+	groupMessages[group] = msgJSON("new", 11, "2026-11-12 09:32", "ou_member", "Member", "new group message")
+	groupMessages[emptyGroup] = msgJSON("first", 1, "2026-11-12 09:32", "ou_member", "Member", "first group message")
+	rejected = true
+	if err := watch.Poll(ctx); err == nil {
+		t.Fatal("expected group relay rejection")
+	}
+	if watch.state.Position(group) != 10 || watch.state.Position(emptyGroup) != 0 {
+		t.Fatal("rejected group messages must not advance positions")
+	}
+	rejected = false
+	if err := watch.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	posts = rec.byPath("relay")
+	if len(posts) != 4 || !strings.Contains(posts[3].body["prompt"], "new group message") || !strings.Contains(posts[3].body["prompt"], "first group message") {
+		t.Fatalf("unexpected group retry: %+v", posts)
+	}
+	if posts[2].body["request_id"] != posts[3].body["request_id"] {
+		t.Fatal("unchanged group retry must preserve request_id")
+	}
+	if watch.state.Position(group) != 11 || watch.state.Position(emptyGroup) != 1 {
+		t.Fatal("accepted group messages must advance positions")
+	}
+	if err := watch.Poll(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.byPath("relay")) != 4 || len(rec.byPath("chat")) != 0 {
+		t.Fatal("accepted messages must not be delivered twice or via /chat")
+	}
+}
+
 func TestGroupBaselineReadFailureDoesNotReplayHistory(t *testing.T) {
 	const group = "oc_group"
 	fail := true
