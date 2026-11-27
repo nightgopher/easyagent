@@ -147,7 +147,6 @@ func (t *deepVTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 type deepVRequest struct {
 	Model    string         `json:"model"`
 	Contents []deepVContent `json:"contents"`
-	System   *deepVContent  `json:"systemInstruction,omitempty"`
 	Config   deepVConfig    `json:"config"`
 }
 type deepVContent struct {
@@ -181,9 +180,10 @@ type deepVResult struct {
 	Response map[string]any `json:"response"`
 }
 type deepVConfig struct {
-	MaxTokens   int         `json:"maxOutputTokens,omitempty"`
-	Temperature *float64    `json:"temperature,omitempty"`
-	Tools       []deepVTool `json:"tools,omitempty"`
+	MaxTokens   int           `json:"maxOutputTokens,omitempty"`
+	Temperature *float64      `json:"temperature,omitempty"`
+	Tools       []deepVTool   `json:"tools,omitempty"`
+	System      *deepVContent `json:"systemInstruction,omitempty"`
 }
 type deepVTool struct {
 	Declarations []deepVDeclaration `json:"functionDeclarations"`
@@ -230,7 +230,7 @@ func deepVFromAnthropic(source anthropicRequest) (deepVRequest, error) {
 		out.Config.MaxTokens = 32000
 	}
 	if source.System != "" {
-		out.System = &deepVContent{Parts: []deepVPart{{Text: source.System}}}
+		out.Config.System = &deepVContent{Parts: []deepVPart{{Text: source.System}}}
 	}
 	names := map[string]string{}
 	for _, message := range source.Messages {

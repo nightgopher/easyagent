@@ -96,6 +96,47 @@ func TestDeepVStreamingToolCallAndConversationHistory(t *testing.T) {
 	}
 }
 
+func TestDeepVSystemInstructionIsNestedInConfig(t *testing.T) {
+	for _, system := range []string{"", "Only reply with fixture-ok."} {
+		t.Run(system, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var body map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if _, present := body["systemInstruction"]; present {
+					t.Error("systemInstruction must not be sent at the top level")
+				}
+				var config map[string]json.RawMessage
+				if err := json.Unmarshal(body["config"], &config); err != nil {
+					t.Error(err)
+				}
+				raw, present := config["systemInstruction"]
+				if system == "" {
+					if present {
+						t.Error("empty systemInstruction must be omitted")
+					}
+				} else {
+					var instruction deepVContent
+					if err := json.Unmarshal(raw, &instruction); err != nil {
+						t.Errorf("missing config.systemInstruction: %v", err)
+					} else if len(instruction.Parts) != 1 || instruction.Parts[0].Text != system {
+						t.Errorf("system text changed: %+v", instruction)
+					}
+				}
+				fmt.Fprint(w, "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"ok\"}]},\"finishReason\":\"STOP\"}]}\n\ndata: [DONE]\n\n")
+			}))
+			defer server.Close()
+			msg, err := collectDeepV(t, NewDeepVProvider(server.URL, &deepVTestTokens{token: "fixture-token"}), ai.StreamRequest{
+				Model: ai.Model{ID: "fixture"}, System: system, Messages: []ai.Message{ai.NewTextUserMessage("hello")},
+			})
+			if err != nil || msg.Text != "ok" {
+				t.Fatalf("unexpected response: %+v, %v", msg, err)
+			}
+		})
+	}
+}
+
 func TestDeepVRefreshesOnceAfterUnauthorized(t *testing.T) {
 	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
