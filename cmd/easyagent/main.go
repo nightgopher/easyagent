@@ -32,6 +32,13 @@ func main() {
 		fmt.Printf("easyagent %s\n", version)
 		return
 	}
+	if len(os.Args) >= 2 && os.Args[1] == "accounts" {
+		if err := runAccountsCommand(os.Args[2:], config.HomeDir(), os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Desktop's machine helper is deliberately isolated from project dotenv
 	// files; its caller explicitly supplies the account home and service URL.
 	if len(os.Args) >= 3 && os.Args[1] == "easycode" && slices.Contains(os.Args[2:], "--machine") {
@@ -58,6 +65,7 @@ func main() {
 	// Config file flag (YAML, loaded before .env and env vars)
 	configFile := flag.String("config", "", "Path to YAML config file (e.g. easyagent.yaml)")
 
+	desktopAccountHome, sharedAccountHome := os.Getenv("EA_DESKTOP_ACCOUNT_HOME"), os.Getenv("EA_SHARED_ACCOUNT_HOME")
 	// Load .env files (ignore if missing). EA_ENV_FILE allows a custom path;
 	// otherwise use the CWD and home files.
 	envFile := config.Env("EA_ENV_FILE")
@@ -70,6 +78,8 @@ func main() {
 		_ = config.LoadDotEnv(filepath.Join(config.HomeDir(), ".env"))
 		_ = config.LoadDotEnv(filepath.Join(config.HomeDir(), ".env.local"))
 	}
+	_ = os.Setenv("EA_DESKTOP_ACCOUNT_HOME", desktopAccountHome)
+	_ = os.Setenv("EA_SHARED_ACCOUNT_HOME", sharedAccountHome)
 	if len(os.Args) >= 2 && os.Args[1] == "easycode" {
 		runEasyCodeCLI(os.Args[2:])
 		return
@@ -182,6 +192,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err := applyEasyCodeCLISelection(context.Background(), &cfg, config.HomeDir(), *modeFlag, explicitProvider, explicitModel); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	if err := applySharedAccountDefault(context.Background(), &cfg, config.HomeDir(), *modeFlag); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

@@ -35,6 +35,11 @@ func runCodexCommand(ctx context.Context, args []string, home string, out io.Wri
 	encoder := json.NewEncoder(out)
 	switch args[0] {
 	case "login":
+		if _, loggedIn, statusErr := manager.Status(ctx); statusErr != nil {
+			return statusErr
+		} else if loggedIn {
+			return errors.New("当前 ChatGPT 账号已登录；请先退出或选择其他已有账号")
+		}
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 		defer cancel()
 		session, err := manager.StartLogin(ctx)

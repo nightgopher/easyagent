@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/nightgopher/easyagent/internal/accountstore"
 )
 
 const DefaultBaseURL = "https://api-code.deepvlab.ai"
@@ -46,10 +48,11 @@ type Model struct {
 // Manager keeps credentials isolated from the EasyCode client's own session.
 // The file is private to the OS user and refresh is serialized across processes.
 type Manager struct {
-	base   string
-	dir    string
-	client *http.Client
-	ports  []int
+	base         string
+	dir          string
+	selectionDir string
+	client       *http.Client
+	ports        []int
 }
 
 func NewManager(home, base string) (*Manager, error) {
@@ -68,14 +71,28 @@ func NewManager(home, base string) (*Manager, error) {
 	if strings.TrimSpace(home) == "" {
 		return nil, errors.New("无法定位 EasyAgent 用户目录")
 	}
+	accountHome, err := accountstore.Resolve(home, "easycode")
+	if err != nil {
+		return nil, err
+	}
 	return &Manager{
-		base: strings.TrimRight(u.String(), "/"), dir: filepath.Join(home, "easycode"),
+		base: strings.TrimRight(u.String(), "/"), dir: filepath.Join(accountHome, "easycode"), selectionDir: filepath.Join(home, "easycode"),
 		client: &http.Client{Timeout: 20 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		ports:  []int{7863, 7864, 7865, 7866, 7867, 7868, 7869, 7870, 7871, 7872, 7873},
 	}, nil
 }
 
 func (m *Manager) BaseURL() string { return m.base }
+
+// NewSelectionManager accesses only CLI model preference files. It does not
+// resolve or inspect account credentials, which may need separate selection.
+func NewSelectionManager(home string) (*Manager, error) {
+	if strings.TrimSpace(home) == "" {
+		return nil, errors.New("无法定位 EasyAgent 用户目录")
+	}
+	dir := filepath.Join(home, "easycode")
+	return &Manager{dir: dir, selectionDir: dir}, nil
+}
 
 func (m *Manager) locked(ctx context.Context, fn func() error) error {
 	if err := ctx.Err(); err != nil {
@@ -155,6 +172,17 @@ func (m *Manager) save(ctx context.Context, data credentials) error {
 	return m.locked(ctx, func() error { return m.writeLocked(data) })
 }
 
+func (m *Manager) saveNewLogin(ctx context.Context, data credentials) error {
+	return m.locked(ctx, func() error {
+		if _, err := os.Lstat(filepath.Join(m.dir, "credentials.json")); err == nil {
+			return errors.New("已有 EasyCode 账号登录，请先退出后再登录")
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		return m.writeLocked(data)
+	})
+}
+
 func (m *Manager) load(ctx context.Context) (credentials, error) {
 	var data credentials
 	err := m.locked(ctx, func() error { var err error; data, err = m.readLocked(); return err })
@@ -176,14 +204,16 @@ func (m *Manager) Status(ctx context.Context) (User, bool, error) {
 }
 
 func (m *Manager) Logout(ctx context.Context) error {
-	return m.locked(ctx, func() error {
-		for _, name := range []string{"credentials.json", cliSelectionFile} {
-			if err := os.Remove(filepath.Join(m.dir, name)); err != nil && !os.IsNotExist(err) {
-				return err
-			}
+	if err := m.locked(ctx, func() error {
+		err := os.Remove(filepath.Join(m.dir, "credentials.json"))
+		if os.IsNotExist(err) {
+			return nil
 		}
-		return nil
-	})
+		return err
+	}); err != nil {
+		return err
+	}
+	return m.ClearCLIModel(ctx)
 }
 
 func (m *Manager) AccessToken(ctx context.Context) (string, error) { return m.accessToken(ctx, "") }

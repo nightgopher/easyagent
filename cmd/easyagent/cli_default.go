@@ -158,7 +158,7 @@ func (b *cliConfigBackend) SetDefault(ctx context.Context, provider, model strin
 	return b.saveDefault(ctx, provider, model)
 }
 func (b *cliConfigBackend) saveDefault(ctx context.Context, provider, model string) error {
-	manager, err := easycode.NewManager(b.home, "")
+	manager, err := easycode.NewSelectionManager(b.home)
 	if err != nil {
 		return err
 	}

@@ -218,7 +218,7 @@ func (s *LoginSession) exchange(ctx context.Context, code, appID string) (User, 
 		lifetime = 900
 	}
 	data := credentials{AccessToken: jwt.AccessToken, RefreshToken: jwt.RefreshToken, ExpiresAt: time.Now().Add(time.Duration(lifetime) * time.Second).UnixMilli(), User: jwt.User}
-	if err := s.manager.save(ctx, data); err != nil {
+	if err := s.manager.saveNewLogin(ctx, data); err != nil {
 		return User{}, err
 	}
 	return jwt.User, nil

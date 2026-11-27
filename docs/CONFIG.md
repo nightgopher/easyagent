@@ -50,7 +50,11 @@ EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCod
 
 远程 SSH 登录可执行 `easyagent easycode login --no-browser`，并在本机另一个终端按提示运行 SSH 本地端口转发，然后在本机浏览器打开登录地址。回调仅监听远程主机的回环地址。CLI 的模型选择不会更改桌面或 `serve` 的模型配置；命令所在 shell 显式设置的 `EA_PROVIDER` 优先于保存的 CLI 选择，`EA_MODEL` / `OPENAI_MODEL` 可覆盖 EasyCode 模型。`.env` 中的旧默认配置则在 `easycode off` 后恢复。
 
-EasyAgent 的 EasyCode 凭据位于 `EA_HOME/easycode/credentials.json`，使用用户私有目录和文件权限，并独立于 EasyCode 原客户端。访问令牌到期自动续期；退出只删除这份本机凭据。桌面使用自身的 `EA_HOME=core-home`，与普通 CLI 各自登录。默认服务是 `https://api-code.deepvlab.ai`；测试或自建服务可通过 `EA_EASYCODE_BASE_URL` 指定 HTTPS 地址（本机回环地址允许 HTTP）。
+EasyAgent 的 EasyCode 和 ChatGPT 登录凭据保存在当前用户的私有目录，并独立于其他客户端。桌面和本机普通 CLI 会复用同一份凭据文件，续期使用同一个文件锁；模型默认值仍各自保存。如果此前桌面和 CLI 各自登录了不同账号，两个文件均保留，需要分别为桌面和 CLI 选择使用哪一份：桌面在对应模型服务页面选择；CLI 使用 `easyagent accounts status codex` 或 `easyagent accounts status easycode` 查看，再运行 `easyagent accounts use codex shared` 或 `easyagent accounts use codex desktop`（EasyCode 将 `codex` 换成 `easycode`）。`shared` 指原 CLI 账号，`desktop` 指原桌面账号。退出共享账号会影响正在使用这份凭据的另一端。
+
+CLI 未配置模型供应商时，如果本机只有一种已登录账号，会使用该账号启动；已有 CLI 模型配置和显式环境变量优先。ChatGPT 使用内置列表中的默认模型，EasyCode 从账号模型目录选择首项；可以在 CLI 的 `/config` 中更改默认模型。两种账号都已登录时，CLI 会提示选择服务商。服务器上显式设置的 `EA_HOME` 保持独立，不自动读取同机桌面凭据。
+
+EasyCode 默认服务是 `https://api-code.deepvlab.ai`；测试或自建服务可通过 `EA_EASYCODE_BASE_URL` 指定 HTTPS 地址（本机回环地址允许 HTTP）。
 
 `EA_SERVER_API_KEY` 单独设置 HTTP API Bearer 令牌，不改变上游模型密钥。未设置时兼容使用 `EA_API_KEY` 作为服务令牌。使用 Anthropic 时，上游密钥来自 `ANTHROPIC_API_KEY`。
 

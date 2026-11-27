@@ -25,6 +25,18 @@ type secretStore interface {
 	Set(string, string) error
 	Delete(string) error
 }
+
+func desktopAccountEnv(dir string) map[string]string {
+	desktop := filepath.Join(dir, "core-home")
+	shared := os.Getenv("EA_HOME")
+	if shared == "" {
+		if home, err := os.UserHomeDir(); err == nil {
+			shared = filepath.Join(home, ".easyagent")
+		}
+	}
+	return map[string]string{"EA_DESKTOP_ACCOUNT_HOME": desktop, "EA_SHARED_ACCOUNT_HOME": shared}
+}
+
 type hostConfig struct {
 	ID, Name, URL, Workspace string
 	HistoryGroup             string `json:",omitempty"`
@@ -218,6 +230,9 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	}
 	home, _ := os.UserHomeDir()
 	env := map[string]string{"EA_DESKTOP_BOOTSTRAP": "1", "EA_DATA_DIR": filepath.Join(dir, "core-data"), "EA_SERVER_API_KEY": token, "EA_ALLOW_NO_AUTH": "0", "EA_ALLOWED_ORIGINS": "", "EA_ENABLE_TERMINAL": "1", "EA_HOME": filepath.Join(dir, "core-home"), "EA_MCP_CONFIG": filepath.Join(dir, "core-home", "mcp.json")}
+	for k, v := range desktopAccountEnv(dir) {
+		env[k] = v
+	}
 	// Codex traffic only (token exchange and the ChatGPT backend): gateways,
 	// Feishu and MCP keep their direct routes. The name mirrors
 	// sdk/ai.CodexProxyEnv; this module does not import the core.
@@ -446,6 +461,13 @@ func inheritedCoreEnvironment(home string) map[string]string {
 func (m *localBackend) ensureIdle(ctx context.Context) error {
 	m.mu.Lock()
 	b := m.client
+	if m.done != nil {
+		select {
+		case <-m.done:
+			b = nil
+		default:
+		}
+	}
 	m.mu.Unlock()
 	if b == nil {
 		return nil

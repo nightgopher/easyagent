@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -88,6 +89,11 @@ func runEasyCodeCommand(ctx context.Context, args []string, home, base string, o
 	encoder := json.NewEncoder(out)
 	switch opts.command {
 	case "login":
+		if _, loggedIn, statusErr := manager.Status(ctx); statusErr != nil {
+			return statusErr
+		} else if loggedIn {
+			return errors.New("当前 EasyCode 账号已登录；请先退出或选择其他已有账号")
+		}
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 		session, err := manager.StartLogin(ctx)
@@ -242,7 +248,14 @@ func applyEasyCodeCLISelection(ctx context.Context, cfg *config.Config, home, mo
 	if explicitProvider != "" && explicitProvider != "deepv" {
 		return nil
 	}
-	manager, err := easycode.NewManager(home, "")
+	// The CLI selection is independent of the shared login. Do not resolve an
+	// unrelated account conflict when no EasyCode CLI selection exists.
+	if _, err := os.Lstat(filepath.Join(home, "easycode", "cli-selection.json")); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	manager, err := easycode.NewSelectionManager(home)
 	if err != nil {
 		return err
 	}
