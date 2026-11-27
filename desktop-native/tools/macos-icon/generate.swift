@@ -5,7 +5,7 @@ import Foundation
 
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let source = root.appendingPathComponent("resources/icon.png")
-let output = root.appendingPathComponent("resources/icon-macos.icns")
+let output = root.appendingPathComponent("tools/macos-icon/icon.icns")
 guard let image = NSImage(contentsOf: source) else {
     fatalError("Cannot read \(source.path)")
 }

@@ -1,5 +1,4 @@
 build.noindex/
 resources/*
 !resources/icon.png
-!resources/icon-macos.icns
 !resources/easyagent.entitlements

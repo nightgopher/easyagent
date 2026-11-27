@@ -4,7 +4,7 @@
   "version": "0.55.0",
   "out": "build.noindex",
   "macos": {
-    "icon": "resources/icon-macos.icns",
+    "icon": "tools/macos-icon/icon.icns",
     "signingIdentity": "8AAD734656B383438D6DAC96D27580A561A1F85B",
     "minimumSystemVersion": "13.0",
     "entitlements": "resources/easyagent.entitlements",

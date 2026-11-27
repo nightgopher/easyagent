@@ -25,7 +25,7 @@ func TestMacOSIconHasInsetAndRoundedCorners(t *testing.T) {
 	if err := json.Unmarshal(configBytes, &config); err != nil {
 		t.Fatal(err)
 	}
-	if config.Icon != "resources/icon.png" || config.MacOS.Icon != "resources/icon-macos.icns" {
+	if config.Icon != "resources/icon.png" || config.MacOS.Icon != "tools/macos-icon/icon.icns" {
 		t.Fatalf("unexpected icon configuration: %+v", config)
 	}
 	data, err := os.ReadFile(config.MacOS.Icon)
