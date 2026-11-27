@@ -125,6 +125,81 @@ func TestHostSavingSameCredentialKeepsIdentity(t *testing.T) {
 	}
 }
 
+func TestHostEditReplacesEntryAndRestoresPreviousIdentity(t *testing.T) {
+	store := &memorySecrets{values: map[string]string{"host/remote": "first-token"}}
+	a := hostCredentialPreview(t, store)
+	a.Live.Config.ActiveHost = "remote"
+	a.Settings.HostURL, a.Settings.HostToken = "http://127.0.0.1:2", "second-token"
+	saved, err := persistHostProfile(a.Live.Dir, store, a.Live.Config, a.Settings.hostForm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.NewIdentity || len(saved.Config.Hosts) != 2 || saved.Config.Hosts[1].ID == "remote" || saved.Config.ActiveHost != saved.Config.Hosts[1].ID || len(saved.Config.HostHistory) != 1 {
+		t.Fatalf("edit did not replace the profile safely: %+v", saved)
+	}
+	newID := saved.Config.Hosts[1].ID
+	form := hostForm{EditHost: newID, HostName: "Remote", HostURL: "http://127.0.0.1:1", HostToken: "first-token"}
+	restored, err := persistHostProfile(a.Live.Dir, store, saved.Config, form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restored.Config.Hosts) != 2 || restored.Config.Hosts[1].ID != "remote" || restored.Config.ActiveHost != "remote" || len(restored.Config.HostHistory) != 1 || restored.Config.HostHistory[0].ID != newID {
+		t.Fatalf("previous endpoint identity not restored: %+v", restored)
+	}
+	data, err := os.ReadFile(filepath.Join(a.Live.Dir, "connections.json"))
+	if err != nil || strings.Contains(string(data), "first-token") || strings.Contains(string(data), "second-token") {
+		t.Fatal("credentials leaked into configuration", err)
+	}
+}
+
+func TestHostEditCredentialReplacesEntryAndRemovalCleansHistory(t *testing.T) {
+	store := &memorySecrets{values: map[string]string{"host/remote": "first-token", "host/unrelated": "keep"}}
+	a := hostCredentialPreview(t, store)
+	a.Settings.HostToken = "second-token"
+	saved, err := persistHostProfile(a.Live.Dir, store, a.Live.Config, a.Settings.hostForm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.NewIdentity || len(saved.Config.Hosts) != 2 || len(saved.Config.HostHistory) != 1 {
+		t.Fatal("credential edit added a list entry or lost history")
+	}
+	newID := saved.Config.Hosts[saved.Index].ID
+	removed, err := persistHostRemoval(a.Live.Dir, store, saved.Config, saved.Index)
+	if err != nil || removed.CleanupError != nil || len(removed.Config.HostHistory) != 0 {
+		t.Fatal("removal failed", err, removed.CleanupError)
+	}
+	old, _ := store.Get("host/remote")
+	current, _ := store.Get("host/" + newID)
+	unrelated, _ := store.Get("host/unrelated")
+	if old != "" || current != "" || unrelated != "keep" {
+		t.Fatal("removal failed to clean only this profile's credentials")
+	}
+}
+
+func TestHostEditMissingProfileDoesNotCreateConnection(t *testing.T) {
+	a := hostCredentialPreview(t, &memorySecrets{})
+	a.Settings.EditHost = "deleted"
+	if _, err := persistHostProfile(a.Live.Dir, a.Live.Secrets, a.Live.Config, a.Settings.hostForm); err == nil {
+		t.Fatal("stale edit created a new connection")
+	}
+}
+
+func TestHostEditShowsEditState(t *testing.T) {
+	a := hostCredentialPreview(t, &memorySecrets{})
+	a.Settings.Open = true
+	a.Settings.Tab = "connections"
+	a.Settings.hostForm = hostForm{}
+	tt := ui.NewTester(a.View, 1240, 820)
+	click(t, tt, "编辑")
+	if a.Settings.EditHost != "remote" || !tt.HasText("编辑连接") || !tt.HasText("保存修改") {
+		t.Fatal("editing a host did not show an edit form")
+	}
+	click(t, tt, "新增连接")
+	if a.Settings.EditHost != "" || !tt.HasText("添加远程主机") {
+		t.Fatal("new connection did not reset edit state")
+	}
+}
+
 func TestExplicitHostCredentialRepairKeepsIdentityAndDrafts(t *testing.T) {
 	for _, previous := range []string{"", "expired-token"} {
 		t.Run(previous, func(t *testing.T) {

@@ -27,6 +27,7 @@ type secretStore interface {
 }
 type hostConfig struct {
 	ID, Name, URL, Workspace string
+	HistoryGroup             string `json:",omitempty"`
 	Local                    bool
 	HasToken                 bool
 	Relay                    *relayConfig `json:",omitempty"`
@@ -39,6 +40,7 @@ type modelConfig struct {
 }
 type clientConfig struct {
 	Hosts         []hostConfig
+	HostHistory   []hostConfig `json:",omitempty"`
 	ActiveHost    string
 	Model         modelConfig
 	PreviousModel *modelConfig           `json:",omitempty"`
