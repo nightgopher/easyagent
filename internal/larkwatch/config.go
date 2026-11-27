@@ -23,6 +23,8 @@ type Config struct {
 	StateFile string
 	// ExcludeChats 是不巡查的 chat_id 集合（机器人会话恒排除，无需配置）。
 	ExcludeChats map[string]bool
+	// GroupChats 是显式指定巡查的飞书群 chat_id。
+	GroupChats map[string]bool
 	// MaxPerWake 是单次唤醒最多带入的消息条数。
 	MaxPerWake int
 	// LarkBin 是 lark-cli 可执行文件路径。

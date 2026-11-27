@@ -33,14 +33,15 @@ const maxRelayRunes = 3000
 // 发现新消息才唤醒管家会话（核心 /chat，忙时转 steer），并把处理结果
 // 以机器人身份转达给主人。模型只在有事时醒来，没事不叫醒。
 type Watch struct {
-	cfg       Config
-	lark      *Lark
-	inject    *Injector
-	state     *State
-	statePath string
-	selfID    string
-	relayChat string
-	log       *slog.Logger
+	cfg        Config
+	lark       *Lark
+	inject     *Injector
+	state      *State
+	statePath  string
+	selfID     string
+	relayChat  string
+	log        *slog.Logger
+	groupReady map[string]bool
 }
 
 // New 构造看门狗。runner 通常为 ExecRunner；injector 指向核心服务。
@@ -52,18 +53,42 @@ func New(cfg Config, runner Runner, injector *Injector, statePath string, logger
 		return nil, err
 	}
 	return &Watch{
-		cfg:       cfg,
-		lark:      NewLark(runner),
-		inject:    injector,
-		state:     NewState(),
-		statePath: statePath,
-		log:       logger,
+		cfg:        cfg,
+		lark:       NewLark(runner),
+		inject:     injector,
+		state:      NewState(),
+		groupReady: map[string]bool{},
+		statePath:  statePath,
+		log:        logger,
 	}, nil
 }
 
 // watchable 判断会话是否在巡查范围：排除机器人会话与显式排除清单。
 func (w *Watch) watchable(c P2PChat) bool {
 	return !c.IsBotChat && !w.cfg.ExcludeChats[c.ChatID]
+}
+
+// targets 保留单聊的机器人排除规则，群只加入显式指定的 ID。
+func (w *Watch) targets(chats []P2PChat) []P2PChat {
+	var out []P2PChat
+	seen := map[string]bool{}
+	for _, c := range chats {
+		seen[c.ChatID] = true
+		if w.watchable(c) {
+			out = append(out, c)
+		}
+	}
+	var ids []string
+	for id, enabled := range w.cfg.GroupChats {
+		if enabled && !seen[id] && !w.cfg.ExcludeChats[id] {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		out = append(out, P2PChat{ChatID: id, Name: "群 " + id})
+	}
+	return out
 }
 
 // init 启动准备：识别主人与机器人转达会话，并把现有消息记为基线（不触发）。
@@ -91,17 +116,15 @@ func (w *Watch) init(ctx context.Context) error {
 		w.log.Warn("no relay chat found; agent replies will not be forwarded to Feishu")
 	}
 
-	var baselineTargets []P2PChat
-	for _, c := range chats {
-		if w.watchable(c) {
-			baselineTargets = append(baselineTargets, c)
-		}
-	}
+	baselineTargets := w.targets(chats)
 	baseline := w.readChats(ctx, baselineTargets)
 	for _, r := range baseline {
 		if r.err != nil {
 			w.log.Warn("baseline read failed", "chat", r.chat.ChatID, "error", r.err)
 			continue
+		}
+		if w.cfg.GroupChats[r.chat.ChatID] {
+			w.groupReady[r.chat.ChatID] = true
 		}
 		if len(r.msgs) > 0 {
 			w.state.Advance(r.chat.ChatID, r.msgs[0].Position)
@@ -172,19 +195,14 @@ func (w *Watch) readChats(ctx context.Context, chats []P2PChat) []chatRead {
 }
 
 // Poll 执行一轮巡查：发现新消息则唤醒会话并转达结果。
-// 返回错误时不动位点，下一轮自动重试同样的消息。
+// 返回错误时不推进待投递消息的位点，下一轮自动重试；群基线独立建立。
 func (w *Watch) Poll(ctx context.Context) error {
 	chats, err := w.lark.P2PChats(ctx)
 	if err != nil {
 		return fmt.Errorf("list p2p chats: %w", err)
 	}
 
-	var watchables []P2PChat
-	for _, c := range chats {
-		if w.watchable(c) {
-			watchables = append(watchables, c)
-		}
-	}
+	watchables := w.targets(chats)
 	results := w.readChats(ctx, watchables)
 
 	maxPos := map[string]int64{}
@@ -196,6 +214,15 @@ func (w *Watch) Poll(ctx context.Context) error {
 			continue
 		}
 		msgs := r.msgs
+		if w.cfg.GroupChats[r.chat.ChatID] && !w.groupReady[r.chat.ChatID] {
+			// 基线不是待投递消息，位点与就绪状态必须一起生效，
+			// 不受同轮其他会话投递失败影响。
+			if len(msgs) > 0 {
+				w.state.Advance(r.chat.ChatID, msgs[0].Position)
+			}
+			w.groupReady[r.chat.ChatID] = true
+			continue
+		}
 		if len(msgs) == 0 {
 			continue
 		}
@@ -356,7 +383,7 @@ func buildPrompt(items []sighting, total int) string {
 			fmt.Fprintf(&b, "- %s（%s，来自会话「%s」）：%s\n", senderLabel(m), m.Time, chatLabel, content)
 		}
 	}
-	b.WriteString("\n请按 butler-rules 铁律处理：先判断是否需要回复；能直接回的以我的身份直接回复；涉及承诺、钱、合同、人事或拿不准的，先把拟稿发给我确认。完成后给出一句话处理摘要。")
+	b.WriteString("\n群消息仅供阅读和向我汇报，不要向群内发送消息。私聊请按 butler-rules 铁律处理：先判断是否需要回复；能直接回的以我的身份直接回复；涉及承诺、钱、合同、人事或拿不准的，先把拟稿发给我确认。完成后给出一句话处理摘要。")
 	return b.String()
 }
 
