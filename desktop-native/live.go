@@ -887,19 +887,42 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 		}
 		a.Archived = false
 		a.Search = ""
-		a.loadSession(s)
-		a.ReturnToComposer = true
-		if len(ready) > 0 {
-			ready[0](s)
+		finish := func() {
+			a.loadSession(s)
+			a.ReturnToComposer = true
+			if len(ready) > 0 {
+				ready[0](s)
+			}
+			if a.current() == s && draft != "" && s.Draft == draft {
+				a.submitLive()
+			}
 		}
-		if draft != "" && s.Draft == draft {
-			a.submitLive()
+		pendingAccessMode := ""
+		if initial {
+			pendingAccessMode = origin.AccessMode
+		}
+		if pendingAccessMode != "" {
+			s.PermissionNeedsApply = true
+			a.operation("permission/"+id, "POST", sessionPath(id)+"/permissions", map[string]any{"mode": pendingAccessMode}, func(any) {
+				s.AccessMode = pendingAccessMode
+				s.PermissionNeedsApply = false
+				finish()
+			})
+		} else {
+			finish()
 		}
 	})
 }
 func (a *preview) submitLive() {
 	s := a.current()
 	l := a.Live
+	if l.Loading["permission/"+s.RemoteID] {
+		return
+	}
+	if s.PermissionNeedsApply {
+		l.Error = a.tr("权限设置未生效，请重新选择权限后发送；草稿已保留")
+		return
+	}
 	text := strings.TrimSpace(s.Draft)
 	if text == "" || s.Sending || s.Archived || l.Loading["queue-add/"+s.RemoteID] || l.Loading["attachments/"+s.RemoteID] || l.Loading["voice"] || l.Voice != nil {
 		return
@@ -1105,18 +1128,24 @@ func (a *preview) switchLiveModel(name string) {
 }
 func (a *preview) switchLivePermission(mode string) {
 	s := a.current()
-	if s.RemoteID == "" {
-		a.Live.Error = "请先创建会话"
-		return
-	}
 	key := "ask"
 	if mode == "完全权限" {
 		key = "full"
+	}
+	if s.RemoteID == "" {
+		s.AccessMode = key
+		a.PermissionMenu = false
+		a.ReturnToComposer = true
+		return
+	}
+	if a.Live.Loading["permission/"+s.RemoteID] {
+		return
 	}
 	s.InfoVersion++
 	a.operation("permission/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/permissions", map[string]any{"mode": key}, func(any) {
 		s.InfoVersion++
 		s.AccessMode = key
+		s.PermissionNeedsApply = false
 		if a.current() == s {
 			a.PermissionMenu = false
 			a.ReturnToComposer = true

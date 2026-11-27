@@ -1,6 +1,7 @@
 {
   "尚未配置默认模型，请先在模型连接中选择并配置服务。": "No default model is configured. Choose and configure a service in Model connections.",
   "配置模型": "Configure model",
+  "权限设置未生效，请重新选择权限后发送；草稿已保留": "Permission settings could not be applied. Select a permission again before sending; your draft has been preserved.",
   "语义检索": "Semantic search",
   "向量模型": "Embedding model",
   "启用语义检索": "Enable semantic search",
