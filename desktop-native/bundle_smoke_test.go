@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -95,6 +96,31 @@ func TestPackagedCoreSmoke(t *testing.T) {
 	if requests.Load() != 0 {
 		t.Fatalf("unconfigured core contacted model service %d times", requests.Load())
 	}
+	credentialDir := filepath.Join(dir, "core-home", "codex")
+	if err := os.MkdirAll(credentialDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	credential := fmt.Sprintf(`{"accessToken":"test-token","accountId":"test-account","expiresAt":%d}`, time.Now().Add(time.Hour).UnixMilli())
+	if err := os.WriteFile(filepath.Join(credentialDir, "credentials.json"), []byte(credential), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// A saved default from another provider must not override the explicitly
+	// selected ChatGPT service on the next desktop startup.
+	if err := os.WriteFile(filepath.Join(dir, "core-data", "settings.json"), []byte(`{"default_provider":"openai","default_model":"old-model"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	codex, err := backend.start(ctx, dir, modelConfig{Mode: "codex", Provider: "codex", Model: "gpt-5.2-codex"}, &memorySecrets{})
+	if err != nil {
+		t.Fatalf("ChatGPT core failed: %v", err)
+	}
+	var codexCatalog struct{ Current struct{ Provider, ID string } }
+	if err = codex.request(ctx, "GET", "/models", nil, &codexCatalog); err != nil {
+		t.Fatal(err)
+	}
+	if codexCatalog.Current.Provider != "codex" || codexCatalog.Current.ID != "gpt-5.2-codex" {
+		t.Fatalf("wrong ChatGPT default: %+v", codexCatalog)
+	}
+	backend.stop()
 	model := modelConfig{Mode: "override", Provider: "openai", BaseURL: provider.URL, Model: "smoke-only"}
 	client, err := backend.start(ctx, dir, model, &memorySecrets{values: map[string]string{"model": "smoke-only"}})
 	if err != nil {

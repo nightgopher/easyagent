@@ -235,6 +235,9 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	if model.Mode == "easycode" {
 		env["EA_PROVIDER"] = "deepv"
 		env["EA_MODEL"], env["OPENAI_MODEL"] = model.Model, model.Model
+	} else if model.Mode == "codex" {
+		env["EA_PROVIDER"], env["EA_CODEX_MODEL"] = "codex", model.Model
+		env["EA_DESKTOP_CODEX_MODEL"] = model.Model
 	} else if isModelOverride(model) {
 		key, err := secrets.Get(modelSecretName(model))
 		if err != nil {

@@ -201,7 +201,7 @@ func (a *preview) syncSettingsConfig() {
 		}
 	}
 	s.modelForm = a.expectedModelForm()
-	s.ModelShowChatGPT = false
+	s.ModelShowChatGPT = l.Config.Model.Mode == "codex"
 	s.HasKey = l.Config.Model.HasKey
 	s.Workspace = l.workspace()
 	l.SavedModelForm = s.modelForm

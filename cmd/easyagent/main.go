@@ -115,6 +115,13 @@ func main() {
 	cfg.LoadFromEnv()
 	// Runtime overrides (desktop settings toggles) sit on top of env+yaml.
 	cfg.LoadRuntimeOverrides(cfg.DataDir)
+	// The desktop's explicitly selected ChatGPT account must take precedence
+	// over a saved default for a previously selected provider.
+	if os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1" {
+		if model := strings.TrimSpace(os.Getenv("EA_DESKTOP_CODEX_MODEL")); model != "" {
+			cfg.Provider, cfg.CodexModel = "codex", model
+		}
+	}
 
 	// Handle --version
 	if *versionFlag {
