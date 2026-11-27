@@ -83,6 +83,7 @@ func (a *preview) easyCodeSettings(c *ui.Context) {
 				a.note(c, "请刷新账号可用的模型目录。")
 			}
 		}
+		a.accountSharingChoices(c, "easycode")
 		a.note(c, "登录凭据仅保存在这台设备的用户私有目录；退出不会影响 EasyCode 其他客户端。")
 	})
 }
@@ -96,7 +97,9 @@ func runEasyCodeHelper(ctx context.Context, dir, action string, onBrowser func(s
 		return result, err
 	}
 	cmd := exec.CommandContext(ctx, binary, "easycode", action, "--machine")
-	cmd.Env = filterEnvironment(map[string]string{"EA_HOME": filepath.Join(dir, "core-home")})
+	env := desktopAccountEnv(dir)
+	env["EA_HOME"] = filepath.Join(dir, "core-home")
+	cmd.Env = filterEnvironment(env)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
 		return result, errors.New("无法启动 EasyCode 登录")
@@ -260,6 +263,7 @@ func (a *preview) startEasyCodeLogin() {
 			l.EasyCode.LoggedIn = true
 			l.EasyCode.NeedsRepair = false
 			l.EasyCode.Name = easyCodeUserName(result)
+			a.refreshAccountSharing("easycode")
 			l.EasyCode.Models = result.Models
 			if result.ModelError != "" {
 				l.Error = "登录成功，但获取模型失败：" + result.ModelError
@@ -471,6 +475,7 @@ func (a *preview) logoutEasyCode() {
 			}
 			l.EasyCode = nativeEasyCodeState{Generation: generation}
 			l.Config = next
+			a.refreshAccountSharing("easycode")
 			a.syncSettingsConfig()
 			l.Notice = "已退出 EasyAgent 中的 EasyCode 账号。"
 			if old.Model.Mode == "easycode" {

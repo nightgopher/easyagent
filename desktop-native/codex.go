@@ -74,7 +74,8 @@ func runCodexHelper(ctx context.Context, dir, action string, onBrowser func(stri
 		return result, err
 	}
 	cmd := exec.CommandContext(ctx, binary, "codex", action, "--machine") //nolint:gosec // 与 EasyCode helper 同源：Bin 为本机装配的核心，参数固定
-	overrides := map[string]string{"EA_HOME": filepath.Join(dir, "core-home")}
+	overrides := desktopAccountEnv(dir)
+	overrides["EA_HOME"] = filepath.Join(dir, "core-home")
 	if u := codexProxyURL(); u != "" {
 		overrides["HTTPS_PROXY"] = u
 		overrides["HTTP_PROXY"] = u
@@ -229,6 +230,7 @@ func (a *preview) startCodexLogin() {
 			l.Codex.LoggedIn = true
 			l.Codex.Name = codexUserName(result)
 			l.Codex.Models = result.Models
+			a.refreshAccountSharing("codex")
 			l.Notice = "已登录 ChatGPT，请选择模型并应用到此主机。"
 		})
 	}()
@@ -275,6 +277,7 @@ func (a *preview) logoutCodex() {
 			l.Codex.LoggedIn = false
 			l.Codex.Name = ""
 			l.Codex.Models = nil
+			a.refreshAccountSharing("codex")
 			l.Notice = "已退出 Codex（ChatGPT）账号。"
 		})
 	}()
@@ -387,6 +390,7 @@ func (a *preview) codexSettings(c *ui.Context) {
 				a.action(c, "刷新 ChatGPT 模型").Disabled(l.Loading["codex-status"]).OnClick(a.refreshCodexStatus)
 			}
 		}
+		a.accountSharingChoices(c, "codex")
 		a.note(c, "登录凭据仅保存在这台设备的用户私有目录，计入登录账号的订阅额度，无需 API key。")
 	})
 }

@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nightgopher/easyagent/internal/accountstore"
 	"github.com/nightgopher/easyagent/sdk/ai"
 )
 
@@ -84,6 +85,10 @@ func NewManager(home, base string) (*Manager, error) {
 	}
 	if strings.TrimSpace(home) == "" {
 		return nil, errors.New("无法定位 EasyAgent 用户目录")
+	}
+	home, err = accountstore.Resolve(home, "codex")
+	if err != nil {
+		return nil, err
 	}
 	return &Manager{
 		mu:     sync.Mutex{},

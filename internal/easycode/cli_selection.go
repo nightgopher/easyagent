@@ -11,6 +11,28 @@ import (
 	"unicode"
 )
 
+func (m *Manager) selectionLocked(ctx context.Context, fn func() error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(m.selectionDir, 0700); err != nil {
+		return err
+	}
+	info, err := os.Lstat(m.selectionDir)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+		return errors.New("EasyCode CLI 设置目录必须仅当前用户可访问")
+	}
+	unlock, err := lockCredentials(ctx, filepath.Join(m.selectionDir, ".lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return fn()
+}
+
 const cliSelectionFile = "cli-selection.json"
 
 type cliSelection struct {
@@ -24,14 +46,14 @@ func validCLIModel(model string) bool {
 // CLIModel returns the explicitly selected CLI model without changing the
 // desktop or service configuration. A missing selection means CLI mode is off.
 func (m *Manager) CLIModel(ctx context.Context) (string, error) {
-	path := filepath.Join(m.dir, cliSelectionFile)
+	path := filepath.Join(m.selectionDir, cliSelectionFile)
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
 		return "", nil
 	} else if err != nil {
 		return "", err
 	}
 	var selection cliSelection
-	err := m.locked(ctx, func() error {
+	err := m.selectionLocked(ctx, func() error {
 		file, err := openCredential(path)
 		if os.IsNotExist(err) {
 			return nil
@@ -58,12 +80,15 @@ func (m *Manager) SetCLIModel(ctx context.Context, model string) error {
 	if !validCLIModel(model) {
 		return errors.New("EasyCode 模型 ID 无效")
 	}
-	return m.locked(ctx, func() error {
+	return m.selectionLocked(ctx, func() error {
+		if err := os.MkdirAll(m.selectionDir, 0700); err != nil {
+			return err
+		}
 		data, err := json.Marshal(cliSelection{Model: model})
 		if err != nil {
 			return err
 		}
-		file, err := os.CreateTemp(m.dir, ".cli-selection-*")
+		file, err := os.CreateTemp(m.selectionDir, ".cli-selection-*")
 		if err != nil {
 			return errors.New("无法保存 EasyCode CLI 设置")
 		}
@@ -77,7 +102,7 @@ func (m *Manager) SetCLIModel(ctx context.Context, model string) error {
 		if closeErr := file.Close(); err == nil {
 			err = closeErr
 		}
-		if err != nil || os.Rename(file.Name(), filepath.Join(m.dir, cliSelectionFile)) != nil {
+		if err != nil || os.Rename(file.Name(), filepath.Join(m.selectionDir, cliSelectionFile)) != nil {
 			return errors.New("无法保存 EasyCode CLI 设置")
 		}
 		return nil
@@ -86,8 +111,8 @@ func (m *Manager) SetCLIModel(ctx context.Context, model string) error {
 
 // ClearCLIModel restores the previous CLI provider configuration.
 func (m *Manager) ClearCLIModel(ctx context.Context) error {
-	return m.locked(ctx, func() error {
-		err := os.Remove(filepath.Join(m.dir, cliSelectionFile))
+	return m.selectionLocked(ctx, func() error {
+		err := os.Remove(filepath.Join(m.selectionDir, cliSelectionFile))
 		if os.IsNotExist(err) {
 			return nil
 		}
