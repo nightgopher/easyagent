@@ -90,7 +90,7 @@ func GetStatus(home, provider string) (Status, error) {
 		if !info.Mode().IsRegular() || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) || info.Size() > 1024 {
 			return s, errors.New("account selection cannot be read safely")
 		}
-		f, e := os.Open(file)
+		f, e := os.Open(file) // #nosec G304 -- fixed account selection file in the user's private account home
 		if e != nil {
 			return s, e
 		}

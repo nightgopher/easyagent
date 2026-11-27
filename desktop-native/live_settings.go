@@ -67,6 +67,8 @@ func (a *preview) loadSettingsPage() {
 	}
 	if a.Settings.Tab == "models" && a.Settings.host().Local {
 		a.refreshCodexStatus()
+		a.refreshAccountSharing("codex")
+		a.refreshAccountSharing("easycode")
 	}
 	if l.Client == nil {
 		return
@@ -450,6 +452,7 @@ func (a *preview) selectModelSource(source string) {
 	s, l := &a.Settings, a.Live
 	if source == "chatgpt" {
 		s.ModelShowChatGPT = true
+		a.refreshAccountSharing("codex")
 		return
 	}
 	if modelSource(s.modelForm) == source {
@@ -465,6 +468,7 @@ func (a *preview) selectModelSource(source string) {
 		case "inherit":
 			s.Mode = SettingCopyCmdlineMode
 		case "easycode":
+			a.refreshAccountSharing("easycode")
 			s.Mode = SettingCopyEasyCodeMode
 			if l.Config.Model.Mode != "easycode" {
 				s.Model = ""

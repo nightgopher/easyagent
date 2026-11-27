@@ -22,7 +22,7 @@ func runAccountSelection(ctx context.Context, dir string, args ...string) ([]byt
 	if err != nil {
 		return nil, err
 	}
-	cmd := exec.CommandContext(ctx, binary, append([]string{"accounts"}, args...)...)
+	cmd := exec.CommandContext(ctx, binary, append([]string{"accounts"}, args...)...) // #nosec G204 -- bundled core and fixed account-management arguments
 	env := desktopAccountEnv(dir)
 	env["EA_HOME"] = filepath.Join(dir, "core-home")
 	cmd.Env = filterEnvironment(env)

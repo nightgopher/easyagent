@@ -84,6 +84,16 @@ func NewManager(home, base string) (*Manager, error) {
 
 func (m *Manager) BaseURL() string { return m.base }
 
+// NewSelectionManager accesses only CLI model preference files. It does not
+// resolve or inspect account credentials, which may need separate selection.
+func NewSelectionManager(home string) (*Manager, error) {
+	if strings.TrimSpace(home) == "" {
+		return nil, errors.New("无法定位 EasyAgent 用户目录")
+	}
+	dir := filepath.Join(home, "easycode")
+	return &Manager{dir: dir, selectionDir: dir}, nil
+}
+
 func (m *Manager) locked(ctx context.Context, fn func() error) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -160,6 +170,17 @@ func (m *Manager) writeLocked(data credentials) error {
 
 func (m *Manager) save(ctx context.Context, data credentials) error {
 	return m.locked(ctx, func() error { return m.writeLocked(data) })
+}
+
+func (m *Manager) saveNewLogin(ctx context.Context, data credentials) error {
+	return m.locked(ctx, func() error {
+		if _, err := os.Lstat(filepath.Join(m.dir, "credentials.json")); err == nil {
+			return errors.New("已有 EasyCode 账号登录，请先退出后再登录")
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		return m.writeLocked(data)
+	})
 }
 
 func (m *Manager) load(ctx context.Context) (credentials, error) {

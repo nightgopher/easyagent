@@ -32,6 +32,12 @@ func applySharedAccountDefault(ctx context.Context, cfg *config.Config, home, mo
 	if es.Conflict && es.Selected == "" {
 		return fmt.Errorf("检测到两个 EasyCode 账号；请运行 easyagent accounts use easycode shared 或 desktop 选择")
 	}
+	if (cs.Selected == "shared" && !cs.Shared && cs.Desktop) || (cs.Selected == "desktop" && !cs.Desktop && cs.Shared) {
+		return fmt.Errorf("所选 ChatGPT 账号已退出，请运行 easyagent accounts status codex 重新选择")
+	}
+	if (es.Selected == "shared" && !es.Shared && es.Desktop) || (es.Selected == "desktop" && !es.Desktop && es.Shared) {
+		return fmt.Errorf("所选 EasyCode 账号已退出，请运行 easyagent accounts status easycode 重新选择")
+	}
 	var codexLogged, easyLogged bool
 	if cs.Shared || cs.Desktop {
 		m, e := codex.NewManager(home, "")
@@ -58,7 +64,9 @@ func applySharedAccountDefault(ctx context.Context, cfg *config.Config, home, mo
 	}
 	if codexLogged {
 		cfg.Provider = "codex"
-		cfg.CodexModel = codexModels[0].ID
+		if cfg.CodexModel == "" {
+			cfg.CodexModel = codexModels[0].ID
+		}
 		return nil
 	}
 	if easyLogged {

@@ -41,6 +41,9 @@ func TestDesktopAndCLIUseSameCredentialAndPreserveConflicts(t *testing.T) {
 		if err != nil || !status.Conflict || status.Selected != "" {
 			t.Fatalf("preserve desktop: %+v %v", status, err)
 		}
+		if _, err := Resolve(desktop, p); err == nil {
+			t.Fatal("conflicting accounts must require a choice")
+		}
 		if err = Select(desktop, p, "shared"); err != nil {
 			t.Fatal(err)
 		}

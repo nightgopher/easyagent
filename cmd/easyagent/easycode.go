@@ -255,7 +255,7 @@ func applyEasyCodeCLISelection(ctx context.Context, cfg *config.Config, home, mo
 	} else if err != nil {
 		return err
 	}
-	manager, err := easycode.NewManager(home, "")
+	manager, err := easycode.NewSelectionManager(home)
 	if err != nil {
 		return err
 	}

@@ -284,7 +284,7 @@ func (m *Manager) exchangeAuthorizationCode(ctx context.Context, code, verifier,
 	if err != nil {
 		return credentials{}, err
 	}
-	if err := m.save(cred); err != nil {
+	if err := m.saveNewLogin(ctx, cred); err != nil {
 		return credentials{}, err
 	}
 	return cred, nil
@@ -362,6 +362,11 @@ func (m *Manager) locked(ctx context.Context, fn func() error) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	unlock, err := lockCredentials(ctx, filepath.Join(m.dir, ".lock"))
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -371,7 +376,7 @@ func (m *Manager) locked(ctx context.Context, fn func() error) error {
 func (m *Manager) readLocked() (credentials, error) {
 	var data credentials
 	path := filepath.Join(m.dir, "credentials.json")
-	file, err := os.Open(path) // #nosec G304 -- path is the credential file inside the manager's own 0700 directory.
+	file, err := openCredential(path)
 	if os.IsNotExist(err) {
 		return data, ErrLoginRequired
 	}
@@ -425,6 +430,17 @@ func (m *Manager) writeLocked(data credentials) error {
 
 func (m *Manager) save(cred credentials) error {
 	return m.locked(context.Background(), func() error { return m.writeLocked(cred) })
+}
+
+func (m *Manager) saveNewLogin(ctx context.Context, cred credentials) error {
+	return m.locked(ctx, func() error {
+		if _, err := os.Lstat(filepath.Join(m.dir, "credentials.json")); err == nil {
+			return errors.New("已有 ChatGPT 账号登录，请先退出后再登录")
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		return m.writeLocked(cred)
+	})
 }
 
 // Credential is the exported view of the stored login.
