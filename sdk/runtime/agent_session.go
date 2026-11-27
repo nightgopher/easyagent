@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
@@ -114,6 +115,27 @@ func logSkillDiagnosticsOnce(s *AgentSession, diags []skill.Diagnostic) {
 // If sessionID is empty, a new session is created.
 // If sessionID is provided, an existing session is loaded.
 func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Dependencies) (*AgentSession, error) {
+	if err := config.ValidateContextScope(opts.Config.ContextScope); err != nil {
+		return nil, err
+	}
+	if opts.Config.ContextScope == "project" {
+		if opts.Config.Workspace == "" || !filepath.IsAbs(opts.Config.Workspace) {
+			return nil, fmt.Errorf("project context_scope requires an absolute workspace")
+		}
+		if opts.Config.ExecutionMode != "" && opts.Config.ExecutionMode != "local" {
+			return nil, fmt.Errorf("project context_scope requires local execution")
+		}
+		workspace, err := filepath.EvalSymlinks(opts.Config.Workspace)
+		if err != nil {
+			return nil, fmt.Errorf("resolve project workspace: %w", err)
+		}
+		info, err := os.Stat(workspace)
+		if err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("project workspace must be an existing directory")
+		}
+		opts.Config.Workspace = workspace
+		opts.Config.AllowOutsideWorkspace = false
+	}
 	s := &AgentSession{
 		cfg:         opts.Config,
 		sessionMgr:  deps.SessionMgr,
@@ -220,8 +242,9 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 	if deps.ToolRevision != nil {
 		version = deps.ToolRevision(s.Workspace())
 	}
-	ag, err := s.buildAgent(ctx, deps.Registry, opts.SkillDirs)
+	ag, err := s.buildAgent(ctx, deps.Registry, s.skillDirs)
 	if err != nil {
+		_ = s.Close()
 		return nil, fmt.Errorf("build agent: %w", err)
 	}
 	if !preserveSavedModel {
@@ -705,7 +728,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 	cwd := s.workspaceLocked()
 
 	// Load context files
-	contextFiles := prompt.LoadProjectContextFiles(cwd, config.HomeDir())
+	contextFiles := prompt.LoadProjectContextFiles(cwd, config.HomeDir(), cfg.ContextScope)
 
 	// Load skills. Apply host preferences after precedence resolution: disabling a winner
 	// must not silently activate an older duplicate from another shared directory.
@@ -714,28 +737,24 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		return nil, fmt.Errorf("read skill preferences: %w", err)
 	}
 	var skills []skill.Skill
-	if len(skillDirs) == 0 {
-		skillDirs = DefaultSkillDirs(cwd)
-	}
-	if cfg.SkillMarketEnabled && cfg.SkillMarketSkillDir != "" {
-		skillDirs = append(append([]string(nil), skillDirs...), cfg.SkillMarketSkillDir)
-	}
-	if len(skillDirs) > 0 {
-		result := skill.LoadFromDirs(skillDirs...)
-		for _, loaded := range result.Skills {
-			if !disabledSkills[filepath.Clean(loaded.FilePath)] {
-				skills = append(skills, loaded)
-			}
+	skillDirs = sessionSkillDirs(cfg, skillDirs, cwd)
+	result := skill.LoadFromDirs(skillDirs...)
+	for _, loaded := range result.Skills {
+		if !disabledSkills[filepath.Clean(loaded.FilePath)] && !skillDenied(cfg.Skills, loaded.Name) {
+			skills = append(skills, loaded)
 		}
-		if len(result.Diagnostics) > 0 {
-			logSkillDiagnosticsOnce(s, result.Diagnostics)
-		}
+	}
+	if len(result.Diagnostics) > 0 {
+		logSkillDiagnosticsOnce(s, result.Diagnostics)
 	}
 
 	if filter, ok := s.application.(interface {
 		FilterSkills([]skill.Skill) []skill.Skill
 	}); ok {
 		skills = filter.FilterSkills(skills)
+	}
+	if err := validateRequiredSkills(cfg.Skills, skills, result.Diagnostics); err != nil {
+		return nil, err
 	}
 	s.skillsMu.Lock()
 	s.loadedSkills = append([]skill.Skill(nil), skills...)
@@ -767,7 +786,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		Name:          modelID,
 		Provider:      providerName,
 		ContextWindow: models.ContextWindow(modelID),
-		MaxTokens:     models.MaxOutput(modelID),
+		MaxTokens:     modelMaxOutput(cfg, modelID),
 	}
 	if providerName == "deepv" {
 		// The EasyCode service limits input plus output per request. Other
@@ -879,7 +898,7 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 	startCommand, endCommand, compactCommand := hooks.CommandObservers(s.cfg.HooksDir, s.workspaceLocked())
 	return agent.NewTaskTool(agent.TaskToolOptions{
 		ResolveModel: func(id, provider string) (ai.Model, error) {
-			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: models.MaxOutput(id)}), nil
+			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: modelMaxOutput(s.cfg, id)}), nil
 		},
 		Model:          model,
 		Registry:       registry,
@@ -888,6 +907,15 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 		ConfirmFunc:    s.wrapConfirm(s.confirmFunc),
 		LifecycleHooks: agent.LifecycleHooks{Before: []agent.BeforeToolCallHook{beforeCommand}, After: []agent.AfterToolCallHook{afterCommand}, SessionStart: []agent.SessionStartHook{startCommand}, SessionEnd: []agent.SessionEndHook{endCommand}, PreCompress: []agent.PreCompressHook{compactCommand}},
 	})
+}
+
+// modelMaxOutput is the per-request output limit: the deployment's
+// max_output_tokens when set, otherwise the model catalog value.
+func modelMaxOutput(cfg config.Config, modelID string) int {
+	if cfg.MaxOutputTokens > 0 {
+		return cfg.MaxOutputTokens
+	}
+	return models.MaxOutput(modelID)
 }
 
 func (s *AgentSession) resolveModel(model ai.Model) ai.Model {

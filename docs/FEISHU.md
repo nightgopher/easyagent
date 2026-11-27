@@ -45,7 +45,11 @@ EA_SERVER_API_KEY=your-agent-server-key
 # 可选：显式配置已授权账号，否则使用首次配对。
 # FEISHU_OWNER_OPEN_ID=ou_your-open-id
 # FEISHU_OWNER_STATE_FILE=/absolute/path/feishu-owner.json
+# 可选：用户发来的图片和文件保存到各会话工作区下的这个目录。
+# FEISHU_INBOX_DIR=.scratch/inbox
 ```
+
+未设置 `FEISHU_INBOX_DIR` 时保留旧行为：图片保存在系统临时目录，文件类消息被忽略；临时目录在工作区之外，默认文件工具读不到。设置后，图片和文件落到 `<会话工作区>/<FEISHU_INBOX_DIR>`，消息里带上保存路径。目录必须位于有效绝对工作区内，拒绝绝对路径、`..`、控制字符和符号链接；配置不安全或没有工作区时不退回临时目录。每个文件使用唯一私有文件名，清理展示文件名中的危险字符，不覆盖已有文件；单资源上限 50 MiB、下载超时两分钟，失败清除部分文件，不将图片占位当成有效素材。仍需部署侧的总空间配额和清理策略，这些预检查不等同于 OS 沙箱。
 
 将这些值放入专用文件后，用 `EA_ENV_FILE=/absolute/path/feishu.env ./bin/easyagent-bridge` 启动。也可通过交互入口 `/feishu setup` 配置凭据。飞书应用侧需启用机器人能力、相应消息权限及长连接事件订阅，并发布可用版本；配置信息以实际应用控制台为准。
 

@@ -124,12 +124,8 @@ func (t *WriteTool) doExecute(ctx context.Context, raw json.RawMessage, onUpdate
 
 	cleanPath := ResolvePath(t.workspace, params.Path)
 
-	// Check path safety if workspace is set
-	if !t.pathPolicy.Allows(t.workspace, cleanPath) {
-		return agent.ToolResult{
-			IsError: true,
-			Content: fmt.Sprintf("path %s is outside workspace %s", params.Path, t.workspace),
-		}, fmt.Errorf("path escapes workspace")
+	if err := t.pathPolicy.CheckWrite(t.workspace, cleanPath); err != nil {
+		return agent.ToolResult{IsError: true, Content: describeWriteDenied(params.Path, t.workspace, err)}, err
 	}
 
 	// Check stale read if file exists and readTracker is set

@@ -94,6 +94,13 @@ func main() {
 		return
 	}
 
+	// Read --config before registering flags that take their defaults from it.
+	selectedConfig, err := configPathArgument(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	*configFile = selectedConfig
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {
 		candidates := []string{"easyagent.yaml", filepath.Join(config.HomeDir(), "config.yaml")}
@@ -106,6 +113,11 @@ func main() {
 	}
 	if *configFile != "" {
 		if err := cfg.LoadFromYAML(*configFile); err != nil {
+			if selectedConfig != "" || config.StrictConfigFile(*configFile) {
+				// A guard profile must not start with its restrictions dropped.
+				slog.Error("refusing to start: strict config could not be loaded", "path", *configFile, "error", err)
+				os.Exit(1)
+			}
 			slog.Warn("failed to load config file", "path", *configFile, "error", err)
 		} else {
 			slog.Info("loaded config file", "path", *configFile)
@@ -199,7 +211,7 @@ func main() {
 	// Create the coding application. Knowledge browsing remains available separately.
 	application, err := app.New(app.AppOptions{
 		Config:      cfg,
-		SkillDirs:   skillDirs(*skillDir),
+		SkillDirs:   skillDirs(*skillDir, cfg.Skills),
 		Application: coding.NewCodingApplication(cfg),
 		Profile:     userProfile,
 		Command:     commandStore,
@@ -338,12 +350,17 @@ func buildSlashRegistry(loopMgr *scheduler.LoopManager) *slashcmd.Registry {
 	return registry
 }
 
-// skillDirs returns the skill directory list from a flag value.
-func skillDirs(flag string) []string {
+// skillDirs returns the skill directory list from a flag value followed by
+// the roots configured under skills.dirs.
+func skillDirs(flag string, configured *config.SkillsConfig) []string {
+	var dirs []string
 	if flag != "" {
-		return []string{flag}
+		dirs = append(dirs, flag)
 	}
-	return nil
+	if configured != nil {
+		dirs = append(dirs, configured.Dirs...)
+	}
+	return dirs
 }
 
 // must panics on error.

@@ -41,14 +41,6 @@
       "linter": "gosec",
       "file": "internal/agents/coding/prompt/builder.go",
       "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "82d702b8802cd412ad8cfc583bc42020f2699d244fdb28841231ba6588e85863",
-      "line_at_baseline": 299,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/agents/coding/prompt/builder.go",
-      "message": "G304: Potential file inclusion via variable",
       "source_sha256": "85d8c74791d9419085b8f6ed5f8c3300746cd0c951f5f101fcf25d3a4185916a",
       "line_at_baseline": 270,
       "count": 1
@@ -115,14 +107,6 @@
       "message": "G118: Goroutine uses context.Background/TODO while request-scoped context is available",
       "source_sha256": "78be062535013f399f056dd6dad8b2b357c11dd8660f18ab9ec314318f485fac",
       "line_at_baseline": 262,
-      "count": 1
-    },
-    {
-      "linter": "gosec",
-      "file": "internal/feishu/gateway.go",
-      "message": "G304: Potential file inclusion via variable",
-      "source_sha256": "1ab43d483e4069d8f667a2edc9db2214468eeda443d7c9ffd4a8d806ef2b762b",
-      "line_at_baseline": 575,
       "count": 1
     },
     {

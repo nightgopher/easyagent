@@ -252,14 +252,19 @@ func processTurn(ctx context.Context, a *Agent, provider interface {
 		// 断流中的工具声明尚未被接受，也未执行，不能作为正式 tool-call
 		// 进入下次请求；保留已收到的文本、思考与用量供展示和核算。
 		message.ToolCalls = nil
-		if a.session != nil && (message.Text != "" || message.Thinking != "" || message.Usage != (ai.Usage{})) {
-			saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			if err := a.session.AppendMessage(saveCtx, message); err != nil {
-				streamErr = errors.Join(streamErr, fmt.Errorf("persist partial assistant: %w", err))
-			}
+		if err := a.persistPartialAssistant(ctx, message); err != nil {
+			streamErr = errors.Join(streamErr, err)
 		}
 		return turnResult{assistant: message}, history, streamErr
+	}
+
+	if err := reasoningExhaustedError(message, a.model); err != nil {
+		message.StopReason = ai.StopReasonError
+		message.ErrorMsg = err.Error()
+		if persistErr := a.persistPartialAssistant(ctx, message); persistErr != nil {
+			err = errors.Join(err, persistErr)
+		}
+		return turnResult{assistant: message}, history, err
 	}
 
 	message = autoContinueMessage(ctx, a, provider, consume, history, message)
@@ -835,6 +840,35 @@ func executeOneTool(ctx context.Context, a *Agent, call ai.ToolCall) (result ai.
 func marshalArgs(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
+}
+
+// persistPartialAssistant saves an assistant message that ended without a
+// usable answer, keeping its text, reasoning and usage for display.
+func (a *Agent) persistPartialAssistant(ctx context.Context, message ai.AssistantMessage) error {
+	if a.session == nil || (message.Text == "" && message.Thinking == "" && message.Usage == (ai.Usage{})) {
+		return nil
+	}
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := a.session.AppendMessage(saveCtx, message); err != nil {
+		return fmt.Errorf("persist partial assistant: %w", err)
+	}
+	return nil
+}
+
+// reasoningExhaustedError reports an output limit that was spent before any
+// answer was produced. A continuation request carries neither the reasoning
+// nor the missing answer, so the model would think it through again and hit
+// the same limit; the turn should fail with the cause instead.
+func reasoningExhaustedError(message ai.AssistantMessage, model ai.Model) error {
+	if message.StopReason != ai.StopReasonLength || len(message.ToolCalls) > 0 || strings.TrimSpace(message.Text) != "" {
+		return nil
+	}
+	limit := model.MaxTokens
+	if limit <= 0 {
+		limit = 4096 // provider fallback
+	}
+	return fmt.Errorf("模型输出达到上限（%d token）且全部用于思考，没有产生回答；请调大 max_output_tokens，或改用输出上限更大的模型", limit)
 }
 
 func checkTruncation(msg ai.AssistantMessage, modelID string, reqMaxTokens int) (isLength bool, isSuspected bool) {

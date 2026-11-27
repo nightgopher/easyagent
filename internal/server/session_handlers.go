@@ -77,6 +77,25 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "expected one session request")
 		return
 	}
+	cfg := s.app.Config()
+	if cfg.ContextScope == "project" {
+		if req.AgentID != "" || req.TeamID != "" || req.ParentSessionID != "" || (req.Application != "" && req.Application != "coding") {
+			writeError(w, http.StatusForbidden, "project-scoped sessions cannot select another identity or application")
+			return
+		}
+		root, err := s.projectWorkspace(cfg.Workspace)
+		if err != nil {
+			writeError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if req.Cwd != "" {
+			if _, err := s.projectWorkspace(req.Cwd); err != nil {
+				writeError(w, http.StatusForbidden, "project-scoped sessions must use the configured workspace")
+				return
+			}
+		}
+		cfg.Workspace = root
+	}
 	// The steward owns exactly one managed session; clients must resolve it
 	// through POST /agents/steward/session instead of spawning copies.
 	if req.AgentID == agentdata.StewardID {
@@ -91,7 +110,6 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cfg := s.app.Config()
 	if req.Channel != "" && req.Channel != "feishu" {
 		writeError(w, http.StatusBadRequest, "unknown session channel")
 		return
@@ -99,7 +117,7 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	cfg.DefaultAccessMode = channelAccessMode(cfg, req.Channel)
 
 	// Apply cwd override if provided
-	if req.Cwd != "" {
+	if req.Cwd != "" && cfg.ContextScope != "project" {
 		cfg.Workspace = req.Cwd
 	}
 

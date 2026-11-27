@@ -256,7 +256,7 @@ func getCurrentGitBranch(cwd string) string {
 	if cwd == "" {
 		return ""
 	}
-	data, err := os.ReadFile(filepath.Join(cwd, ".git", "HEAD"))
+	data, err := os.ReadFile(filepath.Join(gitDir(cwd), "HEAD"))
 	if err != nil {
 		return ""
 	}
@@ -265,4 +265,24 @@ func getCurrentGitBranch(cwd string) string {
 		return strings.TrimPrefix(content, "ref: refs/heads/")
 	}
 	return ""
+}
+
+// gitDir resolves the directory that holds a repository's HEAD: `.git`
+// itself, or the location a linked worktree's `.git` file points at.
+func gitDir(cwd string) string {
+	dotGit := filepath.Join(cwd, ".git")
+	data, err := os.ReadFile(dotGit) // #nosec G304 -- .git is read from the session's own workspace.
+	if err != nil {
+		// A plain checkout keeps its metadata in the .git directory.
+		return dotGit
+	}
+	target, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+	if !ok {
+		return dotGit
+	}
+	target = strings.TrimSpace(target)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(cwd, target)
+	}
+	return target
 }

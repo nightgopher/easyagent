@@ -45,6 +45,43 @@ func TestLoadProjectContextFiles_AncestorTraversal(t *testing.T) {
 	require.Contains(t, files[1].Content, "Mid")
 }
 
+func TestProjectScopeExcludesAncestorsAndGlobalInstructions(t *testing.T) {
+	root := t.TempDir()
+	cwd, agentDir := filepath.Join(root, "project"), filepath.Join(root, "home")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+	require.NoError(t, os.MkdirAll(agentDir, 0o700))
+	for path, body := range map[string]string{
+		filepath.Join(root, "AGENTS.md"):     "ancestor",
+		filepath.Join(cwd, "AGENTS.md"):      "project",
+		filepath.Join(agentDir, "AGENTS.md"): "global",
+	} {
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+	}
+	for _, scope := range []string{"", "all"} {
+		files := LoadProjectContextFiles(cwd, agentDir, scope)
+		contents := make([]string, 0, len(files))
+		for _, file := range files {
+			contents = append(contents, file.Content)
+		}
+		require.Contains(t, contents, "ancestor")
+		require.Contains(t, contents, "global")
+		require.Contains(t, contents, "project")
+	}
+	files := LoadProjectContextFiles(cwd, agentDir, "project")
+	require.Equal(t, []ContextFile{{Path: filepath.Join(cwd, "AGENTS.md"), Content: "project"}}, files)
+}
+
+func TestProjectScopeRejectsInstructionSymlinkOutsideWorkspace(t *testing.T) {
+	root := t.TempDir()
+	cwd := filepath.Join(root, "project")
+	require.NoError(t, os.MkdirAll(cwd, 0o700))
+	external := filepath.Join(root, "external.md")
+	require.NoError(t, os.WriteFile(external, []byte("outside instructions"), 0o600))
+	require.NoError(t, os.Symlink(external, filepath.Join(cwd, "AGENTS.md")))
+	require.Empty(t, LoadProjectContextFiles(cwd, "", "project"))
+	require.NotEmpty(t, LoadProjectContextFiles(cwd, ""), "legacy symlink behavior remains unchanged")
+}
+
 func TestLoadProjectContextFiles_WithAgentDir(t *testing.T) {
 	agentDir := t.TempDir()
 	cwd := t.TempDir()
