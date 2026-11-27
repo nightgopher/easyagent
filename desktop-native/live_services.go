@@ -430,7 +430,10 @@ func (a *preview) liveFeishuSettings(c *ui.Context) {
 	}
 	if a.Settings.host().Local {
 		a.heading(c, "收件箱看门狗（本机）")
-		a.note(c, "用 lark-cli 用户身份低频巡查主人单聊，发现新消息自动唤醒当前主机的会话处理并转达；没事不叫醒 Agent。前提：lark-cli 已 auth login 且用户身份授权 im:chat:read、im:message:readonly。")
+		a.note(c, "用 lark-cli 用户身份低频巡查主人单聊及指定群，发现新消息自动唤醒当前主机的会话处理并转达；没事不叫醒 Agent。前提：lark-cli 已 auth login 且用户身份授权 im:chat:read、im:message:readonly。")
+		a.input(c, "指定巡查的群会话 ID", &a.Settings.Preferences.LarkWatchGroups, "例如 oc_xxx，多个用英文逗号分隔", false)
+		a.note(c, "仅巡查填写的群；首次启用或重启时以现有消息为基线。群消息会要求管家只汇报，不向群内回复。")
+		a.action(c, "保存巡查群").Disabled(l.Loading["larkwatch"]).OnClick(func() { a.toggleLarkWatch(a.Settings.Preferences.LarkWatch) })
 		on := a.Settings.Preferences.LarkWatch
 		_, running, detail := l.Core.LarkWatchStatus()
 		status := "已关闭"
@@ -741,8 +744,9 @@ func (a *preview) toggleLarkWatch(on bool) {
 	a.Settings.Preferences.LarkWatch = on
 	a.Settings.savePreferences()
 	epoch := l.epoch
+	groups := a.Settings.Preferences.LarkWatchGroups
 	go func() {
-		l.Core.ApplyLarkWatch(on)
+		l.Core.ApplyLarkWatch(on, groups)
 		a.post(epoch, func() {
 			l.Loading["larkwatch"] = false
 		})

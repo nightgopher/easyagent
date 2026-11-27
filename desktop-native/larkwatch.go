@@ -69,9 +69,10 @@ func resolveNodeDir(home string) string {
 
 // ApplyLarkWatch 应用看门狗开关：保存偏好并在核心在线时立即生效。
 // 拉起失败不回滚开关，错误经状态接口在设置页展示。
-func (m *localBackend) ApplyLarkWatch(on bool) {
+func (m *localBackend) ApplyLarkWatch(on bool, groups string) {
 	m.mu.Lock()
 	m.watchOn = on
+	m.watchGroups = groups
 	err := error(nil)
 	if m.client != nil {
 		if on {
@@ -111,11 +112,12 @@ func (m *localBackend) startLarkWatchLocked() error {
 	}
 	pathDirs = append(pathDirs, os.Getenv("PATH"))
 	env := map[string]string{
-		"EA_LARKWATCH_CORE_URL": m.client.URL,
-		"EA_SERVER_API_KEY":     m.client.Token,
-		"EA_HOME":               filepath.Join(m.dir, "core-home"),
-		"EA_LARKWATCH_LARK_CLI": larkCLI,
-		"PATH":                  strings.Join(pathDirs, ":"),
+		"EA_LARKWATCH_CORE_URL":    m.client.URL,
+		"EA_SERVER_API_KEY":        m.client.Token,
+		"EA_HOME":                  filepath.Join(m.dir, "core-home"),
+		"EA_LARKWATCH_LARK_CLI":    larkCLI,
+		"EA_LARKWATCH_GROUP_CHATS": m.watchGroups,
+		"PATH":                     strings.Join(pathDirs, ":"),
 	}
 	stderr := newRingBuffer(8192)
 	cmd := exec.Command(binary, "watch", "serve") //nolint:gosec // 与核心 helper 同源：Bin 为本机装配的核心，参数固定

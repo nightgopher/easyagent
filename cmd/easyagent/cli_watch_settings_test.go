@@ -87,3 +87,23 @@ func TestWatchFilePrecedence(t *testing.T) {
 	require.Equal(t, "http://localhost:2222", cfg.CoreURL)
 	require.Equal(t, "saved-session", cfg.SessionID)
 }
+
+func TestWatchGroupIDsFromFlagAndEnvironment(t *testing.T) {
+	env := map[string]string{"EA_LARKWATCH_CORE_URL": "http://localhost:8080", "EA_LARKWATCH_SESSION_ID": "sess_test", "EA_LARKWATCH_GROUP_CHATS": "oc_env"}
+	opts, err := parseWatchArgs([]string{"serve", "--group-chats", "oc_one, oc_two,oc_one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := buildWatchConfig(opts, func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.GroupChats) != 2 || !cfg.GroupChats["oc_one"] || !cfg.GroupChats["oc_two"] || cfg.GroupChats["oc_env"] {
+		t.Fatalf("groups: %v", cfg.GroupChats)
+	}
+	opts.groupIDs = ""
+	cfg, err = buildWatchConfig(opts, func(k string) string { return env[k] })
+	if err != nil || !cfg.GroupChats["oc_env"] {
+		t.Fatalf("environment groups: %v, %v", cfg.GroupChats, err)
+	}
+}

@@ -135,3 +135,17 @@ func TestResolveNodeDirMissing(t *testing.T) {
 		t.Fatalf("want empty, got %q", got)
 	}
 }
+
+func TestLarkWatchPreferencesRestoreOnStartup(t *testing.T) {
+	dir := t.TempDir()
+	a := newConnectedPreview(dir)
+	a.Settings.Preferences.LarkWatch = true
+	a.Settings.Preferences.LarkWatchGroups = "oc_one,oc_two"
+	if !a.Settings.savePreferences() {
+		t.Fatal(a.Settings.Error)
+	}
+	restored := newConnectedPreview(dir)
+	if !restored.Live.Core.watchOn || restored.Live.Core.watchGroups != "oc_one,oc_two" {
+		t.Fatalf("preferences not restored: enabled=%v groups=%q", restored.Live.Core.watchOn, restored.Live.Core.watchGroups)
+	}
+}
