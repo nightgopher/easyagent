@@ -197,7 +197,7 @@ func (t *Tool) submit(ctx context.Context, p Params) (*receipt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = t.checkAllowed(changes); err != nil {
+	if err = t.checkAllowed(changes, scopeWorktree); err != nil {
 		return nil, err
 	}
 	if _, err = t.auditHistory(ctx, base); err != nil {
@@ -225,7 +225,7 @@ func (t *Tool) submit(ctx context.Context, p Params) (*receipt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = t.checkAllowed(fileChanges(parseNameStatus(staged))); err != nil {
+	if err = t.checkAllowed(fileChanges(parseNameStatus(staged)), scopeStaged); err != nil {
 		return nil, err
 	}
 	snapshot, err := t.sourceState(ctx)
@@ -426,7 +426,22 @@ func (t *Tool) auditHistory(ctx context.Context, base string) ([]fileChange, err
 		}
 		files = append(files, parseNameStatus(out)...)
 	}
-	return files, t.checkAllowed(fileChanges(files))
+	// A path changed by several commits is still one path to report.
+	return files, t.checkAllowed(uniquePaths(fileChanges(files)), scopeHistory)
+}
+
+// uniquePaths drops later changes to a path, keeping the first occurrence.
+func uniquePaths(changes []change) []change {
+	seen := make(map[string]bool, len(changes))
+	out := changes[:0]
+	for _, c := range changes {
+		if seen[c.path] {
+			continue
+		}
+		seen[c.path] = true
+		out = append(out, c)
+	}
+	return out
 }
 
 func fileChanges(files []fileChange) []change {
@@ -590,8 +605,19 @@ func parseStatus(out string) []change {
 	return changes
 }
 
+// changeScope says where audited changes come from. The caller can undo its
+// own edits, but must never rewrite commits it did not create, so each scope
+// names a different remedy.
+type changeScope int
+
+const (
+	scopeWorktree changeScope = iota
+	scopeStaged
+	scopeHistory
+)
+
 // checkAllowed refuses the submit when a change lies outside the included paths.
-func (t *Tool) checkAllowed(changes []change) error {
+func (t *Tool) checkAllowed(changes []change, scope changeScope) error {
 	if len(t.allow.Allow) == 0 {
 		return errors.New("submit_task requires an explicit nonempty include allowlist")
 	}
@@ -610,8 +636,19 @@ func (t *Tool) checkAllowed(changes []change) error {
 	if len(outside) == 0 {
 		return nil
 	}
-	return fmt.Errorf("有 %d 处改动不在允许提交的路径内（%s），已拦截，没有创建分支也没有推送。请先把这些改动恢复原状，再重新调用 submit_task：%s",
-		len(outside), strings.Join(t.allow.Allow, ", "), listPaths(outside))
+	allowed := strings.Join(t.allow.Allow, ", ")
+	const blocked = "，已拦截，没有创建分支也没有推送。"
+	switch scope {
+	case scopeHistory:
+		return fmt.Errorf("当前分支相对基线 %s 有 %d 处已提交的改动不在允许提交的路径内（%s）%s这些提交不是本次任务创建的，不能随任务一起发布，也不要改动或回退它们：请负责人从 %s 新建任务分支后重试，或确认基线配置：%s",
+			t.baseBranch(), len(outside), allowed, blocked, t.baseBranch(), listPaths(outside))
+	case scopeStaged:
+		return fmt.Errorf("暂存区有 %d 处改动不在允许提交的路径内（%s）%s它们不属于本次提交，请取消暂存或恢复原状后再调用 submit_task：%s",
+			len(outside), allowed, blocked, listPaths(outside))
+	default:
+		return fmt.Errorf("工作区有 %d 处未提交的改动不在允许提交的路径内（%s）%s它们不属于本次提交，请恢复原状，或由负责人另行处理后再调用 submit_task：%s",
+			len(outside), allowed, blocked, listPaths(outside))
+	}
 }
 
 // runGate runs the configured checks in order and stops at the first failure.

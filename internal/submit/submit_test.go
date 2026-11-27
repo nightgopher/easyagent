@@ -185,6 +185,7 @@ func TestSubmitRefusesChangesOutsideTheIncludedPaths(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "已拦截")
 			assert.Contains(t, err.Error(), "src/content/**")
+			assert.Contains(t, err.Error(), "工作区有 1 处未提交的改动")
 			// Nothing was committed, branched or pushed, and the edit is still there to undo.
 			assert.Equal(t, "main", strings.TrimSpace(git(t, work, "rev-parse", "--abbrev-ref", "HEAD")))
 			assert.NotEmpty(t, git(t, work, "status", "--porcelain"))
@@ -478,10 +479,34 @@ func TestSubmitAuditsAllPendingHistory(t *testing.T) {
 			}
 			_, err := call(t, newTool(t, work, "true"), `{"summary":"retry"}`)
 			require.ErrorContains(t, err, "astro.config.mjs")
+			// The caller cannot undo commits it did not create: say where they
+			// come from and what the operator should do instead.
+			assert.Contains(t, err.Error(), "相对基线 main")
+			assert.Contains(t, err.Error(), "已提交的改动")
+			assert.Contains(t, err.Error(), "不要改动或回退它们")
+			assert.NotContains(t, err.Error(), "恢复原状")
 			assert.Equal(t, before, remoteHeads(t, remote))
 			assert.Equal(t, "bot/pending", strings.TrimSpace(git(t, work, "symbolic-ref", "--short", "HEAD")))
 		})
 	}
+}
+
+// A path changed by several pending commits is reported once, with a count to
+// match, so the list does not look larger than the history it describes.
+func TestSubmitAuditsPendingHistoryListsEachPathOnce(t *testing.T) {
+	work, _ := newCheckout(t)
+	git(t, work, "switch", "-qc", "bot/repeated")
+	for _, content := range []string{"first\n", "second\n"} {
+		write(t, work, "astro.config.mjs", content)
+		git(t, work, "add", "-A")
+		git(t, work, "commit", "-qm", "protected change")
+	}
+	write(t, work, "src/content/news/a.md", "allowed\n")
+
+	_, err := call(t, newTool(t, work, "true"), `{"summary":"retry"}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "有 1 处已提交的改动")
+	assert.Equal(t, 1, strings.Count(err.Error(), "astro.config.mjs"))
 }
 
 func TestRetryRunsGateAndRejectsGateMutation(t *testing.T) {
