@@ -1,9 +1,10 @@
 {
   "name": "EasyAgent",
   "identifier": "com.hwj.easyagent",
-  "version": "0.55.0",
+  "version": "0.56.0",
   "out": "build.noindex",
   "macos": {
+    "icon": "tools/macos-icon/icon.icns",
     "signingIdentity": "8AAD734656B383438D6DAC96D27580A561A1F85B",
     "minimumSystemVersion": "13.0",
     "entitlements": "resources/easyagent.entitlements",

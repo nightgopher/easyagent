@@ -32,7 +32,27 @@ func LoadContextFiles(dir string) []ContextFile {
 // 从 cwd 向上遍历目录树直到根目录，收集所有找到的上下文文件。
 // 同时也加载全局的 agentDir 中的上下文文件。
 // 返回的文件按从根到叶的顺序排列（最外层在前）。
-func LoadProjectContextFiles(cwd string, agentDir string) []ContextFile {
+// An optional "project" scope excludes ancestors and agentDir, and refuses
+// instruction-file symlinks that leave cwd. Empty/all preserves legacy loading.
+func LoadProjectContextFiles(cwd string, agentDir string, scope ...string) []ContextFile {
+	if len(scope) > 0 && scope[0] == "project" {
+		root, err := filepath.EvalSymlinks(cwd)
+		if err != nil {
+			return nil
+		}
+		var files []ContextFile
+		for _, file := range loadContextFilesFromDir(cwd) {
+			resolved, err := filepath.EvalSymlinks(file.Path)
+			if err != nil {
+				continue
+			}
+			rel, err := filepath.Rel(root, resolved)
+			if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				files = append(files, file)
+			}
+		}
+		return files
+	}
 	var files []ContextFile
 	seen := make(map[string]bool)
 

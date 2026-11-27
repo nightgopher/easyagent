@@ -25,6 +25,9 @@ func (a *preview) liveNotices(c *ui.Context) {
 				color = c.Theme().Danger
 			}
 			ui.Text(c, text).FontSize(12).TextColor(color).Grow(1).MinWidth(0).Role(ui.RoleStatus)
+			if l.Error == "" && l.Notice == a.tr(unconfiguredModelNotice) && !phoneClient {
+				a.action(c, "配置模型").OnClick(func() { a.openSettings("models") })
+			}
 			if l.CredentialRepair {
 				a.action(c, "重新填写访问令牌").OnClick(a.repairLiveCredential)
 			}

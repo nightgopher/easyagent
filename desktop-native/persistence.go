@@ -34,10 +34,11 @@ func (l *liveState) configBusy() bool {
 	return l.configMutating() || l.Loading["easycode-login"]
 }
 func (l *liveState) configMutating() bool {
-	return l.Loading["business-save"] || l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"] || l.Loading["easycode-apply"] || l.Loading["easycode-logout"]
+	return l.Loading["business-save"] || l.Loading["model-save"] || l.Loading["host-save"] || l.Loading["configuration"] || l.Loading["easycode-apply"] || l.Loading["easycode-logout"] || l.Loading["codex-apply"]
 }
 func cloneConfig(cfg clientConfig) clientConfig {
 	cfg.Hosts = append([]hostConfig{}, cfg.Hosts...)
+	cfg.HostHistory = append([]hostConfig(nil), cfg.HostHistory...)
 	if cfg.ModelProfiles != nil {
 		profiles := make(map[string]modelConfig, len(cfg.ModelProfiles))
 		for id, profile := range cfg.ModelProfiles {

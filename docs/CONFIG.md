@@ -36,7 +36,15 @@ EA_API_KEY=your-coding-plan-key
 
 国际版把地址域名换成 `https://api.z.ai/api/coding/paas/v4`。思考开关用 `EA_THINKING=enabled/disabled`（GLM 会随工具调用轮次自动回放 reasoning_content）；Coding Plan 端点不提供 `/models` 模型目录，模型 ID 需显式填写。桌面端「设置 → 模型连接」内置同名选项。
 
-Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv` / `codex`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+
+CLI 使用 ChatGPT 订阅时，先运行 `easyagent codex login` 登录，再用 `easyagent codex models` 查看模型。以所选模型替换下面的模型 ID 后启动：
+
+```sh
+EA_PROVIDER=codex EA_CODEX_MODEL=gpt-5.2-codex easyagent
+```
+
+进入对话后可在 `/config` 保存 CLI 默认模型。桌面和普通 CLI 使用各自的用户目录，登录凭据与模型设置不自动共享；桌面安装命令行只添加终端入口。
 
 EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 运行 `easyagent easycode login` 完成飞书授权后，会选择账号可用模型并作为后续 CLI 对话的默认模型；可用 `easyagent easycode models` 查看模型，`easyagent easycode use <模型 ID>` 切换，或首次登录时使用 `easyagent easycode login --model <模型 ID>` 指定。`easyagent easycode status` 查询状态，`easyagent easycode off` 停用 CLI 的 EasyCode 模式并恢复原配置（保留登录），`easyagent easycode logout` 退出账号。模型目录暂不可用时登录仍会保存，可稍后列出并选择模型。
 
@@ -92,6 +100,7 @@ Web 页面可加载不代表 API 已获授权。远程使用需要登录；WebSo
 | `EA_ENABLE_WEB_SEARCH` | `true` | 启用搜索工具，设为 `false` 可关闭 |
 | `EA_WEB_TIMEOUT_SECONDS` | `30` | 网页请求超时 |
 | `EA_MAX_OUTPUT_LEN` | `51200` | 工具输出长度上限（50KB，对齐 pi） |
+| `EA_MAX_OUTPUT_TOKENS` / `max_output_tokens` | 空 | 模型单次输出的 token 上限，留空时用内置模型表的值。模型名不在模型表里时（例如网关的链名 `coding`）默认只有 4096，思考型模型可能把它全花在推理上，导致没有产生任何回答；这种情况运行会直接报错并提示调大本项 |
 | `EA_SYNOPSIS_THRESHOLD` | `51200` | 输出概览化阈值：超过该长度的大输出对模型替换为结构概览（可用 `full_output` 工具按 ref 取回全文）。read/grep 等内容型工具豁免 |
 | `EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` | 空 | 逗号分隔的工具过滤名单 |
 | `EA_PROMPT_TEMPLATE` | 空 | 自定义系统提示模板 |
@@ -119,6 +128,76 @@ channel_access_modes:
 ```
 
 `full` 自动批准普通工具确认，不解除 MCP 的独立信任要求、必须回答的问题、工具启用开关或工作区路径限制。飞书选择 `ask` 后，通过已配对使用者的机器人私聊卡片允许一次或拒绝；普通工具审批两分钟未处理会拒绝，绝不会因超时自动放行。
+
+## 受控运营部署（Guard profile）
+
+把一次部署限定为某个仓库的运营角色（例如只维护一个网站的飞书机器人）时，用下面这组可选配置收紧工具，不需要改代码。每一段都缺省为空，不配置的部署行为不变；配置后与访问模式、`-y`、`EA_AUTO_APPROVE` 无关，放开审批也不会放开这些限制。建议配合独立的 `EA_HOME` 与 `EA_WORKSPACE`。
+
+```yaml
+strict_config: true
+context_scope: project
+prompt_file: SYSTEM_PROMPT.md
+enable_bash: false
+allowed_tools: [read, write, edit, grep, find, ls, local_time, todo_write, send_message, send_file, submit_task]
+skills:
+  dirs: [/srv/website/.agents/skills]
+  deny: [generic-design-method]
+  always_inline: [brand-rules]
+file_policy:
+  write_allow: ["content/**", "data/**", "assets/**", ".scratch/**"]
+submit:
+  gate: ["npm run lint", "npm run build"]
+  include: ["content/**", "data/**", "assets/**"]
+  branch_prefixes: ["bot/", "demo/"]
+  base_branch: main
+  preview_url: http://test.example.com/
+  next_steps: "如需微调请直接回复；验收通过后由负责人合并并发布。"
+```
+
+| 配置 | 作用 |
+|---|---|
+| `strict_config: true` | 配置文件出现未知键、非法值，或引用的文件读不到时拒绝启动。默认加载失败只告警并忽略整个文件，对护栏部署等于无保护运行 |
+| `prompt_file` | 系统提示词文件；相对路径按配置文件所在目录解析。内容替换默认的基础提示，等同于多行的 `EA_PROMPT_TEMPLATE`（环境变量仍优先）；工具说明、项目上下文和技能清单照常追加 |
+| `context_scope: project` | 仅加载固定工作区根目录的指令，不加载用户目录或祖先目录。要求存在且绝对的本地目录，Web/API 不能换目录、换专家或打开终端；默认空/all 保持通用模式 |
+| `skills.dirs` | 会话运行时统一应用的显式技能根目录，优先于入口传入目录；显式根不再混入个人、默认项目或市场目录。新建、恢复、刷新均一致 |
+| `skills.deny` | 不向模型暴露的技能名 |
+| `skills.always_inline` | 正文常驻系统提示的技能名。只在清单里列出技能并不能保证模型去读；常驻后其中的规则每一轮都在上下文里。缺失、被禁用/拒绝/过滤或格式错误时拒绝创建或重建会话 |
+| `file_policy.write_allow` / `write_deny` | `write`、`edit`、`patch`、`delete_file` 只能改动匹配的工作区相对路径：`**` 跨目录，`*`、`?` 限单段；deny 优先。配置时必须有有效绝对工作区；同时检查逻辑与物理位置，拒绝工作区内的符号链接路径与多硬链接文件。`deny` 为空时不在 `write_allow` 内的一律不可写；检查不是抵御并发路径替换的 OS 沙箱 |
+| `bash_policy` | 出现即启用 bash 命令策略，见下文 |
+| `submit` | 配置 `gate` 后注册 `submit_task` 工具，见下文 |
+
+**面向业务的专家建议不开放原始 bash**，如上例只保留明确列出的工具，质检交由 `submit_task`。`context_scope` 不是进程沙箱，允许执行的 TS 配置仍是构建期代码；构建要在无凭据、无生产网络、源码只读且输出目录单独可写的隔离进程中运行。下面的可选命令策略仅适合可信操作者，不作为读取隔离保证。
+
+**bash 命令策略**只放行清单里的程序（内置默认清单，加 `allow`，减 `deny`），并且判断的是解析后的整条命令：管道、`&&`、命令替换、条件与函数体里的命令逐个检查，命令名必须是固定的程序名且不带路径，用变量或替换充当命令名、充当要写入的路径，以及无法解析的命令，一律拒绝。另有几条固定规则：
+
+- 写入只允许落在 `file_policy.write_allow` 内，包括重定向，以及 `rm`、`mv`、`cp`、`ln`、`touch`、`mkdir`、`tee`、`sort -o` 和 `curl -o` 的目标；`/dev/null` 等设备除外。
+- `git` 只读：只允许 `status`、`diff`、`log` 等查询子命令，提交、打标签、推送以及 `-c`、`--paginate` 等会执行外部程序的选项都被拒绝。
+- `npm` 只运行 `package.json` 里已有的脚本（`run`、`ci` 等），脚本名之后的参数必须是单个普通单词——npm 会把它们拼进 shell 命令行；`npx` 只运行 `npx` 列出的包。
+- `bash`、`sh` 只能执行工作区内、且不在 `write_allow` 里的脚本文件，不允许 `-c`、`-s` 和标准输入脚本。
+- `curl` 只读，不允许上传、指定请求方法和按远程文件名落盘；`find`、`rg`、`sort` 中会执行外部命令的选项被拒绝。
+- 不允许设置会改变程序解析或加载的变量，例如 `PATH`、`NODE_OPTIONS`、`LD_PRELOAD`、`GIT_DIR`、`npm_config_*`。
+- `deny_args` 列出的片段只要出现在任一参数里就拒绝，例如代码托管平台的 API 地址。
+
+默认清单不含 `sed`、`awk`、`node`、`python` 等能执行代码或原地改文件的程序，确有需要再用 `allow` 显式加入。它不是沙箱：放行的程序仍以运行用户身份执行，读取不受限制；隔离仍依靠运行账号、systemd 加固和代码托管平台的保护设置，见[安全模型](SECURITY_MODEL.md)。
+
+**`submit_task`** 是配置后会话通往远端的唯一出口。它依次做这些事，任何一步不通过都不会创建分支或推送：
+
+1. 必须配置非空检查命令和提交白名单（应用层可从 `file_policy.write_allow` 继承）。审计工作区、暂存区以及所有待推送提交的路径，包含删除、重命名来源及后来被还原的受保护改动。
+2. 按 `gate` 的顺序执行检查，绑定暂存候选树、HEAD、分支和工作区状态。门禁改变源码、并行改动或检查失败都阻止提交；修复后必须重跑，包括重试推送。
+3. 当前在主分支上时新建任务分支 `<branch_prefixes 首项><摘要>-<时间戳>`（缺省 `bot/`）；已在任务分支上时追加到该分支。
+4. 完整审计后以 literal pathspec 暂存候选，提交并确认源码树一致，再将已验证 SHA 推到允许的 `refs/heads/<任务分支>`。不强推，不推主分支/HEAD/标签；拒绝任意来源分支和落后或无法验证的远端基线。推送失败保留本地提交，再次调用会重新审计和质检。
+5. 配置了 `mr` 时创建合并请求，已存在则复用；失败只记为回执里的警告。
+
+成功后返回结构化回执：改动的文件、每一步检查的结果与耗时、`preview_url` 加 `preview_paths` 的预览链接和 `next_steps` 指引。调用时传 `new_task: true`，须工作区干净且没有未推送/未整合工作才切回 `base_branch`；无法安全更新则拦截，不静默使用旧基线。其余选项：`push: false` 只提交不推送；`gate_timeout_seconds` 是单条检查命令的超时，默认 900 秒；`mr` 需要 `api_url`、`project`、`token_env`，令牌从运行进程的环境变量读取。
+
+```dotenv
+# 受控部署常用的配套环境变量
+EA_BLOCKED_TOOLS=task,skill_market,save_memory,delete_file,patch,web_fetch,web_search
+EA_SKILL_MARKET=0
+EA_EXPERT_MARKET=0
+```
+
+`submit_task` 与其他工具一样受 `EA_ALLOWED_TOOLS` / `EA_BLOCKED_TOOLS` 过滤。
 
 ## Hooks
 

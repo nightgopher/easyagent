@@ -474,6 +474,77 @@ func TestNativePermissionResponseIsSessionScoped(t *testing.T) {
 	}
 }
 
+func TestNativeInitialPermissionAppliedBeforeSending(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/sessions":
+			fmt.Fprint(w, `{"id":"created"}`)
+		case strings.HasSuffix(r.URL.Path, "/permissions"):
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["mode"] != "full" {
+				t.Errorf("unexpected mode: %v", body)
+			}
+			close(entered)
+			<-release
+			fmt.Fprint(w, `{}`)
+		case strings.HasSuffix(r.URL.Path, "/info"):
+			fmt.Fprint(w, `{"access_mode":"full"}`)
+		default:
+			fmt.Fprint(w, `{}`)
+		}
+	}))
+	defer func() { once.Do(func() { close(release) }); srv.Close() }()
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Live.Client, _ = newBackendClient(srv.URL, "")
+	a.Live.Connected = false
+	a.switchLivePermission("完全权限")
+	if a.livePermission() != "完全权限" || a.Live.Error != "" {
+		t.Fatal("initial choice not retained while disconnected")
+	}
+	a.Live.Connected = true
+	a.current().Draft = "keep draft"
+	a.createLiveSession("")
+	waitNative(t, a, func() bool { return a.current().RemoteID == "created" })
+	<-entered
+	a.submitLive()
+	if a.current().Draft != "keep draft" || a.current().Sending {
+		t.Fatal("sent before permission applied")
+	}
+	once.Do(func() { close(release) })
+	waitNative(t, a, func() bool { return !a.Live.Loading["permission/created"] })
+	if a.current().PermissionNeedsApply || a.current().AccessMode != "full" {
+		t.Fatal("initial permission not applied")
+	}
+}
+
+func TestNativeInitialPermissionFailurePreservesDraft(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/sessions" {
+			fmt.Fprint(w, `{"id":"created"}`)
+			return
+		}
+		http.Error(w, "permission failed", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	a := newConnectedPreview(t.TempDir())
+	defer a.closeLive()
+	a.Live.Client, _ = newBackendClient(srv.URL, "")
+	a.Live.Connected = true
+	a.switchLivePermission("每次询问")
+	a.current().Draft = "keep draft"
+	a.createLiveSession("")
+	waitNative(t, a, func() bool { return a.current().RemoteID == "created" && !a.Live.Loading["permission/created"] })
+	a.submitLive()
+	if !a.current().PermissionNeedsApply || a.current().Sending || a.current().Draft != "keep draft" || a.Live.Error == "" {
+		t.Fatal("permission failure must block send and preserve draft")
+	}
+}
+
 func TestNativeTerminalLateFailureDoesNotCloseReplacement(t *testing.T) {
 	firstEntered, secondEntered := make(chan struct{}), make(chan struct{})
 	firstRelease, secondRelease := make(chan struct{}), make(chan struct{})
@@ -541,11 +612,11 @@ func TestNativeEditedEndpointGetsSeparateIdentity(t *testing.T) {
 	a.Settings.HostURL = srv.URL
 	a.saveLiveHost()
 	waitNative(t, a, func() bool { return a.Live.Client != nil && a.Live.Client.URL == srv.URL })
-	if len(a.Live.Config.Hosts) != 2 || a.Live.Config.ActiveHost == "old" || a.Live.workspace() != "" || a.Live.Drafts["old/same"] != "old server draft" {
+	if len(a.Live.Config.Hosts) != 1 || a.Live.Config.ActiveHost == "old" || a.Live.workspace() != "" || a.Live.Drafts["old/same"] != "old server draft" {
 		t.Fatal("endpoint change reused previous server identity or workspace")
 	}
-	if a.Live.Config.Hosts[0].URL != "http://127.0.0.1:1" {
-		t.Fatal("old connection overwritten")
+	if a.Live.Config.Hosts[0].URL != srv.URL || len(a.Live.Config.HostHistory) != 1 || a.Live.Config.HostHistory[0].ID != "old" {
+		t.Fatal("edited entry not replaced or original identity lost")
 	}
 }
 

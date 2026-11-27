@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
@@ -151,4 +152,47 @@ func TestAutoContinue_DisabledByEnv(t *testing.T) {
 	assert.Contains(t, result.assistant.Text, "网关截断输出内容...")
 	assert.Contains(t, result.assistant.Text, "[回复可能被截断]")
 	assert.NotContains(t, result.assistant.Text, "[已自动续写]")
+}
+
+// 输出上限被思考占满时，续写请求既不带思考也不带未完成的回答，模型只会从头
+// 再想一遍并再次触顶。应当立即失败并说明原因，而不是再请求三次。
+func TestAutoContinue_ReasoningExhaustsOutputLimit(t *testing.T) {
+	t.Setenv("EA_AUTO_CONTINUE", "true")
+
+	provider := &mockContinueProvider{
+		responses: []ai.StreamAssistantMessage{
+			{
+				Thinking:   strings.Repeat("still thinking ", 900),
+				StopReason: ai.StopReasonLength,
+				Usage:      ai.Usage{OutputTokens: 4096},
+			},
+		},
+	}
+	a := New(Options{Model: ai.Model{ID: "coding", MaxTokens: 4096}})
+
+	consume := func(stream *ai.EventStream) (ai.StreamAssistantMessage, error) {
+		for range stream.Events() {
+		}
+		return stream.Result()
+	}
+
+	result, _, err := processTurn(context.Background(), a, provider, consume, []ai.Message{ai.NewTextUserMessage("写一个新产品页")}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "输出达到上限（4096 token）")
+	assert.Equal(t, ai.StopReasonError, result.assistant.StopReason)
+	assert.Empty(t, result.assistant.Text)
+	// 只发了最初那一次请求，没有进入续写循环。
+	assert.Len(t, provider.requests, 1)
+}
+
+// 模型表里查不到、也没配置上限时，错误信息里给出提供方兜底的 4096。
+func TestAutoContinue_ReasoningExhaustedNamesFallbackLimit(t *testing.T) {
+	a := &Agent{model: ai.Model{ID: "coding"}}
+	err := reasoningExhaustedError(ai.AssistantMessage{Thinking: "…", StopReason: ai.StopReasonLength}, a.model)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "4096")
+
+	// 有正文或有工具调用的截断仍交给自动续写。
+	assert.NoError(t, reasoningExhaustedError(ai.AssistantMessage{Text: "前半段", StopReason: ai.StopReasonLength}, a.model))
+	assert.NoError(t, reasoningExhaustedError(ai.AssistantMessage{StopReason: ai.StopReasonStop}, a.model))
 }

@@ -94,6 +94,13 @@ func main() {
 		return
 	}
 
+	// Read --config before registering flags that take their defaults from it.
+	selectedConfig, err := configPathArgument(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	*configFile = selectedConfig
 	// Load YAML config first (lowest priority), then env vars override
 	if *configFile == "" {
 		candidates := []string{"easyagent.yaml", filepath.Join(config.HomeDir(), "config.yaml")}
@@ -106,6 +113,11 @@ func main() {
 	}
 	if *configFile != "" {
 		if err := cfg.LoadFromYAML(*configFile); err != nil {
+			if selectedConfig != "" || config.StrictConfigFile(*configFile) {
+				// A guard profile must not start with its restrictions dropped.
+				slog.Error("refusing to start: strict config could not be loaded", "path", *configFile, "error", err)
+				os.Exit(1)
+			}
 			slog.Warn("failed to load config file", "path", *configFile, "error", err)
 		} else {
 			slog.Info("loaded config file", "path", *configFile)
@@ -115,6 +127,13 @@ func main() {
 	cfg.LoadFromEnv()
 	// Runtime overrides (desktop settings toggles) sit on top of env+yaml.
 	cfg.LoadRuntimeOverrides(cfg.DataDir)
+	// The desktop's explicitly selected ChatGPT account must take precedence
+	// over a saved default for a previously selected provider.
+	if os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1" {
+		if model := strings.TrimSpace(os.Getenv("EA_DESKTOP_CODEX_MODEL")); model != "" {
+			cfg.Provider, cfg.CodexModel = "codex", model
+		}
+	}
 
 	// Handle --version
 	if *versionFlag {
@@ -198,14 +217,25 @@ func main() {
 
 	// Create the coding application. Knowledge browsing remains available separately.
 	application, err := app.New(app.AppOptions{
-		Config:      cfg,
-		SkillDirs:   skillDirs(*skillDir),
-		Application: coding.NewCodingApplication(cfg),
-		Profile:     userProfile,
-		Command:     commandStore,
+		Config:                    cfg,
+		AllowUnconfiguredProvider: *modeFlag == "serve" && os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1",
+		SkillDirs:                 skillDirs(*skillDir, cfg.Skills),
+		Application:               coding.NewCodingApplication(cfg),
+		Profile:                   userProfile,
+		Command:                   commandStore,
 	})
 	if err != nil {
 		slog.Error("failed to create app", "error", err)
+		if uiModes[*modeFlag] {
+			fmt.Fprintf(os.Stderr, "EasyAgent 启动失败：%v\n", err)
+			if cfg.Provider == "" {
+				fmt.Fprintln(os.Stderr, "尚未配置 CLI 模型服务。可先运行 easyagent easycode login，或使用 ChatGPT：")
+				fmt.Fprintln(os.Stderr, "  easyagent codex login")
+				fmt.Fprintln(os.Stderr, "  easyagent codex models")
+				fmt.Fprintln(os.Stderr, "  EA_PROVIDER=codex EA_CODEX_MODEL=<模型ID> easyagent -y")
+				fmt.Fprintln(os.Stderr, "启动后可在 /config 保存 CLI 默认模型。桌面和 CLI 的登录及模型设置相互独立。")
+			}
+		}
 		os.Exit(1)
 	}
 	defer application.Close()
@@ -338,12 +368,17 @@ func buildSlashRegistry(loopMgr *scheduler.LoopManager) *slashcmd.Registry {
 	return registry
 }
 
-// skillDirs returns the skill directory list from a flag value.
-func skillDirs(flag string) []string {
+// skillDirs returns the skill directory list from a flag value followed by
+// the roots configured under skills.dirs.
+func skillDirs(flag string, configured *config.SkillsConfig) []string {
+	var dirs []string
 	if flag != "" {
-		return []string{flag}
+		dirs = append(dirs, flag)
 	}
-	return nil
+	if configured != nil {
+		dirs = append(dirs, configured.Dirs...)
+	}
+	return dirs
 }
 
 // must panics on error.

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -512,6 +513,9 @@ func (a *Agent) provider() (providers.Provider, error) {
 	}
 	provider, ok := a.registry.Get(a.model.Provider)
 	if !ok {
+		if a.model.Provider == "" {
+			return nil, errors.New("尚未配置模型服务，请在设置 → 模型连接中选择并配置服务")
+		}
 		return nil, fmt.Errorf("provider %q not found", a.model.Provider)
 	}
 	return provider, nil

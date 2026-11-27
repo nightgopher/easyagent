@@ -1,8 +1,10 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -99,6 +101,9 @@ type Config struct {
 
 	// Tool output
 	MaxOutputLen int
+	// MaxOutputTokens overrides the model catalog's per-request output limit
+	// when positive; see the yamlConfig field of the same name.
+	MaxOutputTokens int
 
 	// 工具输出概览化阈值（字符）：超过该长度的大输出替换为结构概览，
 	// 模型可用 full_output 按 ref 取回全文。0 用内置默认（30000）。
@@ -113,6 +118,17 @@ type Config struct {
 
 	// Prompt
 	PromptTemplate string
+
+	// Guard profile (see guard.go). Every section is optional: nil keeps the
+	// default behaviour for deployments that do not configure one.
+	PromptFile string
+	// ContextScope is empty/all for legacy instruction discovery, or project
+	// to load instructions only from the explicitly configured workspace.
+	ContextScope string
+	Skills       *SkillsConfig
+	FilePolicy   *FilePolicy
+	BashPolicy   *BashPolicy
+	Submit       *SubmitConfig
 
 	// Knowledge base (second-brain)
 	KBRepoPath string // path to the personal knowledge repo (default: ~/agent-lessons)
@@ -308,6 +324,10 @@ func (c *Config) LoadFromEnv() {
 	if n := getEnvInt("EA_MAX_OUTPUT_LEN", c.MaxOutputLen); n > 0 {
 		c.MaxOutputLen = n
 	}
+	// Model output
+	if n := getEnvInt("EA_MAX_OUTPUT_TOKENS", c.MaxOutputTokens); n > 0 {
+		c.MaxOutputTokens = n
+	}
 	if n := getEnvInt("EA_SYNOPSIS_THRESHOLD", c.SynopsisThreshold); n > 0 {
 		c.SynopsisThreshold = n
 	}
@@ -464,6 +484,12 @@ type yamlConfig struct {
 
 	MaxOutputLen int `yaml:"max_output_len,omitempty"`
 
+	// MaxOutputTokens overrides the per-request output limit. A model name
+	// outside the catalog (a gateway chain such as "coding") otherwise falls
+	// back to 4096, which a thinking model can spend on reasoning alone.
+	// 0 keeps the catalog value.
+	MaxOutputTokens int `yaml:"max_output_tokens,omitempty"`
+
 	SynopsisThreshold int      `yaml:"synopsis_threshold,omitempty"`
 	ToolSearch        string   `yaml:"tool_search,omitempty"`
 	AllowedTools      []string `yaml:"allowed_tools,omitempty"`
@@ -484,6 +510,14 @@ type yamlConfig struct {
 	ASRAPIKey  string `yaml:"asr_api_key,omitempty"`
 	ASRModel   string `yaml:"asr_model,omitempty"`
 	ASRBaseURL string `yaml:"asr_base_url,omitempty"`
+
+	StrictConfig bool          `yaml:"strict_config,omitempty"`
+	PromptFile   string        `yaml:"prompt_file,omitempty"`
+	ContextScope string        `yaml:"context_scope,omitempty"`
+	Skills       *SkillsConfig `yaml:"skills,omitempty"`
+	FilePolicy   *FilePolicy   `yaml:"file_policy,omitempty"`
+	BashPolicy   *BashPolicy   `yaml:"bash_policy,omitempty"`
+	Submit       *SubmitConfig `yaml:"submit,omitempty"`
 }
 
 // LoadFromYAML loads configuration from a YAML file.
@@ -496,8 +530,38 @@ func (c *Config) LoadFromYAML(path string) error {
 	}
 
 	var yc yamlConfig
-	if err := yaml.Unmarshal(data, &yc); err != nil {
+	// strict_config rejects unknown keys so a mistyped guard rule fails loudly
+	// instead of silently leaving a restriction unconfigured.
+	if strictRequested(data) {
+		decoder := yaml.NewDecoder(bytes.NewReader(data))
+		decoder.KnownFields(true)
+		if err := decoder.Decode(&yc); err != nil {
+			return fmt.Errorf("parse YAML: %w", err)
+		}
+		var extra yaml.Node
+		if err := decoder.Decode(&extra); err != io.EOF {
+			if err != nil {
+				return fmt.Errorf("parse YAML trailing document: %w", err)
+			}
+			return fmt.Errorf("strict config must contain exactly one YAML document")
+		}
+	} else if err := yaml.Unmarshal(data, &yc); err != nil {
 		return fmt.Errorf("parse YAML: %w", err)
+	}
+	if err := ValidateContextScope(yc.ContextScope); err != nil {
+		return err
+	}
+	baseDir, err := filepath.Abs(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("resolve config directory: %w", err)
+	}
+	for _, value := range []*string{&yc.Workspace, &yc.DataDir, &yc.MCPConfigPath, &yc.KBRepoPath, &yc.SkillMarketSkillDir} {
+		if *value != "" {
+			*value = resolveConfigPath(baseDir, *value)
+		}
+	}
+	if yc.ContextScope != "" {
+		c.ContextScope = yc.ContextScope
 	}
 
 	if yc.ThinkingMode != "" {
@@ -599,6 +663,9 @@ func (c *Config) LoadFromYAML(path string) error {
 	if yc.MaxOutputLen > 0 {
 		c.MaxOutputLen = yc.MaxOutputLen
 	}
+	if yc.MaxOutputTokens > 0 {
+		c.MaxOutputTokens = yc.MaxOutputTokens
+	}
 	if yc.SynopsisThreshold > 0 {
 		c.SynopsisThreshold = yc.SynopsisThreshold
 	}
@@ -642,7 +709,7 @@ func (c *Config) LoadFromYAML(path string) error {
 		c.ASRBaseURL = yc.ASRBaseURL
 	}
 
-	return nil
+	return c.applyGuardProfile(baseDir, yc.PromptFile, yc.Skills, yc.FilePolicy, yc.BashPolicy, yc.Submit)
 }
 
 // ─── Runtime overrides (settings.json) ──────────────────────────────────────

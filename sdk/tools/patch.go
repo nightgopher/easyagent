@@ -312,7 +312,10 @@ func (t *PatchTool) Execute(ctx context.Context, raw json.RawMessage, _ func(age
 	seen := map[string]bool{}
 	for i := range hunks {
 		p := ResolvePath(t.workspace, hunks[i].Path)
-		if !t.pathPolicy.Allows(t.workspace, p) || seen[p] {
+		if err := t.pathPolicy.CheckWrite(t.workspace, p); err != nil {
+			return agent.ToolResult{IsError: true, Content: describeWriteDenied(hunks[i].Path, t.workspace, err)}, err
+		}
+		if seen[p] {
 			return agent.ToolResult{IsError: true}, fmt.Errorf("invalid or duplicate patch path: %s", hunks[i].Path)
 		}
 		seen[p] = true

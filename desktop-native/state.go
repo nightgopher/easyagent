@@ -51,6 +51,7 @@ type session struct {
 	TeamID, TeamName                             string // set when the session runs a team
 	Home                                         string // the host's home directory, for expanding "~/" in file links
 	ModelChosen                                  bool
+	PermissionNeedsApply                         bool
 	Pinned, Sending                              bool
 	Run                                          *runInfo
 	InfoVersion                                  uint64

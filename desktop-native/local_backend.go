@@ -27,6 +27,7 @@ type secretStore interface {
 }
 type hostConfig struct {
 	ID, Name, URL, Workspace string
+	HistoryGroup             string `json:",omitempty"`
 	Local                    bool
 	HasToken                 bool
 	Relay                    *relayConfig `json:",omitempty"`
@@ -39,6 +40,7 @@ type modelConfig struct {
 }
 type clientConfig struct {
 	Hosts         []hostConfig
+	HostHistory   []hostConfig `json:",omitempty"`
 	ActiveHost    string
 	Model         modelConfig
 	PreviousModel *modelConfig           `json:",omitempty"`
@@ -215,7 +217,7 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 		return nil, err
 	}
 	home, _ := os.UserHomeDir()
-	env := map[string]string{"EA_DATA_DIR": filepath.Join(dir, "core-data"), "EA_SERVER_API_KEY": token, "EA_ALLOW_NO_AUTH": "0", "EA_ALLOWED_ORIGINS": "", "EA_ENABLE_TERMINAL": "1", "EA_HOME": filepath.Join(dir, "core-home"), "EA_MCP_CONFIG": filepath.Join(dir, "core-home", "mcp.json")}
+	env := map[string]string{"EA_DESKTOP_BOOTSTRAP": "1", "EA_DATA_DIR": filepath.Join(dir, "core-data"), "EA_SERVER_API_KEY": token, "EA_ALLOW_NO_AUTH": "0", "EA_ALLOWED_ORIGINS": "", "EA_ENABLE_TERMINAL": "1", "EA_HOME": filepath.Join(dir, "core-home"), "EA_MCP_CONFIG": filepath.Join(dir, "core-home", "mcp.json")}
 	// Codex traffic only (token exchange and the ChatGPT backend): gateways,
 	// Feishu and MCP keep their direct routes. The name mirrors
 	// sdk/ai.CodexProxyEnv; this module does not import the core.
@@ -236,6 +238,9 @@ func (m *localBackend) start(ctx context.Context, dir string, model modelConfig,
 	if model.Mode == "easycode" {
 		env["EA_PROVIDER"] = "deepv"
 		env["EA_MODEL"], env["OPENAI_MODEL"] = model.Model, model.Model
+	} else if model.Mode == "codex" {
+		env["EA_PROVIDER"], env["EA_CODEX_MODEL"] = "codex", model.Model
+		env["EA_DESKTOP_CODEX_MODEL"] = model.Model
 	} else if isModelOverride(model) {
 		key, err := secrets.Get(modelSecretName(model))
 		if err != nil {

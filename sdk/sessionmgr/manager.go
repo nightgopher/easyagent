@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -374,11 +375,18 @@ func (m *Manager) List(ctx context.Context) ([]SessionInfo, error) {
 			info.LastActive = fi.ModTime().Unix()
 		}
 
+		// Generated IDs contain the creation time, which stays stable even when
+		// opening an empty session touches its directory.
+		if nanos, err := strconv.ParseInt(strings.TrimPrefix(id, "sess_"), 10, 64); strings.HasPrefix(id, "sess_") && err == nil && nanos >= 1e18 {
+			info.CreatedAt = nanos / int64(time.Second)
+			info.LastActive = info.CreatedAt
+		}
+
 		// Use SQLite or the legacy log to count messages and derive the title.
 		msgCount, lastActive, firstUserMsg, err := m.countMessagesCached(sessionPath)
 		if err == nil {
 			info.MessageCount = msgCount
-			if lastActive > info.LastActive {
+			if lastActive > 0 {
 				info.LastActive = lastActive
 			}
 			info.Title = strings.SplitN(firstUserMsg, "\n", 2)[0]
@@ -517,6 +525,9 @@ func countMessages(path string) (int, int64, string, error) {
 		}
 		if entry.Type == "message" {
 			count++
+			if entry.TS > lastTS {
+				lastTS = entry.TS
+			}
 			if entry.User != nil && firstUserMsg == "" {
 				firstUserMsg = entry.User.DisplayText
 				for _, c := range entry.User.Content {
@@ -529,9 +540,6 @@ func countMessages(path string) (int, int64, string, error) {
 					}
 				}
 			}
-		}
-		if entry.TS > lastTS {
-			lastTS = entry.TS
 		}
 	}
 	// 会话条目时间戳是毫秒（session.UnixMilli），归一化为秒，
@@ -550,7 +558,7 @@ func countSQLiteMessages(path string) (int, int64, string, error) {
 	defer db.Close()
 	var count int
 	var last int64
-	if err = db.QueryRow("SELECT COUNT(*) FILTER (WHERE type='message'), COALESCE(MAX(timestamp),0) FROM entries").Scan(&count, &last); err != nil {
+	if err = db.QueryRow("SELECT COUNT(*) FILTER (WHERE type='message'), COALESCE(MAX(timestamp) FILTER (WHERE type='message'),0) FROM entries").Scan(&count, &last); err != nil {
 		return 0, 0, "", err
 	}
 	rows, err := db.Query("SELECT payload FROM entries WHERE type='message' AND json_type(payload, '$.user') IS NOT NULL ORDER BY seq")

@@ -16,7 +16,7 @@ func TestGlobalSkillDirs(t *testing.T) {
 	assert.Equal(t, []string{agents, claude}, PersonalSkillDirs())
 	assert.Equal(t, []string{agents, claude}, GlobalSkillDirs(nil, ""), "defaults to the personal roots")
 	assert.Equal(t, []string{agents, claude, "/market"}, GlobalSkillDirs(nil, "/market"), "the market directory is appended")
-	assert.Equal(t, []string{"/custom", "/market"}, GlobalSkillDirs([]string{"/custom"}, "/market"), "explicit directories replace the defaults")
+	assert.Equal(t, []string{"/custom"}, GlobalSkillDirs([]string{"/custom"}, "/market"), "explicit directories replace defaults and market")
 
 	explicit := []string{"/custom"}
 	GlobalSkillDirs(explicit, "/market")

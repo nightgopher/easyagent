@@ -1,11 +1,42 @@
 package main
 
 import (
+	"flag"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/nightgopher/easyagent/sdk/config"
 )
+
+func TestCLIStartupFailureIsVisible(t *testing.T) {
+	if os.Getenv("EASYAGENT_TEST_CLI_STARTUP") == "1" {
+		flag.CommandLine = flag.NewFlagSet("easyagent", flag.ContinueOnError)
+		os.Args = []string{"easyagent", "-y"}
+		main()
+		return
+	}
+	for _, tc := range []struct{ provider, want string }{
+		{"", "尚未配置 CLI 模型服务"},
+		{"invalid", "unknown EA_PROVIDER"},
+	} {
+		t.Run(tc.want, func(t *testing.T) {
+			home := t.TempDir()
+			cmd := exec.Command(os.Args[0], "-test.run=^TestCLIStartupFailureIsVisible$")
+			cmd.Dir = home
+			cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "EA_HOME=" + filepath.Join(home, "config"), "EA_DATA_DIR=" + filepath.Join(home, "data"), "EA_ENV_FILE=" + filepath.Join(home, "absent"), "EA_WORKSPACE=" + home, "EA_SKILL_MARKET=0", "EA_PROVIDER=" + tc.provider, "EASYAGENT_TEST_CLI_STARTUP=1"}
+			out, err := cmd.CombinedOutput()
+			if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 1 {
+				t.Fatalf("expected exit 1: %v: %s", err, out)
+			}
+			if !strings.Contains(string(out), "EasyAgent 启动失败") || !strings.Contains(string(out), tc.want) {
+				t.Fatalf("missing actionable startup error: %s", out)
+			}
+		})
+	}
+}
 
 func TestInferredDefaultMode(t *testing.T) {
 	tests := []struct {

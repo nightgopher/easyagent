@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/session"
@@ -240,4 +241,73 @@ func TestOpenRejectsTraversalAndSymlinkSessionDirectories(t *testing.T) {
 	require.False(t, mgr.Exists("linked"))
 	_, err = os.Stat(filepath.Join(outside, "session.sqlite"))
 	require.True(t, os.IsNotExist(err), "a symlink must not create a database outside sessions")
+}
+
+func TestListActivityIgnoresOpeningAndNonMessageChanges(t *testing.T) {
+	ctx := context.Background()
+	for _, legacy := range []bool{false, true} {
+		name := "sqlite"
+		if legacy {
+			name = "jsonl"
+		}
+		t.Run(name, func(t *testing.T) {
+			mgr := NewManager(t.TempDir())
+			ids := []string{"older", "newer"}
+			for i, id := range ids {
+				var storage session.SessionStorage
+				if legacy {
+					storage = session.NewJSONLStorage(mgr.legacySessionPath(id))
+				} else {
+					storage = session.NewSQLiteStorage(mgr.SessionPath(id), mgr.legacySessionPath(id))
+				}
+				require.NoError(t, storage.Init())
+				msg := ai.NewTextUserMessage(id)
+				require.NoError(t, storage.Append(ctx, session.Entry{Type: session.EntryTypeMessage, Timestamp: int64(1700000000000 + i*10000), User: &msg}))
+				if id == "older" {
+					require.NoError(t, storage.Append(ctx, session.Entry{Type: session.EntryTypeModelChange, Timestamp: 1900000000000}))
+				}
+				require.NoError(t, storage.Close())
+			}
+			list, err := mgr.List(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "newer", list[0].ID)
+			require.Equal(t, int64(1700000000), list[1].LastActive)
+			// Opening a session and replacing metadata both touch files in its directory.
+			opened, _, err := mgr.Open(ctx, "older")
+			require.NoError(t, err)
+			require.NoError(t, opened.Storage().Append(ctx, session.Entry{Type: session.EntryTypeModelChange, Timestamp: 1900000000000}))
+			require.NoError(t, opened.Storage().Close())
+			title := "renamed"
+			require.NoError(t, mgr.UpdatePreferences("older", PreferencePatch{Title: &title}))
+			list, err = mgr.List(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "newer", list[0].ID)
+			require.Equal(t, int64(1700000000), list[1].LastActive)
+			opened, _, err = mgr.Open(ctx, "older")
+			require.NoError(t, err)
+			msg := ai.NewTextUserMessage("new message")
+			require.NoError(t, opened.Storage().Append(ctx, session.Entry{Type: session.EntryTypeMessage, Timestamp: 1800000000000, User: &msg}))
+			require.NoError(t, opened.Storage().Close())
+			list, err = mgr.List(ctx)
+			require.NoError(t, err)
+			require.Equal(t, "older", list[0].ID)
+			require.Equal(t, int64(1800000000), list[0].LastActive)
+		})
+	}
+}
+
+func TestEmptySessionActivityUsesStableCreationTime(t *testing.T) {
+	ctx := context.Background()
+	mgr := NewManager(t.TempDir())
+	id, _, err := mgr.Create(ctx)
+	require.NoError(t, err)
+	before, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+	future := time.Now().Add(24 * time.Hour)
+	require.NoError(t, os.Chtimes(filepath.Join(mgr.SessionsDir(), id), future, future))
+	after, err := mgr.List(ctx)
+	require.NoError(t, err)
+	require.Equal(t, before[0].CreatedAt, after[0].CreatedAt)
+	require.Equal(t, before[0].LastActive, after[0].LastActive)
 }

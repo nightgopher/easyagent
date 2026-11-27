@@ -145,6 +145,9 @@ func runFeishuBridgeLocal(ctx context.Context, baseURL string, attach func(conte
 	})
 	gateway.SetOwnerAccess(access)
 	gateway.SetCardActionHandler(handler.HandleCardAction)
+	if os.Getenv("FEISHU_INBOX_DIR") != "" {
+		gateway.SetInbox(handler.InboxDir)
+	}
 	if attach != nil {
 		attach(ctx, handler)
 	}
