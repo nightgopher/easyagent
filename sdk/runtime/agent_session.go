@@ -786,7 +786,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		Name:          modelID,
 		Provider:      providerName,
 		ContextWindow: models.ContextWindow(modelID),
-		MaxTokens:     models.MaxOutput(modelID),
+		MaxTokens:     modelMaxOutput(cfg, modelID),
 	}
 	if providerName == "deepv" {
 		// The EasyCode service limits input plus output per request. Other
@@ -898,7 +898,7 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 	startCommand, endCommand, compactCommand := hooks.CommandObservers(s.cfg.HooksDir, s.workspaceLocked())
 	return agent.NewTaskTool(agent.TaskToolOptions{
 		ResolveModel: func(id, provider string) (ai.Model, error) {
-			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: models.MaxOutput(id)}), nil
+			return s.resolveModel(ai.Model{ID: id, Name: id, Provider: provider, ContextWindow: models.ContextWindow(id), MaxTokens: modelMaxOutput(s.cfg, id)}), nil
 		},
 		Model:          model,
 		Registry:       registry,
@@ -907,6 +907,15 @@ func (s *AgentSession) newTaskTool(model ai.Model, registry *providers.Registry,
 		ConfirmFunc:    s.wrapConfirm(s.confirmFunc),
 		LifecycleHooks: agent.LifecycleHooks{Before: []agent.BeforeToolCallHook{beforeCommand}, After: []agent.AfterToolCallHook{afterCommand}, SessionStart: []agent.SessionStartHook{startCommand}, SessionEnd: []agent.SessionEndHook{endCommand}, PreCompress: []agent.PreCompressHook{compactCommand}},
 	})
+}
+
+// modelMaxOutput is the per-request output limit: the deployment's
+// max_output_tokens when set, otherwise the model catalog value.
+func modelMaxOutput(cfg config.Config, modelID string) int {
+	if cfg.MaxOutputTokens > 0 {
+		return cfg.MaxOutputTokens
+	}
+	return models.MaxOutput(modelID)
 }
 
 func (s *AgentSession) resolveModel(model ai.Model) ai.Model {

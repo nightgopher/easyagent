@@ -101,6 +101,9 @@ type Config struct {
 
 	// Tool output
 	MaxOutputLen int
+	// MaxOutputTokens overrides the model catalog's per-request output limit
+	// when positive; see the yamlConfig field of the same name.
+	MaxOutputTokens int
 
 	// 工具输出概览化阈值（字符）：超过该长度的大输出替换为结构概览，
 	// 模型可用 full_output 按 ref 取回全文。0 用内置默认（30000）。
@@ -321,6 +324,10 @@ func (c *Config) LoadFromEnv() {
 	if n := getEnvInt("EA_MAX_OUTPUT_LEN", c.MaxOutputLen); n > 0 {
 		c.MaxOutputLen = n
 	}
+	// Model output
+	if n := getEnvInt("EA_MAX_OUTPUT_TOKENS", c.MaxOutputTokens); n > 0 {
+		c.MaxOutputTokens = n
+	}
 	if n := getEnvInt("EA_SYNOPSIS_THRESHOLD", c.SynopsisThreshold); n > 0 {
 		c.SynopsisThreshold = n
 	}
@@ -476,6 +483,12 @@ type yamlConfig struct {
 	SSHWorkDir    string `yaml:"ssh_work_dir,omitempty"`
 
 	MaxOutputLen int `yaml:"max_output_len,omitempty"`
+
+	// MaxOutputTokens overrides the per-request output limit. A model name
+	// outside the catalog (a gateway chain such as "coding") otherwise falls
+	// back to 4096, which a thinking model can spend on reasoning alone.
+	// 0 keeps the catalog value.
+	MaxOutputTokens int `yaml:"max_output_tokens,omitempty"`
 
 	SynopsisThreshold int      `yaml:"synopsis_threshold,omitempty"`
 	ToolSearch        string   `yaml:"tool_search,omitempty"`
@@ -649,6 +662,9 @@ func (c *Config) LoadFromYAML(path string) error {
 	}
 	if yc.MaxOutputLen > 0 {
 		c.MaxOutputLen = yc.MaxOutputLen
+	}
+	if yc.MaxOutputTokens > 0 {
+		c.MaxOutputTokens = yc.MaxOutputTokens
 	}
 	if yc.SynopsisThreshold > 0 {
 		c.SynopsisThreshold = yc.SynopsisThreshold
