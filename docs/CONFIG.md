@@ -36,7 +36,15 @@ EA_API_KEY=your-coding-plan-key
 
 国际版把地址域名换成 `https://api.z.ai/api/coding/paas/v4`。思考开关用 `EA_THINKING=enabled/disabled`（GLM 会随工具调用轮次自动回放 reasoning_content）；Coding Plan 端点不提供 `/models` 模型目录，模型 ID 需显式填写。桌面端「设置 → 模型连接」内置同名选项。
 
-Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+Anthropic 使用 `EA_PROVIDER=anthropic` 和 `ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`。CLI 支持 `openai` / `anthropic` / `deepv` / `codex`；开发测试注入 mock 或使用本地模拟接口，`EA_PROVIDER=mock` 不是有效的 CLI 配置。Provider 默认为空，正常使用需配置。
+
+CLI 使用 ChatGPT 订阅时，先运行 `easyagent codex login` 登录，再用 `easyagent codex models` 查看模型。以所选模型替换下面的模型 ID 后启动：
+
+```sh
+EA_PROVIDER=codex EA_CODEX_MODEL=gpt-5.2-codex easyagent
+```
+
+进入对话后可在 `/config` 保存 CLI 默认模型。桌面和普通 CLI 使用各自的用户目录，登录凭据与模型设置不自动共享；桌面安装命令行只添加终端入口。
 
 EasyCode 账号可在 macOS / Linux 桌面「设置 → 模型连接 → EasyCode 飞书登录」中使用。CLI 运行 `easyagent easycode login` 完成飞书授权后，会选择账号可用模型并作为后续 CLI 对话的默认模型；可用 `easyagent easycode models` 查看模型，`easyagent easycode use <模型 ID>` 切换，或首次登录时使用 `easyagent easycode login --model <模型 ID>` 指定。`easyagent easycode status` 查询状态，`easyagent easycode off` 停用 CLI 的 EasyCode 模式并恢复原配置（保留登录），`easyagent easycode logout` 退出账号。模型目录暂不可用时登录仍会保存，可稍后列出并选择模型。
 

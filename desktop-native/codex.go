@@ -17,8 +17,8 @@ import (
 )
 
 // Codex 登录入口：与 EasyCode 同一套 helper 管线（spawn coreBinary，
-// --machine NDJSON 事件，core 负责回调与私有凭据文件），但不接管
-// connections.json 的模型配置——登录后在会话里用 /models 选择 Codex 模型。
+// --machine NDJSON 事件，core 负责回调与私有凭据文件。
+// 登录后可显式将 ChatGPT 设为主机的模型服务。
 
 type nativeCodexEvent struct {
 	Type     string `json:"type"`
@@ -33,6 +33,8 @@ type nativeCodexEvent struct {
 type nativeCodexState struct {
 	LoggedIn   bool
 	Name, URL  string
+	Models     []nativeEasyCodeModel
+	Model      string
 	Cancel     context.CancelFunc
 	Generation uint64
 }
@@ -157,6 +159,10 @@ func (a *preview) refreshCodexStatus() {
 	epoch, ctx, dir, generation := l.epoch, l.ctx, l.Dir, l.Codex.Generation
 	go func() {
 		result, err := invokeCodexHelper(ctx, dir, "status", nil)
+		var models nativeCodexEvent
+		if err == nil && result.LoggedIn {
+			models, err = invokeCodexHelper(ctx, dir, "models", nil)
+		}
 		a.post(epoch, func() {
 			l.Loading["codex-status"] = false
 			if generation != l.Codex.Generation {
@@ -168,6 +174,10 @@ func (a *preview) refreshCodexStatus() {
 			}
 			l.Codex.LoggedIn = result.LoggedIn
 			l.Codex.Name = codexUserName(result)
+			l.Codex.Models = models.Models
+			if l.Config.Model.Mode == "codex" {
+				l.Codex.Model = l.Config.Model.Model
+			}
 		})
 	}()
 }
@@ -218,7 +228,8 @@ func (a *preview) startCodexLogin() {
 			}
 			l.Codex.LoggedIn = true
 			l.Codex.Name = codexUserName(result)
-			l.Notice = "已登录 ChatGPT（Codex）；在会话里用 /models 选择 Codex 模型。"
+			l.Codex.Models = result.Models
+			l.Notice = "已登录 ChatGPT，请选择模型并应用到此主机。"
 		})
 	}()
 }
@@ -242,6 +253,10 @@ func (a *preview) logoutCodex() {
 	if l.configBusy() || l.Loading["codex-login"] {
 		return
 	}
+	if l.Config.Model.Mode == "codex" {
+		l.Error = "请先切换到其他模型服务，再退出 ChatGPT。"
+		return
+	}
 	l.Codex.Generation++
 	generation := l.Codex.Generation
 	l.Loading["codex-status"] = true
@@ -259,7 +274,75 @@ func (a *preview) logoutCodex() {
 			}
 			l.Codex.LoggedIn = false
 			l.Codex.Name = ""
+			l.Codex.Models = nil
 			l.Notice = "已退出 Codex（ChatGPT）账号。"
+		})
+	}()
+}
+
+func (a *preview) applyCodexModel(model string) {
+	l := a.Live
+	if l.configBusy() || !l.Codex.LoggedIn {
+		return
+	}
+	valid := false
+	for _, item := range l.Codex.Models {
+		if item.ID == model {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		l.Error = "请先选择 ChatGPT 模型。"
+		return
+	}
+	for _, s := range a.Sessions {
+		if s.Running || s.Pending || s.Sending {
+			l.Error = "请先等待或停止正在运行的任务"
+			return
+		}
+	}
+	old := cloneConfig(l.Config)
+	next := cloneConfig(old)
+	if old.Model.Mode != "codex" {
+		previous := old.Model
+		next.PreviousModel = &previous
+	}
+	next.Model = modelConfig{Mode: "codex", Provider: "codex", Model: model}
+	l.Loading["codex-apply"] = true
+	epoch, ctx, dir, secrets := l.epoch, l.ctx, l.Dir, l.Secrets
+	go func() {
+		err := l.Core.ensureIdle(ctx)
+		changed, stopped := false, false
+		if err == nil {
+			err = atomicJSON(filepath.Join(dir, "connections.json"), next)
+			changed = err == nil
+		}
+		if err == nil {
+			l.Core.stop()
+			stopped = true
+			_, err = l.Core.start(ctx, dir, next.Model, secrets)
+		}
+		if err != nil && changed {
+			_ = atomicJSON(filepath.Join(dir, "connections.json"), old)
+			if stopped {
+				l.Core.stop()
+				_, _ = l.Core.start(ctx, dir, old.Model, secrets)
+			}
+		}
+		a.post(epoch, func() {
+			l.Loading["codex-apply"] = false
+			if err != nil {
+				if changed {
+					a.connectLive()
+				}
+				l.Error = "启用 ChatGPT 失败：" + err.Error()
+				return
+			}
+			l.Config = next
+			a.syncSettingsConfig()
+			l.Notice = "已启用 ChatGPT 模型。"
+			a.connectLive()
 		})
 	}()
 }
@@ -270,7 +353,7 @@ func (a *preview) codexSettings(c *ui.Context) {
 		if l.Codex.LoggedIn {
 			a.note(c, a.tr("已登录：")+l.Codex.Name+"（ChatGPT 账号额度）")
 		} else {
-			a.note(c, "尚未登录 Codex。登录后可在会话里用 /models 选择 ChatGPT 模型。")
+			a.note(c, "登录 ChatGPT 后，选择模型并应用到此主机。")
 		}
 		ui.Row(c).Gap(10).Wrap().Children(func() {
 			if l.Loading["codex-login"] {
@@ -288,6 +371,22 @@ func (a *preview) codexSettings(c *ui.Context) {
 				}
 			}
 		})
+		if l.Codex.LoggedIn {
+			choices := make([]string, 0, len(l.Codex.Models))
+			for _, model := range l.Codex.Models {
+				choices = append(choices, model.ID)
+			}
+			if len(choices) > 0 {
+				if l.Codex.Model == "" {
+					l.Codex.Model = choices[0]
+				}
+				a.selectControl(c.Key("codex-model"), "ChatGPT 默认模型", &l.Codex.Model, choices).Width(300).MaxWidth(420).Disabled(l.configBusy())
+				a.primary(c, "应用 ChatGPT 模型").Disabled(l.configBusy()).OnClick(func() { a.applyCodexModel(l.Codex.Model) })
+			} else {
+				a.note(c, "无法读取 ChatGPT 模型列表，请刷新后重试。")
+				a.action(c, "刷新 ChatGPT 模型").Disabled(l.Loading["codex-status"]).OnClick(a.refreshCodexStatus)
+			}
+		}
 		a.note(c, "登录凭据仅保存在这台设备的用户私有目录，计入登录账号的订阅额度，无需 API key。")
 	})
 }

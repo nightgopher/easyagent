@@ -58,9 +58,12 @@ type App struct {
 
 // AppOptions holds the options for creating a new App.
 type AppOptions struct {
-	Config      config.Config
-	SkillDirs   []string
-	Application runtime.Application // inject a concrete Application; defaults to CodingApplication
+	Config config.Config
+	// AllowUnconfiguredProvider is reserved for the desktop's first-run setup.
+	// Explicitly configured but invalid providers still fail startup.
+	AllowUnconfiguredProvider bool
+	SkillDirs                 []string
+	Application               runtime.Application // inject a concrete Application; defaults to CodingApplication
 
 	// Applications is a named map of available applications.
 	// Keys are application names (e.g. "coding", "kb") that the frontend
@@ -92,8 +95,10 @@ func New(opts AppOptions) (*App, error) {
 
 	// Provider registry
 	reg := providers.NewRegistry()
-	if err := registerProviders(reg, cfg); err != nil {
-		return nil, fmt.Errorf("provider setup: %w", err)
+	if !opts.AllowUnconfiguredProvider || cfg.Provider != "" {
+		if err := registerProviders(reg, cfg); err != nil {
+			return nil, fmt.Errorf("provider setup: %w", err)
+		}
 	}
 
 	// Session manager

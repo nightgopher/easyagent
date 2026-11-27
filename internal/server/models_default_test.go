@@ -77,3 +77,18 @@ func TestServer_SetDefaultModel(t *testing.T) {
 	// 全局默认仍是 newModel
 	assert.Equal(t, newModel, application.Config().OpenAIModel)
 }
+
+func TestServer_ModelsIncludesCodexDefault(t *testing.T) {
+	application := newTestApp(t)
+	require.NoError(t, application.SetDefaultModel("codex", "gpt-test"))
+	srv := New(application, nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, localReq(http.MethodGet, "/models", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+	var response ModelsResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotNil(t, response.Current)
+	assert.Equal(t, "codex", response.Current.Provider)
+	assert.Equal(t, "gpt-test", response.Current.ID)
+	assert.NotEqual(t, "unconfigured", response.Source)
+}

@@ -127,6 +127,13 @@ func main() {
 	cfg.LoadFromEnv()
 	// Runtime overrides (desktop settings toggles) sit on top of env+yaml.
 	cfg.LoadRuntimeOverrides(cfg.DataDir)
+	// The desktop's explicitly selected ChatGPT account must take precedence
+	// over a saved default for a previously selected provider.
+	if os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1" {
+		if model := strings.TrimSpace(os.Getenv("EA_DESKTOP_CODEX_MODEL")); model != "" {
+			cfg.Provider, cfg.CodexModel = "codex", model
+		}
+	}
 
 	// Handle --version
 	if *versionFlag {
@@ -210,14 +217,25 @@ func main() {
 
 	// Create the coding application. Knowledge browsing remains available separately.
 	application, err := app.New(app.AppOptions{
-		Config:      cfg,
-		SkillDirs:   skillDirs(*skillDir, cfg.Skills),
-		Application: coding.NewCodingApplication(cfg),
-		Profile:     userProfile,
-		Command:     commandStore,
+		Config:                    cfg,
+		AllowUnconfiguredProvider: *modeFlag == "serve" && os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1",
+		SkillDirs:                 skillDirs(*skillDir, cfg.Skills),
+		Application:               coding.NewCodingApplication(cfg),
+		Profile:                   userProfile,
+		Command:                   commandStore,
 	})
 	if err != nil {
 		slog.Error("failed to create app", "error", err)
+		if uiModes[*modeFlag] {
+			fmt.Fprintf(os.Stderr, "EasyAgent 启动失败：%v\n", err)
+			if cfg.Provider == "" {
+				fmt.Fprintln(os.Stderr, "尚未配置 CLI 模型服务。可先运行 easyagent easycode login，或使用 ChatGPT：")
+				fmt.Fprintln(os.Stderr, "  easyagent codex login")
+				fmt.Fprintln(os.Stderr, "  easyagent codex models")
+				fmt.Fprintln(os.Stderr, "  EA_PROVIDER=codex EA_CODEX_MODEL=<模型ID> easyagent -y")
+				fmt.Fprintln(os.Stderr, "启动后可在 /config 保存 CLI 默认模型。桌面和 CLI 的登录及模型设置相互独立。")
+			}
+		}
 		os.Exit(1)
 	}
 	defer application.Close()
