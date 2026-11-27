@@ -51,6 +51,9 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 			result.Index = i
 		}
 	}
+	if form.EditHost != "" && result.Index < 0 {
+		return result, errors.New("正在编辑的连接已不存在，请重新选择连接")
+	}
 	var previous hostConfig
 	if result.Index >= 0 {
 		previous = config.Hosts[result.Index]
@@ -65,22 +68,48 @@ func persistHostProfile(dir string, store secretStore, config clientConfig, form
 			return result, readErr
 		}
 	}
-	// An explicit repair replaces the unavailable/expired token on this endpoint
-	// without stranding its sessions and drafts behind a duplicate host profile.
-	// Ordinary edits to the endpoint or identity still create an isolated profile.
+	// A changed endpoint or credential needs its own storage identity so drafts
+	// from a different server/account cannot be sent to it.
 	repairing := form.RepairCredential && previous.HasToken && previous.URL == b.URL && key != ""
 	result.NewIdentity = !repairing && previous.URL != "" && (previous.URL != b.URL || (key != "" && (readErr != nil || key != oldToken)))
+	if previous.Relay != nil && result.NewIdentity {
+		return result, errors.New("配对主机的地址或身份不能修改，请重新配对")
+	}
 	host := previous
-	if result.Index < 0 || result.NewIdentity {
+	if result.Index < 0 {
 		host = hostConfig{ID: requestID()}
 		result.Index = len(result.Config.Hosts)
 		result.Config.Hosts = append(result.Config.Hosts, host)
-	}
-	if previous.Relay != nil && host.ID == previous.ID && previous.URL != b.URL {
-		return result, errors.New("配对主机地址不能修改，请重新配对")
+	} else if result.NewIdentity {
+		// Preserve prior identities and their credentials off-list. If the user
+		// later returns to the same endpoint and credential, recover its drafts.
+		group := previous.HistoryGroup
+		if group == "" {
+			group = previous.ID
+		}
+		host = hostConfig{ID: requestID(), HistoryGroup: group}
+		for i, candidate := range result.Config.HostHistory {
+			candidateGroup := candidate.HistoryGroup
+			if candidateGroup == "" {
+				candidateGroup = candidate.ID
+			}
+			if candidateGroup != group || candidate.URL != b.URL {
+				continue
+			}
+			stored, err := hostCredential(store, candidate)
+			if err == nil && stored == key {
+				host = candidate
+				result.Config.HostHistory = append(result.Config.HostHistory[:i], result.Config.HostHistory[i+1:]...)
+				break
+			}
+		}
+		result.Config.HostHistory = append(result.Config.HostHistory, previous)
+		if config.ActiveHost == previous.ID {
+			result.Config.ActiveHost = host.ID
+		}
 	}
 	host.Name, host.URL = strings.TrimSpace(form.HostName), b.URL
-	freshCredential := key != "" && host.ID != previous.ID
+	freshCredential := key != "" && host.ID != previous.ID && !host.HasToken
 	if freshCredential || repairing {
 		if err = verifiedHostCredential(store, host.ID, key); err != nil {
 			if freshCredential {
@@ -113,6 +142,23 @@ func persistHostRemoval(dir string, store secretStore, config clientConfig, inde
 	next := cloneConfig(config)
 	host := next.Hosts[index]
 	next.Hosts = append(next.Hosts[:index], next.Hosts[index+1:]...)
+	group := host.HistoryGroup
+	if group == "" {
+		group = host.ID
+	}
+	var history, retained []hostConfig
+	for _, candidate := range next.HostHistory {
+		candidateGroup := candidate.HistoryGroup
+		if candidateGroup == "" {
+			candidateGroup = candidate.ID
+		}
+		if candidateGroup == group {
+			history = append(history, candidate)
+		} else {
+			retained = append(retained, candidate)
+		}
+	}
+	next.HostHistory = retained
 	if next.ActiveHost == host.ID {
 		next.ActiveHost = "local"
 	}
@@ -124,6 +170,11 @@ func persistHostRemoval(dir string, store secretStore, config clientConfig, inde
 	result := removedHostProfile{Config: next}
 	if host.HasToken {
 		result.CleanupError = store.Delete("host/" + host.ID)
+	}
+	for _, candidate := range history {
+		if candidate.HasToken {
+			result.CleanupError = errors.Join(result.CleanupError, store.Delete("host/"+candidate.ID))
+		}
 	}
 	return result, nil
 }

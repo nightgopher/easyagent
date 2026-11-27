@@ -1,4 +1,8 @@
 {
+  "添加远程主机": "Add a remote host",
+  "编辑连接": "Edit connection",
+  "保存修改": "Save changes",
+  "主机连接已更新；不同地址或令牌的草稿分别保留。": "Connection updated. Drafts for different addresses or credentials are kept separately.",
   "语义检索": "Semantic search",
   "向量模型": "Embedding model",
   "启用语义检索": "Enable semantic search",

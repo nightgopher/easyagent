@@ -854,12 +854,16 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 		a.action(c, "手动添加连接").AlignSelf(ui.Start).OnClick(func() { a.PhoneHostEditor = true; s.hostForm = hostForm{} })
 	}
 	if !phoneClient || a.PhoneHostEditor {
-		a.heading(c, "添加或修改远程主机"+a.dirtySuffix())
+		heading, saveLabel := "添加远程主机", "保存连接"
+		if s.EditHost != "" {
+			heading, saveLabel = "编辑连接", "保存修改"
+		}
+		a.heading(c, heading+a.dirtySuffix())
 		a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
 		a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
 		a.input(c, "访问令牌", &s.HostToken, "原地址留空保留令牌；新连接留空表示无令牌", true).Bind(&s.HostTokenField)
 		ui.Row(c).Gap(8).Children(func() {
-			a.primary(c, "保存连接").Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
+			a.primary(c, saveLabel).Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)
 			if a.settingsFormDirty() {
 				a.action(c, "放弃修改").OnClick(a.discardSettingsForms)
 			}
@@ -946,6 +950,11 @@ func (a *preview) saveLiveHost() {
 				return
 			}
 			l.Config = saved.Config
+			if wasActive && saved.NewIdentity {
+				// selectLiveHost captures the old host's draft before switching.
+				// The persisted config already points to the new identity.
+				l.Config.ActiveHost = form.EditHost
+			}
 			s.EditHost = saved.Config.Hosts[saved.Index].ID
 			s.HostToken = ""
 			s.RepairCredential = false
@@ -955,7 +964,7 @@ func (a *preview) saveLiveHost() {
 			}
 			l.Notice = "主机连接已保存。"
 			if saved.NewIdentity {
-				l.Notice = "已另存为新连接，原连接及其草稿仍保留。"
+				l.Notice = "主机连接已更新；不同地址或令牌的草稿分别保留。"
 			}
 			if wasActive && saved.NewIdentity {
 				a.selectLiveHost(saved.Index)

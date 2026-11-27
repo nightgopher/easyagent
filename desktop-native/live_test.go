@@ -541,11 +541,11 @@ func TestNativeEditedEndpointGetsSeparateIdentity(t *testing.T) {
 	a.Settings.HostURL = srv.URL
 	a.saveLiveHost()
 	waitNative(t, a, func() bool { return a.Live.Client != nil && a.Live.Client.URL == srv.URL })
-	if len(a.Live.Config.Hosts) != 2 || a.Live.Config.ActiveHost == "old" || a.Live.workspace() != "" || a.Live.Drafts["old/same"] != "old server draft" {
+	if len(a.Live.Config.Hosts) != 1 || a.Live.Config.ActiveHost == "old" || a.Live.workspace() != "" || a.Live.Drafts["old/same"] != "old server draft" {
 		t.Fatal("endpoint change reused previous server identity or workspace")
 	}
-	if a.Live.Config.Hosts[0].URL != "http://127.0.0.1:1" {
-		t.Fatal("old connection overwritten")
+	if a.Live.Config.Hosts[0].URL != srv.URL || len(a.Live.Config.HostHistory) != 1 || a.Live.Config.HostHistory[0].ID != "old" {
+		t.Fatal("edited entry not replaced or original identity lost")
 	}
 }
 

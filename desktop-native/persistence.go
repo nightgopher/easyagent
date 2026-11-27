@@ -38,6 +38,7 @@ func (l *liveState) configMutating() bool {
 }
 func cloneConfig(cfg clientConfig) clientConfig {
 	cfg.Hosts = append([]hostConfig{}, cfg.Hosts...)
+	cfg.HostHistory = append([]hostConfig(nil), cfg.HostHistory...)
 	if cfg.ModelProfiles != nil {
 		profiles := make(map[string]modelConfig, len(cfg.ModelProfiles))
 		for id, profile := range cfg.ModelProfiles {
