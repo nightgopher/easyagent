@@ -235,6 +235,9 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 	})
 	a.preferenceRow(c, SettingCopyCurrentModel, a.current().Model, func() {})
 	a.note(c, SettingCopyModelNote)
+	if str(object(l.Data["models"])["source"]) == "unconfigured" && s.host().Local {
+		a.note(c, unconfiguredModelNotice)
+	}
 	if !s.host().Local {
 		a.note(c, SettingCopyRemoteModelNote)
 		ui.Row(c).Gap(8).Wrap().Children(func() {

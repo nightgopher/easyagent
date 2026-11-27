@@ -640,10 +640,20 @@ func (a *preview) subscribe(s *session) {
 	value := map[string]any{"type": "subscribe", "session_id": s.RemoteID, "after_seq": s.Seq, "run_id": s.runID()}
 	a.background(func(context.Context, *backendClient) (any, error) { return nil, b.send(value) }, nil)
 }
+
+const unconfiguredModelNotice = "尚未配置默认模型，请先在模型连接中选择并配置服务。"
+
 func (a *preview) refreshModels() {
 	a.operation("model-list", "GET", "/models", nil, func(v any) {
 		m := object(v)
 		a.Live.Data["models"] = v
+		if !phoneClient && a.Settings.host().Local && str(m["source"]) == "unconfigured" {
+			if a.Live.Notice == "" {
+				a.Live.Notice = a.tr(unconfiguredModelNotice)
+			}
+		} else if a.Live.Notice == a.tr(unconfiguredModelNotice) {
+			a.Live.Notice = ""
+		}
 		var models []string
 		for _, item := range list(m["models"]) {
 			id := str(object(item)["id"])

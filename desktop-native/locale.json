@@ -1,4 +1,6 @@
 {
+  "尚未配置默认模型，请先在模型连接中选择并配置服务。": "No default model is configured. Choose and configure a service in Model connections.",
+  "配置模型": "Configure model",
   "语义检索": "Semantic search",
   "向量模型": "Embedding model",
   "启用语义检索": "Enable semantic search",

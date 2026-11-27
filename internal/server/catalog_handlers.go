@@ -90,6 +90,8 @@ func (s *Server) listModels(w http.ResponseWriter, r *http.Request) {
 		modelID = cfg.OpenAIModel
 	case "anthropic":
 		modelID = cfg.AnthropicModel
+	case "codex":
+		modelID = cfg.CodexModel
 	}
 	if modelID != "" {
 		current = &ModelInfo{ID: modelID, Provider: provider, Name: modelID, ContextWindow: knownWindow(modelID)}

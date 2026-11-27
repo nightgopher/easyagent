@@ -198,11 +198,12 @@ func main() {
 
 	// Create the coding application. Knowledge browsing remains available separately.
 	application, err := app.New(app.AppOptions{
-		Config:      cfg,
-		SkillDirs:   skillDirs(*skillDir),
-		Application: coding.NewCodingApplication(cfg),
-		Profile:     userProfile,
-		Command:     commandStore,
+		Config:                    cfg,
+		AllowUnconfiguredProvider: *modeFlag == "serve" && os.Getenv("EA_DESKTOP_BOOTSTRAP") == "1",
+		SkillDirs:                 skillDirs(*skillDir),
+		Application:               coding.NewCodingApplication(cfg),
+		Profile:                   userProfile,
+		Command:                   commandStore,
 	})
 	if err != nil {
 		slog.Error("failed to create app", "error", err)
