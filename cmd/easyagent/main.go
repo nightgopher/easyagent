@@ -214,6 +214,16 @@ func main() {
 	})
 	if err != nil {
 		slog.Error("failed to create app", "error", err)
+		if uiModes[*modeFlag] {
+			fmt.Fprintf(os.Stderr, "EasyAgent 启动失败：%v\n", err)
+			if cfg.Provider == "" {
+				fmt.Fprintln(os.Stderr, "尚未配置 CLI 模型服务。可先运行 easyagent easycode login，或使用 ChatGPT：")
+				fmt.Fprintln(os.Stderr, "  easyagent codex login")
+				fmt.Fprintln(os.Stderr, "  easyagent codex models")
+				fmt.Fprintln(os.Stderr, "  EA_PROVIDER=codex EA_CODEX_MODEL=<模型ID> easyagent -y")
+				fmt.Fprintln(os.Stderr, "启动后可在 /config 保存 CLI 默认模型。桌面和 CLI 的登录及模型设置相互独立。")
+			}
+		}
 		os.Exit(1)
 	}
 	defer application.Close()
