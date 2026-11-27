@@ -186,6 +186,7 @@ func newConnectedPreview(dir string) *preview {
 	a.Settings.mcpForm = mcpForm{}
 	a.Settings.feishuForm = feishuForm{}
 	a.Settings.loadPreferences(filepath.Join(dir, "native-preview-preferences.json"))
+	l.Core.ApplyLarkWatch(a.Settings.Preferences.LarkWatch, a.Settings.Preferences.LarkWatchGroups)
 	a.loadWallpaper()
 	a.syncSettingsConfig()
 	return a
