@@ -20,14 +20,14 @@ import (
 )
 
 const watchUsage = `usage: easyagent watch serve [--core-url URL] [--session ID] [--interval DURATION]
-                              [--state-file PATH] [--exclude-chats IDS] [--max-per-wake N]
+                              [--state-file PATH] [--exclude-chats IDS] [--group-chats IDS] [--max-per-wake N]
        easyagent watch once   [同上 flags，只巡查一轮]
 
-lark 看门狗：用 lark-cli 用户身份巡查主人单聊的新消息，发现新消息才唤醒
+lark 看门狗：用 lark-cli 用户身份巡查主人单聊和指定群的新消息，发现新消息才唤醒
 EasyAgent 会话（忙时转插话），并把处理结果以机器人身份转达给主人。
 配置也可用环境变量：EA_LARKWATCH_CORE_URL（或 PI_AGENT_URL）、EA_SERVER_API_KEY、
 EA_LARKWATCH_SESSION_ID、EA_LARKWATCH_INTERVAL、EA_LARKWATCH_STATE_FILE、
-EA_LARKWATCH_EXCLUDE_CHATS、EA_LARKWATCH_MAX_PER_WAKE、EA_LARKWATCH_LARK_CLI。
+EA_LARKWATCH_EXCLUDE_CHATS、EA_LARKWATCH_GROUP_CHATS、EA_LARKWATCH_MAX_PER_WAKE、EA_LARKWATCH_LARK_CLI。
 详见 docs/LARK_WATCH.md。`
 
 // watchOptions 汇总 CLI flag 与环境变量的最终取值；零值表示未指定，交给默认值。
@@ -39,6 +39,7 @@ type watchOptions struct {
 	interval   time.Duration
 	stateFile  string
 	excludeIDs string
+	groupIDs   string
 	maxPerWake int
 	larkBin    string
 }
@@ -62,6 +63,7 @@ func parseWatchArgs(args []string) (*watchOptions, error) {
 	fs.DurationVar(&opts.interval, "interval", 0, "轮询间隔，≥10s（默认 30s）")
 	fs.StringVar(&opts.stateFile, "state-file", "", "位点状态文件路径")
 	fs.StringVar(&opts.excludeIDs, "exclude-chats", "", "不巡查的 chat_id，逗号分隔")
+	fs.StringVar(&opts.groupIDs, "group-chats", "", "要巡查的群 chat_id，逗号分隔")
 	fs.IntVar(&opts.maxPerWake, "max-per-wake", 0, "单次唤醒携带的消息上限（默认 5）")
 	fs.StringVar(&opts.larkBin, "lark-cli", "", "lark-cli 可执行文件路径")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -150,6 +152,7 @@ func buildWatchConfig(opts *watchOptions, getter func(string) string) (larkwatch
 		StateFile:    firstNonEmpty(opts.stateFile, getter("EA_LARKWATCH_STATE_FILE")),
 		MaxPerWake:   opts.maxPerWake,
 		LarkBin:      firstNonEmpty(opts.larkBin, getter("EA_LARKWATCH_LARK_CLI")),
+		GroupChats:   parseChatList(firstNonEmpty(opts.groupIDs, getter("EA_LARKWATCH_GROUP_CHATS"))),
 		ExcludeChats: parseChatList(firstNonEmpty(opts.excludeIDs, getter("EA_LARKWATCH_EXCLUDE_CHATS"))),
 		APIKey:       firstNonEmpty(getter("EA_SERVER_API_KEY"), getter("EA_API_KEY")),
 		OneShot:      opts.command == "once",

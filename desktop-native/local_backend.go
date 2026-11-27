@@ -100,6 +100,7 @@ type localBackend struct {
 	closed      bool
 	dir         string
 	watchOn     bool
+	watchGroups string
 	watchErr    string
 	watchCmd    *exec.Cmd
 	watchDone   chan struct{}
