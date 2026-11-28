@@ -162,6 +162,16 @@ type StreamAssistantMessage struct {
 	Usage              Usage           `json:"usage,omitempty"`
 }
 
+// ThinkingOverride carries a per-request thinking configuration. A nil field
+// on StreamRequest means "no override": providers keep the options they were
+// constructed with. An explicit override replaces them entirely for that
+// request, which is how per-session thinking levels (model menu) work.
+type ThinkingOverride struct {
+	Mode         string // enabled, disabled, or adaptive (Anthropic)
+	BudgetTokens int    // Anthropic thinking budget
+	Effort       string // OpenAI-compatible reasoning_effort
+}
+
 type StreamRequest struct {
 	Model       Model
 	Messages    []Message
@@ -170,6 +180,7 @@ type StreamRequest struct {
 	MaxTokens   *int
 	Temperature *float64
 	ToolChoice  *ToolChoice
+	Thinking    *ThinkingOverride
 }
 
 type SimpleStreamRequest struct {

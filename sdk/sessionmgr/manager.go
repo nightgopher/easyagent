@@ -122,6 +122,15 @@ func (m *Manager) SaveMeta(sessionID string, workspace string, application strin
 type ModelPreference struct {
 	Model    string `json:"model"`
 	Provider string `json:"provider"`
+	// 会话级思考覆盖（空=沿用全局配置）；随 model_selection 一起持久化。
+	ThinkingMode   string `json:"thinking_mode,omitempty"`
+	ThinkingEffort string `json:"thinking_effort,omitempty"`
+	ThinkingBudget int    `json:"thinking_budget,omitempty"`
+}
+
+// ThinkingSet reports whether the preference carries an explicit thinking override.
+func (p ModelPreference) ThinkingSet() bool {
+	return p.ThinkingMode != "" || p.ThinkingEffort != "" || p.ThinkingBudget != 0
 }
 
 func (m *Manager) SaveModel(id string, choice ModelPreference) error {

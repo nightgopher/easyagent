@@ -182,6 +182,19 @@ func resolveCodexEffort(options ThinkingOptions) string {
 	return "medium"
 }
 
+// codexEffortFor resolves the reasoning effort for one request: a session-level
+// override wins over the constructor options; the Responses API cannot disable
+// reasoning, so the "off" level falls back to the lowest effort.
+func codexEffortFor(req ai.StreamRequest, options ThinkingOptions) string {
+	if req.Thinking == nil {
+		return resolveCodexEffort(options)
+	}
+	if effort := req.Thinking.Effort; effort != "" && req.Thinking.Mode != "disabled" {
+		return effort
+	}
+	return "minimal"
+}
+
 // ─── SSE 解析 ────────────────────────────────────────────────────────────────────
 
 type codexSSEEvent struct {
@@ -417,7 +430,8 @@ func (p *CodexProvider) Stream(ctx context.Context, req ai.StreamRequest) (*ai.E
 		return nil, errors.New("请先登录 Codex（ChatGPT）账号")
 	}
 
-	wire, err := buildCodexRequest(req, resolveCodexEffort(p.thinking))
+	// 会话级覆盖优先；Responses API 无法关闭推理，"关"档位落到最低强度。
+	wire, err := buildCodexRequest(req, codexEffortFor(req, p.thinking))
 	if err != nil {
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}

@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /sessions/{id}/queue", s.messageQueueHTTP)
 	restMux.HandleFunc("POST /sessions/{id}/attachments", s.uploadAttachment)
 	restMux.HandleFunc("POST /sessions/{id}/model", s.switchModel)
+	restMux.HandleFunc("POST /sessions/{id}/thinking", s.setThinking)
 	restMux.HandleFunc("GET /inbox", s.listCaptures)
 	restMux.HandleFunc("POST /inbox", s.saveCapture)
 	restMux.HandleFunc("POST /sessions/{id}/artifacts", s.saveArtifact)

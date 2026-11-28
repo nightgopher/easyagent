@@ -506,11 +506,16 @@ func (p *OpenAIProvider) buildOpenAIRequest(req ai.StreamRequest, stream bool) o
 		Temperature: 0.7,
 	}
 
-	if p.thinking.Mode != "" {
-		oaiReq.Thinking = &thinkingParam{Type: p.thinking.Mode}
+	// 会话级覆盖优先；nil 时沿用构造参数（全局配置）。
+	thinking := p.thinking
+	if req.Thinking != nil {
+		thinking = ThinkingOptions{Mode: req.Thinking.Mode, BudgetTokens: req.Thinking.BudgetTokens, Effort: req.Thinking.Effort}
 	}
-	oaiReq.ReasoningEffort = p.thinking.Effort
-	if p.thinking.Effort != "" {
+	if thinking.Mode != "" {
+		oaiReq.Thinking = &thinkingParam{Type: thinking.Mode}
+	}
+	oaiReq.ReasoningEffort = thinking.Effort
+	if thinking.Effort != "" {
 		oaiReq.Temperature = 0
 		if strings.HasPrefix(req.Model.ID, "gpt-") || strings.HasPrefix(req.Model.ID, "o1") || strings.HasPrefix(req.Model.ID, "o3") || strings.HasPrefix(req.Model.ID, "o4") {
 			oaiReq.MaxCompletionTokens = maxTokens

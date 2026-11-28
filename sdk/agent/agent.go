@@ -42,6 +42,7 @@ type Options struct {
 	HookSystem               HookSystemInterface      // 可选：增强型 Hook 系统（优先级排序、超时）
 	ConfirmFunc              ConfirmFunc              // 可选：危险工具执行前向用户确认（未注入则默认放行）
 	LoopDetectSettings       LoopDetectSettings       // 循环检测设置（默认启用，连续相同 tool call 触发提醒）
+	Thinking                 *ai.ThinkingOverride     // 可选：会话级思考覆盖（nil=沿用 provider 构造参数）
 }
 
 type Agent struct {
@@ -67,6 +68,7 @@ type Agent struct {
 	confirmFunc        ConfirmFunc
 	loopDetectSettings LoopDetectSettings
 	loopDetect         loopDetector
+	thinking           *ai.ThinkingOverride
 }
 
 func New(opts Options) *Agent {
@@ -104,6 +106,7 @@ func New(opts Options) *Agent {
 		hookSystem:         opts.HookSystem,
 		confirmFunc:        opts.ConfirmFunc,
 		loopDetectSettings: loopSettings,
+		thinking:           opts.Thinking,
 	}
 	a.discoveryFallback = opts.ToolSearchDisabledReason
 	if opts.ToolSearchMode != "" && opts.ToolSearchMode != ToolSearchOff && opts.ToolSearchMode != ToolSearchLocal {
@@ -557,6 +560,7 @@ func (a *Agent) llmRequest(messages []ai.Message) ai.StreamRequest {
 		System:     a.system,
 		Tools:      definitions,
 		ToolChoice: nil,
+		Thinking:   a.thinking,
 	}
 	if max := a.model.MaxTokens; max > 0 {
 		req.MaxTokens = &max

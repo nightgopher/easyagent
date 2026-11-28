@@ -520,12 +520,30 @@ func (p *AnthropicProvider) buildRequest(req ai.StreamRequest, stream bool) anth
 		Messages:    convertToAnthropicMessages(req.Messages),
 	}
 
-	if p.thinking.Mode != "" {
-		apiReq.Thinking = &thinkingParam{Type: p.thinking.Mode}
-		if p.thinking.Mode == "enabled" {
-			apiReq.Thinking.BudgetTokens = p.thinking.BudgetTokens
-			if apiReq.MaxTokens <= p.thinking.BudgetTokens {
-				apiReq.MaxTokens = p.thinking.BudgetTokens + 1024
+	// 会话级覆盖优先；nil 时沿用构造参数（全局配置）。
+	// 覆盖只带 Effort（分段按钮的 低/中/高）时映射为思考预算：
+	// low=2048 / medium=8192 / high=16384，模式启用思考。
+	thinking := p.thinking
+	if req.Thinking != nil {
+		thinking = ThinkingOptions{Mode: req.Thinking.Mode, BudgetTokens: req.Thinking.BudgetTokens, Effort: req.Thinking.Effort}
+		if thinking.Mode == "" && thinking.Effort != "" {
+			thinking.Mode = "enabled"
+			switch thinking.Effort {
+			case "low":
+				thinking.BudgetTokens = 2048
+			case "medium":
+				thinking.BudgetTokens = 8192
+			default:
+				thinking.BudgetTokens = 16384
+			}
+		}
+	}
+	if thinking.Mode != "" {
+		apiReq.Thinking = &thinkingParam{Type: thinking.Mode}
+		if thinking.Mode == "enabled" {
+			apiReq.Thinking.BudgetTokens = thinking.BudgetTokens
+			if apiReq.MaxTokens <= thinking.BudgetTokens {
+				apiReq.MaxTokens = thinking.BudgetTokens + 1024
 			}
 		}
 	}
