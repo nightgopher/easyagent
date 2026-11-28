@@ -731,6 +731,10 @@ type runtimeOverrides struct {
 	DefaultProvider        *string           `json:"default_provider,omitempty"`
 	EasyCodeDefaultModel   *string           `json:"easycode_default_model,omitempty"`
 	BuiltinTools           map[string]bool   `json:"builtin_tools,omitempty"`
+	OpenAIAPIKey           *string           `json:"openai_api_key,omitempty"`
+	OpenAIBaseURL          *string           `json:"openai_base_url,omitempty"`
+	AnthropicAPIKey        *string           `json:"anthropic_api_key,omitempty"`
+	AnthropicBaseURL       *string           `json:"anthropic_base_url,omitempty"`
 }
 
 // LoadRuntimeOverrides applies <dataDir>/settings.json on top of c. Missing
@@ -807,6 +811,34 @@ func SaveRuntimeOverrideDefaultModel(dataDir, provider, model string) error {
 		o.DefaultModel = &model
 		if provider != "" {
 			o.DefaultProvider = &provider
+		}
+	})
+}
+
+// SaveRuntimeOverrideProviderConnection persists a provider connection (base
+// URL / API key) configured at runtime, e.g. from the web settings page.
+// Empty values keep the previous setting; provider must be openai or
+// anthropic (deepv/codex credentials come from their own login flows).
+func SaveRuntimeOverrideProviderConnection(dataDir, provider, baseURL, apiKey string) error {
+	if provider != "openai" && provider != "anthropic" {
+		return fmt.Errorf("unsupported provider %q (only openai/anthropic)", provider)
+	}
+	return mutateRuntimeOverrides(dataDir, func(o *runtimeOverrides) {
+		switch provider {
+		case "openai":
+			if baseURL != "" {
+				o.OpenAIBaseURL = &baseURL
+			}
+			if apiKey != "" {
+				o.OpenAIAPIKey = &apiKey
+			}
+		case "anthropic":
+			if baseURL != "" {
+				o.AnthropicBaseURL = &baseURL
+			}
+			if apiKey != "" {
+				o.AnthropicAPIKey = &apiKey
+			}
 		}
 	})
 }

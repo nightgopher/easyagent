@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/nightgopher/easyagent/internal/agents/business"
@@ -353,6 +354,68 @@ func (a *App) SetDefaultModel(provider, model string) error {
 		return config.SaveEasyCodeDefaultModel(a.cfg.DataDir, model)
 	}
 	return config.SaveRuntimeOverrideDefaultModel(a.cfg.DataDir, provider, model)
+}
+
+// SetProviderConnection updates the provider connection (base URL, API key,
+// default model) at runtime, re-registers the provider client so new sessions
+// pick it up, and persists the values as runtime overrides. Empty arguments
+// keep the current value. In-flight sessions keep their previous client.
+func (a *App) SetProviderConnection(provider, baseURL, apiKey, model string) (config.Config, error) {
+	a.cfgMu.Lock()
+	defer a.cfgMu.Unlock()
+	if provider == "" {
+		provider = a.cfg.Provider
+	}
+	switch provider {
+	case "openai", "anthropic":
+	case "deepv", "codex":
+		return config.Config{}, fmt.Errorf("provider %q 的连接由登录账号管理，请使用对应的登录入口", provider)
+	default:
+		return config.Config{}, fmt.Errorf("unknown provider %q (supported: openai, anthropic)", provider)
+	}
+	thinking := providers.ThinkingOptions{Mode: a.cfg.ThinkingMode, BudgetTokens: a.cfg.ThinkingBudget, Effort: a.cfg.ReasoningEffort}
+	if err := thinking.Validate(provider); err != nil {
+		return config.Config{}, err
+	}
+	switch provider {
+	case "openai":
+		if baseURL != "" {
+			a.cfg.OpenAIBaseURL = strings.TrimSuffix(baseURL, "/")
+		}
+		if apiKey != "" {
+			a.cfg.OpenAIAPIKey = apiKey
+		}
+		if model != "" {
+			a.cfg.OpenAIModel = model
+		}
+		if a.cfg.OpenAIAPIKey == "" {
+			return config.Config{}, fmt.Errorf("API key 不能为空")
+		}
+		a.registry.Register(providers.NewOpenAIProvider(a.cfg.OpenAIAPIKey, a.cfg.OpenAIBaseURL, thinking))
+	case "anthropic":
+		if baseURL != "" {
+			a.cfg.AnthropicBaseURL = strings.TrimSuffix(baseURL, "/")
+		}
+		if apiKey != "" {
+			a.cfg.AnthropicAPIKey = apiKey
+		}
+		if model != "" {
+			a.cfg.AnthropicModel = model
+		}
+		if a.cfg.AnthropicAPIKey == "" {
+			return config.Config{}, fmt.Errorf("API key 不能为空")
+		}
+		a.registry.Register(providers.NewAnthropicProvider(a.cfg.AnthropicAPIKey, a.cfg.AnthropicBaseURL, thinking))
+	}
+	if err := config.SaveRuntimeOverrideProviderConnection(a.cfg.DataDir, provider, baseURL, apiKey); err != nil {
+		return config.Config{}, err
+	}
+	if model != "" {
+		if err := config.SaveRuntimeOverrideDefaultModel(a.cfg.DataDir, provider, model); err != nil {
+			return config.Config{}, err
+		}
+	}
+	return a.cfg, nil
 }
 
 // ApplyCLIDefaultModel updates this CLI process after its user-scoped

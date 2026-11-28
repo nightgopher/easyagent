@@ -210,6 +210,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /sessions/{id}/permissions", s.setSessionPermissions)
 	restMux.HandleFunc("GET /settings/permissions", s.getPermissionSettings)
 	restMux.HandleFunc("POST /settings/permissions", s.setPermissionSettings)
+	restMux.HandleFunc("GET /settings/provider", s.getProviderSettings)
+	restMux.HandleFunc("PUT /settings/provider", s.updateProviderSettings)
 	restMux.HandleFunc("GET /sessions/{id}/run", s.getRun)
 	restMux.HandleFunc("POST /sessions/{id}/run/cancel", s.cancelRunHTTP)
 	restMux.HandleFunc("POST /sessions/{id}/run/continue", s.continueRunHTTP)
