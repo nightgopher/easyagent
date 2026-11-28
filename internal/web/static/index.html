@@ -129,6 +129,22 @@
     <main id="page-settings" class="page" hidden>
       <div class="settings-layout">
         <header class="settings-heading"><div><h1>连接与工具</h1><p>管理消息入口，以及 Agent 可以使用的外部工具。</p></div></header>
+        <form id="provider-form" class="settings-section" aria-labelledby="provider-title">
+          <div class="settings-heading settings-subheading"><div><h2 id="provider-title">模型连接</h2><p>配置模型提供方、接口地址与 API 密钥。保存后新会话立即使用新连接，进行中的会话不受影响；密钥保存在服务端数据目录，不会完整回显。</p></div></div>
+          <div class="mcp-editor-options">
+            <label for="provider-select">提供方</label>
+            <select id="provider-select" class="settings-input" style="width:160px;max-width:100%"><option value="openai">OpenAI 兼容</option><option value="anthropic">Anthropic</option></select>
+            <label for="provider-base-url">接口地址</label>
+            <input id="provider-base-url" class="settings-input" type="text" placeholder="留空保持不变（可选）" style="width:260px;max-width:100%" autocomplete="off">
+            <label for="provider-api-key">API 密钥</label>
+            <input id="provider-api-key" class="settings-input" type="password" placeholder="留空保持不变" autocomplete="off">
+            <label for="provider-model">模型</label>
+            <input id="provider-model" class="settings-input" type="text" placeholder="模型 ID" style="width:200px;max-width:100%" autocomplete="off">
+            <button id="provider-save" class="btn" type="submit">保存</button>
+            <button id="provider-refresh" type="button" class="btn btn-ghost">刷新</button>
+          </div>
+          <p id="provider-status" class="settings-notice" role="status" aria-live="polite"></p>
+        </form>
         <form id="tool-discovery-form" class="settings-section" aria-labelledby="tool-discovery-title">
           <div class="settings-heading settings-subheading"><div><h2 id="tool-discovery-title">工具加载</h2><p>保留基础工具，其他工具在需要时搜索并加载。保存到当前运行主机，下一次任务生效。</p></div></div>
           <div class="mcp-editor-options"><label for="tool-discovery-mode">加载方式</label><select id="tool-discovery-mode" class="settings-input" style="width:180px;max-width:100%" disabled><option value="">尚未读取</option><option value="off">完整加载</option><option value="local">按需加载</option></select><button id="tool-discovery-save" class="btn" disabled>保存</button><button id="tool-discovery-refresh" type="button" class="btn btn-ghost">刷新</button></div>
