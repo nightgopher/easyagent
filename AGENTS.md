@@ -69,6 +69,13 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - 架构决策：`docs/decisions/`
 - 竞品调研：`docs/research/`
 
+按任务路由阅读，改前先读对应文档：
+
+- 界面文案、命名、术语拿不准：先查 `GLOSSARY.md`（领域词汇裁决来源，配合 `.agents/skills/domain-modeling/`）
+- 改桌面原生 UI（`desktop-native/`）：先读 `.agents/skills/desktop-native-ui/SKILL.md`，界面规范见 `DESIGN.md`、桌面文档见 `docs/DESKTOP.md`
+- 改核心 / SDK / 服务端：`docs/ARCHITECTURE.md` / `docs/INTERNALS.md` / `docs/API.md`
+- 涉及接入安全（飞书、HTTP 认证、配对、工具确认）：`docs/SECURITY_MODEL.md`
+
 ## 项目架构
 
 四层分层，依赖方向：`Entrypoints → Application → Platform → Core`
