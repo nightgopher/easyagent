@@ -114,6 +114,17 @@
           <div><h3>全部会话</h3></div>
           <button id="sess-refresh-btn" class="btn btn-ghost">刷新</button>
         </div>
+        <div id="sess-export-bar" class="sess-export-bar" hidden>
+          <span>已选 <b id="sess-sel-count">0</b> 条</span>
+          <label for="sess-export-format">格式</label>
+          <select id="sess-export-format" class="settings-input">
+            <option value="md">Markdown</option>
+            <option value="json">JSON</option>
+            <option value="txt">纯文本</option>
+          </select>
+          <button id="sess-export-zip-btn" class="btn btn-sm">导出 zip</button>
+          <button id="sess-export-cancel" class="btn btn-ghost btn-sm">取消选择</button>
+        </div>
         <div id="sess-table" class="sess-table"></div>
       </div>
       <section id="sess-messages" class="sess-messages" aria-labelledby="sess-msg-title" hidden>

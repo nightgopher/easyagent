@@ -188,6 +188,8 @@ func (s *Server) Handler() http.Handler {
 	restMux.HandleFunc("POST /chat/stream", s.chatStream)
 	restMux.HandleFunc("GET /sessions", s.listSessions)
 	restMux.HandleFunc("GET /sessions/search", s.searchSessions)
+	restMux.HandleFunc("GET /sessions/export", s.exportSessionsZip)
+	restMux.HandleFunc("GET /sessions/{id}/export", s.exportSession)
 	restMux.HandleFunc("GET /sessions/{id}/history", s.searchSessionHistory)
 	restMux.HandleFunc("POST /sessions", s.createSession)
 	restMux.HandleFunc("POST /sessions/{id}/fork", s.forkSession)
