@@ -72,6 +72,12 @@ func (a *preview) loadSettingsPage() {
 		return
 	}
 	s := &a.Settings
+	if s.Tab == "models" && !s.host().Local && l.Client != nil &&
+		!l.Loading["provider-settings"] && l.Data["provider-settings"] == nil && l.ResourceErrors["provider-settings"] == "" {
+		a.operation("provider-settings", "GET", "/settings/provider", nil, func(v any) {
+			s.applyRemoteProviderSettings(v)
+		})
+	}
 	switch s.Tab {
 	case "workflows":
 		a.resource("workflows", "/dynamic-workflows")
@@ -139,6 +145,49 @@ func (a *preview) saveLiveDefaultModel(model string) {
 	a.operation("model-default", "PUT", "/models/default", payload, func(v any) {
 		a.Settings.message("已保存主机默认模型（需重启核心生效）")
 		a.refreshModels()
+	})
+}
+
+// remoteProviderSettings renders the 远程主机「模型连接（远程）」card: it reads
+// and writes the connected host's provider connection via GET/PUT
+// /settings/provider, so the model plane can be re-pointed without SSH.
+func (a *preview) remoteProviderSettings(c *ui.Context) {
+	s := &a.Settings
+	l := a.Live
+	a.heading(c, "模型连接（远程）")
+	if l.Loading["provider-settings"] {
+		a.note(c, "正在读取…")
+	}
+	if errText, bad := l.ResourceErrors["provider-settings"]; bad && errText != "" {
+		a.note(c, "读取失败："+errText+"。远程主机核心需要升级到包含 /settings/provider 的版本。")
+		return
+	}
+	if l.Data["provider-settings"] == nil {
+		return
+	}
+	a.dropdown(c, "提供方", &s.RemoteProvider, []string{"openai", "anthropic"})
+	a.input(c, "接口地址", &s.RemoteBaseURL, "留空保持不变（可选）", false)
+	a.input(c, "API 密钥", &s.RemoteAPIKey, "留空保持不变", true)
+	a.input(c, "模型", &s.RemoteModel, "模型 ID", false)
+	if s.RemoteKeySet {
+		a.note(c, "已保存密钥（"+s.RemoteKeyHint+"）；留空保留现有密钥。")
+	}
+	a.action(c, "保存").Disabled(l.Loading["provider-save"]).OnClick(func() { a.saveRemoteProviderSettings() })
+	a.note(c, "保存后新会话立即使用新连接；进行中的会话仍使用原连接。")
+}
+
+func (a *preview) saveRemoteProviderSettings() {
+	s := &a.Settings
+	payload := map[string]any{
+		"provider": s.RemoteProvider,
+		"base_url": strings.TrimSpace(s.RemoteBaseURL),
+		"api_key":  strings.TrimSpace(s.RemoteAPIKey),
+		"model":    strings.TrimSpace(s.RemoteModel),
+	}
+	a.operation("provider-save", "PUT", "/settings/provider", payload, func(v any) {
+		s.applyRemoteProviderSettings(v)
+		s.message("已保存。新会话将使用新连接；进行中的会话仍使用原连接。")
+		s.RemoteAPIKey = ""
 	})
 }
 
@@ -245,6 +294,7 @@ func (a *preview) liveModelSettings(c *ui.Context) {
 				selectedButton(c, a.action(c, h.Name), h.ID == l.Config.ActiveHost).Disabled(l.Connecting).OnClick(func() { a.selectLiveHost(index) })
 			}
 		})
+		a.remoteProviderSettings(c)
 		return
 	}
 	a.heading(c, "模型服务")
@@ -912,6 +962,7 @@ func (a *preview) selectLiveHost(index int) {
 	a.Settings.mcpForm = mcpForm{Workspace: l.workspace()}
 	a.Live.SavedMCPForm = a.Settings.mcpForm
 	a.Settings.hostForm = hostForm{}
+	a.Settings.remoteModelForm = remoteModelForm{}
 	a.Sessions = []*session{{ID: a.NextID, Title: "新会话", UpdatedAt: time.Now().UTC().Format(time.RFC3339), Workspace: l.workspace(), Draft: l.Drafts[l.Config.ActiveHost+"/"]}}
 	a.Active = a.NextID
 	a.NextID++
