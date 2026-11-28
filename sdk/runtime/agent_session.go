@@ -52,6 +52,9 @@ type AgentSessionOptions struct {
 	SessionID string
 	Config    config.Config
 	SkillDirs []string
+	// Thinking 是创建时的会话级思考覆盖（nil=沿用全局配置）；恢复旧会话时
+	// 仍以已保存的偏好优先。
+	Thinking *ai.ThinkingOverride
 }
 
 // AgentSession is the central runtime abstraction for agent sessions.
@@ -89,6 +92,10 @@ type AgentSession struct {
 	// within this session: switching models or refreshing tools reloads skills
 	// and would otherwise repeat identical diagnostics each time.
 	seenSkillDiagnostics map[string]struct{}
+
+	// thinkingOverride 是会话级显式思考覆盖（模型菜单设置），nil=沿用全局配置。
+	// 不从 cfg 播种：cfg 里的 Thinking 字段是启动时的全局值，交给 provider 构造参数处理。
+	thinkingOverride *ai.ThinkingOverride
 }
 
 var skillDiagnosticsMu sync.Mutex
@@ -137,11 +144,12 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 		opts.Config.AllowOutsideWorkspace = false
 	}
 	s := &AgentSession{
-		cfg:         opts.Config,
-		sessionMgr:  deps.SessionMgr,
-		extRegistry: deps.ExtRegistry,
-		deps:        deps,
-		skillDirs:   opts.SkillDirs,
+		cfg:              opts.Config,
+		sessionMgr:       deps.SessionMgr,
+		extRegistry:      deps.ExtRegistry,
+		deps:             deps,
+		skillDirs:        opts.SkillDirs,
+		thinkingOverride: opts.Thinking,
 	}
 
 	s.application = deps.Application
@@ -235,6 +243,9 @@ func NewAgentSession(ctx context.Context, opts AgentSessionOptions, deps Depende
 			_ = s.Close()
 			return nil, fmt.Errorf("unsupported saved model provider %q", choice.Provider)
 		}
+	}
+	if choice.ThinkingSet() && opts.Thinking == nil {
+		s.thinkingOverride = &ai.ThinkingOverride{Mode: choice.ThinkingMode, BudgetTokens: choice.ThinkingBudget, Effort: choice.ThinkingEffort}
 	}
 
 	// Build the agent
@@ -542,7 +553,57 @@ func (s *AgentSession) saveModel() error {
 	if model == "" || s.cfg.Provider == "" {
 		return nil
 	}
-	return s.sessionMgr.SaveModel(s.sessionID, sessionmgr.ModelPreference{Model: model, Provider: s.cfg.Provider})
+	choice := sessionmgr.ModelPreference{Model: model, Provider: s.cfg.Provider}
+	if s.thinkingOverride != nil {
+		choice.ThinkingMode = s.thinkingOverride.Mode
+		choice.ThinkingEffort = s.thinkingOverride.Effort
+		choice.ThinkingBudget = s.thinkingOverride.BudgetTokens
+	}
+	return s.sessionMgr.SaveModel(s.sessionID, choice)
+}
+
+// ThinkingInfo returns the session-level thinking override, if any.
+func (s *AgentSession) ThinkingInfo() (string, string, int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.thinkingOverride == nil {
+		return "", "", 0
+	}
+	return s.thinkingOverride.Mode, s.thinkingOverride.Effort, s.thinkingOverride.BudgetTokens
+}
+
+// SetThinking applies a session-level thinking override and rebuilds the agent.
+// Empty mode and effort clear the override (back to provider/global defaults);
+// the change persists with the session's model preference and takes effect for
+// subsequent prompts.
+func (s *AgentSession) SetThinking(ctx context.Context, mode, effort string, budget int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.busyLocked() {
+		return agent.ErrAgentBusy
+	}
+	previous := s.thinkingOverride
+	if mode == "" && effort == "" && budget == 0 {
+		s.thinkingOverride = nil
+	} else {
+		opts := providers.ThinkingOptions{Mode: mode, BudgetTokens: budget, Effort: effort}
+		if err := opts.Validate(s.cfg.Provider); err != nil {
+			return err
+		}
+		s.thinkingOverride = &ai.ThinkingOverride{Mode: mode, BudgetTokens: budget, Effort: effort}
+	}
+	ag, err := s.buildAgent(ctx, s.deps.Registry, s.skillDirs)
+	if err != nil {
+		s.thinkingOverride = previous
+		return fmt.Errorf("rebuild agent with thinking override: %w", err)
+	}
+	if err := s.saveModel(); err != nil {
+		s.thinkingOverride = previous
+		return fmt.Errorf("save session thinking: %w", err)
+	}
+	s.agent = ag
+	slog.Info("switched thinking", "provider", s.cfg.Provider, "mode", mode, "effort", effort, "budget", budget)
+	return nil
 }
 
 // Compact manually triggers context compaction.
@@ -875,6 +936,7 @@ func (s *AgentSession) buildAgent(ctx context.Context, registry *providers.Regis
 		LifecycleHooks:           lifecycleHooks,
 		ConfirmFunc:              s.wrapConfirm(s.confirmFunc),
 		LoopDetectSettings:       agent.DefaultLoopDetectSettings(),
+		Thinking:                 s.thinkingOverride,
 	}), nil
 }
 

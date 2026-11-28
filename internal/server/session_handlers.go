@@ -14,6 +14,7 @@ import (
 	"github.com/nightgopher/easyagent/internal/agentdata"
 	"github.com/nightgopher/easyagent/internal/stewardtools"
 	"github.com/nightgopher/easyagent/sdk/agent"
+	"github.com/nightgopher/easyagent/sdk/ai"
 	"github.com/nightgopher/easyagent/sdk/config"
 	"github.com/nightgopher/easyagent/sdk/runtime"
 	"github.com/nightgopher/easyagent/sdk/sessionmgr"
@@ -63,6 +64,9 @@ type CreateSessionRequest struct {
 	Cwd             string `json:"cwd,omitempty"`
 	Model           string `json:"model,omitempty"`
 	Application     string `json:"application,omitempty"` // e.g. "coding", "kb"
+	ThinkingMode    string `json:"thinking_mode,omitempty"`
+	ThinkingEffort  string `json:"thinking_effort,omitempty"`
+	ThinkingBudget  int    `json:"thinking_budget,omitempty"`
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
@@ -157,6 +161,9 @@ func (s *Server) createSession(w http.ResponseWriter, r *http.Request) {
 	}
 	opts := runtime.AgentSessionOptions{
 		Config: cfg,
+	}
+	if req.ThinkingMode != "" || req.ThinkingEffort != "" || req.ThinkingBudget != 0 {
+		opts.Thinking = &ai.ThinkingOverride{Mode: req.ThinkingMode, BudgetTokens: req.ThinkingBudget, Effort: req.ThinkingEffort}
 	}
 	sess, err := s.app.SessionStore().Create(r.Context(), opts, deps)
 	if err != nil {
@@ -317,6 +324,7 @@ func (s *Server) getSessionInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	provider, modelID := sess.ModelInfo()
+	thinkingMode, thinkingEffort, thinkingBudget := sess.ThinkingInfo()
 	agentID, _ := s.app.SessionManager().AgentID(sessionID)
 
 	usage, err := sess.ContextUsage(r.Context())
@@ -339,6 +347,9 @@ func (s *Server) getSessionInfo(w http.ResponseWriter, r *http.Request) {
 		"id":                      sess.SessionID(),
 		"provider":                provider,
 		"model":                   modelID,
+		"thinking_mode":           thinkingMode,
+		"thinking_effort":         thinkingEffort,
+		"thinking_budget":         thinkingBudget,
 		"workspace":               workspace,
 		"allow_outside_workspace": sess.Config().AllowOutsideWorkspace,
 	})
@@ -384,6 +395,54 @@ func (s *Server) switchModel(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"provider": provider,
 		"model":    modelID,
+	})
+}
+
+// ─── POST /sessions/{id}/thinking ─────────────────────────────────────────────
+
+// ThinkingRequest is the request body for switching a session's thinking
+// override. Empty mode and effort clear the override (back to the global
+// configuration); a mode without effort toggles thinking on/off, an effort
+// without mode picks a reasoning level (Anthropic maps it to a budget).
+type ThinkingRequest struct {
+	Mode   string `json:"mode,omitempty"`
+	Effort string `json:"effort,omitempty"`
+	Budget int    `json:"budget,omitempty"`
+}
+
+func (s *Server) setThinking(w http.ResponseWriter, r *http.Request) {
+	if s.rejectActiveWorkflowActor(w, r.PathValue("id")) {
+		return
+	}
+	sessionID := r.PathValue("id")
+
+	var req ThinkingRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	sess, err := s.app.LoadSession(r.Context(), sessionID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "session not found")
+		return
+	}
+
+	if err := sess.SetThinking(r.Context(), req.Mode, req.Effort, req.Budget); err != nil {
+		if errors.Is(err, agent.ErrAgentBusy) {
+			writeError(w, http.StatusConflict, "session is busy")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "set thinking failed: "+err.Error())
+		return
+	}
+
+	mode, effort, budget := sess.ThinkingInfo()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"mode":   mode,
+		"effort": effort,
+		"budget": budget,
 	})
 }
 

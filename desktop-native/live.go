@@ -795,6 +795,7 @@ func (a *preview) loadSession(s *session) {
 		s.Home = str(m["home"])
 		s.Project = filepath.Base(s.Workspace)
 		s.Model = str(m["model"])
+		s.ThinkingLevel = thinkingLevelFrom(str(m["thinking_mode"]), str(m["thinking_effort"]))
 		s.Usage = object(m["context_usage"])
 		s.AccessMode = str(m["access_mode"])
 		s.AgentID = str(m["agent_id"])
@@ -853,6 +854,11 @@ func (a *preview) createBoundSession(draft, workspace, application, agentID stri
 	}
 	a.Live.Versions["sessions"]++
 	body := map[string]any{"cwd": workspace, "model": model, "application": application}
+	if initial && origin.ThinkingLevel != "" {
+		for key, value := range thinkingBody(origin.ThinkingLevel) {
+			body[key] = value
+		}
+	}
 	if agentID != "" {
 		body = map[string]any{"agent_id": agentID}
 		if origin.SelectedExpertID == agentID && origin.RemoteID != "" {
@@ -1125,6 +1131,22 @@ func (a *preview) switchLiveModel(name string) {
 		if a.current() == s {
 			a.ReturnToComposer = true
 		}
+	})
+}
+// setSessionThinking applies the picker's 思考强度 level to the current
+// session: unsaved sessions keep it locally for the create request, existing
+// sessions POST it and re-read the resolved override.
+func (a *preview) setSessionThinking(level string) {
+	s := a.current()
+	if a.Live.Loading["thinking/"+s.RemoteID] {
+		return
+	}
+	if s.RemoteID == "" {
+		s.ThinkingLevel = level
+		return
+	}
+	a.operation("thinking/"+s.RemoteID, "POST", sessionPath(s.RemoteID)+"/thinking", thinkingBody(level), func(v any) {
+		s.ThinkingLevel = thinkingLevelFrom(str(object(v)["mode"]), str(object(v)["effort"]))
 	})
 }
 func (a *preview) switchLivePermission(mode string) {

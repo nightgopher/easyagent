@@ -264,3 +264,29 @@ func TestConcurrentMetadataUpdatesPreserveIndependentFields(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, choice, actualChoice)
 }
+
+func TestModelPreferenceThinkingRoundtrip(t *testing.T) {
+	ctx := context.Background()
+	manager := sessionmgr.NewManager(t.TempDir())
+	id, _, err := manager.Create(ctx)
+	require.NoError(t, err)
+
+	want := sessionmgr.ModelPreference{Model: "glm-5.3-flash", Provider: "openai", ThinkingEffort: "high"}
+	require.NoError(t, manager.SaveModel(id, want))
+	choice, err := manager.LoadModel(id)
+	require.NoError(t, err)
+	require.Equal(t, want, choice)
+	require.True(t, choice.ThinkingSet())
+
+	off := sessionmgr.ModelPreference{Model: "glm-5.3-flash", Provider: "openai", ThinkingMode: "disabled"}
+	require.NoError(t, manager.SaveModel(id, off))
+	choice, err = manager.LoadModel(id)
+	require.NoError(t, err)
+	require.Equal(t, off, choice)
+	require.True(t, choice.ThinkingSet())
+
+	require.NoError(t, manager.SaveModel(id, sessionmgr.ModelPreference{Model: "glm-5.3-flash", Provider: "openai"}))
+	choice, err = manager.LoadModel(id)
+	require.NoError(t, err)
+	require.False(t, choice.ThinkingSet(), "cleared override must not persist stale thinking fields")
+}

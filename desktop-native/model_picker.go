@@ -16,6 +16,34 @@ type nativeModelChoice struct {
 // recentModelLimit is how many recently chosen models are listed first.
 const recentModelLimit = 3
 
+// thinkingLevels are the picker's discrete 思考强度 levels; "" inherits the
+// global configuration from the model settings page.
+var thinkingLevels = []struct{ Level, Label string }{
+	{"", "默认"}, {"off", "关"}, {"low", "低"}, {"medium", "中"}, {"high", "高"},
+}
+
+// thinkingBody maps a picker level to the session thinking request fields.
+func thinkingBody(level string) map[string]any {
+	switch level {
+	case "off":
+		return map[string]any{"mode": "disabled"}
+	case "low", "medium", "high":
+		return map[string]any{"effort": level}
+	}
+	return map[string]any{}
+}
+
+// thinkingLevelFrom maps server thinking fields back to a picker level.
+func thinkingLevelFrom(mode, effort string) string {
+	switch {
+	case mode == "disabled":
+		return "off"
+	case effort == "low" || effort == "medium" || effort == "high":
+		return effort
+	}
+	return ""
+}
+
 // detail is the second line of a choice: provider, ID when it differs from the
 // name, and the context window when the host knows it.
 func (m nativeModelChoice) detail() string {
@@ -164,6 +192,21 @@ func (a *preview) liveModelPicker(c *ui.Context, anchor ui.Element) {
 					icon(c, "check")
 				}
 			})
+		})
+		// 思考强度：会话级分段选择，点击即时生效；默认沿用全局配置。
+		ui.Row(c).Gap(4).Margin(6, 0, 0, 0).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, "思考强度").FontSize(10).TextColor(c.Theme().TextMuted)
+			ui.Spacer(c)
+			for _, tl := range thinkingLevels {
+				level, busy := tl.Level, l.Loading["thinking/"+s.RemoteID]
+				button := ui.ButtonBase(c.Key("thinking-" + tl.Label)).Label("思考强度：" + tl.Label).Padding(5, 8).Radius(5).FontSize(11).TextColor(c.Theme().TextMuted).Disabled(busy).OnClick(func() { a.setSessionThinking(level) })
+				if s.ThinkingLevel == level {
+					button.Background(c.Theme().Accent.Alpha(.12)).TextColor(c.Theme().Accent)
+				}
+				button.Children(func() {
+					ui.Text(c, tl.Label).SingleLine()
+				})
+			}
 		})
 		if str(object(l.Data["models"])["source"]) == "configured" {
 			a.note(c, "仅显示已配置模型，连接尚未验证")
