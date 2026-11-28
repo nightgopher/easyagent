@@ -263,3 +263,10 @@ h1,h2,h3{text-wrap:balance}p{text-wrap:pretty}
 .tool-confirmation pre { max-height: 96px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .tool-confirmation > div { display: flex; justify-content: flex-end; gap: 8px; }
 .tool-confirmation button { padding: 8px 14px; white-space: nowrap; min-height: 40px; }
+
+/* 会话页批量导出栏 */
+.sess-export-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:10px;border:1px solid var(--accent,#7ed0c6);border-radius:10px;background:var(--bg-card,#172b29)}
+.sess-export-bar[hidden]{display:none}
+.sess-export-bar select.settings-input{width:auto;min-width:120px}
+.sess-export-bar label{color:var(--text-secondary,#a5bbb7)}
+.sess-export-bar b{color:var(--accent,#7ed0c6)}

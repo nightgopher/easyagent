@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -43,6 +48,57 @@ func (a *preview) deleteNativeSession(s *session) {
 	}}
 }
 func (a *preview) forkNativeSession(s *session) { a.forkNativeSessionTo(s, nil) }
+
+// exportNativeSession 把会话日志导出为 Markdown 文件:取服务端导出端点,
+// 弹系统保存对话框落盘(模式同 workbench.go 的 exportNativeFile)。
+func (a *preview) exportNativeSession(s *session) {
+	if s.RemoteID == "" {
+		return
+	}
+	a.background(func(ctx context.Context, b *backendClient) (any, error) {
+		req, err := http.NewRequestWithContext(ctx, "GET", b.URL+sessionPath(s.RemoteID)+"/export?format=md", nil)
+		if err != nil {
+			return nil, err
+		}
+		if b.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+b.Token)
+		}
+		res, err := b.HTTP.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer res.Body.Close()
+		data, err := io.ReadAll(io.LimitReader(res.Body, 32<<20+1))
+		if err != nil {
+			return nil, err
+		}
+		if res.StatusCode < 200 || res.StatusCode >= 300 {
+			return nil, fmt.Errorf("服务返回 HTTP %d", res.StatusCode)
+		}
+		name := strings.TrimSpace(s.Title)
+		if name == "" {
+			name = "会话-" + s.RemoteID
+		}
+		name = strings.Map(func(r rune) rune {
+			if strings.ContainsRune(`/\:*?"<>|`, r) {
+				return '-'
+			}
+			return r
+		}, name+".md")
+		target, err := mygo.Dialog.Save(mygo.SaveDialogOptions{Title: "导出会话", DefaultPath: name})
+		if err != nil {
+			return nil, err
+		}
+		if target == "" {
+			return nil, nil
+		}
+		return target, os.WriteFile(target, data, 0600)
+	}, func(v any) {
+		if str(v) != "" {
+			a.Live.Notice = "会话已导出:" + str(v)
+		}
+	})
+}
 func (a *preview) forkNativeSessionTo(s *session, application *string) {
 	body := map[string]any{}
 	if application != nil {
@@ -59,6 +115,7 @@ func (a *preview) sessionOptions(c *ui.Context, s *session, close func()) {
 	}
 	menuOption(c, "pin", pin, false).Disabled(a.Live.Loading["preferences/"+s.RemoteID]).OnClick(func() { close(); a.patchSessionPreference(s, map[string]any{"pinned": !s.Pinned}, nil) })
 	menuOption(c, "git-branch", "分叉会话", false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSession(s) })
+	menuOption(c, "download", "导出会话", false).Disabled(busy || a.Live.Loading["export/"+s.RemoteID]).OnClick(func() { close(); a.exportNativeSession(s) })
 	for _, target := range []struct{ Name, ID string }{{"编程", ""}} {
 		menuOption(c, "git-branch", "分叉为："+target.Name, false).Disabled(busy || a.Live.Loading["fork/"+s.RemoteID]).OnClick(func() { close(); a.forkNativeSessionTo(s, &target.ID) })
 	}

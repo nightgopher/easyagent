@@ -1,6 +1,6 @@
-// 会话管理页：列表、消息回看、删除
+// 会话管理页：列表、消息回看、删除、多选导出
 
-import { api } from './api.js';
+import { api, authFetch } from './api.js';
 import { renderMarkdown } from './markdown.js';
 
 export class SessionsPage {
@@ -8,6 +8,8 @@ export class SessionsPage {
     this.state = state;
     this.sessions = [];
     this.detailRequest = 0;
+    this.selected = new Set();
+    this.exporting = false;
     this.$overview = document.getElementById('sess-overview');
     this.$close = document.getElementById('sess-close-btn');
 
@@ -16,8 +18,14 @@ export class SessionsPage {
     this.$msgList = document.getElementById('sess-msg-list');
     this.$msgTitle = document.getElementById('sess-msg-title');
 
+    this.$exportBar = document.getElementById('sess-export-bar');
+    this.$selCount = document.getElementById('sess-sel-count');
+    this.$exportFormat = document.getElementById('sess-export-format');
+
     document.getElementById('sess-refresh-btn').onclick = () => this.load();
     this.$close.onclick = () => this.closeMessages();
+    document.getElementById('sess-export-zip-btn').onclick = () => this.exportSelected();
+    document.getElementById('sess-export-cancel').onclick = () => this.clearSelection();
     this.$messages.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.preventDefault(); this.closeMessages(); }
     });
@@ -48,7 +56,10 @@ export class SessionsPage {
       return;
     }
     this.sessions = sessions || [];
+    const alive = new Set(this.sessions.map(s => s.id));
+    this.selected = new Set([...this.selected].filter(id => alive.has(id)));
     this.render();
+    this.updateExportBar();
   }
 
   render() {
@@ -61,6 +72,7 @@ export class SessionsPage {
     table.className = 'data-table';
     table.innerHTML = `
       <thead><tr>
+        <th class="col-nowrap"><input type="checkbox" id="sess-check-all" aria-label="全选"></th>
         <th>标题</th><th class="col-nowrap">消息数</th><th class="col-nowrap">最近活跃</th><th class="col-nowrap">操作</th>
       </tr></thead>`;
     const tbody = document.createElement('tbody');
@@ -69,11 +81,17 @@ export class SessionsPage {
       const title = (s.title || '').trim() || '新对话';
       const short = title.length > 40 ? title.slice(0, 40) + '…' : title;
       tr.innerHTML = `
+        <td class="col-nowrap"><input type="checkbox" data-id="${escapeHTML(s.id)}" ${this.selected.has(s.id) ? 'checked' : ''} aria-label="选择 ${escapeHTML(short)}"></td>
         <td class="sess-title-cell"><span title="${escapeHTML(title)}">${escapeHTML(short)}</span></td>
         <td class="col-nowrap">${s.message_count ?? '-'}</td>
         <td class="col-nowrap">${formatTime(s.last_active || s.created_at)}</td>`;
       const actions = document.createElement('td');
       actions.className = 'sess-actions col-nowrap';
+      const exportBtn = document.createElement('button');
+      exportBtn.className = 'btn btn-ghost btn-sm';
+      exportBtn.textContent = '导出';
+      exportBtn.title = '导出为 Markdown 下载';
+      exportBtn.onclick = () => this.exportSession(s.id);
       const viewBtn = document.createElement('button');
       viewBtn.className = 'btn btn-ghost btn-sm';
       viewBtn.textContent = '查看';
@@ -82,12 +100,99 @@ export class SessionsPage {
       delBtn.className = 'btn btn-danger btn-sm';
       delBtn.textContent = '删除';
       delBtn.onclick = () => this.deleteSession(s.id);
-      actions.append(viewBtn, delBtn);
+      actions.append(exportBtn, viewBtn, delBtn);
       tr.appendChild(actions);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     this.$table.appendChild(table);
+
+    const checkAll = table.querySelector('#sess-check-all');
+    checkAll.checked = this.selected.size > 0 && this.selected.size === this.sessions.length;
+    checkAll.onchange = () => {
+      this.selected = checkAll.checked ? new Set(this.sessions.map(s => s.id)) : new Set();
+      for (const box of table.querySelectorAll('input[data-id]')) box.checked = checkAll.checked;
+      this.updateExportBar();
+    };
+    for (const box of table.querySelectorAll('input[data-id]')) {
+      box.onchange = () => {
+        if (box.checked) this.selected.add(box.dataset.id);
+        else this.selected.delete(box.dataset.id);
+        checkAll.checked = this.selected.size === this.sessions.length;
+        this.updateExportBar();
+      };
+    }
+  }
+
+  updateExportBar() {
+    this.$exportBar.hidden = this.selected.size === 0;
+    this.$selCount.textContent = String(this.selected.size);
+  }
+
+  clearSelection() {
+    this.selected = new Set();
+    for (const box of this.$table.querySelectorAll('input[type=checkbox]')) box.checked = false;
+    this.updateExportBar();
+  }
+
+  // downloadBlob 触发浏览器保存;filename 优先取服务端 Content-Disposition。
+  downloadBlob(blob, fallbackName, response) {
+    let name = fallbackName;
+    const disposition = response?.headers?.get('Content-Disposition') || '';
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (match) {
+      try { name = decodeURIComponent(match[1]); } catch { /* 保持回退名 */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async exportSession(sessionID, format = 'md') {
+    if (this.exporting) return;
+    this.exporting = true;
+    try {
+      const response = await authFetch(`/sessions/${encodeURIComponent(sessionID)}/export?format=${format}`);
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status} ${text.slice(0, 120)}`);
+      }
+      this.downloadBlob(await response.blob(), `session-${shortID(sessionID)}.${format}`, response);
+    } catch (e) {
+      alert('导出失败：' + e.message);
+    } finally {
+      this.exporting = false;
+    }
+  }
+
+  async exportSelected() {
+    if (this.exporting || this.selected.size === 0) return;
+    const format = this.$exportFormat.value || 'md';
+    const ids = [...this.selected].map(id => encodeURIComponent(id)).join(',');
+    this.exporting = true;
+    const button = document.getElementById('sess-export-zip-btn');
+    const original = button.textContent;
+    button.textContent = '正在打包…';
+    button.disabled = true;
+    try {
+      const response = await authFetch(`/sessions/export?ids=${ids}&format=${format}`);
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status} ${text.slice(0, 120)}`);
+      }
+      this.downloadBlob(await response.blob(), `easyagent-sessions.zip`, response);
+    } catch (e) {
+      alert('批量导出失败：' + e.message);
+    } finally {
+      this.exporting = false;
+      button.textContent = original;
+      button.disabled = false;
+    }
   }
 
   async viewMessages(sessionID) {
@@ -149,6 +254,7 @@ export class SessionsPage {
     if (!confirm('确认删除会话 ' + shortID(sessionID) + '？此操作不可恢复。')) return;
     try {
       await api.del('/sessions/' + sessionID);
+      this.selected.delete(sessionID);
       await this.load();
     } catch (e) {
       alert('删除失败：' + e.message);

@@ -12,5 +12,6 @@ func BaseToolNames(enableBash bool) []string {
 
 func RegisterCommands(registry *slashcmd.Registry) {
 	codingcommands.RegisterBuiltins(registry)
+	codingcommands.RegisterExportCommands(registry)
 	codingcommands.RegisterWikiCommands(registry)
 }

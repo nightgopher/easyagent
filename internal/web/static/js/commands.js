@@ -5,6 +5,7 @@ export const commands = [
   {name:'model', label:'切换模型', description:'打开可搜索的模型列表'},
   {name:'sessions', label:'历史会话', description:'浏览和管理全部会话'},
   {name:'context', label:'会话信息', description:'查看当前模型和工作区', session:true},
+  {name:'export', label:'导出对话', description:'导出当前会话日志到工作区（可选格式与是否含工具调用）', session:true, args:true},
   {name:'tools', label:'可用工具', description:'查看服务提供的工具'},
   {name:'compact', label:'压缩上下文', description:'总结较早消息，可追加保留要求', session:true, args:true},
   {name:'stop', label:'停止生成', description:'停止当前会话的任务'},
