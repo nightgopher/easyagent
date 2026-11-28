@@ -23,7 +23,7 @@ const (
 	SettingCopyDefaultModel      = "主机默认模型"
 	SettingCopyCurrentModel      = "当前会话模型"
 	SettingCopyModelNote         = "新建会话使用主机默认模型；会话中单独选择的模型只影响该会话，并在重启后保留。"
-	SettingCopyRemoteModelNote   = "模型配置属于服务主机。远程默认模型可通过下拉选择保存为该主机默认模型；会话模型可在对话输入框切换。"
+	SettingCopyRemoteModelNote   = "模型配置属于服务主机。远程默认模型可通过下拉选择保存为该主机默认模型；会话模型可在对话输入框切换。远程主机的连接配置（提供方、地址、密钥）可在下方「模型连接（远程）」卡片中直接修改。"
 	SettingCopyRefreshModels     = "刷新模型"
 	SettingCopySaveDefaultModel  = "保存默认模型"
 	SettingCopyLocalSource       = "本地模型来源"
@@ -117,6 +117,16 @@ type modelForm struct {
 	DefaultModelChoice                                           string
 	Checked, HasKey                                              bool
 }
+
+// remoteModelForm holds the 远程主机「模型连接（远程）」card's input state.
+type remoteModelForm struct {
+	RemoteProvider string
+	RemoteBaseURL  string
+	RemoteAPIKey   string
+	RemoteModel    string
+	RemoteKeySet   bool
+	RemoteKeyHint  string
+}
 type hostForm struct {
 	EditHost, HostName, HostURL, HostToken string
 	RepairCredential                       bool
@@ -147,6 +157,7 @@ type settingsState struct {
 	hostForm
 	mcpForm
 	feishuForm
+	remoteModelForm
 	Open                                                                     bool
 	Heading                                                                  ui.Handle
 	HostTokenField                                                           ui.Handle
@@ -344,6 +355,23 @@ func settingsPageMatches(p settingsPage, search string) bool {
 	return strings.Contains(text, search)
 }
 func (s *settingsState) host() demoHost       { return s.Hosts[min(s.Host, len(s.Hosts)-1)] }
+
+// applyRemoteProviderSettings copies a GET/PUT /settings/provider response
+// into the 远程「模型连接」card's input state. The API key is never echoed:
+// the response only carries whether one is saved plus a masked hint.
+func (s *settingsState) applyRemoteProviderSettings(v any) {
+	m := object(v)
+	provider := str(m["provider"])
+	if provider != "openai" && provider != "anthropic" {
+		provider = "openai"
+	}
+	s.RemoteProvider = provider
+	s.RemoteBaseURL = str(m["base_url"])
+	s.RemoteModel = str(m["model"])
+	s.RemoteKeySet, _ = m["api_key_set"].(bool)
+	s.RemoteKeyHint = str(m["api_key_hint"])
+	s.RemoteAPIKey = ""
+}
 func (s *settingsState) message(value string) { s.Notice = value; s.Error = "" }
 func validServiceURL(raw string) bool {
 	u, err := url.Parse(strings.TrimSpace(raw))
