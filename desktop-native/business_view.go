@@ -357,7 +357,10 @@ func (a *preview) sourceEditor(c *ui.Context) {
 	v := &s.Source
 	a.heading(c, "配置知识来源")
 	a.input(c, "来源名称", &v.Name, "例如：团队操作手册", false)
-	a.input(c, "主机目录", &v.Path, "当前主机的绝对目录路径", false)
+	ui.Row(c).Gap(10).AlignItems(ui.End).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.input(c, "主机目录", &v.Path, "当前主机的绝对目录路径", false) })
+		a.action(c, "选择目录").Disabled(!a.Settings.host().Local || a.Live.Loading["source-folder-picker"]).OnClick(a.pickKnowledgeSourceDir)
+	})
 	a.multiline(c, "纳入的相对目录（每行一个）", &s.Directories, 3, 6)
 	a.note(c, "填写 . 表示整个来源；例如 knowledge、docs。隐藏目录、原始对话导出与规则文件不会被索引。")
 	ui.Checkbox(c, &v.Writable, a.tr("允许人工发布知识文档"))

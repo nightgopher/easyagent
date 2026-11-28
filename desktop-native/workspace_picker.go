@@ -36,6 +36,26 @@ func (a *preview) openWorkspacePicker() {
 	})
 }
 
+// Knowledge sources follow the same host rule: this Mac can open the system
+// picker, while a remote host keeps its manual path input.
+func (a *preview) pickKnowledgeSourceDir() {
+	if !a.Settings.host().Local {
+		return
+	}
+	choose := a.Live.PickDirectory
+	if choose == nil {
+		choose = mygo.Dialog.Open
+	}
+	options := mygo.OpenDialogOptions{Parent: a.Window, Directory: true, ButtonLabel: "选择", Title: "选择知识来源目录"}
+	a.run("source-folder-picker", func(context.Context, *backendClient) (any, error) { return choose(options) }, func(v any) {
+		paths, _ := v.([]string)
+		if len(paths) == 0 || paths[0] == "" {
+			return
+		}
+		a.Settings.Business.Source.Path = paths[0]
+	})
+}
+
 func absoluteWorkspace(path string) bool {
 	path = strings.TrimSpace(path)
 	return strings.HasPrefix(path, "/") || len(path) >= 3 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':' && (path[2] == '/' || path[2] == '\\')
