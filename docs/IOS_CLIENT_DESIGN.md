@@ -52,7 +52,7 @@ Swift + SwiftUI，最低 iOS 17。
 服务端侧需要注意的一个既有事实：core 监听 `0.0.0.0:8080` 明文 HTTP + API Key。iOS 的 ATS（App Transport Security）默认禁止明文 HTTP，设计上：
 
 1. 远程主机（公网/HTTPS 反代）：正常直连。
-2. 局域网/Tailscale 主机（`100.64.0.1` 等明文 HTTP）：`NSAllowsLocalNetworking` 例外 + 用户在 Info.plist 显式确认的主机白名单；不提供全局禁用 ATS 的开关。
+2. 局域网/Tailscale 主机（如 `http://<主机地址>:8080` 这类明文 HTTP）：`NSAllowsLocalNetworking` 例外 + 用户在 Info.plist 显式确认的主机白名单；不提供全局禁用 ATS 的开关。
 3. Tailscale 主机可升级为 HTTPS（Tailscale 证书），作为推荐的进阶配置写进部署文档。
 
 ## 架构

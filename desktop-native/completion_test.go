@@ -310,7 +310,7 @@ func TestOutsideWorkspaceLinksOpenTheLocalFolderOnly(t *testing.T) {
 	}
 
 	a.Live.Error = ""
-	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.0.2.10:8080"}}
 	a.Live.Config.ActiveHost = "mini"
 	a.revealOutsideWorkspace(filepath.ToSlash(file))
 	select {
@@ -334,7 +334,7 @@ func TestHostHomeUsesTheHostReportedDirectory(t *testing.T) {
 	if got := a.hostHome(s); got != local {
 		t.Fatalf("local host without a reported home falls back to this machine: got %q want %q", got, local)
 	}
-	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.0.2.10:8080"}}
 	a.Live.Config.ActiveHost = "mini"
 	if got := a.hostHome(s); got != "" {
 		t.Fatal("a remote host without a reported home must stay unknown, got", got)

@@ -11,7 +11,8 @@ BRIDGE_BIN=${EA_DEPLOY_BRIDGE_BIN:-}
 BRIDGE_SERVICE=${EA_DEPLOY_BRIDGE_SERVICE:-easyagent-bridge.service}
 services=("$SERVICE")
 if [[ -n "$BRIDGE_BIN" ]]; then services+=("$BRIDGE_SERVICE"); fi
-HEALTH_URL=${EA_DEPLOY_HEALTH:-http://192.168.5.16:8080/health}
+HEALTH_URL=${EA_DEPLOY_HEALTH:-}
+if [[ -z "$HEALTH_URL" ]]; then { echo "错误:未设置 EA_DEPLOY_HEALTH(健康检查地址,如 http://<迷你主机地址>:8080/health)" >&2; exit 1; } fi
 GO_BIN=${EA_DEPLOY_GO:-go}
 mkdir -p "$DEPLOY_ROOT/releases" "$(dirname "$BIN_PATH")"
 exec 9>"$DEPLOY_ROOT/update.lock"

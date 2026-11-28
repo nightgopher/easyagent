@@ -103,7 +103,7 @@ func TestLoopbackListen(t *testing.T) {
 		":8080":             false,
 		"0.0.0.0:8080":      false,
 		"[::]:8080":         false,
-		"192.168.5.16:8080": false,
+		"192.0.2.10:8080": false,
 		"agent.lan:8080":    false,
 	} {
 		assert.Equal(t, want, loopbackListen(addr), addr)

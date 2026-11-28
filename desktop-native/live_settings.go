@@ -863,7 +863,7 @@ func (a *preview) liveConnectionSettings(c *ui.Context) {
 		}
 		a.heading(c, heading+a.dirtySuffix())
 		a.input(c, "连接名称", &s.HostName, "例如 迷你主机", false)
-		a.input(c, "服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
+		a.input(c, "服务地址", &s.HostURL, "http://192.0.2.10:8080", false)
 		a.input(c, "访问令牌", &s.HostToken, "原地址留空保留令牌；新连接留空表示无令牌", true).Bind(&s.HostTokenField)
 		ui.Row(c).Gap(8).Children(func() {
 			a.primary(c, saveLabel).Disabled(l.Loading["host-save"]).OnClick(a.saveLiveHost)

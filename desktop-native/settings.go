@@ -694,7 +694,7 @@ func (a *preview) connectionSettings(c *ui.Context) {
 		}
 	}
 	a.input(c, "名称", &s.HostName, "连接名称", false)
-	a.input(c, "Agent 服务地址", &s.HostURL, "http://192.168.5.16:8080", false)
+	a.input(c, "Agent 服务地址", &s.HostURL, "http://192.0.2.10:8080", false)
 	a.input(c, "API 令牌", &s.HostToken, "演示输入（不保存）", true)
 	a.note(c, "预览模式仅保存当前窗口的演示配置，令牌不会写入偏好文件。")
 	a.primary(c, "保存并连接").Disabled(strings.TrimSpace(s.HostURL) == "").OnClick(s.saveHost)

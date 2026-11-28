@@ -38,7 +38,7 @@ func TestSettingsHostFormDiscardedOnConfirmedSwitch(t *testing.T) {
 	a.Settings.Open = true
 	a.Settings.Tab = "connections"
 	a.Settings.HostName = "half-host"
-	a.Settings.HostURL = "http://192.168.5.16:9999"
+	a.Settings.HostURL = "http://192.0.2.10:9999"
 	confirmDirtySwitch(t, a, "general")
 	if a.Settings.Tab != "general" || a.Settings.HostName != "" || a.Settings.HostURL != "" {
 		t.Fatal("confirmed switch should discard the host form and proceed")
