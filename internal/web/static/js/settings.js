@@ -3,9 +3,11 @@ import { copyText } from './clipboard.js';
 import { ToolDiscoverySettings } from './tool-discovery.js';
 import { PermissionSettings } from './permission-settings.js';
 import { BuiltinToolSettings } from './builtin-tools.js';
+import { ProviderSettings } from './provider-settings.js';
 
 export class SettingsPage {
   constructor() {
+    this.providerConnection = new ProviderSettings();
     this.toolDiscovery = new ToolDiscoverySettings();
     this.permissions = new PermissionSettings();
     this.builtinTools = new BuiltinToolSettings();
@@ -58,6 +60,7 @@ export class SettingsPage {
     document.getElementById('service-boot-note').textContent = data.linger === 'yes' ? '无需登录主机，开机即可启动已启用的服务。' : '主机尚未确认开启免登录启动，请检查用户服务设置。';
   }
   async activate() {
+    void this.providerConnection.update();
     void this.toolDiscovery.update();
     void this.permissions.update();
     void this.builtinTools.update();
@@ -89,5 +92,5 @@ export class SettingsPage {
     } catch (error) { this.message(error.message, true); }
     finally { button.disabled = false; }
   }
-  deactivate() { this.hidePairing(); this.secret.value = ''; }
+  deactivate() { this.hidePairing(); this.secret.value = ''; this.providerConnection.apiKey.value = ''; }
 }
