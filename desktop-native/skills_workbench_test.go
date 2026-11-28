@@ -189,7 +189,7 @@ func TestSkillsWorkbenchHidesOpenFolderOnRemoteHosts(t *testing.T) {
 	if !tt.HasText("打开文件夹") {
 		t.Fatal("this machine's own projects can be opened in the file manager")
 	}
-	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.0.2.10:8080"}}
 	a.Live.Config.ActiveHost = "mini"
 	tt.Frame()
 	if tt.HasText("打开文件夹") {

@@ -293,7 +293,7 @@ func TestMySkillsOpenFolderShowsTheSkillsFolderLocally(t *testing.T) {
 		t.Fatal("the skill's folder was not opened")
 	}
 
-	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.168.5.16:8080"}}
+	a.Live.Config.Hosts = []hostConfig{{ID: "mini", Name: "迷你主机", URL: "http://192.0.2.10:8080"}}
 	a.Live.Config.ActiveHost = "mini"
 	tt.Frame()
 	if tt.HasText("打开文件夹") {

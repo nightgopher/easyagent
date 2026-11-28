@@ -1,6 +1,6 @@
 # 迷你主机更新
 
-正式网页由 `q@192.168.5.16` 的用户级 `easyagent-core.service` 提供，入口 `http://192.168.5.16:8080`。Mac 用于开发预览。
+正式网页由迷你主机上用户级的 `easyagent-core.service` 提供，入口 `http://<迷你主机地址>:8080`（地址按你的局域网实际配置，登记在 `deploy.env` 的健康检查项中）。Mac 用于开发预览。
 
 合并到 GitHub `main` 后，用户级 `easyagent-update.timer` 每 5 分钟检查一次（加 0–30 秒随机延迟）。更新器按 SHA 获取源码，在独立构建目录测试根模块和 Bubble Tea、运行 vet 与网页脚本测试、构建 CLI 和 bridge；成功后向认证的 `/admin/deploy` 获取空闲租约，再原子替换服务程序并重启。正在执行的对话和循环任务都会让本轮更新推迟；下次 timer 再检查，不取消任务。取得租约后短暂拒绝新执行请求，避免空闲检查与新任务之间的竞态。健康检查必须返回对应提交版本，失败自动恢复旧程序并重启，失败版本不重复部署，后续新提交仍可更新。源码开发副本、运行配置、会话数据不被覆盖。
 
@@ -33,7 +33,7 @@ systemctl --user enable --now easyagent-update.timer
 systemctl --user start easyagent-update.service  # 立即检查
 systemctl --user status easyagent-core.service easyagent-update.timer
 journalctl --user -u easyagent-update.service -n 80 --no-pager
-curl -fsS http://192.168.5.16:8080/health
+curl -fsS http://<迷你主机地址>:8080/health
 systemctl --user stop easyagent-update.timer     # 暂停自动更新
 ```
 
